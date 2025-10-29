@@ -555,6 +555,37 @@
             showNewUserStartupModal();
         };
 
+        // Event delegation for new user modal buttons (more reliable)
+        document.addEventListener('click', function(e) {
+            if (e.target && e.target.id) {
+                console.log('[DEBUG] Click detected on element:', e.target.id);
+                
+                if (e.target.id === 'importFolderBtn') {
+                    console.log('[DEBUG] Import folder button clicked via delegation');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const modal = document.getElementById('newUserModal');
+                    if (modal) modal.remove();
+                    handleNewUserFolderImport();
+                } else if (e.target.id === 'importSingleFileBtn') {
+                    console.log('[DEBUG] Import single file button clicked via delegation');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const modal = document.getElementById('newUserModal');
+                    if (modal) modal.remove();
+                    handleNewUserSingleFileImport();
+                } else if (e.target.id === 'skipImportBtn') {
+                    console.log('[DEBUG] Skip button clicked via delegation');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const modal = document.getElementById('newUserModal');
+                    if (modal) modal.remove();
+                    localStorage.setItem('hasSeenWelcome', 'true');
+                    showTooltip('Welcome! You can import YDK files anytime using the Import buttons.');
+                }
+            }
+        });
+
         async function loadInitialData() {
             if (!userId) return;
             // These now run concurrently without blocking the UI.
@@ -4874,6 +4905,9 @@
             document.body.insertAdjacentHTML('beforeend', modalHTML);
             console.log('[DEBUG] Modal HTML added to page');
             
+            // Wait a moment for the DOM to update
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
             const modal = document.getElementById('newUserModal');
             const importFolderBtn = document.getElementById('importFolderBtn');
             const importSingleFileBtn = document.getElementById('importSingleFileBtn');
@@ -4886,29 +4920,46 @@
                 skipImportBtn: !!skipImportBtn
             });
             
+            if (!modal || !importFolderBtn || !importSingleFileBtn || !skipImportBtn) {
+                console.error('[DEBUG] Failed to find modal elements!');
+                return;
+            }
+            
             // Handle folder import
-            importFolderBtn.addEventListener('click', async () => {
+            importFolderBtn.addEventListener('click', async (e) => {
                 console.log('[DEBUG] Import folder button clicked');
+                e.preventDefault();
+                e.stopPropagation();
                 modal.remove();
                 await handleNewUserFolderImport();
             });
             
             // Handle single file import
-            importSingleFileBtn.addEventListener('click', async () => {
+            importSingleFileBtn.addEventListener('click', async (e) => {
                 console.log('[DEBUG] Import single file button clicked');
+                e.preventDefault();
+                e.stopPropagation();
                 modal.remove();
                 await handleNewUserSingleFileImport();
             });
             
             // Handle skip
-            skipImportBtn.addEventListener('click', () => {
+            skipImportBtn.addEventListener('click', (e) => {
                 console.log('[DEBUG] Skip button clicked');
+                e.preventDefault();
+                e.stopPropagation();
                 modal.remove();
                 localStorage.setItem('hasSeenWelcome', 'true');
                 showTooltip('Welcome! You can import YDK files anytime using the Import buttons.');
             });
             
             console.log('[DEBUG] Event listeners added to modal buttons');
+            
+            // Test if buttons are clickable
+            console.log('[DEBUG] Testing button clickability...');
+            importFolderBtn.style.cursor = 'pointer';
+            importSingleFileBtn.style.cursor = 'pointer';
+            skipImportBtn.style.cursor = 'pointer';
         }
 
         async function handleNewUserFolderImport() {
