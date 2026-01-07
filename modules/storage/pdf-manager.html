@@ -1,0 +1,195 @@
+<div id="moduleContent">
+    <!-- PDF MANAGER MODULE -->
+    <!--
+    This module handles PDF generation and export functionality.
+
+    Dependencies (loaded in main HTML):
+    - jsPDF library (window.jspdf)
+    - html2canvas library (window.html2canvas)
+
+    Global Dependencies (read-only access):
+    - UI.loadingOverlay - Loading overlay element
+    - showMessage() - Function to display messages
+
+    Functions:
+    - PDFManager._proxyAndBase64Images(container) - Proxies external images via CORS
+    - PDFManager.generateFromHTML(element, fileName) - Generates PDF from HTML element
+    -->
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    // Safe global access helpers
+    const getUIElement = (id) => {
+        const ui = typeof UI !== 'undefined' ? UI : {};
+        return typeof ui[id] !== 'undefined' ? ui[id] : document.getElementById(id);
+    };
+
+    const getShowMessage = () => {
+        return typeof showMessage !== 'undefined' ? showMessage : (msg) => {
+            console.log(msg);
+            alert(msg);
+        };
+    };
+
+    // PDF Manager Module
+    const PDFManager = {
+        /**
+         * Proxies external images through CORS and converts them to base64
+         * This allows images from external domains to be included in PDFs
+         * @param {HTMLElement} container - The DOM element containing images to process
+         * @returns {Promise<void>} Resolves when all images have been processed
+         */
+        _proxyAndBase64Images: async function(container) {
+            const imageElements = container.getElementsByTagName('img');
+            const corsProxyUrl = 'https://corsproxy.io/?';
+
+            // Process each image in parallel
+            const processingTasks = Array.from(imageElements).map(async (img) => {
+                const originalImageSrc = img.src;
+
+                // Skip images that are already processed, are placeholders, or aren't HTTP URLs
+                if (!originalImageSrc ||
+                    originalImageSrc.startsWith('data:') ||
+                    !originalImageSrc.startsWith('http')) {
+                    return;
+                }
+
+                try {
+                    // Fetch the image through CORS proxy
+                    const proxyUrl = corsProxyUrl + encodeURIComponent(originalImageSrc);
+                    const response = await fetch(proxyUrl);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    // Convert response to blob and then to base64 data URL
+                    const imageBlob = await response.blob();
+                    const dataUrl = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.onerror = () => reject(new Error('Failed to read file as data URL'));
+                        reader.readAsDataURL(imageBlob);
+                    });
+
+                    // Replace image source with base64 version
+                    img.src = dataUrl;
+                } catch (err) {
+                    console.warn(`Failed to load image via proxy: ${originalImageSrc}`, err);
+                    // The img.onerror handler in HTML will handle visual fallback
+                }
+            });
+
+            // Wait for all image processing to complete
+            await Promise.all(processingTasks);
+        },
+
+        /**
+         * Generates a PDF file from an HTML element
+         * @param {HTMLElement} element - The DOM element to convert to PDF
+         * @param {string} fileName - The name for the generated PDF file
+         * @returns {Promise<void>} Resolves when PDF is generated and downloaded
+         */
+        generateFromHTML: async function(element, fileName) {
+            const loadingOverlay = getUIElement('loadingOverlay');
+            const showMsg = getShowMessage();
+
+            // Show loading state
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('hidden');
+            }
+            showMsg(`Generating ${fileName}... This may take a moment.`);
+
+            try {
+                // Step 1: Convert all external images to base64 to avoid CORS issues
+                await this._proxyAndBase64Images(element);
+
+                // Step 2: Check for required libraries
+                if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') {
+                    throw new Error('jsPDF library not loaded');
+                }
+                if (typeof html2canvas === 'undefined') {
+                    throw new Error('html2canvas library not loaded');
+                }
+
+                // Step 3: Render HTML element to canvas
+                const { jsPDF } = window.jspdf;
+                const canvas = await html2canvas(element, {
+                    scale: 2, // High resolution
+                    useCORS: true // Allow cross-origin images
+                });
+
+                const imageData = canvas.toDataURL('image/png');
+
+                // Step 4: Create PDF document with A4 page size (portrait)
+                const pdfDoc = new jsPDF({
+                    orientation: 'p',
+                    unit: 'px',
+                    format: 'a4'
+                });
+
+                // Step 5: Calculate dimensions to fit canvas into PDF pages
+                const pdfPageWidth = pdfDoc.internal.pageSize.getWidth();
+                const pdfPageHeight = pdfDoc.internal.pageSize.getHeight();
+                const canvasPixelWidth = canvas.width;
+                const canvasPixelHeight = canvas.height;
+
+                // Calculate the aspect ratios
+                const canvasRatio = canvasPixelWidth / canvasPixelHeight;
+                const pdfPageRatio = pdfPageWidth / pdfPageHeight;
+
+                // Determine rendering dimensions that fit within the PDF page
+                let renderWidth = pdfPageWidth;
+                let renderHeight = pdfPageWidth / canvasRatio;
+
+                // If the calculated height exceeds page height, constrain by height instead
+                if (renderHeight > pdfPageHeight) {
+                    renderHeight = pdfPageHeight;
+                    renderWidth = pdfPageHeight * canvasRatio;
+                }
+
+                // Step 6: Add canvas to PDF, handling multi-page content
+                let yOffset = 0;
+                let remainingCanvasHeight = canvasPixelHeight;
+
+                while (remainingCanvasHeight > 0) {
+                    // Add the image at the current y position
+                    pdfDoc.addImage(imageData, 'PNG', 0, yOffset, renderWidth, renderHeight);
+
+                    // Decrement remaining height and advance position
+                    remainingCanvasHeight -= canvasPixelHeight;
+
+                    // Add new page if there's more content
+                    if (remainingCanvasHeight > 0) {
+                        pdfDoc.addPage();
+                        const currentPageNum = pdfDoc.internal.getNumberOfPages();
+                        yOffset = -renderHeight * (currentPageNum - 1);
+                    }
+                }
+
+                // Step 7: Save the PDF file
+                pdfDoc.save(fileName);
+            } catch (error) {
+                console.error('PDF Generation Error:', error);
+                showMsg('Failed to generate PDF. Check console for details.');
+            } finally {
+                // Hide loading state
+                if (loadingOverlay) {
+                    loadingOverlay.classList.add('hidden');
+                }
+            }
+        }
+    };
+
+    // Export PDFManager to global scope to override main HTML's version
+    if (typeof window !== 'undefined') {
+        window.PDFManager = PDFManager;
+        console.log('PDF Manager module initialized and PDFManager exported to window');
+    } else {
+        console.error('Window object not available, cannot export PDFManager');
+    }
+})();
+</script>
