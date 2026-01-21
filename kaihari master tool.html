@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -11,28 +11,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script type="module">
-        // Firebase Imports
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js?module";
-        import { getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js?module";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, addDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js?module";
-
         // Module-level global variable declarations (must come before any access)
         let ydkDB;  // FIX: Declare before any access to prevent Temporal Dead Zone error
 
 
         // --- GLOBAL STATE & CONFIG ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyDstcgMAdJhXoaZpZsTQbWAcxs6jPRTPBM",
-            authDomain: "kaihari-s-master-tool.firebaseapp.com",
-            projectId: "kaihari-s-master-tool",
-            storageBucket: "kaihari-s-master-tool.firebasestorage.app",
-            messagingSenderId: "384258679853",
-            appId: "1:384258679853:web:ca207148abc8ee912a84a4",
-            measurementId: "G-QMKPHQGY41"
-        };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'ygo-evaluator-default';
+        const appId = 'ygo-evaluator-default';
 
-        let app, auth, db, userId;
         let cardDatabase = [];
 
         // ============================================================================
@@ -1294,11 +1279,10 @@
         let originalCardDatabase = []; // Backup of full database for deck-specific filtering
         let easterEggCardPool = []; // Custom card pool for easter egg animation
         let chibiAnimationState = { hopInterval: null, physicsInterval: null, isPaused: false }; // Global animation state
-        let deckLists = [];
         let offlineDecks = [];
         let currentDeck = { main: [], side: [], extra: [], sidingPatterns: {} };
-        let currentDeckId = null; // Track the currently loaded/saved deck document ID (online or offline)
-        let currentDeckSource = 'unsaved'; // 'online' | 'offline' | 'ydk' | 'unsaved'
+        let currentDeckId = null; // Track the currently loaded/saved deck document ID (offline)
+        let currentDeckSource = 'unsaved'; // 'offline' | 'unsaved'
         let currentDeckMeta = { name: null, sync: null }; // Additional metadata about the loaded deck
         let isDeckDirty = false;
         let activeEditingPattern = null; // { patternId: string, section: 'goingFirst.in' | 'goingFirst.out' | 'goingSecond.in' | 'goingSecond.out' }
@@ -1348,7 +1332,8 @@
             if (!value) return { source: null, id: null };
             const [source, ...rest] = value.split(':');
             if (rest.length === 0) {
-                return { source: 'online', id: source };
+                // Invalid format - treat as unsaved
+                return { source: 'unsaved', id: source };
             }
             return { source, id: rest.join(':') };
         };
@@ -1388,8 +1373,6 @@
         let currentSidingPatternId = null; // Tracks loaded pattern for save/delete
         let universalSidingPatterns = {}; // Universal siding patterns stored independently of decks (DEPRECATED - will be migrated)
         let draggingElement = null;
-        let isOffline = true; // NEW: Global flag for offline mode - start in offline mode by default
-        let isFirebaseReady = false; // NEW: Flag to ensure Firebase is fully initialized
         let placeholder = null;
         let autocompleteSelectedIndex = -1; // For tracking selected autocomplete suggestion
         let autocompleteMode = 'db'; // 'db' or 'all' - controls whether to filter DB only or all cards
@@ -1469,7 +1452,7 @@
             shootoutView: null, shootoutSidingView: null, shootoutSimulatorView: null, shootoutReportView: null,
 
             // Navigation
-            navDeckBuilder: null, navShootout: null, navOnlineMode: null, headerTitle: null, snapshotBtn: null, fullscreenBtn: null,
+            navDeckBuilder: null, navShootout: null, headerTitle: null, snapshotBtn: null, fullscreenBtn: null,
 
             // Card Database
             cardSearchInput: null, addCardBtn: null, cardDbList: null, cardAutocompleteList: null, autocompleteModeToggle: null, editDbToggle: null, viewToggleBtn: null, resetDbBtn: null,
@@ -1550,44 +1533,6 @@
             }
         }
 
-
-        function initializeFirebase() {
-            return new Promise((resolve) => {
-                try {
-                    app = initializeApp(firebaseConfig);
-                    auth = getAuth(app);
-                    db = getFirestore(app);
-
-                    onAuthStateChanged(auth, (user) => {
-                        if (user) {
-                            userId = user.uid;
-                            isOffline = false;
-                            isFirebaseReady = true;
-                            console.log("Firebase online, user:", userId);
-                            document.querySelectorAll('.online-feature').forEach(el => el.style.display = 'block');
-                            loadInitialData().then(resolve);
-                        } else {
-                            signInAnonymously(auth).catch(err => {
-                                console.error("Anonymous sign-in failed:", err);
-                                isOffline = true;
-                                isFirebaseReady = true; // Still ready, but in offline state
-                                document.querySelectorAll('.online-feature').forEach(el => el.style.display = 'none');
-                                showMessage("Offline Mode: Could not sign in. Deck saving is disabled.");
-                                resolve();
-                            });
-                        }
-                    });
-                } catch (error) {
-                    console.error("Firebase initialization failed, entering offline mode:", error);
-                    isOffline = true;
-                    isFirebaseReady = true; // Ready for offline operation
-                    document.querySelectorAll('.online-feature').forEach(el => el.style.display = 'none');
-                    showMessage("Could not connect to the database. Running in Offline Mode.");
-                    resolve(); // Resolve the promise to allow the app to continue in offline mode
-                }
-            });
-        }
-
         async function main() {
             // 1. Show loading screen immediately
             const loadingOverlay = document.getElementById('loadingOverlay');
@@ -1611,10 +1556,6 @@
 
             // 5. Initialize the deck resize handles
             initializeDeckResizeHandles();
-
-            // 4. Start in offline mode by default - skip Firebase initialization
-            isFirebaseReady = true;
-            document.querySelectorAll('.online-feature').forEach(el => el.style.display = 'none');
 
             // 4.5. Run one-time cleanup to fix any existing issues
             performOneTimeCleanup();
@@ -1910,13 +1851,6 @@
                 }
             }
         });
-
-        async function loadInitialData() {
-            if (!userId) return;
-            // These now run concurrently without blocking the UI.
-            loadCardDatabase();
-            loadUserDecks();
-        }
 
         function cleanupBadConfigs() {
             // Check and clean up bad deckBuilderConfig
@@ -3878,17 +3812,9 @@
             // Fullscreen toggle
             UI.fullscreenBtn.addEventListener('click', toggleFullscreen);
 
-            UI.navShootout.addEventListener('click', () => { // MODIFIED
-                // Allow access in offline mode if a deck is loaded in the builder, otherwise check for saved decks online.
-                if (deckLists.length === 0 && !isOffline) {
-                    showMessage("You must have at least one saved deck before starting Shootout Mode.");
-                    return;
-                }
+            UI.navShootout.addEventListener('click', () => {
                 ShootoutManager.populateSetup();
                 showView('shootoutView');
-            });
-            UI.navOnlineMode.addEventListener('click', () => {
-                showMessage("Online Mode is currently unavailable. The tool is running in offline mode.");
             });
 
             // Card Database
@@ -5268,90 +5194,49 @@
                 return;
             }
 
-            // Clear database on startup
+            // Initialize database arrays
             cardDatabase = [];
             originalCardDatabase = [];
-            if (isOffline) {
-                try {
-                    localStorage.setItem('offlineCardDatabase', JSON.stringify([]));
-                } catch (e) {
-                    console.error('Error clearing localStorage database:', e);
-                }
-            }
 
-            if (isOffline) {
-                // In offline mode, load from localStorage
-                try {
-                    const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
-                    console.log(`loadCardDatabase: Found ${savedCards.length} cards in localStorage`);
+            // Load from localStorage
+            try {
+                const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
+                console.log(`loadCardDatabase: Found ${savedCards.length} cards in localStorage`);
 
-                    // Deduplicate cards by ID
-                    const uniqueCards = [];
-                    const seenIds = new Set();
-                    let dupCount = 0;
-                    for (const card of savedCards) {
-                        if (!seenIds.has(card.id)) {
-                            seenIds.add(card.id);
-                            uniqueCards.push(card);
-                        } else {
-                            dupCount++;
-                        }
-                    }
-
-                    cardDatabase = uniqueCards;
-                    originalCardDatabase = [...uniqueCards]; // Store backup of full database
-                    console.log(`[DEBUG] Offline: Stored ${originalCardDatabase.length} cards in original database`);
-                    cardDatabase.sort((a, b) => a.name.localeCompare(b.name));
-
-                    // Save the deduplicated database back to localStorage
-                    if (uniqueCards.length !== savedCards.length) {
-                        console.log(`loadCardDatabase: Removed ${dupCount} duplicate cards from database`);
-                        localStorage.setItem('offlineCardDatabase', JSON.stringify(uniqueCards));
+                // Deduplicate cards by ID
+                const uniqueCards = [];
+                const seenIds = new Set();
+                let dupCount = 0;
+                for (const card of savedCards) {
+                    if (!seenIds.has(card.id)) {
+                        seenIds.add(card.id);
+                        uniqueCards.push(card);
                     } else {
-                        console.log(`loadCardDatabase: No duplicates found`);
+                        dupCount++;
                     }
-
-                    isDatabaseLoaded = true; // Mark as loaded
-                    renderCardDatabase();
-                    console.log(`loadCardDatabase: Loaded ${cardDatabase.length} unique cards into memory.`);
-                } catch (e) {
-                    console.error("Error loading offline card database:", e);
-                    cardDatabase = [];
-                    renderCardDatabase();
                 }
-                return;
+
+                cardDatabase = uniqueCards;
+                originalCardDatabase = [...uniqueCards]; // Store backup of full database
+                console.log(`[DEBUG] Stored ${originalCardDatabase.length} cards in original database`);
+                cardDatabase.sort((a, b) => a.name.localeCompare(b.name));
+
+                // Save the deduplicated database back to localStorage
+                if (uniqueCards.length !== savedCards.length) {
+                    console.log(`loadCardDatabase: Removed ${dupCount} duplicate cards from database`);
+                    localStorage.setItem('offlineCardDatabase', JSON.stringify(uniqueCards));
+                } else {
+                    console.log(`loadCardDatabase: No duplicates found`);
+                }
+
+                isDatabaseLoaded = true; // Mark as loaded
+                renderCardDatabase();
+                console.log(`loadCardDatabase: Loaded ${cardDatabase.length} unique cards into memory.`);
+            } catch (e) {
+                console.error("Error loading card database:", e);
+                cardDatabase = [];
+                renderCardDatabase();
             }
-
-            if (!userId) return;
-            const cardDbRef = collection(db, `artifacts/${appId}/users/${userId}/cards`);
-            onSnapshot(query(cardDbRef),
-                (snapshot) => {
-                    const tempCards = [];
-                    snapshot.forEach(doc => tempCards.push({ id: doc.id, ...doc.data() }));
-
-                    // Deduplicate cards by ID (safety check)
-                    const uniqueCards = [];
-                    const seenIds = new Set();
-                    for (const card of tempCards) {
-                        if (!seenIds.has(card.id)) {
-                            seenIds.add(card.id);
-                            uniqueCards.push(card);
-                        }
-                    }
-
-                    cardDatabase = uniqueCards;
-                    originalCardDatabase = [...uniqueCards]; // Store backup of full database
-                    console.log(`[DEBUG] Online: Stored ${originalCardDatabase.length} cards in original database`);
-                    cardDatabase.sort((a, b) => a.name.localeCompare(b.name));
-                    isDatabaseLoaded = true; // Mark as loaded
-                    renderCardDatabase();
-                    populateSimulationSetup();
-                },
-                (error) => {
-                    console.error("Error loading card database:", error);
-                    // This handles cases where the database is not yet fully provisioned.
-                    showMessage(`Could not load card database: ${error.code}. The database might still be initializing. Please wait a few minutes and refresh.`);
-                });
         }
 
         // --- AUTOCOMPLETE FUNCTIONS ---
@@ -7720,45 +7605,22 @@
             }
             renderCardDatabase();
 
-            if (isOffline) {
-                // In offline mode, save to localStorage
-                try {
-                    const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
-                    // Check for duplicates before adding
-                    const isDuplicate = savedCards.some(card => card.id === newCard.id);
-                    if (!isDuplicate) {
-                        savedCards.push(newCard);
-                        localStorage.setItem('offlineCardDatabase', JSON.stringify(savedCards));
-                        showTooltip(`Added '${newCard.name}' to the database (offline mode).`);
-                    } else {
-                        console.log(`Card '${newCard.name}' already exists in database, skipping duplicate.`);
-                        showTooltip(`Card '${newCard.name}' already exists in database.`);
-                    }
-                } catch (e) {
-                    console.error("Error saving card to localStorage:", e);
-                    showMessage("Failed to save card to local database.");
-                }
-            } else {
-                // In online mode, save to Firebase
-                if (!userId) {
-                    showMessage("You must be logged in to add cards in online mode.");
-                    // Remove from local database since we can't save it
-                    cardDatabase = cardDatabase.filter(card => card.id !== newCard.id);
-                    originalCardDatabase = originalCardDatabase.filter(card => card.id !== newCard.id);
-                    renderCardDatabase();
-                    return;
-                }
-                try {
-                    await setDoc(doc(db, `artifacts/${appId}/users/${userId}/cards`, newCard.id), newCard);
+            // Save to localStorage
+            try {
+                const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
+                // Check for duplicates before adding
+                const isDuplicate = savedCards.some(card => card.id === newCard.id);
+                if (!isDuplicate) {
+                    savedCards.push(newCard);
+                    localStorage.setItem('offlineCardDatabase', JSON.stringify(savedCards));
                     showTooltip(`Added '${newCard.name}' to the database.`);
-                } catch (e) {
-                    console.error("Error adding card to DB:", e);
-                    showMessage("Failed to add card to database.");
-                    // Remove from local database since we can't save it
-                    cardDatabase = cardDatabase.filter(card => card.id !== newCard.id);
-                    originalCardDatabase = originalCardDatabase.filter(card => card.id !== newCard.id);
-                    renderCardDatabase();
+                } else {
+                    console.log(`Card '${newCard.name}' already exists in database, skipping duplicate.`);
+                    showTooltip(`Card '${newCard.name}' already exists in database.`);
                 }
+            } catch (e) {
+                console.error("Error saving card to localStorage:", e);
+                showMessage("Failed to save card to local database.");
             }
         }
 
@@ -7776,59 +7638,20 @@
                 renderCardDatabase();
                 populateSimulationSetup();
 
-                if (isOffline) {
-                    // In offline mode, save to localStorage
-                    try {
-                        const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
-                        const updatedCards = savedCards.filter(card => card.id !== cardId);
-                        localStorage.setItem('offlineCardDatabase', JSON.stringify(updatedCards));
-                        showTooltip(`Deleted '${cardToDelete.name}' from the database (offline mode).`);
-                    } catch (e) {
-                        console.error("Error saving to localStorage:", e);
-                        showMessage("Failed to save changes to local database.");
-                    }
-                } else {
-                    // In online mode, delete from Firebase
-                    if (!userId) {
-                        showMessage("You must be logged in to delete cards in online mode.");
-                        return;
-                    }
-                    try {
-                        await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/cards`, cardId));
-                        showTooltip(`Deleted '${cardToDelete.name}' from the database.`);
-                    } catch (e) {
-                        showMessage("Error deleting card from database.");
-                        console.error(e);
-                        // Re-add the card to local database since deletion failed
-                        cardDatabase.push(cardToDelete);
-                        originalCardDatabase.push(cardToDelete); // Also add to original database
-                        cardDatabase.sort((a, b) => a.name.localeCompare(b.name));
-                        originalCardDatabase.sort((a, b) => a.name.localeCompare(b.name));
-                        renderCardDatabase();
-                        populateSimulationSetup();
-                    }
+                // Save to localStorage
+                try {
+                    const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
+                    const updatedCards = savedCards.filter(card => card.id !== cardId);
+                    localStorage.setItem('offlineCardDatabase', JSON.stringify(updatedCards));
+                    showTooltip(`Deleted '${cardToDelete.name}' from the database.`);
+                } catch (e) {
+                    console.error("Error saving to localStorage:", e);
+                    showMessage("Failed to save changes to local database.");
                 }
             });
         }
 
         // --- DECKBUILDER LOGIC ---
-        async function loadUserDecks() {
-            if (!userId) return;
-            const decksRef = collection(db, `artifacts/${appId}/users/${userId}/decks`);
-            onSnapshot(query(decksRef),
-                (snapshot) => {
-                    deckLists = [];
-                    snapshot.forEach(doc => deckLists.push({ id: doc.id, ...doc.data() }));
-                    renderDeckSelector();
-                    populateSimulationSetup();
-                },
-                (error) => {
-                    console.error("Error loading user decks:", error);
-                    // This error is less critical if the card DB also fails, but good to have.
-                    showMessage(`Could not load your saved decks: ${error.code}.`);
-                });
-        }
-
         async function loadOfflineDecks() {
             try {
                 offlineDecks = await StorageManager.getOfflineDecks();
@@ -8088,107 +7911,58 @@
                     cardPool: cardDatabase.map(card => card.id) // Save current card pool
                 };
 
-                const savingOffline = isOffline || currentDeckSource === 'offline' || currentDeckSource === 'ydk';
-                if (savingOffline) {
-                    const existingById = currentDeckSource === 'offline' && currentDeckId
-                        ? offlineDecks.find(d => d.id === currentDeckId)
-                        : null;
-                    const conflictingByName = offlineDecks.find(d => d.name.toLowerCase() === deckName.toLowerCase() && (!existingById || d.id !== existingById.id));
+                const existingById = currentDeckSource === 'offline' && currentDeckId
+                    ? offlineDecks.find(d => d.id === currentDeckId)
+                    : null;
+                const conflictingByName = offlineDecks.find(d => d.name.toLowerCase() === deckName.toLowerCase() && (!existingById || d.id !== existingById.id));
 
-                    if (ydkFiles.length === 0) {
-                        await StorageManager.loadYDKFiles({ silent: true });
-                    }
-
-                    if (conflictingByName) {
-                        const shouldOverwrite = typeof window !== 'undefined' ? window.confirm(`A local deck named "${deckName}" already exists. Overwrite it?`) : true;
-                        if (!shouldOverwrite) {
-                            showTooltip('Save cancelled.');
-                            return;
-                        }
-                    }
-
-                    const targetId = conflictingByName ? conflictingByName.id : existingById?.id;
-                    const baseRecord = conflictingByName || existingById;
-                    const existingSync = baseRecord?.sync || currentDeckMeta?.sync || null;
-                    const preferredFormat = existingSync?.format || currentDeckFormat || 'ydk';
-                    let syncMeta = existingSync ? { ...existingSync } : null;
-                    if (!syncMeta) {
-                        const fileName = generateUniqueYDKFileName(deckName, preferredFormat);
-                        syncMeta = { type: 'ydk-storage', name: fileName, format: preferredFormat, displayName: deckName };
-                    } else {
-                        syncMeta.type = syncMeta.type || 'ydk-storage';
-                        syncMeta.format = syncMeta.format || preferredFormat;
-                        syncMeta.displayName = deckName;
-                    }
-
-                    const offlineDeckPayload = {
-                        ...deckData,
-                        id: targetId,
-                        createdAt: baseRecord?.createdAt,
-                        sync: syncMeta
-                    };
-
-                    let savedDeck = await StorageManager.saveOfflineDeck(offlineDeckPayload);
-                    savedDeck = await syncYDKFromDeck(savedDeck, offlineDeckPayload) || savedDeck;
-
-                    currentDeckId = savedDeck.id;
-                    currentDeckSource = 'offline';
-                    const updatedSync = savedDeck.sync || syncMeta;
-                    currentDeckMeta = { name: savedDeck.name, sync: updatedSync ? { ...updatedSync } : null };
-                    isDeckDirty = false;
-
-                    await loadOfflineDecks();
-                    UI.deckSelector.value = encodeDeckSelectorValue('offline', savedDeck.id);
-                    const syncedFileName = (savedDeck.sync || syncMeta)?.name;
-                    showTooltip(`Deck '${deckName}' saved locally${syncedFileName ? ` and synced to ${syncedFileName}` : ''}.`);
-                    return;
+                if (ydkFiles.length === 0) {
+                    await StorageManager.loadYDKFiles({ silent: true });
                 }
 
-                // Determine if we are updating the currently loaded deck, or creating a new deck
-                let performUpdateById = false;
-                if (currentDeckSource === 'online' && currentDeckId) {
-                    const loaded = deckLists.find(d => d.id === currentDeckId);
-                    if (loaded && loaded.name === deckName) {
-                        performUpdateById = true; // same deck and same name → update in place
+                if (conflictingByName) {
+                    const shouldOverwrite = typeof window !== 'undefined' ? window.confirm(`A local deck named "${deckName}" already exists. Overwrite it?`) : true;
+                    if (!shouldOverwrite) {
+                        showTooltip('Save cancelled.');
+                        UI.loadingOverlay.classList.add('hidden');
+                        return;
                     }
                 }
 
-                if (performUpdateById) {
-                    await setDoc(doc(db, `artifacts/${appId}/users/${userId}/decks`, currentDeckId), deckData);
-                    currentDeckSource = 'online';
-                    currentDeckMeta = { name: deckName, sync: null };
-                    isDeckDirty = false;
-                    showTooltip(`Deck '${deckName}' updated.`);
+                const targetId = conflictingByName ? conflictingByName.id : existingById?.id;
+                const baseRecord = conflictingByName || existingById;
+                const existingSync = baseRecord?.sync || currentDeckMeta?.sync || null;
+                const preferredFormat = existingSync?.format || currentDeckFormat || 'ydk';
+                let syncMeta = existingSync ? { ...existingSync } : null;
+                if (!syncMeta) {
+                    const fileName = generateUniqueYDKFileName(deckName, preferredFormat);
+                    syncMeta = { type: 'ydk-storage', name: fileName, format: preferredFormat, displayName: deckName };
                 } else {
-                    // Name changed or no deck loaded → Save As (create new)
-                    // If a deck already exists with this name, confirm overwrite; otherwise create new
-                    const existingByName = deckLists.find(d => d.name === deckName);
-                    if (existingByName) {
-                        await new Promise((resolve) => {
-                            showConfirmModal(
-                                `A deck named "${deckName}" already exists. Overwrite it?`,
-                                async () => {
-                                    await setDoc(doc(db, `artifacts/${appId}/users/${userId}/decks`, existingByName.id), deckData);
-                                    currentDeckId = existingByName.id;
-                                    currentDeckSource = 'online';
-                                    currentDeckMeta = { name: deckName, sync: null };
-                                    isDeckDirty = false;
-                                    resolve();
-                                }
-                            );
-                        });
-                        showTooltip(`Deck '${deckName}' overwritten.`);
-                    } else {
-                        const ref = await addDoc(collection(db, `artifacts/${appId}/users/${userId}/decks`), deckData);
-                        currentDeckId = ref.id;
-                        currentDeckSource = 'online';
-                        currentDeckMeta = { name: deckName, sync: null };
-                        isDeckDirty = false;
-                        // Keep selector synced
-                        if (UI.deckSelector) UI.deckSelector.value = encodeDeckSelectorValue('online', currentDeckId);
-                        showTooltip(`Deck '${deckName}' saved.`);
-                    }
+                    syncMeta.type = syncMeta.type || 'ydk-storage';
+                    syncMeta.format = syncMeta.format || preferredFormat;
+                    syncMeta.displayName = deckName;
                 }
+
+                const offlineDeckPayload = {
+                    ...deckData,
+                    id: targetId,
+                    createdAt: baseRecord?.createdAt,
+                    sync: syncMeta
+                };
+
+                let savedDeck = await StorageManager.saveOfflineDeck(offlineDeckPayload);
+                savedDeck = await syncYDKFromDeck(savedDeck, offlineDeckPayload) || savedDeck;
+
+                currentDeckId = savedDeck.id;
+                currentDeckSource = 'offline';
+                const updatedSync = savedDeck.sync || syncMeta;
+                currentDeckMeta = { name: savedDeck.name, sync: updatedSync ? { ...updatedSync } : null };
+                isDeckDirty = false;
+
+                await loadOfflineDecks();
+                UI.deckSelector.value = encodeDeckSelectorValue('offline', savedDeck.id);
+                const syncedFileName = (savedDeck.sync || syncMeta)?.name;
+                showTooltip(`Deck '${deckName}' saved locally${syncedFileName ? ` and synced to ${syncedFileName}` : ''}.`);
             } catch (e) {
                 console.error("Error saving deck:", e);
                 showMessage("An error occurred while saving the deck.");
@@ -8210,23 +7984,14 @@
             }
 
             let selectedDeck = null;
-            if (selection.source === 'offline') {
-                selectedDeck = offlineDecks.find(d => d.id === selection.id);
-                if (!selectedDeck) {
-                    showMessage('Offline deck not found.');
-                    return;
-                }
-                currentDeckSource = 'offline';
-                currentDeckMeta = { name: selectedDeck.name, sync: selectedDeck.sync ? { ...selectedDeck.sync } : null };
-            } else {
-                selectedDeck = deckLists.find(d => d.id === selection.id);
-                if (!selectedDeck) {
-                    showMessage('Deck not found.');
-                    return;
-                }
-                currentDeckSource = 'online';
-                currentDeckMeta = { name: selectedDeck.name, sync: null };
+            selectedDeck = offlineDecks.find(d => d.id === selection.id);
+            if (!selectedDeck) {
+                showMessage('Deck not found.');
+                return;
             }
+            currentDeckSource = 'offline';
+            currentDeckMeta = { name: selectedDeck.name, sync: selectedDeck.sync ? { ...selectedDeck.sync } : null };
+
 
             currentDeck.main = [...(selectedDeck.main || [])];
             currentDeck.side = [...(selectedDeck.side || [])];
@@ -8256,68 +8021,35 @@
             const selection = decodeDeckSelectorValue(UI.deckSelector.value);
             if (!selection.id) { showMessage("Please select a deck to delete."); return; }
 
-            if (selection.source === 'offline') {
-                const deck = offlineDecks.find(d => d.id === selection.id);
-                if (!deck) { showMessage('Offline deck not found.'); return; }
-                const confirmed = typeof window !== 'undefined' ? window.confirm(`Delete local deck '${deck.name}'? This action cannot be undone.`) : true;
-                if (!confirmed) return;
+            const deck = offlineDecks.find(d => d.id === selection.id);
+            if (!deck) { showMessage('Deck not found.'); return; }
+            const confirmed = typeof window !== 'undefined' ? window.confirm(`Delete deck '${deck.name}'? This action cannot be undone.`) : true;
+            if (!confirmed) return;
 
-                UI.loadingOverlay.classList.remove('hidden');
-                deleteOfflineDeckFromDB(deck.id)
-                    .then(async () => {
-                        showTooltip(`Deleted local deck '${deck.name}'.`);
-                        if (currentDeckSource === 'offline' && currentDeckId === deck.id) {
-                            currentDeck = { main: [], side: [], extra: [], sidingPatterns: {} };
-                            currentDeckId = null;
-                            currentDeckSource = 'unsaved';
-                            currentDeckMeta = { name: null, sync: null };
-                            isDeckDirty = false;
-                            UI.deckNameInput.value = '';
-                            cardDatabase = [...originalCardDatabase];
-                            renderCurrentDeck();
-                            renderCardDatabase();
-                        }
-                        await loadOfflineDecks();
-                        populateSimulationSetup();
-                        UI.deckSelector.value = '';
-                    })
-                    .catch((error) => {
-                        console.error('Error deleting offline deck:', error);
-                        showMessage('Failed to delete local deck.');
-                    })
-                    .finally(() => UI.loadingOverlay.classList.add('hidden'));
-                return;
-            }
-
-            const deckId = selection.id;
-            const deckName = deckLists.find(d => d.id === deckId)?.name || 'the selected deck';
-
-            showConfirmModal(`Are you sure you want to delete '${deckName}'? This cannot be undone.`, async () => {
-                UI.loadingOverlay.classList.remove('hidden');
-                try {
-                    await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/decks`, deckId));
-                    showTooltip(`Deck deleted successfully.`);
-                    if (currentDeckSource === 'online' && currentDeckId === deckId) {
+            UI.loadingOverlay.classList.remove('hidden');
+            deleteOfflineDeckFromDB(deck.id)
+                .then(async () => {
+                    showTooltip(`Deleted deck '${deck.name}'.`);
+                    if (currentDeckSource === 'offline' && currentDeckId === deck.id) {
                         currentDeck = { main: [], side: [], extra: [], sidingPatterns: {} };
                         currentDeckId = null;
                         currentDeckSource = 'unsaved';
                         currentDeckMeta = { name: null, sync: null };
                         isDeckDirty = false;
                         UI.deckNameInput.value = '';
-                        // Reset card pool to full database when current deck is deleted
                         cardDatabase = [...originalCardDatabase];
                         renderCurrentDeck();
                         renderCardDatabase();
                     }
-                    UI.deckSelector.value = '';
+                    await loadOfflineDecks();
                     populateSimulationSetup();
-                } catch (e) {
-                    console.error("Error deleting deck:", e);
-                    showMessage("An error occurred while deleting the deck.");
-                } finally {
-                    UI.loadingOverlay.classList.add('hidden');
-                }
-            });
+                    UI.deckSelector.value = '';
+                })
+                .catch((error) => {
+                    console.error('Error deleting deck:', error);
+                    showMessage('Failed to delete deck.');
+                })
+                .finally(() => UI.loadingOverlay.classList.add('hidden'));
         }
 
         function exportDeckToYDK() {
@@ -9441,23 +9173,20 @@
             // Check if user has any stored data
             const hasYDKFiles = ydkFiles.length > 0;
             const hasOfflineDecks = offlineDecks.length > 0;
-            const hasOnlineDecks = deckLists.length > 0;
             const hasStoredFolder = localStorage.getItem('ydkFolderPath') !== null;
             const hasSeenWelcome = localStorage.getItem('hasSeenWelcome') === 'true';
 
             console.log('[DEBUG] New user check:', {
                 hasYDKFiles,
                 hasOfflineDecks,
-                hasOnlineDecks,
                 hasStoredFolder,
                 hasSeenWelcome,
                 ydkFilesLength: ydkFiles.length,
-                offlineDecksLength: offlineDecks.length,
-                deckListsLength: deckLists.length
+                offlineDecksLength: offlineDecks.length
             });
 
             // User is new if they have no decks, no YDK files, no stored folder, and haven't seen welcome
-            const isNew = !hasYDKFiles && !hasOfflineDecks && !hasOnlineDecks && !hasStoredFolder && !hasSeenWelcome;
+            const isNew = !hasYDKFiles && !hasOfflineDecks && !hasStoredFolder && !hasSeenWelcome;
             console.log('[DEBUG] Is new user:', isNew);
             return isNew;
         }
@@ -10883,28 +10612,18 @@
             cardDatabase.sort((a, b) => a.name.localeCompare(b.name));
             renderCardDatabase(); // Refresh the DB view
 
-            // Save to localStorage in offline mode
-            if (isOffline) {
-                try {
-                    const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
-                    // Also check localStorage for duplicates
-                    const cardsToSave = cardsToAdd.filter(card => !savedCards.some(saved => saved.id === card.id));
-                    if (cardsToSave.length > 0) {
-                        savedCards.push(...cardsToSave);
-                        localStorage.setItem('offlineCardDatabase', JSON.stringify(savedCards));
-                        console.log(`[DEBUG] Saved ${cardsToSave.length} cards to localStorage`);
-                    }
-                } catch (e) {
-                    console.error('Error saving cards to localStorage:', e);
+            // Save to localStorage
+            try {
+                const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
+                // Also check localStorage for duplicates
+                const cardsToSave = cardsToAdd.filter(card => !savedCards.some(saved => saved.id === card.id));
+                if (cardsToSave.length > 0) {
+                    savedCards.push(...cardsToSave);
+                    localStorage.setItem('offlineCardDatabase', JSON.stringify(savedCards));
+                    console.log(`[DEBUG] Saved ${cardsToSave.length} cards to localStorage`);
                 }
-            } else {
-                // If online, also save to Firebase
-                const batch = writeBatch(db);
-                cardsToAdd.forEach(card => {
-                    const docRef = doc(db, `artifacts/${appId}/users/${userId}/cards`, card.id);
-                    batch.set(docRef, card);
-                });
-                await batch.commit();
+            } catch (e) {
+                console.error('Error saving cards to localStorage:', e);
             }
         }
 
@@ -11140,15 +10859,13 @@
                     cardDatabase = cardDatabase.filter(card => !selectedGridCards.has(card.id));
                     originalCardDatabase = originalCardDatabase.filter(card => !selectedGridCards.has(card.id));
 
-                    // Update localStorage if in offline mode
-                    if (isOffline) {
-                        try {
-                            const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
-                            const updatedCards = savedCards.filter(card => !selectedGridCards.has(card.id));
-                            localStorage.setItem('offlineCardDatabase', JSON.stringify(updatedCards));
-                        } catch (e) {
-                            console.error('Error updating localStorage:', e);
-                        }
+                    // Update localStorage
+                    try {
+                        const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
+                        const updatedCards = savedCards.filter(card => !selectedGridCards.has(card.id));
+                        localStorage.setItem('offlineCardDatabase', JSON.stringify(updatedCards));
+                    } catch (e) {
+                        console.error('Error updating localStorage:', e);
                     }
 
                     // Clear selection and re-render
@@ -11174,12 +10891,10 @@
             if (deckCardIds.length === 0) {
                 cardDatabase = [];
                 originalCardDatabase = [];
-                if (isOffline) {
-                    try {
-                        localStorage.setItem('offlineCardDatabase', JSON.stringify([]));
-                    } catch (e) {
-                        console.error('Error updating localStorage:', e);
-                    }
+                try {
+                    localStorage.setItem('offlineCardDatabase', JSON.stringify([]));
+                } catch (e) {
+                    console.error('Error updating localStorage:', e);
                 }
                 renderCardDatabase();
                 populateSimulationSetup();
@@ -11208,13 +10923,11 @@
                         // Filter original database to only include deck cards
                         cardDatabase = originalCardDatabase.filter(card => deckCardIds.includes(card.id));
 
-                        // Update localStorage if in offline mode
-                        if (isOffline) {
-                            try {
-                                localStorage.setItem('offlineCardDatabase', JSON.stringify(cardDatabase));
-                            } catch (e) {
-                                console.error('Error updating localStorage:', e);
-                            }
+                        // Update localStorage
+                        try {
+                            localStorage.setItem('offlineCardDatabase', JSON.stringify(cardDatabase));
+                        } catch (e) {
+                            console.error('Error updating localStorage:', e);
                         }
 
                         // Clear any grid selection
@@ -12510,22 +12223,12 @@
 
             if (offlineDecks.length > 0) {
                 const offlineGroup = document.createElement('optgroup');
-                offlineGroup.label = 'Offline Decks';
+                offlineGroup.label = 'Saved Decks';
                 offlineDecks.forEach(deck => {
                     const option = new Option(deck.name, encodeDeckSelectorValue('offline', deck.id));
                     offlineGroup.appendChild(option);
                 });
                 UI.deckSelector.appendChild(offlineGroup);
-            }
-
-            if (deckLists.length > 0) {
-                const onlineGroup = document.createElement('optgroup');
-                onlineGroup.label = 'Online Decks';
-                deckLists.forEach(deck => {
-                    const option = new Option(deck.name, encodeDeckSelectorValue('online', deck.id));
-                    onlineGroup.appendChild(option);
-                });
-                UI.deckSelector.appendChild(onlineGroup);
             }
 
             if (previousSelection.source && previousSelection.id) {
@@ -12537,17 +12240,18 @@
             }
         }
 
+        // Populate the shootout simulation with current card database
+        function populateSimulationSetup() {
+            if (ShootoutManager && ShootoutManager.cardCache) {
+                ShootoutManager.cardCache = [...cardDatabase];
+            }
+        }
+
         // --- SIDING PATTERN LOGIC ---
         async function openSidingPatternModal(isTemp = false, onTempSave = null) {
-            // In offline mode, check if a deck is in the builder. Online, check if a saved deck is loaded.
-            if (isOffline) {
-                if (currentDeck.main.length === 0) {
-                    showMessage("Please build or import a deck before managing siding patterns.");
-                    return;
-                }
-            } else if (!UI.deckSelector.value) {
-                // This check is for online mode only.
-                showMessage("Please load a saved deck before managing siding patterns.");
+            // Check if a deck is in the builder
+            if (currentDeck.main.length === 0) {
+                showMessage("Please build or import a deck before managing siding patterns.");
                 return;
             }
             sidingState = { out: {}, in: {} }; // Reset state (maps: { cardId: count })
@@ -12618,9 +12322,6 @@
             }
             if (selection.source === 'offline') {
                 return offlineDecks.find(d => d.id === selection.id) || currentDeck;
-            }
-            if (selection.source === 'online') {
-                return deckLists.find(d => d.id === selection.id) || currentDeck;
             }
             return currentDeck;
         }
@@ -13036,25 +12737,7 @@
                 markDeckDirty();
             }
 
-            if (selection.source === 'online' && selection.id) {
-                const deckDocRef = doc(db, `artifacts/${appId}/users/${userId}/decks`, selection.id);
-                try {
-                    // Update currentDeck if activeDeck is the same, otherwise update the active deck
-                    if (activeDeck === currentDeck) {
-                        currentDeck.sidingPatterns = activeDeck.sidingPatterns;
-                    }
-                    await updateDoc(deckDocRef, {
-                        sidingPatterns: activeDeck.sidingPatterns
-                    });
-                    showMessage(`Siding pattern "${name}" saved.`);
-                } catch (error) {
-                    console.error("Error saving siding pattern:", error);
-                    showMessage("Failed to save siding pattern.");
-                    return;
-                }
-            } else {
-                showTooltip(`Pattern "${name}" saved locally. Remember to save your deck to keep it.`);
-            }
+            showTooltip(`Pattern "${name}" saved locally. Remember to save your deck to keep it.`);
 
             clearPatternEditor();
             renderSidingPatternList();
@@ -13333,26 +13016,10 @@
                 const activeDeck = getActiveDeckForSiding();
                 if (activeDeck.sidingPatterns && activeDeck.sidingPatterns[patternName]) {
                     delete activeDeck.sidingPatterns[patternName];
-
-                    const selection = decodeDeckSelectorValue(UI.deckSelector ? UI.deckSelector.value : '');
-                    if (selection.source === 'online' && selection.id) {
-                        const deckDocRef = doc(db, `artifacts/${appId}/users/${userId}/decks`, selection.id);
-                        updateDoc(deckDocRef, {
-                            sidingPatterns: activeDeck.sidingPatterns
-                        }).then(() => {
-                            showMessage(`Pattern "${patternName}" deleted.`);
-                            clearPatternEditor();
-                            renderSidingPatternList();
-                        }).catch(error => {
-                            console.error("Error deleting siding pattern:", error);
-                            showMessage("Failed to delete siding pattern.");
-                        });
-                    } else {
-                        markDeckDirty();
-                        showTooltip(`Pattern "${patternName}" removed locally. Save your deck to keep changes.`);
-                        clearPatternEditor();
-                        renderSidingPatternList();
-                    }
+                    markDeckDirty();
+                    showTooltip(`Pattern "${patternName}" removed locally. Save your deck to keep changes.`);
+                    clearPatternEditor();
+                    renderSidingPatternList();
                 }
             }
         }
@@ -13436,27 +13103,11 @@
 
         async function deleteSidingPattern(e) {
             const name = e.target.dataset.name;
-            const selection = decodeDeckSelectorValue(UI.deckSelector.value);
             const activeDeck = getActiveDeckForSiding();
 
             delete activeDeck.sidingPatterns[name];
-
-            if (selection.source === 'online' && selection.id) {
-                const deckDocRef = doc(db, `artifacts/${appId}/users/${userId}/decks`, selection.id);
-                try { // This will only work online, which is the intended behavior for permanent patterns
-                    await updateDoc(deckDocRef, {
-                        sidingPatterns: currentDeck.sidingPatterns
-                    });
-                    showMessage(`Pattern "${name}" deleted.`);
-                } catch (error) {
-                    console.error("Error deleting siding pattern:", error);
-                    showMessage("Failed to delete siding pattern.");
-                    return;
-                }
-            } else {
-                markDeckDirty();
-                showTooltip(`Pattern "${name}" removed locally. Save your deck to keep changes.`);
-            }
+            markDeckDirty();
+            showTooltip(`Pattern "${name}" removed locally. Save your deck to keep changes.`);
             renderSidingPatternList();
         }
 
@@ -13492,14 +13143,7 @@
                     // Merge imported patterns with existing ones
                     activeDeck.sidingPatterns = { ...activeDeck.sidingPatterns, ...importedPatterns };
                     markDeckDirty();
-
-                    if (selection.source === 'online') {
-                        const deckDocRef = doc(db, `artifacts/${appId}/users/${userId}/decks`, selection.id);
-                        await updateDoc(deckDocRef, { sidingPatterns: currentDeck.sidingPatterns });
-                        showMessage("Siding patterns imported and saved successfully.");
-                    } else {
-                        showTooltip('Siding patterns imported locally. Save your deck to persist them.');
-                    }
+                    showTooltip('Siding patterns imported locally. Save your deck to persist them.');
                     renderSidingPatternList(); // Refresh the list in the modal
                 } catch (err) {
                     showMessage("Invalid siding pattern file. Please ensure it's a valid JSON file.");
@@ -13845,17 +13489,14 @@
             },
 
             populateSetup: function () {
-                const currentDeckVal = UI.shootoutUserDeckSelector.value;
-                UI.shootoutUserDeckSelector.innerHTML = ''; // Clear it
-                if (isOffline) {
-                    UI.shootoutUserDeckSelector.innerHTML = '<option value="offline-deck" selected>Using Deck from Deckbuilder</option>';
-                    UI.shootoutUserDeckSelector.disabled = true;
-                } else {
-                    UI.shootoutUserDeckSelector.innerHTML = '<option value="">-- Select Your Deck --</option>';
-                    deckLists.forEach(deck => UI.shootoutUserDeckSelector.add(new Option(deck.name, deck.id)));
-                    UI.shootoutUserDeckSelector.value = currentDeckVal;
-                    UI.shootoutUserDeckSelector.disabled = false;
-                }
+                // Show current deck from deckbuilder
+                const deckName = UI.deckNameInput.value.trim() || 'Unsaved Deck';
+                const mainCount = currentDeck.main.length;
+                const sideCount = currentDeck.side.length;
+
+                UI.shootoutUserDeckSelector.innerHTML = `<option value="">${deckName} (Main: ${mainCount}, Side: ${sideCount})</option>`;
+                UI.shootoutUserDeckSelector.disabled = true;
+
                 // Reset opponent deck state on setup
                 this.opponent = { main: [], side: [], name: 'Opponent Deck' };
                 UI.shootoutOpponentDeckInput.value = '';
@@ -13893,15 +13534,7 @@
                     this.opponent.name = deckName;
 
                     // Try to find a matching siding pattern for this YDK file name
-                    let userDeckData;
-                    if (isOffline) {
-                        userDeckData = { name: UI.deckNameInput.value || 'Imported Deck', main: currentDeck.main, side: currentDeck.side, extra: currentDeck.extra || [], sidingPatterns: currentDeck.sidingPatterns || {} };
-                    } else {
-                        const userDeckId = UI.shootoutUserDeckSelector.value;
-                        if (userDeckId) {
-                            userDeckData = deckLists.find(d => d.id === userDeckId);
-                        }
-                    }
+                    let userDeckData = { name: UI.deckNameInput.value || 'Imported Deck', main: currentDeck.main, side: currentDeck.side, extra: currentDeck.extra || [], sidingPatterns: currentDeck.sidingPatterns || {} };
 
                     // Store the matched pattern name for later use
                     this.opponent.matchedSidingPattern = null;
@@ -13929,76 +13562,76 @@
             },
 
             start: async function () {
-                const userDeckId = isOffline ? 'offline-deck' : UI.shootoutUserDeckSelector.value;
-                const shootoutMode = document.querySelector('input[name="shootout-mode"]:checked').value;
-                const trials = parseInt(UI.shootoutTrialsInput.value);
+                try {
+                    const shootoutMode = document.querySelector('input[name="shootout-mode"]:checked')?.value;
+                    const trials = parseInt(UI.shootoutTrialsInput?.value);
 
-                if (!userDeckId) { showMessage("Please select your deck."); return; }
-                if (this.opponent.main.length === 0) { showMessage("Please load an opponent's deck."); return; }
-                if (!shootoutMode) { showMessage("Please select a shootout mode."); return; }
-                if (!trials || trials < 1) { showMessage("Please enter a valid number of trials."); return; }
+                    if (currentDeck.main.length === 0) { showMessage("Please build a deck first."); return; }
+                    if (this.opponent.main.length === 0) { showMessage("Please load an opponent's deck."); return; }
+                    if (!shootoutMode) { showMessage("Please select a shootout mode."); return; }
+                    if (!trials || trials < 1) { showMessage("Please enter a valid number of trials."); return; }
 
-                UI.loadingOverlay.classList.remove('hidden');
+                    UI.loadingOverlay.classList.remove('hidden');
 
-                let userDeckData;
-                if (isOffline) {
-                    userDeckData = { name: UI.deckNameInput.value || 'Imported Deck', main: currentDeck.main, side: currentDeck.side, extra: currentDeck.extra || [] };
-                } else {
-                    userDeckData = deckLists.find(d => d.id === userDeckId);
-                }
+                    const userDeckData = { name: UI.deckNameInput?.value || 'Imported Deck', main: currentDeck.main, side: currentDeck.side, extra: currentDeck.extra || [] };
 
-                this.state = {
-                    userDeckData,
-                    opponentDeckData: this.opponent,
-                    mode: shootoutMode,
-                    totalTrials: trials,
-                    currentTrial: 0, // MODIFIED
-                    results: [],
-                    trialHistory: [], // Reset history
-                };
+                    this.state = {
+                        userDeckData,
+                        opponentDeckData: this.opponent,
+                        mode: shootoutMode,
+                        totalTrials: trials,
+                        currentTrial: 0,
+                        results: [],
+                        trialHistory: [],
+                    };
 
-                // Centralized card cache creation
-                this.cardCache = [...cardDatabase];
-                const allOpponentIds = [...new Set([...this.opponent.main, ...this.opponent.side])];
-                const missingCardIds = allOpponentIds.filter(id => !this.cardCache.some(c => c.id === id));
+                    // Centralized card cache creation
+                    this.cardCache = [...cardDatabase];
+                    const allOpponentIds = [...new Set([...this.opponent.main, ...this.opponent.side])];
+                    const missingCardIds = allOpponentIds.filter(id => !this.cardCache.some(c => c.id === id));
 
-                if (missingCardIds.length > 0) {
-                    showMessage(`Fetching data for ${missingCardIds.length} new opponent card(s)...`);
-                    for (const id of missingCardIds) {
-                        try {
-                            const response = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${id}`);
-                            const data = await response.json();
-                            if (data.data && data.data[0]) {
-                                const cardData = data.data[0];
-                                this.cardCache.push({
-                                    id: cardData.id.toString(),
-                                    name: cardData.name,
-                                    type: cardData.type,
-                                    imageUrl: cardData.card_images[0].image_url
-                                });
-                            } else {
-                                if (!this.cardCache.some(c => String(c.id) === String(id))) { // MODIFIED
+                    if (missingCardIds.length > 0) {
+                        showMessage(`Fetching data for ${missingCardIds.length} new opponent card(s)...`);
+                        for (const id of missingCardIds) {
+                            try {
+                                const response = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${id}`);
+                                const data = await response.json();
+                                if (data.data && data.data[0]) {
+                                    const cardData = data.data[0];
+                                    this.cardCache.push({
+                                        id: cardData.id.toString(),
+                                        name: cardData.name,
+                                        type: cardData.type,
+                                        imageUrl: cardData.card_images[0].image_url
+                                    });
+                                } else {
+                                    if (!this.cardCache.some(c => String(c.id) === String(id))) {
+                                        this.cardCache.push({ id, name: `Unknown ID: ${id}`, imageUrl: `https://placehold.co/100x140/2d3748/e2e8f0?text=${id}` });
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn(`Could not fetch opponent card ID ${id}`, e);
+                                if (!this.cardCache.some(c => String(c.id) === String(id))) {
                                     this.cardCache.push({ id, name: `Unknown ID: ${id}`, imageUrl: `https://placehold.co/100x140/2d3748/e2e8f0?text=${id}` });
                                 }
                             }
-                        } catch (e) {
-                            console.warn(`Could not fetch opponent card ID ${id}`, e);
-                            if (!this.cardCache.some(c => String(c.id) === String(id))) { // MODIFIED
-                                this.cardCache.push({ id, name: `Unknown ID: ${id}`, imageUrl: `https://placehold.co/100x140/2d3748/e2e8f0?text=${id}` });
-                            }
                         }
                     }
-                }
 
-                UI.loadingOverlay.classList.add('hidden');
+                    UI.loadingOverlay.classList.add('hidden');
 
-                if (shootoutMode.includes('post-side')) {
-                    this.renderSiding();
-                    showView('shootoutSidingView');
-                } else {
-                    this.state.userDeckFinal = [...userDeckData.main];
-                    this.state.opponentDeckFinal = [...this.opponent.main];
-                    this.startEvaluationPhase();
+                    if (shootoutMode.includes('post-side')) {
+                        this.renderSiding();
+                        showView('shootoutSidingView');
+                    } else {
+                        this.state.userDeckFinal = [...userDeckData.main];
+                        this.state.opponentDeckFinal = [...this.opponent.main];
+                        this.startEvaluationPhase();
+                    }
+                } catch (error) {
+                    console.error('Error starting shootout:', error);
+                    showMessage('Failed to start shootout: ' + error.message);
+                    UI.loadingOverlay.classList.add('hidden');
                 }
             },
 
@@ -14301,13 +13934,28 @@
             },
 
             startEvaluationPhase: function () {
-                showView('shootoutSimulatorView');
-                this.nextTrial();
+                try {
+                    showView('shootoutSimulatorView');
+                    this.nextTrial();
+                } catch (error) {
+                    console.error('Error starting evaluation phase:', error);
+                    showMessage('Failed to start simulator: ' + error.message);
+                    UI.loadingOverlay.classList.add('hidden');
+                }
+            },
+
+            // Fisher-Yates shuffle algorithm
+            shuffleArray: function(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+                return array;
             },
 
             nextTrial: function () {
-                // Save current state to history before proceeding
-                if (this.state.currentTrial > 0) {
+                // Save current state to history before proceeding (only if we have a previous trial)
+                if (this.state.currentTrial > 0 && this.state.currentUserHand) {
                     this.trialHistory.push({
                         userHand: [...this.state.currentUserHand],
                         opponentHand: [...this.state.currentOpponentHand],
@@ -14321,8 +13969,8 @@
                 }
                 this.state.currentTrial++;
 
-                this.state.currentUserDeck = shuffleArray([...this.state.userDeckFinal]);
-                this.state.currentOpponentDeck = shuffleArray([...this.state.opponentDeckFinal]);
+                this.state.currentUserDeck = this.shuffleArray([...this.state.userDeckFinal]);
+                this.state.currentOpponentDeck = this.shuffleArray([...this.state.opponentDeckFinal]);
 
                 this.state.currentUserHand = this.state.currentUserDeck.splice(0, 5);
                 this.state.currentOpponentHand = this.state.currentOpponentDeck.splice(0, 5);
@@ -14345,27 +13993,44 @@
                         e.dataTransfer.effectAllowed = 'move';
                     });
 
+                    const imageUrl = card?.imageUrl || 'https://placehold.co/120x175/2d3748/e2e8f0?text=?';
+                    const cardName = card?.name || `ID: ${cardId}`;
                     el.innerHTML = `
-                        <img src="${card?.imageUrl}" class="w-full rounded-lg shadow-lg" title="${card?.name}" onerror="this.onerror=null;this.src='https://placehold.co/120x175/2d3748/e2e8f0?text=?';">
+                        <img src="${imageUrl}" class="w-full rounded-lg shadow-lg" title="${cardName}" onerror="this.onerror=null;this.src='https://placehold.co/120x175/2d3748/e2e8f0?text=?';">
                      `;
 
                     return el;
                 };
 
-                UI.shootoutSimUserHand.innerHTML = '';
-                this.state.currentUserHand.forEach(id => UI.shootoutSimUserHand.appendChild(cardMapper(id, 'user')));
+                // Clear and populate user hand
+                if (UI.shootoutSimUserHand) {
+                    UI.shootoutSimUserHand.innerHTML = '';
+                    this.state.currentUserHand.forEach(id => UI.shootoutSimUserHand.appendChild(cardMapper(id, 'user')));
+                }
 
-                UI.shootoutSimOpponentHand.innerHTML = '';
-                this.state.currentOpponentHand.forEach(id => UI.shootoutSimOpponentHand.appendChild(cardMapper(id, 'opponent')));
+                // Clear and populate opponent hand
+                if (UI.shootoutSimOpponentHand) {
+                    UI.shootoutSimOpponentHand.innerHTML = '';
+                    this.state.currentOpponentHand.forEach(id => UI.shootoutSimOpponentHand.appendChild(cardMapper(id, 'opponent')));
+                }
 
-                UI.shootoutSimUserDeckCount.textContent = `Deck: ${this.state.currentUserDeck.length}`;
-                UI.shootoutSimOpponentDeckCount.textContent = `Deck: ${this.state.currentOpponentDeck.length}`;
-                UI.shootoutNotes.value = '';
+                // Update deck counts
+                if (UI.shootoutSimUserDeckCount) {
+                    UI.shootoutSimUserDeckCount.textContent = `Deck: ${this.state.currentUserDeck.length}`;
+                }
+                if (UI.shootoutSimOpponentDeckCount) {
+                    UI.shootoutSimOpponentDeckCount.textContent = `Deck: ${this.state.currentOpponentDeck.length}`;
+                }
+
+                if (UI.shootoutNotes) {
+                    UI.shootoutNotes.value = '';
+                }
 
                 const scenarioText = this.state.mode.includes('first') ? 'Going First' : 'Going Second';
-                const scenarioEl = UI.shootoutSimScenarioIndicator;
-                scenarioEl.textContent = scenarioText;
-                scenarioEl.classList.remove('hidden');
+                if (UI.shootoutSimScenarioIndicator) {
+                    UI.shootoutSimScenarioIndicator.textContent = scenarioText;
+                    UI.shootoutSimScenarioIndicator.classList.remove('hidden');
+                }
 
                 // Populate deck views
                 const simpleCardMapper = (id) => {
@@ -14373,8 +14038,16 @@
                     if (!card) return `<div class="w-full aspect-[2.5/3.5] rounded-lg shadow-lg bg-slate-700 flex items-center p-4 text-xs text-center p-1">Unknown ID: ${id}</div>`;
                     return `<img src="${card.imageUrl}" class="w-full rounded-lg shadow-lg" title="${card.name}" onerror="this.onerror=null;this.src='https://placehold.co/120x175/2d3748/e2e8f0?text=?';">`;
                 }
-                document.getElementById('userFullDeck').innerHTML = this.state.currentUserDeck.map(simpleCardMapper).join('');
-                document.getElementById('opponentFullDeck').innerHTML = this.state.currentOpponentDeck.map(simpleCardMapper).join('');
+
+                const userFullDeckEl = document.getElementById('userFullDeck');
+                if (userFullDeckEl) {
+                    userFullDeckEl.innerHTML = this.state.currentUserDeck.map(simpleCardMapper).join('');
+                }
+
+                const opponentFullDeckEl = document.getElementById('opponentFullDeck');
+                if (opponentFullDeckEl) {
+                    opponentFullDeckEl.innerHTML = this.state.currentOpponentDeck.map(simpleCardMapper).join('');
+                }
             },
 
             moveCard: function (cardId, player, action) {
@@ -14390,8 +14063,8 @@
                 else if (action === 'bottom') deck.push(cardId);
                 else if (action === 'shuffle') {
                     deck.push(cardId);
-                    if (player === 'user') this.state.currentUserDeck = shuffleArray(deck);
-                    else this.state.currentOpponentDeck = shuffleArray(deck);
+                    if (player === 'user') this.state.currentUserDeck = this.shuffleArray(deck);
+                    else this.state.currentOpponentDeck = this.shuffleArray(deck);
                 }
 
                 this.renderTrial();
@@ -14454,8 +14127,8 @@
                 const deckIndex = deck.indexOf(cardId);
                 if (deckIndex > -1) {
                     deck.splice(deckIndex, 1);
-                    if (player === 'user') this.state.currentUserDeck = shuffleArray(deck);
-                    else this.state.currentOpponentDeck = shuffleArray(deck);
+                    if (player === 'user') this.state.currentUserDeck = this.shuffleArray(deck);
+                    else this.state.currentOpponentDeck = this.shuffleArray(deck);
                     hand.push(cardId);
                     UI.searchDeckModal.classList.add('hidden');
                     this.renderTrial();
@@ -19343,9 +19016,6 @@
                         class="px-4 py-2 rounded-md text-sm font-semibold transition-colors hover:bg-[var(--color-primary-hover)]">Deckbuilder</button>
                     <button id="navShootout"
                         class="px-4 py-2 rounded-md text-sm font-semibold transition-colors hover:bg-[var(--color-primary-hover)]">Shootout</button>
-                    <button id="navOnlineMode"
-                        class="px-4 py-2 rounded-md text-sm font-semibold transition-colors bg-gray-500 text-gray-300 cursor-not-allowed opacity-50"
-                        title="Currently Unavailable" disabled>Online Mode</button>
                 </nav>
             </div>
         </header>
@@ -20471,6 +20141,13 @@
             console.error('Window object not available, cannot export PDFManager');
         }
     })();
+    </script>
+
+    <!-- Clear any leftover button editor config from localStorage -->
+    <script>
+        localStorage.removeItem('buttonEditorConfig');
+        const buttonEditorStyles = document.getElementById('buttonEditorHoverStyles');
+        if (buttonEditorStyles) buttonEditorStyles.remove();
     </script>
 
 </body>
