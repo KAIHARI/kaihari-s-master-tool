@@ -1398,6 +1398,13 @@
         let cardDatabaseSource = 'db'; // 'db' or 'all' - controls whether to show database cards or all game cards in database view
         let showExtraDeckCards = true; // Controls whether extra deck cards are shown in database view
 
+        // --- UX IMPROVEMENTS STATE ---
+        let dbSortBy = 'name'; // Database sort field: 'name', 'type', 'atk', 'def', 'level'
+        let dbSortOrder = 'asc'; // Database sort order: 'asc' or 'desc'
+        let currentPreviewCard = null; // Currently displayed card in preview panel
+        let previewCardList = []; // Current list of cards for navigation
+        let previewCardIndex = -1; // Current index in the card list
+
 
         // --- ADVANCED CARD SEARCH STATE ---
         let advancedSearchState = {
@@ -1472,6 +1479,18 @@
             gridSelectionControls: null, selectAllGridBtn: null, clearSelectionGridBtn: null, deleteSelectedGridBtn: null, selectedCount: null,
             cardDatabaseSection: null, resizeHandle: null, deckBuilderSection: null, deckBuilderContainer: null,
             advancedSearchBtn: null,
+            // UX Improvements - Sort Controls
+            dbSortSelect: null, dbSortOrderBtn: null, dbResultCount: null,
+            // UX Improvements - Preview Modal
+            cardPreviewModal: null, closePreviewModal: null,
+            previewCardImage: null, previewCardName: null, previewCardType: null,
+            previewStats: null, previewCardDesc: null, previewAddMain: null, previewAddSide: null,
+            // Enhanced Modal Elements
+            previewBanlistBadge: null, previewBanlistText: null,
+            previewArchetype: null,
+            previewCopyEffect: null, copyFeedback: null,
+            previewSetInfo: null, previewSetInfoToggle: null, previewSetList: null,
+            previewAddExtra: null, previewActionButtons: null,
 
             // Advanced Search Modal
             advancedSearchModal: null, advancedSearchModalClose: null, advSearchTextInput: null,
@@ -4828,6 +4847,59 @@
             UI.databaseSourceToggle.addEventListener('click', toggleDatabaseSource);
             UI.extraDeckToggle.addEventListener('click', toggleExtraDeckCards);
 
+            // UX Improvements - Sort Controls
+            if (UI.dbSortSelect) {
+                UI.dbSortSelect.addEventListener('change', (e) => {
+                    dbSortBy = e.target.value;
+                    renderCardDatabase();
+                });
+            }
+
+            if (UI.dbSortOrderBtn) {
+                UI.dbSortOrderBtn.addEventListener('click', () => {
+                    dbSortOrder = dbSortOrder === 'asc' ? 'desc' : 'asc';
+                    // Update icon
+                    const icon = UI.dbSortOrderBtn.querySelector('svg');
+                    if (icon) {
+                        if (dbSortOrder === 'asc') {
+                            icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"></path>';
+                        } else {
+                            icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m5-4v12m0 0l-4-4m4 4l4-4"></path>';
+                        }
+                    }
+                    renderCardDatabase();
+                });
+            }
+
+            // UX Improvements - Preview Modal
+            if (UI.closePreviewModal) {
+                UI.closePreviewModal.addEventListener('click', hideCardPreview);
+            }
+
+            // Preview modal - close on backdrop click
+            if (UI.cardPreviewModal) {
+                UI.cardPreviewModal.addEventListener('click', (e) => {
+                    if (e.target === UI.cardPreviewModal) {
+                        hideCardPreview();
+                    }
+                });
+            }
+
+            // Preview modal - close on Escape key, arrow keys for navigation
+            document.addEventListener('keydown', (e) => {
+                if (UI.cardPreviewModal && !UI.cardPreviewModal.classList.contains('hidden')) {
+                    if (e.key === 'Escape') {
+                        hideCardPreview();
+                    } else if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        navigatePreviewCard(-1);
+                    } else if (e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        navigatePreviewCard(1);
+                    }
+                }
+            });
+
             // Advanced Search
             UI.advancedSearchBtn.addEventListener('click', openAdvancedSearchModal);
             UI.advancedSearchModalClose.addEventListener('click', closeAdvancedSearchModal);
@@ -7788,7 +7860,9 @@
         function toggleAutocompleteMode() {
             autocompleteMode = autocompleteMode === 'db' ? 'all' : 'db';
             const modeText = autocompleteMode === 'db' ? 'DB' : 'All';
-            UI.autocompleteModeToggle.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z"></path></svg>Autocomplete: <span class="text-[var(--color-primary)]">${modeText}</span>`;
+            // Update label element instead of full innerHTML
+            const label = document.getElementById('autocompleteModeLabel');
+            if (label) label.textContent = modeText;
 
             // Clear search and reset database view when switching modes
             UI.cardSearchInput.value = '';
@@ -7813,11 +7887,13 @@
             if (editMode) {
                 button.classList.add('bg-red-700', 'hover:bg-red-600');
                 button.classList.remove('bg-slate-700', 'hover:bg-slate-600');
-                button.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>Exit Edit`;
+                const label = button.querySelector('.text-xs');
+                if (label) label.textContent = 'Exit Edit';
             } else {
                 button.classList.remove('bg-red-700', 'hover:bg-red-600');
                 button.classList.add('bg-slate-700', 'hover:bg-slate-600');
-                button.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>Edit DB`;
+                const label = button.querySelector('.text-xs');
+                if (label) label.textContent = 'Edit';
 
                 // Clear grid selection when exiting edit mode
                 selectedGridCards.clear();
@@ -7830,12 +7906,8 @@
         function toggleCardDatabaseView() {
             cardDatabaseView = cardDatabaseView === 'list' ? 'grid' : 'list';
             const button = UI.viewToggleBtn;
-
-            if (cardDatabaseView === 'grid') {
-                button.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>Grid`;
-            } else {
-                button.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>List`;
-            }
+            const label = document.getElementById('viewToggleLabel');
+            if (label) label.textContent = cardDatabaseView === 'grid' ? 'Grid' : 'List';
 
             // Save preference to localStorage
             localStorage.setItem('cardDatabaseView', cardDatabaseView);
@@ -7847,14 +7919,17 @@
         function toggleDatabaseSource() {
             cardDatabaseSource = cardDatabaseSource === 'db' ? 'all' : 'db';
             const sourceText = cardDatabaseSource === 'db' ? 'DB' : 'All';
-            UI.databaseSourceToggle.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>Source: <span class="text-[var(--color-primary)]">${sourceText}</span>`;
+            // Update label element instead of full innerHTML
+            const label = document.getElementById('databaseSourceLabel');
+            if (label) label.textContent = sourceText;
 
             // Exit edit mode when switching to All source
             if (cardDatabaseSource === 'all' && editMode) {
                 editMode = false;
                 UI.editDbToggle.classList.remove('bg-red-700', 'hover:bg-red-600');
                 UI.editDbToggle.classList.add('bg-slate-700', 'hover:bg-slate-600');
-                UI.editDbToggle.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>Edit DB`;
+                const editLabel = UI.editDbToggle.querySelector('.text-xs');
+                if (editLabel) editLabel.textContent = 'Edit';
                 selectedGridCards.clear();
             }
 
@@ -7868,7 +7943,9 @@
         function toggleExtraDeckCards() {
             showExtraDeckCards = !showExtraDeckCards;
             const statusText = showExtraDeckCards ? 'Show' : 'Hide';
-            UI.extraDeckToggle.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>Extra: <span class="text-[var(--color-primary)]">${statusText}</span>`;
+            // Update label element instead of full innerHTML
+            const label = document.getElementById('extraDeckLabel');
+            if (label) label.textContent = statusText;
 
             // Re-render the card database with the extra deck filter applied
             renderCardDatabase();
@@ -12518,6 +12595,20 @@
                                 id: cardData.id.toString(),
                                 name: cardData.name,
                                 type: cardData.type,
+                                desc: cardData.desc,
+                                race: cardData.race,
+                                attribute: cardData.attribute,
+                                level: cardData.level,
+                                rank: cardData.rank,
+                                linkval: cardData.linkval,
+                                linkmarkers: cardData.linkmarkers,
+                                scale: cardData.scale,
+                                atk: cardData.atk,
+                                def: cardData.def,
+                                archetype: cardData.archetype,
+                                banlist_info: cardData.banlist_info,
+                                card_sets: cardData.card_sets,
+                                card_images: cardData.card_images,
                                 imageUrl: cardData.card_images[0].image_url
                             };
                         }
@@ -12594,6 +12685,26 @@
                 cards = cardDatabase;
             }
 
+            // Apply sorting
+            cards.sort((a, b) => {
+                let aVal = a[dbSortBy];
+                let bVal = b[dbSortBy];
+
+                // Handle missing values
+                if (aVal === undefined || aVal === null) aVal = '';
+                if (bVal === undefined || bVal === null) bVal = '';
+
+                // String comparison for name and type
+                if (typeof aVal === 'string' || typeof bVal === 'string') {
+                    aVal = String(aVal).toLowerCase();
+                    bVal = String(bVal).toLowerCase();
+                }
+
+                if (aVal < bVal) return dbSortOrder === 'asc' ? -1 : 1;
+                if (aVal > bVal) return dbSortOrder === 'asc' ? 1 : -1;
+                return 0;
+            });
+
             // Filter out extra deck cards if showExtraDeckCards is false
             if (!showExtraDeckCards) {
                 cards = cards.filter(card => !isExtraDeckMonster(card));
@@ -12620,10 +12731,60 @@
 
             UI.cardDbList.innerHTML = '';
             UI.cardDbList.className = 'space-y-2 overflow-y-auto pr-2 flex-grow';
+
+            // Update result count
+            if (UI.dbResultCount) {
+                UI.dbResultCount.textContent = `${cards.length} cards`;
+            }
+
             cards.forEach(card => {
                 const cardEl = document.createElement('div');
-                cardEl.className = 'p-2 flex items-center justify-between bg-[var(--color-surface-2)]/50 rounded-lg';
-                cardEl.setAttribute('data-card-id', card.id); // Add data attribute for filtering
+                cardEl.className = 'card-list-item group';
+                cardEl.setAttribute('data-card-id', card.id);
+                cardEl.draggable = !editMode;
+
+                // Get card image URL
+                const imgUrl = card.card_images?.[0]?.image_url || card.imageUrl || '';
+
+                // Build stats HTML for monsters
+                let statsHtml = '';
+                if (card.type?.includes('Monster')) {
+                    const atk = card.atk !== undefined ? card.atk : '?';
+                    const def = card.def !== undefined ? card.def : '?';
+                    const level = card.level || card.rank || 0;
+                    const stars = level > 0 ? '★'.repeat(level) : '';
+                    const race = card.race || '';
+                    const attr = card.attribute || '';
+                    statsHtml = `
+                        <div class="text-xs text-slate-400">${stars} ${race} / ${attr}</div>
+                        <div class="text-xs text-slate-400">ATK/${atk} DEF/${def}</div>
+                    `;
+                } else {
+                    // For spells/traps
+                    statsHtml = `
+                        <div class="text-xs text-slate-400">${card.type || ''}</div>
+                        <div class="text-xs text-slate-500">${card.race || ''}</div>
+                    `;
+                }
+
+                // Banlist badge
+                let banlistBadge = '';
+                const banStatus = card.banlist_info?.ban_tcg || card.banlist_status;
+                if (banStatus && banStatus !== 'Unlimited' && banStatus !== 'Unlimited') {
+                    const banColors = {
+                        'Forbidden': 'bg-red-600',
+                        'Limited': 'bg-orange-600',
+                        'Semi-Limited': 'bg-yellow-600'
+                    };
+                    const banLabels = {
+                        'Forbidden': 'BANNED',
+                        'Limited': 'LIMITED',
+                        'Semi-Limited': 'SEMI'
+                    };
+                    const colorClass = banColors[banStatus] || 'bg-slate-600';
+                    const label = banLabels[banStatus] || banStatus;
+                    banlistBadge = `<span class="banlist-badge ${colorClass} text-white">${label}</span>`;
+                }
 
                 // Build the buttons section based on edit mode
                 let buttonsHtml = '';
@@ -12633,24 +12794,47 @@
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
-                            DELETE
                         </button>`;
                 } else {
                     buttonsHtml = `
-                        <button data-action="add-side" data-id="${card.id}" class="text-yellow-400 hover:text-yellow-300 text-xs font-bold" title="Add to Side Deck">SIDE</button>
-                        <button data-action="add-main" data-id="${card.id}" class="text-green-400 hover:text-green-300 text-xs font-bold" title="Add to Main Deck">MAIN</button>
-                        <button data-action="add-extra" data-id="${card.id}" class="text-blue-400 hover:text-blue-300 text-xs font-bold" title="Add to Extra Deck">EXTRA</button>`;
+                        <button data-action="add-side" data-id="${card.id}" class="text-yellow-400 hover:text-yellow-300 text-xs font-bold px-1.5 py-0.5 rounded bg-yellow-600/20" title="Add to Side Deck">S</button>
+                        <button data-action="add-main" data-id="${card.id}" class="text-green-400 hover:text-green-300 text-xs font-bold px-1.5 py-0.5 rounded bg-green-600/20" title="Add to Main Deck">M</button>
+                        <button data-action="add-extra" data-id="${card.id}" class="text-blue-400 hover:text-blue-300 text-xs font-bold px-1.5 py-0.5 rounded bg-blue-600/20" title="Add to Extra Deck">E</button>`;
                 }
 
                 cardEl.innerHTML = `
-                    <div class="flex items-center gap-3 overflow-hidden">
-                        <img src="${card.imageUrl}" class="w-10 h-auto rounded-md flex-shrink-0" onerror="this.onerror=null;this.src='https://placehold.co/40x58/2d3748/e2e8f0?text=?';">
-                        <span class="text-sm font-medium truncate">${card.name}</span>
+                    <div class="flex items-center gap-2 overflow-hidden flex-grow min-w-0">
+                        <img src="${imgUrl}" class="w-10 h-auto rounded-md flex-shrink-0" onerror="this.onerror=null;this.src='https://placehold.co/40x58/2d3748/e2e8f0?text=?';">
+                        <div class="min-w-0 flex-grow">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-sm font-medium truncate">${card.name}</span>
+                                ${banlistBadge}
+                            </div>
+                            <div class="flex flex-wrap gap-x-3">
+                                ${statsHtml}
+                            </div>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-2 flex-shrink-0">
+                    <div class="flex items-center gap-1.5 flex-shrink-0 ml-2">
                         ${buttonsHtml}
                     </div>`;
                 UI.cardDbList.appendChild(cardEl);
+
+                // Add event listeners for list items (only in normal mode)
+                if (!editMode) {
+                    // Click to show preview modal (not on the action buttons)
+                    cardEl.addEventListener('click', (e) => {
+                        if (!e.target.closest('button')) {
+                            showCardPreview(card);
+                        }
+                    });
+
+                    // Drag and drop for list items
+                    cardEl.addEventListener('dragstart', (e) => {
+                        e.dataTransfer.setData('text/plain', card.id);
+                        e.dataTransfer.effectAllowed = 'copy';
+                    });
+                }
             });
 
             // Remove any existing event listeners first to prevent duplicates
@@ -12671,11 +12855,230 @@
             });
         }
 
+        // --- CARD PREVIEW MODAL FUNCTIONS ---
+        async function showCardPreview(card) {
+            if (!UI.cardPreviewModal) return;
+            currentPreviewCard = card;
+
+            // Store current card list for arrow key navigation
+            previewCardList = await getCardsToDisplay();
+            previewCardIndex = previewCardList.findIndex(c => c.id === card.id);
+
+            // Get card image URL
+            const imgUrl = card.card_images?.[0]?.image_url || card.imageUrl || '';
+            UI.previewCardImage.src = imgUrl;
+            UI.previewCardImage.onerror = function() {
+                this.src = 'https://placehold.co/400x560/2d3748/e2e8f0?text=No+Image';
+            };
+
+            // Card name
+            UI.previewCardName.textContent = card.name || '';
+
+            // Card type - combine type and race for spells/traps (e.g., "Normal Trap Card")
+            const isSpellTrap = card.type && (card.type.includes('Spell') || card.type.includes('Trap'));
+            if (isSpellTrap && card.race) {
+                UI.previewCardType.textContent = `${card.race} ${card.type}`;
+            } else {
+                UI.previewCardType.textContent = card.type || '';
+            }
+
+            // Archetype badge
+            if (card.archetype) {
+                UI.previewArchetype.textContent = `"${card.archetype}"`;
+                UI.previewArchetype.classList.remove('hidden');
+            } else {
+                UI.previewArchetype.classList.add('hidden');
+            }
+
+            // Banlist status
+            const banStatus = card.banlist_info?.ban_tcg;
+            if (banStatus && banStatus !== 'Unlimited') {
+                UI.previewBanlistBadge.classList.remove('hidden');
+                UI.previewBanlistBadge.className = `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold mb-2 banlist-${banStatus.toLowerCase().replace(' ', '-')}`;
+                UI.previewBanlistText.textContent = banStatus.toUpperCase();
+            } else {
+                UI.previewBanlistBadge.classList.add('hidden');
+            }
+
+            // Build stats HTML based on card type
+            let statsHtml = '';
+            const isMonster = card.type?.includes('Monster');
+            const isLink = card.type?.includes('Link');
+            const isPendulum = card.type?.includes('Pendulum');
+
+            if (isMonster) {
+                // Show stats section for monsters
+                UI.previewStats.parentElement.classList.remove('hidden');
+
+                // Level/Rank/Link Rating
+                let levelInfo = '';
+                if (isLink) {
+                    levelInfo = `<span class="text-blue-400 font-bold">LINK-${card.linkval}</span>`;
+                } else if (card.rank) {
+                    levelInfo = `RANK ${'★'.repeat(card.rank)}`;
+                } else {
+                    levelInfo = `LEVEL ${'★'.repeat(card.level || 0)}`;
+                }
+
+                statsHtml += `
+                    <div class="grid grid-cols-2 gap-y-2 mb-2">
+                        <div class="text-slate-300">${levelInfo}</div>
+                        <div class="text-slate-300 text-right">${card.race || ''}</div>
+                        <div class="text-slate-300">⚔️ ${card.atk ?? '?'}</div>
+                        ${isLink ? '<div class="text-slate-300 text-right">—</div>' : `<div class="text-slate-300 text-right">🛡️ ${card.def ?? '?'}</div>`}
+                    </div>
+                `;
+
+                // Attribute
+                if (card.attribute) {
+                    statsHtml += `<div class="text-slate-400 text-xs mt-1">${card.attribute} Attribute</div>`;
+                }
+
+                // Pendulum Scale
+                if (isPendulum && card.scale !== undefined) {
+                    statsHtml += `
+                        <div class="mt-2 flex items-center gap-2">
+                            <span class="text-sky-400 text-xs">Scale:</span>
+                            <span class="text-blue-400 font-bold">${card.scale}</span>
+                            <span class="text-red-400 font-bold">${card.scale}</span>
+                        </div>
+                    `;
+                }
+            } else {
+                // Spell/Trap - hide stats section since they have no ATK/DEF
+                UI.previewStats.parentElement.classList.add('hidden');
+            }
+
+            UI.previewStats.innerHTML = statsHtml;
+
+            // Card description
+            UI.previewCardDesc.textContent = card.desc || '';
+
+            // Set information - show toggle button if available, hide info by default
+            if (card.card_sets && card.card_sets.length > 0) {
+                UI.previewSetInfoToggle.classList.remove('hidden');
+                UI.previewSetInfo.classList.add('hidden'); // Always start hidden
+
+                // Build list of all printings
+                const printingsCount = card.card_sets.length;
+                UI.previewSetInfoToggle.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                    Show Card Printings (${printingsCount})
+                `;
+
+                // Populate all printings
+                UI.previewSetList.innerHTML = card.card_sets.map(set => `
+                    <div class="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-700/30">
+                        <span class="text-slate-300">${set.set_name} (${set.set_code})</span>
+                        <span class="px-2 py-0.5 rounded ${getRarityClass(set.set_rarity)}">${set.set_rarity || 'Unknown'}</span>
+                    </div>
+                `).join('');
+
+                // Setup toggle button
+                UI.previewSetInfoToggle.onclick = () => {
+                    const isHidden = UI.previewSetInfo.classList.contains('hidden');
+                    UI.previewSetInfo.classList.toggle('hidden');
+                    UI.previewSetInfoToggle.innerHTML = isHidden
+                        ? `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg> Hide Card Printings (${printingsCount})`
+                        : `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg> Show Card Printings (${printingsCount})`;
+                };
+            } else {
+                UI.previewSetInfoToggle.classList.add('hidden');
+                UI.previewSetInfo.classList.add('hidden');
+            }
+
+            // Setup copy effect button
+            UI.previewCopyEffect.onclick = () => {
+                navigator.clipboard.writeText(card.desc || '').then(() => {
+                    UI.copyFeedback.classList.remove('hidden');
+                    UI.copyFeedback.classList.remove('copy-feedback-show');
+                    void UI.copyFeedback.offsetWidth; // Trigger reflow
+                    UI.copyFeedback.classList.add('copy-feedback-show');
+                    setTimeout(() => UI.copyFeedback.classList.add('hidden'), 1500);
+                });
+            };
+
+            // Setup add buttons - check if Extra Deck monster
+            const isExtraDeck = isExtraDeckMonster(card);
+
+            if (isExtraDeck) {
+                UI.previewAddExtra.classList.remove('hidden');
+                UI.previewAddExtra.onclick = () => {
+                    addCardToDeck(card.id, 'extra');
+                };
+            } else {
+                UI.previewAddExtra.classList.add('hidden');
+            }
+
+            UI.previewAddMain.onclick = () => addCardToDeck(card.id, 'main');
+            UI.previewAddSide.onclick = () => addCardToDeck(card.id, 'side');
+
+            // Show modal
+            UI.cardPreviewModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        // Keyboard navigation handler for preview modal
+        function handlePreviewKeydown(e) {
+            if (UI.cardPreviewModal.classList.contains('hidden')) return;
+
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                navigatePreviewCard(-1);
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                navigatePreviewCard(1);
+            }
+        }
+
+        // Navigate to previous/next card in the list
+        function navigatePreviewCard(direction) {
+            if (previewCardList.length === 0) return;
+
+            const newIndex = previewCardIndex + direction;
+            if (newIndex >= 0 && newIndex < previewCardList.length) {
+                const nextCard = previewCardList[newIndex];
+                showCardPreview(nextCard);
+            }
+        }
+
+        function hideCardPreview() {
+            if (UI.cardPreviewModal) {
+                UI.cardPreviewModal.classList.add('hidden');
+                document.body.style.overflow = ''; // Restore scrolling
+            }
+            currentPreviewCard = null;
+            previewCardList = [];
+            previewCardIndex = -1;
+        }
+
+        // Helper function for rarity classes
+        function getRarityClass(rarity) {
+            if (!rarity) return 'rarity-common';
+            const r = rarity.toLowerCase();
+            if (r.includes('prismatic') || r.includes('psr')) return 'rarity-prismatic-secret-rare';
+            if (r.includes('secret') || r.includes('scr')) return 'rarity-secret-rare';
+            if (r.includes('ultimate') || r.includes('utr')) return 'rarity-ultimate-rare';
+            if (r.includes('ghost') || r.includes('gesr')) return 'rarity-ghost-rare';
+            if (r.includes('ultra') || r.includes('ur')) return 'rarity-ultra-rare';
+            if (r.includes('super') || r.includes('sr')) return 'rarity-super-rare';
+            if (r.includes('rare')) return 'rarity-rare';
+            if (r.includes('common')) return 'rarity-common';
+            return 'rarity-common';
+        }
+
         async function renderCardDatabaseGrid() {
             const cards = await getCardsToDisplay();
 
             UI.cardDbList.innerHTML = '';
             UI.cardDbList.className = 'card-db-grid overflow-y-auto pr-2 flex-grow';
+
+            // Update result count
+            if (UI.dbResultCount) {
+                UI.dbResultCount.textContent = `${cards.length} cards`;
+            }
 
             // Show/hide selection controls based on edit mode and view
             if (editMode && cardDatabaseView === 'grid') {
@@ -12691,12 +13094,31 @@
                 cardEl.setAttribute('data-card-id', card.id);
                 cardEl.draggable = !editMode; // Disable drag in edit mode
 
+                // Get card image URL
+                const imgUrl = card.card_images?.[0]?.image_url || card.imageUrl || '';
+
+                // Build stats overlay for monsters (not in edit mode)
+                let statsOverlay = '';
+                if (!editMode && card.type?.includes('Monster')) {
+                    const stars = '★'.repeat(card.level || card.rank || 0);
+                    const atk = card.atk !== undefined ? card.atk : '?';
+                    const def = card.def !== undefined ? card.def : '?';
+                    statsOverlay = `
+                        <div class="stats-overlay">
+                            <div class="stat-row"><span>${stars}</span></div>
+                            <div class="stat-row"><span>ATK/${atk}</span><span>DEF/${def}</span></div>
+                        </div>`;
+                }
+
                 // Build content based on edit mode
                 let content = `
-                    <img src="${card.imageUrl}" 
-                         class="w-full h-full object-cover" 
-                         title="${card.name}" 
-                         onerror="this.onerror=null;this.src='https://placehold.co/80x112/2d3748/e2e8f0?text=?';">
+                    <div class="relative w-full h-full">
+                        <img src="${imgUrl}"
+                             class="w-full h-full object-cover"
+                             title="${card.name}"
+                             onerror="this.onerror=null;this.src='https://placehold.co/80x112/2d3748/e2e8f0?text=?';">
+                        ${statsOverlay}
+                    </div>
                 `;
 
                 if (editMode) {
@@ -12704,13 +13126,13 @@
                     cardEl.classList.add('edit-mode');
                     content = `
                         <div class="relative w-full h-full">
-                            <input type="checkbox" 
-                                   class="absolute top-2 left-2 z-10 w-4 h-4 text-blue-600 bg-white rounded border-gray-300 focus:ring-blue-500" 
+                            <input type="checkbox"
+                                   class="absolute top-2 left-2 z-10 w-4 h-4 text-blue-600 bg-white rounded border-gray-300 focus:ring-blue-500"
                                    ${isSelected ? 'checked' : ''}
                                    data-card-id="${card.id}">
-                            <img src="${card.imageUrl}" 
-                                 class="w-full h-full object-cover" 
-                                 title="${card.name}" 
+                            <img src="${imgUrl}"
+                                 class="w-full h-full object-cover"
+                                 title="${card.name}"
                                  onerror="this.onerror=null;this.src='https://placehold.co/80x112/2d3748/e2e8f0?text=?';">
                         </div>
                     `;
@@ -12755,6 +13177,14 @@
 
                     cardEl.addEventListener('dragend', (e) => {
                         cardEl.classList.remove('dragging');
+                    });
+
+                    // Click to show preview modal
+                    cardEl.addEventListener('click', (e) => {
+                        if (!e.shiftKey) {
+                            e.preventDefault();
+                            showCardPreview(card);
+                        }
                     });
 
                     // Shift+click - add card to side deck
@@ -20856,6 +21286,126 @@
             accent-color: #3b82f6;
         }
 
+        /* Grid Stats Overlay - Shows ATK/DEF/Level on hover */
+        .card-db-grid .card-item .stats-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.95));
+            padding: 6px 3px 3px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+            border-radius: 0 0 3px 3px;
+        }
+
+        .card-db-grid .card-item:hover .stats-overlay {
+            opacity: 1;
+        }
+
+        .card-db-grid .card-item .stats-overlay .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            gap: 2px;
+        }
+
+        /* Card Preview Modal */
+        #cardPreviewModal {
+            transition: opacity 0.2s ease;
+        }
+
+        #cardPreviewModal > div {
+            animation: modalSlideIn 0.2s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        /* Banlist Status Badge Colors */
+        .banlist-forbidden {
+            background: linear-gradient(135deg, #dc2626, #991b1b);
+        }
+        .banlist-limited {
+            background: linear-gradient(135deg, #f97316, #c2410c);
+        }
+        .banlist-semilimited {
+            background: linear-gradient(135deg, #eab308, #ca8a04);
+        }
+
+        /* Rarity Colors */
+        .rarity-common { background: #9ca3af; color: #1f2937; }
+        .rarity-rare { background: linear-gradient(135deg, #d4d4d8, #9ca3af); color: #1f2937; }
+        .rarity-ultra-rare { background: linear-gradient(135deg, #fbbf24, #d97706); color: #1f2937; }
+        .rarity-super-rare { background: linear-gradient(135deg, #a855f7, #7c3aed); color: white; }
+        .rarity-secret-rare { background: linear-gradient(135deg, #ec4899, #be185d, #3b82f6); color: white; }
+        .rarity-ultimate-rare { background: linear-gradient(135deg, #06b6d4, #0891b2); color: white; }
+        .rarity-ghost-rare { background: linear-gradient(135deg, #a855f7, #7c3aed); color: white; }
+        .rarity-prismatic-secret-rare { background: linear-gradient(135deg, #fbbf24, #ec4899, #3b82f6); color: white; }
+
+        /* Copy Feedback Animation */
+        @keyframes copyFade {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+        .copy-feedback-show {
+            animation: copyFade 1.5s forwards;
+        }
+
+        /* Responsive: stack vertically on smaller screens */
+        @media (max-width: 768px) {
+            #cardPreviewModal > div {
+                flex-direction: column;
+                max-height: 95vh;
+                overflow-y: auto;
+            }
+            #cardPreviewModal > div > div:first-child {
+                width: 100%;
+                padding: 2rem;
+            }
+            #cardPreviewModal > div > div:last-child {
+                width: 100%;
+            }
+        }
+
+        /* Enhanced List View Styles */
+        .card-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 8px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 6px;
+            transition: background 0.15s ease;
+            cursor: grab;
+        }
+
+        .card-list-item:hover {
+            background: rgba(255,255,255,0.06);
+        }
+
+        .card-list-item:active {
+            cursor: grabbing;
+        }
+
+        .card-list-item .banlist-badge {
+            font-size: 9px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
         /* Advanced Search Modal Styles */
         #advancedSearchModal .grid {
             display: grid;
@@ -26887,6 +27437,83 @@
         </div>
     </div>
 
+    <!-- Card Preview Modal -->
+    <div id="cardPreviewModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-[var(--color-surface-1)] rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex">
+            <!-- Left: Card Image -->
+            <div class="w-1/2 bg-gradient-to-br from-slate-800 to-slate-900 p-8 flex items-center justify-center">
+                <img id="previewCardImage" src="" class="max-h-full max-w-full rounded-lg shadow-2xl" alt="Card image">
+            </div>
+
+            <!-- Right: Card Details -->
+            <div class="w-1/2 p-6 overflow-y-auto">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex-1">
+                        <!-- Banlist Status Badge -->
+                        <div id="previewBanlistBadge" class="hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold mb-2">
+                            <span id="previewBanlistText"></span>
+                        </div>
+                        <h2 id="previewCardName" class="text-2xl font-bold text-white"></h2>
+                        <!-- Archetype Tag -->
+                        <span id="previewArchetype" class="hidden inline-block mt-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 text-xs rounded-full font-medium"></span>
+                    </div>
+                    <button id="closePreviewModal" class="text-slate-400 hover:text-white text-2xl leading-none p-1">&times;</button>
+                </div>
+
+                <!-- Card Type -->
+                <p id="previewCardType" class="text-sm text-[var(--color-primary)] mb-4"></p>
+
+                <!-- Stats Section -->
+                <div class="bg-slate-800/50 rounded-lg p-4 mb-4">
+                    <!-- Stats Grid -->
+                    <div id="previewStats" class="text-sm"></div>
+                </div>
+
+                <!-- Card Effect Section with Copy Button -->
+                <div class="mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-sm font-semibold text-slate-400">Card Effect</h3>
+                        <button id="previewCopyEffect" class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2h-2m-6-6h12a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2z"></path>
+                            </svg>
+                            Copy
+                        </button>
+                    </div>
+                    <p id="previewCardDesc" class="text-sm text-slate-300 leading-relaxed bg-slate-900/30 rounded-lg p-3"></p>
+                    <p id="copyFeedback" class="hidden text-xs text-green-400 mt-1">Copied to clipboard!</p>
+                </div>
+
+                <!-- Set Information Toggle -->
+                <button id="previewSetInfoToggle" class="hidden w-full mb-4 text-xs text-slate-500 hover:text-slate-300 py-2 flex items-center justify-center gap-2 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                    Show Card Printings
+                </button>
+
+                <!-- Set Information (hidden by default) -->
+                <div id="previewSetInfo" class="hidden mb-4 p-3 bg-slate-800/30 rounded-lg max-h-48 overflow-y-auto">
+                    <h4 class="text-xs font-semibold text-slate-400 mb-2">📦 Card Printings</h4>
+                    <div id="previewSetList" class="space-y-1.5"></div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex gap-3 mt-6" id="previewActionButtons">
+                    <button id="previewAddMain" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                        + Main
+                    </button>
+                    <button id="previewAddSide" class="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                        + Side
+                    </button>
+                    <button id="previewAddExtra" class="hidden flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                        + Extra
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Banlist Management Modal -->
     <!-- Banlist management modal moved to modules/banlist-management.html -->
 
@@ -26962,28 +27589,39 @@
                         class="bg-[var(--color-surface-1) p-4 rounded-lg flex flex-col min-w-0 flex-shrink-0"
                         style="width: 322px;">
                         <h2 class="text-xl font-semibold mb-3">Card Database</h2>
-                        <div class="flex flex-wrap items-center justify-between mb-2 gap-2"><button
-                                id="autocompleteModeToggle"
-                                class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"><svg
+                        <div class="flex flex-wrap items-center gap-1.5 mb-2">
+                            <button id="autocompleteModeToggle"
+                                class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1" title="Toggle autocomplete mode"><svg
                                     class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z">
                                     </path>
-                                </svg>Autocomplete: <span class="text-[var(--color-primary)]">DB</span></button><button
-                                id="editDbToggle"
-                                class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"><svg
+                                </svg><span class="text-xs">Auto: <span id="autocompleteModeLabel" class="text-[var(--color-primary)]">DB</span></span></button>
+                            <button id="editDbToggle"
+                                class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1" title="Toggle edit mode for bulk deletion"><svg
                                     class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
                                     </path>
-                                </svg>Edit DB</button><button id="viewToggleBtn"
-                                class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"><svg
+                                </svg><span class="text-xs">Edit</span></button>
+                            <button id="viewToggleBtn"
+                                class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1" title="Toggle between Grid and List view"><svg
                                     class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z">
                                     </path>
-                                </svg>Grid</button><button id="resetDbBtn"
-                                class="text-xs bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"
+                                </svg><span id="viewToggleLabel" class="text-xs">Grid</span></button>
+                            <!-- Sort Controls -->
+                            <select id="dbSortSelect"
+                                class="text-xs bg-slate-700 border border-[var(--color-border)] rounded-md px-2 py-1.5 focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none">
+                                <option value="name">Name</option>
+                                <option value="type">Type</option>
+                                <option value="atk">ATK</option>
+                                <option value="def">DEF</option>
+                                <option value="level">Level</option>
+                            </select>
+                            <button id="resetDbBtn"
+                                class="text-xs bg-orange-600 hover:bg-orange-700 px-2 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"
                                 title="Reset database to only include cards currently in deck"><svg class="w-3 h-3"
                                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -26991,28 +27629,34 @@
                                     </path>
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                </svg>Reset DB</button><button id="databaseSourceToggle"
-                                class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"
+                                </svg></button>
+                            <button id="databaseSourceToggle"
+                                class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"
                                 title="Toggle between showing database cards or all game cards"><svg class="w-3 h-3"
                                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M4 6h16M4 10h16M4 14h16M4 18h16">
                                     </path>
-                                </svg>Source: <span class="text-[var(--color-primary)]">DB</span></button><button id="extraDeckToggle"
-                                class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"
+                                </svg><span class="text-xs">Src: <span id="databaseSourceLabel" class="text-[var(--color-primary)]">DB</span></span></button>
+                            <button id="extraDeckToggle"
+                                class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"
                                 title="Toggle extra deck cards visibility"><svg class="w-3 h-3"
                                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
                                     </path>
-                                </svg>Extra: <span class="text-[var(--color-primary)]">Show</span></button><button id="editEasterEggBtn"
-                                class="text-xs bg-purple-600 hover:bg-purple-700 px-3 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"
+                                </svg><span class="text-xs">Extra: <span id="extraDeckLabel" class="text-[var(--color-primary)]">Show</span></span></button>
+                            <button id="editEasterEggBtn"
+                                class="text-xs bg-purple-600 hover:bg-purple-700 px-2 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"
                                 title="Edit Easter Egg Card Pool"><svg class="w-3 h-3" fill="none" stroke="currentColor"
                                     viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253">
                                     </path>
-                                </svg>Edit Easter Egg</button></div>
+                                </svg></button>
+                            <!-- Result Count -->
+                            <span id="dbResultCount" class="text-xs text-slate-400 ml-auto">0 cards</span>
+                        </div>
                         <div id="gridSelectionControls" class="hidden flex items-center gap-2 mb-2"><button
                                 id="selectAllGridBtn"
                                 class="text-xs bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-md transition-colors font-medium">Select
@@ -27038,6 +27682,7 @@
                             </div><button id="addCardBtn"
                                 class="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold py-2 px-4 rounded-md transition-colors flex-shrink-0">Search</button>
                         </div>
+                        <!-- Card Database List -->
                         <div id="cardDbList" class="space-y-2 overflow-y-auto pr-2 flex-grow"></div>
                     </div>
                     <div id="resizeHandle"
