@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -488,6 +488,9 @@
                         NotificationManager.info(`Undo: ${command.getDescription()}`);
 
                         notify();
+                    } else {
+                        // Nothing to undo
+                        NotificationManager.info('Nothing to undo');
                     }
                 },
 
@@ -502,6 +505,9 @@
                         NotificationManager.info(`Redo: ${command.getDescription()}`);
 
                         notify();
+                    } else {
+                        // Nothing to redo
+                        NotificationManager.info('Nothing to redo');
                     }
                 },
 
@@ -1489,7 +1495,7 @@
             deckSelector: null, loadDeckBtn: null, deleteDeckBtn: null, exportDeckBtn: null, exportDeckYDKXBtn: null,
             exportDeckClipboardBtn: null, importDeckClipboardBtn: null, importDeckInput: null, deckCountDisplay: null, deckTypeCountsDisplay: null,
             deckScaleSlider: null, scaleTargetBtn: null, cardsPerRowDisplay: null, manageSidingBtn: null, toggleExtraDeckBtn: null, extraDeckSection: null, deckGridContainer: null,
-            deckOptionsBtn: null, deckOptionsDropdown: null, resetToDefaultSizesBtn: null,
+            deckOptionsBtn: null, deckOptionsDropdown: null, autoAlignByCardSizeBtn: null, autoAlignByTotalSizeBtn: null, resetHeightsBtn: null, resetToDefaultSizesBtn: null,
             toggleSideDeckBtn: null, toggleDatabaseBtn: null, sideDeckSection: null, mainDeckSection: null,
             mainSideResizeHandle: null, sideExtraResizeHandle: null,
 
@@ -1545,6 +1551,82 @@
             }
         }
 
+        function createFloatingHelpButton() {
+            // Create floating help button
+            const helpBtn = document.createElement('button');
+            helpBtn.id = 'floatingHelpBtn';
+            helpBtn.className = 'fixed bottom-6 right-6 w-12 h-12 rounded-full bg-amber-600 hover:bg-amber-500 text-white font-bold text-lg shadow-lg z-40 flex items-center justify-center transition-all duration-200 hover:scale-110';
+            helpBtn.innerHTML = '?';
+            helpBtn.title = 'Keyboard shortcuts';
+
+            // Create shortcuts modal (hidden by default)
+            const modal = document.createElement('div');
+            modal.id = 'shortcutsModal';
+            modal.className = 'hidden fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50';
+            modal.innerHTML = `
+                <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-lg w-full shadow-2xl relative">
+                    <button id="closeShortcutsBtn" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold flex items-center justify-center transition-colors">
+                        ×
+                    </button>
+                    <h2 class="text-xl font-bold mb-4 text-center text-white">Keyboard Shortcuts</h2>
+                    <p class="text-gray-400 text-sm text-center mb-4">Speed up your workflow with these handy shortcuts</p>
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Save Deck</span><span class="font-mono text-amber-400">Ctrl+S</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Search Cards</span><span class="font-mono text-amber-400">Ctrl+F</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Undo</span><span class="font-mono text-amber-400">Ctrl+Z</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Redo</span><span class="font-mono text-amber-400">Ctrl+Shift+Z</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Toggle Database</span><span class="font-mono text-amber-400">D</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Close Modal</span><span class="font-mono text-amber-400">Esc</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Main Deck</span><span class="font-mono text-amber-400">Ctrl+1</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Side Deck</span><span class="font-mono text-amber-400">Ctrl+2</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Extra Deck</span><span class="font-mono text-amber-400">Ctrl+3</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Deck Stats</span><span class="font-mono text-amber-400">S</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Cycle Theme</span><span class="font-mono text-amber-400">T</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Notif History</span><span class="font-mono text-amber-400">N</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Show Help</span><span class="font-mono text-amber-400">H</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Export Log</span><span class="font-mono text-amber-400">L</span></div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-4 text-center">Press H anytime to show this help</p>
+                </div>
+            `;
+
+            // Add to document
+            document.body.appendChild(helpBtn);
+            document.body.appendChild(modal);
+
+            // Event listeners
+            helpBtn.addEventListener('click', () => {
+                modal.classList.remove('hidden');
+            });
+
+            // Close on backdrop click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.add('hidden');
+                }
+            });
+
+            // Close button (X)
+            const closeBtn = modal.querySelector('#closeShortcutsBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    modal.classList.add('hidden');
+                });
+            }
+
+            // Close on Escape - use the modal's reference to avoid duplicates
+            const escapeHandler = (e) => {
+                if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                    modal.classList.add('hidden');
+                }
+            };
+            document.addEventListener('keydown', escapeHandler);
+
+            // Store handler on modal for cleanup if needed
+            modal._escapeHandler = escapeHandler;
+        }
+
         async function main() {
             // 1. Show loading screen immediately
             const loadingOverlay = document.getElementById('loadingOverlay');
@@ -1553,9 +1635,28 @@
             // 1.5. Initialize ThemeManager
             ThemeManager.init();
 
+            // 1.6. Migrate old cards-per-row values to new defaults
+            (function migrateCardSettings() {
+                const oldDefaults = { main: 8, side: 4, extra: 3, db: 7 };
+                const newDefaults = { main: 10, side: 3, extra: 3, db: 5 };
+
+                for (const [key, oldValue] of Object.entries(oldDefaults)) {
+                    const stored = localStorage.getItem(`${key}DeckCardsPerRow`);
+                    if (stored && parseInt(stored) === oldValue) {
+                        localStorage.setItem(`${key}DeckCardsPerRow`, newDefaults[key]);
+                        // Also clear the old scale value so it gets recalculated correctly
+                        localStorage.removeItem(`${key}DeckScale`);
+                        console.log(`Migrated ${key} cards/row: ${oldValue} → ${newDefaults[key]} (scale cleared for recalculation)`);
+                    }
+                }
+            })();
+
             // 2. Find all UI elements and set up the theme.
             initializeUI();
             loadEasterEggCardPool(); // Initialize easter egg card pool
+
+            // 2.1. Create floating help button for keyboard shortcuts
+            createFloatingHelpButton();
 
             // 3. Now that the UI is ready, attach all event listeners.
             attachEventListeners();
@@ -1901,10 +2002,11 @@
 
         function loadLocalData() {
             // Load individual deck scales (pixel sizes)
-            const mainScale = localStorage.getItem('mainDeckScale') || '68';
-            const sideScale = localStorage.getItem('sideDeckScale') || '68';
-            const extraScale = localStorage.getItem('extraDeckScale') || '68';
-            const dbScale = localStorage.getItem('dbDeckScale') || '80';
+            // Use reasonable defaults if not set (will be recalculated during initialization)
+            const mainScale = localStorage.getItem('mainDeckScale') || '100';
+            const sideScale = localStorage.getItem('sideDeckScale') || '100';
+            const extraScale = localStorage.getItem('extraDeckScale') || '100';
+            const dbScale = localStorage.getItem('dbDeckScale') || '100';
 
             document.documentElement.style.setProperty('--main-deck-size', `${mainScale}px`);
             document.documentElement.style.setProperty('--side-deck-size', `${sideScale}px`);
@@ -1974,6 +2076,43 @@
             setTimeout(() => {
                 autoFitDeckSections();
 
+                // Recalculate card sizes based on saved cardsPerRow values
+                ['main', 'side', 'extra', 'db'].forEach(deckType => {
+                    const savedScale = localStorage.getItem(`${deckType}DeckScale`);
+                    const savedCardsPerRow = localStorage.getItem(`${deckType}DeckCardsPerRow`);
+
+                    if (savedCardsPerRow) {
+                        // We have cardsPerRow, calculate the appropriate scale
+                        const cardsPerRow = parseInt(savedCardsPerRow);
+                        const section = deckType === 'main' ? UI.mainDeckSection :
+                            deckType === 'side' ? UI.sideDeckSection :
+                                deckType === 'extra' ? UI.extraDeckSection :
+                                    deckType === 'db' ? UI.cardDatabaseSection : null;
+                        if (section) {
+                            const grid = section.querySelector('.deck-grid, .side-deck-grid, .card-db-grid');
+                            if (grid && grid.clientWidth > 0) {
+                                // Use grid's clientWidth (actual rendered width)
+                                // Grid has padding: 8px on each side = 16px total
+                                const availableWidth = grid.clientWidth - 16;
+                                // Calculate scale to fit exactly cardsPerRow cards
+                                const cardSize = Math.floor(availableWidth / cardsPerRow);
+                                const cssVar = deckType === 'db' ? '--db-card-size' : `--${deckType}-deck-size`;
+                                document.documentElement.style.setProperty(cssVar, `${cardSize}px`);
+                                localStorage.setItem(`${deckType}DeckScale`, cardSize);
+                                console.log(`[INIT] Set ${deckType} scale: ${cardSize}px for ${cardsPerRow} cards/row (grid clientWidth: ${grid.clientWidth}px, available: ${availableWidth}px)`);
+                            } else {
+                                // Fallback: use section width
+                                const availableWidth = section.offsetWidth - 16;
+                                const cardSize = Math.max(30, Math.floor(availableWidth / cardsPerRow));
+                                const cssVar = deckType === 'db' ? '--db-card-size' : `--${deckType}-deck-size`;
+                                document.documentElement.style.setProperty(cssVar, `${cardSize}px`);
+                                localStorage.setItem(`${deckType}DeckScale`, cardSize);
+                                console.log(`[INIT] Set ${deckType} scale (fallback): ${cardSize}px for ${cardsPerRow} cards/row (section width: ${section.offsetWidth}px)`);
+                            }
+                        }
+                    }
+                });
+
                 // Initialize slider max based on default target (main)
                 UI.deckScaleSlider.max = scaleTarget === 'db' ? 8 : 16;
 
@@ -2020,18 +2159,36 @@
                 return parseInt(saved);
             }
 
+            // Use responsive defaults based on screen size
+            const isMobile = window.innerWidth < 768;
+            const defaults = isMobile ? {
+                main: 5,
+                side: 2,
+                extra: 2,
+                db: 3
+            } : {
+                main: 10,
+                side: 3,
+                extra: 3,
+                db: 5
+            };
+
+            if (defaults[target] !== undefined) {
+                return defaults[target];
+            }
+
             // Calculate from current card scale and section width
             const section = target === 'main' ? UI.mainDeckSection :
                 target === 'side' ? UI.sideDeckSection :
                     target === 'extra' ? UI.extraDeckSection :
                         target === 'db' ? UI.cardDatabaseSection : null;
-            if (!section) return 8; // default
+            if (!section) return 8; // default fallback
 
             const currentScale = getCurrentDeckScale(target);
             const sectionWidth = section.offsetWidth;
-            // Match actual CSS values: deck-grid has gap: 8px, padding: 8px, margin: -8px (net 0)
+            // Match actual CSS values: deck-grid has gap: 0px, padding: 8px, margin: -8px (net 0)
             const padding = target === 'db' ? 16 : 0;
-            const gap = target === 'db' ? 4 : (target === 'main' ? 4 : 8);
+            const gap = 0;
             const availableWidth = sectionWidth - padding;
 
             return Math.max(1, Math.floor(availableWidth / (currentScale + gap)));
@@ -2063,10 +2220,11 @@
                 availableWidth = section.offsetWidth - totalPadding;
             }
 
-            const gap = target === 'db' ? 4 : (target === 'main' ? 4 : 8);
+            const gap = 0;
 
             // Calculate card size to fit exactly this many cards per row
             // In a grid with N cards, there are N-1 gaps
+            // Use Math.floor to ensure cards aren't too large (which would prevent N cards from fitting)
             const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
             const roundedSize = Math.max(30, Math.min(300, Math.floor(cardSize)));
 
@@ -2298,20 +2456,25 @@
         }
 
         function resetToDefaultSizes() {
-            // Reset all deck cards-per-row to default values
-            const defaultMainCardsPerRow = 8;
+            // Reset all deck cards-per-row to default values (desktop)
+            const defaultMainCardsPerRow = 10;
             const defaultSideCardsPerRow = 3;
             const defaultExtraCardsPerRow = 3;
+            const defaultDbCardsPerRow = 5;
 
             // Save cards per row settings
             localStorage.setItem('mainDeckCardsPerRow', defaultMainCardsPerRow);
             localStorage.setItem('sideDeckCardsPerRow', defaultSideCardsPerRow);
             localStorage.setItem('extraDeckCardsPerRow', defaultExtraCardsPerRow);
+            localStorage.setItem('dbDeckCardsPerRow', defaultDbCardsPerRow);
 
             // Use updateCardsPerRow for consistent calculation
             updateCardsPerRow('main', defaultMainCardsPerRow);
             updateCardsPerRow('side', defaultSideCardsPerRow);
             updateCardsPerRow('extra', defaultExtraCardsPerRow);
+
+            // Card database needs delay to ensure it's rendered
+            setTimeout(() => updateCardsPerRow('db', defaultDbCardsPerRow), 50);
 
             // Update slider to show current cards per row for the selected target
             UI.deckScaleSlider.value = getCurrentCardsPerRow(scaleTarget);
@@ -2341,6 +2504,292 @@
 
             // Show confirmation message
             showMessage('All deck settings reset to default values');
+        }
+
+        // Align by Card Size (Rows): Makes all sections have the same number of rows
+        function autoAlignByCardSize() {
+            const gridContainer = UI.deckGridContainer;
+            if (!gridContainer) {
+                showMessage('Deck container not found');
+                return;
+            }
+
+            // Get cards per row for each section
+            const mainCardsPerRow = parseInt(localStorage.getItem('mainDeckCardsPerRow')) || 10;
+            const sideCardsPerRow = parseInt(localStorage.getItem('sideDeckCardsPerRow')) || 3;
+            const extraCardsPerRow = parseInt(localStorage.getItem('extraDeckCardsPerRow')) || 3;
+
+            // Get card counts
+            const mainCardCount = currentDeck?.main?.length || 0;
+            const sideCardCount = currentDeck?.side?.length || 0;
+            const extraCardCount = currentDeck?.extra?.length || 0;
+
+            if (mainCardCount === 0 || sideCardCount === 0) {
+                showMessage('Add cards to decks first');
+                return;
+            }
+
+            // Calculate rows for each section
+            const mainRows = Math.ceil(mainCardCount / mainCardsPerRow);
+            const sideRows = Math.ceil(sideCardCount / sideCardsPerRow);
+            const extraRows = Math.ceil(extraCardCount / extraCardsPerRow);
+
+            // Find the section with the most rows (will be our reference)
+            const maxRows = Math.max(mainRows, sideRows, extraRows);
+
+            console.log(`[Align by Rows] Rows: main=${mainRows}, side=${sideRows}, extra=${extraRows}, max=${maxRows}`);
+
+            // Get available width from container
+            const containerWidth = gridContainer.clientWidth;
+            const gap = 16; // gap-4 = 16px between flex items
+            const resizeHandleWidth = 8; // w-2 = 8px for each resize handle
+            const visibleSections = (UI.extraDeckSection?.offsetParent !== null) ? 3 : 2;
+            const numResizeHandles = visibleSections - 1; // 2 handles for 3 sections, 1 handle for 2 sections
+            const totalGap = (gap * (visibleSections + numResizeHandles - 1)) + (resizeHandleWidth * numResizeHandles);
+
+            // For equal card size across all sections, calculate required card size
+            // Each section needs: sectionWidth = cardsPerRow × cardSize + 16 (grid padding)
+            // Total width: sections + gaps + resize handles
+            const totalCardsPerRow = mainCardsPerRow + sideCardsPerRow + (UI.extraDeckSection?.offsetParent !== null ? extraCardsPerRow : 0);
+            const totalPadding = 16 * visibleSections;
+            const cardSize = (containerWidth - totalPadding - totalGap) / totalCardsPerRow;
+
+            // Calculate section widths based on card size
+            let mainSectionWidth = (mainCardsPerRow * cardSize) + 16;
+            let sideSectionWidth = (sideCardsPerRow * cardSize) + 16;
+            let extraSectionWidth = (extraCardsPerRow * cardSize) + 16;
+
+            // Floor to ensure we never exceed container width
+            mainSectionWidth = Math.floor(mainSectionWidth);
+            sideSectionWidth = Math.floor(sideSectionWidth);
+            extraSectionWidth = Math.floor(extraSectionWidth);
+
+            // Calculate total and distribute remaining pixels
+            const totalWidth = mainSectionWidth + sideSectionWidth + (UI.extraDeckSection?.offsetParent !== null ? extraSectionWidth : 0) + totalGap;
+            let remainder = containerWidth - totalWidth;
+
+            // Distribute remainder to main (and extra if visible) up to 1px each to avoid overflow
+            if (remainder > 0) {
+                mainSectionWidth += 1;
+                remainder -= 1;
+                if (remainder > 0 && UI.extraDeckSection?.offsetParent !== null) {
+                    extraSectionWidth += 1;
+                    remainder -= 1;
+                }
+                if (remainder > 0) {
+                    sideSectionWidth += 1;
+                }
+            }
+
+            console.log(`Card size: ${cardSize.toFixed(1)}px, Section widths: main=${mainSectionWidth}px, side=${sideSectionWidth}px, extra=${extraSectionWidth}px, total=${mainSectionWidth + sideSectionWidth + (UI.extraDeckSection?.offsetParent !== null ? extraSectionWidth : 0) + totalGap}px, container=${containerWidth}px`);
+
+            // Apply the new section widths
+            if (UI.mainDeckSection) {
+                UI.mainDeckSection.style.width = `${mainSectionWidth}px`;
+                UI.mainDeckSection.style.minWidth = `${mainSectionWidth}px`;
+                UI.mainDeckSection.style.flexGrow = '0';
+                UI.mainDeckSection.style.flexShrink = '0';
+            }
+            if (UI.sideDeckSection) {
+                UI.sideDeckSection.style.width = `${sideSectionWidth}px`;
+                UI.sideDeckSection.style.minWidth = `${sideSectionWidth}px`;
+                UI.sideDeckSection.style.flexGrow = '0';
+                UI.sideDeckSection.style.flexShrink = '0';
+            }
+            if (UI.extraDeckSection && UI.extraDeckSection.offsetParent !== null) {
+                UI.extraDeckSection.style.width = `${extraSectionWidth}px`;
+                UI.extraDeckSection.style.minWidth = `${extraSectionWidth}px`;
+                UI.extraDeckSection.style.flexGrow = '0';
+                UI.extraDeckSection.style.flexShrink = '0';
+            }
+
+            // Update card sizes using updateCardsPerRow which handles padding correctly
+            updateCardsPerRow('main', mainCardsPerRow);
+            updateCardsPerRow('side', sideCardsPerRow);
+            updateCardsPerRow('extra', extraCardsPerRow);
+
+            // Update the display
+            if (UI.cardsPerRowDisplay && scaleTarget) {
+                const currentCardsPerRow = getCurrentCardsPerRow(scaleTarget);
+                UI.cardsPerRowDisplay.textContent = currentCardsPerRow;
+            }
+
+            // Store the aligned state
+            gridContainer.dataset.autoAligned = 'true';
+
+            // Close dropdown
+            UI.deckOptionsDropdown.classList.add('hidden');
+        }
+
+        // Align by Total Size: Makes total height of all cards equal across sections
+        function autoAlignByTotalSize() {
+            const gridContainer = UI.deckGridContainer;
+            if (!gridContainer) {
+                showMessage('Deck container not found');
+                return;
+            }
+
+            // Get cards per row for each section
+            const mainCardsPerRow = parseInt(localStorage.getItem('mainDeckCardsPerRow')) || 10;
+            const sideCardsPerRow = parseInt(localStorage.getItem('sideDeckCardsPerRow')) || 3;
+            const extraCardsPerRow = parseInt(localStorage.getItem('extraDeckCardsPerRow')) || 3;
+
+            // Get card counts
+            const mainCardCount = currentDeck?.main?.length || 0;
+            const sideCardCount = currentDeck?.side?.length || 0;
+            const extraCardCount = currentDeck?.extra?.length || 0;
+
+            if (mainCardCount === 0 || sideCardCount === 0) {
+                showMessage('Add cards to decks first');
+                return;
+            }
+
+            // For equal total height: (cardCount / cardsPerRow) × cardSize must be equal
+            // This means sections with more cards need proportionally smaller card sizes
+            // cardSize[i] = (H × cardsPerRow[i]) / cardCount[i] where H is common total height
+
+            // Get container width
+            const containerWidth = gridContainer.clientWidth;
+            const gap = 16; // gap-4 = 16px between flex items
+            const resizeHandleWidth = 8; // w-2 = 8px for each resize handle
+            const visibleSections = (UI.extraDeckSection?.offsetParent !== null) ? 3 : 2;
+            const numResizeHandles = visibleSections - 1;
+            const totalGap = (gap * (visibleSections + numResizeHandles - 1)) + (resizeHandleWidth * numResizeHandles);
+
+            // For equal total height, we need:
+            // sectionWidth = cardsPerRow × cardSize + 16
+            // and cardSize scales with: (cardsPerRow / cardCount)
+            // So sectionWidth ratio is proportional to: (cardsPerRow^2 / cardCount)
+
+            const mainWidthRatio = (mainCardsPerRow * mainCardsPerRow) / mainCardCount;
+            const sideWidthRatio = (sideCardsPerRow * sideCardsPerRow) / sideCardCount;
+            const extraWidthRatio = (extraCardsPerRow * extraCardsPerRow) / extraCardCount;
+            const totalRatio = mainWidthRatio + sideWidthRatio + (UI.extraDeckSection?.offsetParent !== null ? extraWidthRatio : 0);
+
+            // Calculate section widths (accounting for 16px padding each and gaps + resize handles)
+            // First, calculate width available for actual card content
+            const contentWidth = containerWidth - (16 * visibleSections) - totalGap;
+            const mainContentWidth = (mainWidthRatio / totalRatio) * contentWidth;
+            const sideContentWidth = (sideWidthRatio / totalRatio) * contentWidth;
+            const extraContentWidth = (extraWidthRatio / totalRatio) * contentWidth;
+
+            // Add padding back to get section widths
+            let mainSectionWidth = mainContentWidth + 16;
+            let sideSectionWidth = sideContentWidth + 16;
+            let extraSectionWidth = extraContentWidth + 16;
+
+            // Floor to ensure we never exceed container width
+            mainSectionWidth = Math.floor(mainSectionWidth);
+            sideSectionWidth = Math.floor(sideSectionWidth);
+            extraSectionWidth = Math.floor(extraSectionWidth);
+
+            // Calculate total and distribute remaining pixels
+            const totalWidth = mainSectionWidth + sideSectionWidth + (UI.extraDeckSection?.offsetParent !== null ? extraSectionWidth : 0) + totalGap;
+            let remainder = containerWidth - totalWidth;
+
+            // Distribute remainder to main (and extra if visible) up to 1px each to avoid overflow
+            if (remainder > 0) {
+                mainSectionWidth += 1;
+                remainder -= 1;
+                if (remainder > 0 && UI.extraDeckSection?.offsetParent !== null) {
+                    extraSectionWidth += 1;
+                    remainder -= 1;
+                }
+                if (remainder > 0) {
+                    sideSectionWidth += 1;
+                }
+            }
+
+            console.log(`[Align by Total] Cards: main=${mainCardCount}, side=${sideCardCount}, extra=${extraCardCount}`);
+            console.log(`Section widths: main=${mainSectionWidth}px, side=${sideSectionWidth}px, extra=${extraSectionWidth}px, total=${mainSectionWidth + sideSectionWidth + (UI.extraDeckSection?.offsetParent !== null ? extraSectionWidth : 0) + totalGap}px, container=${containerWidth}px`);
+
+            // Apply the new section widths
+            if (UI.mainDeckSection) {
+                UI.mainDeckSection.style.width = `${mainSectionWidth}px`;
+                UI.mainDeckSection.style.minWidth = `${mainSectionWidth}px`;
+                UI.mainDeckSection.style.flexGrow = '0';
+                UI.mainDeckSection.style.flexShrink = '0';
+            }
+            if (UI.sideDeckSection) {
+                UI.sideDeckSection.style.width = `${sideSectionWidth}px`;
+                UI.sideDeckSection.style.minWidth = `${sideSectionWidth}px`;
+                UI.sideDeckSection.style.flexGrow = '0';
+                UI.sideDeckSection.style.flexShrink = '0';
+            }
+            if (UI.extraDeckSection && UI.extraDeckSection.offsetParent !== null) {
+                UI.extraDeckSection.style.width = `${extraSectionWidth}px`;
+                UI.extraDeckSection.style.minWidth = `${extraSectionWidth}px`;
+                UI.extraDeckSection.style.flexGrow = '0';
+                UI.extraDeckSection.style.flexShrink = '0';
+            }
+
+            // Update card sizes using updateCardsPerRow which handles padding correctly
+            updateCardsPerRow('main', mainCardsPerRow);
+            updateCardsPerRow('side', sideCardsPerRow);
+            updateCardsPerRow('extra', extraCardsPerRow);
+
+            // Update the display
+            if (UI.cardsPerRowDisplay && scaleTarget) {
+                const currentCardsPerRow = getCurrentCardsPerRow(scaleTarget);
+                UI.cardsPerRowDisplay.textContent = currentCardsPerRow;
+            }
+
+            // Store the aligned state
+            gridContainer.dataset.autoAligned = 'true';
+
+            // Close dropdown
+            UI.deckOptionsDropdown.classList.add('hidden');
+        }
+
+        // Reset deck section heights (restore flexible layout)
+        function resetDeckHeights() {
+            // Reset main deck to flexible
+            if (UI.mainDeckSection) {
+                UI.mainDeckSection.style.width = '';
+                UI.mainDeckSection.style.minWidth = '300px';
+                UI.mainDeckSection.style.flexGrow = '1';
+                UI.mainDeckSection.style.flexShrink = '1';
+            }
+            // Reset side deck to flexible
+            if (UI.sideDeckSection) {
+                UI.sideDeckSection.style.width = '';
+                UI.sideDeckSection.style.minWidth = '200px';
+                UI.sideDeckSection.style.flexGrow = '0';
+                UI.sideDeckSection.style.flexShrink = '1';
+            }
+            // Reset extra deck to flexible
+            if (UI.extraDeckSection) {
+                UI.extraDeckSection.style.width = '';
+                UI.extraDeckSection.style.minWidth = '200px';
+                UI.extraDeckSection.style.flexGrow = '0';
+                UI.extraDeckSection.style.flexShrink = '1';
+            }
+
+            // Clear any grid padding
+            const sections = [UI.mainDeckSection, UI.sideDeckSection, UI.extraDeckSection];
+            sections.forEach(section => {
+                if (section) {
+                    const grid = section.querySelector('.deck-grid, .side-deck-grid');
+                    if (grid) {
+                        grid.style.paddingTop = '';
+                        grid.style.paddingBottom = '';
+                    }
+                }
+            });
+
+            // Clear auto-aligned state
+            if (UI.deckGridContainer) {
+                delete UI.deckGridContainer.dataset.autoAligned;
+            }
+
+            // Re-apply cards per row to refresh sizes
+            updateCardsPerRow('main', parseInt(localStorage.getItem('mainDeckCardsPerRow')) || 10);
+            updateCardsPerRow('side', parseInt(localStorage.getItem('sideDeckCardsPerRow')) || 3);
+            updateCardsPerRow('extra', parseInt(localStorage.getItem('extraDeckCardsPerRow')) || 3);
+
+            // Close dropdown and show message
+            UI.deckOptionsDropdown.classList.add('hidden');
+            showMessage('Deck layout reset');
         }
 
         function applyDefaultDeckLayout() {
@@ -2517,12 +2966,13 @@
                 const paddingRight = parseFloat(gridStyle.paddingRight) || 0;
                 const availableWidth = grid.clientWidth - paddingLeft - paddingRight;
 
-                const gap = deckType === 'main' ? 4 : (deckType === 'db' ? 4 : 8);
+                const gap = 0;
                 const cardsPerRow = getCurrentCardsPerRow(deckType);
 
                 // Calculate card size to fit exactly this many cards per row
+                // Use Math.ceil to ensure card size is never too small (which would allow extra cards to fit)
                 const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-                const roundedSize = Math.max(30, Math.min(300, Math.floor(cardSize)));
+                const roundedSize = Math.max(30, Math.min(300, Math.round(cardSize)));
 
                 // Apply the new card size
                 const cssVar = deckType === 'db' ? '--db-card-size' : `--${deckType}-deck-size`;
@@ -2831,6 +3281,9 @@
                 UI.toggleDatabaseBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
                 UI.toggleDatabaseBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
             } else {
+                // Hide database immediately - hide resize handle right away for visual symmetry
+                if (UI.resizeHandle) UI.resizeHandle.style.display = 'none';
+
                 // Hide database with smooth transition
                 UI.cardDatabaseSection.classList.add('hidden');
 
@@ -2853,7 +3306,6 @@
                     UI.cardDatabaseSection.removeEventListener('transitionend', onEnd);
                     if (!databaseVisible) {
                         UI.cardDatabaseSection.style.display = 'none';
-                        if (UI.resizeHandle) UI.resizeHandle.style.display = 'none';
                     }
                 };
                 UI.cardDatabaseSection.addEventListener('transitionend', onEnd, { once: true });
@@ -2870,6 +3322,12 @@
         function autoFitDeckSections() {
             // Automatically adjust deck section sizes to fit everything on screen
             if (!UI.deckGridContainer || !UI.mainDeckSection || !UI.sideDeckSection || !UI.extraDeckSection) return;
+
+            // Skip auto-fit if sections have been manually aligned by user
+            if (UI.deckGridContainer && UI.deckGridContainer.dataset.autoAligned === 'true') {
+                console.log('[AUTO-FIT] Skipping - sections are manually aligned');
+                return;
+            }
 
             console.log('Auto-fitting deck sections to screen...');
 
@@ -3050,7 +3508,7 @@
                 const gap = getGap('main');
                 if (availableWidth > 0) {
                     const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-                    const roundedSize = Math.max(30, Math.min(300, Math.floor(cardSize)));
+                    const roundedSize = Math.max(30, Math.min(300, Math.round(cardSize)));
                     document.documentElement.style.setProperty('--main-deck-size', `${roundedSize}px`);
                     localStorage.setItem('mainDeckScale', roundedSize);
                     console.log(`[CARD SCALE ADJUST] Main: ${cardsPerRow} cards/row → ${roundedSize}px per card`);
@@ -3065,7 +3523,7 @@
                 const gap = getGap('side');
                 if (availableWidth > 0) {
                     const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-                    const roundedSize = Math.max(30, Math.min(300, Math.floor(cardSize)));
+                    const roundedSize = Math.max(30, Math.min(300, Math.round(cardSize)));
                     document.documentElement.style.setProperty('--side-deck-size', `${roundedSize}px`);
                     localStorage.setItem('sideDeckScale', roundedSize);
                     console.log(`[CARD SCALE ADJUST] Side: ${cardsPerRow} cards/row → ${roundedSize}px per card`);
@@ -3080,7 +3538,7 @@
                 const gap = getGap('extra');
                 if (availableWidth > 0) {
                     const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-                    const roundedSize = Math.max(30, Math.min(300, Math.floor(cardSize)));
+                    const roundedSize = Math.max(30, Math.min(300, Math.round(cardSize)));
                     document.documentElement.style.setProperty('--extra-deck-size', `${roundedSize}px`);
                     localStorage.setItem('extraDeckScale', roundedSize);
                     console.log(`[CARD SCALE ADJUST] Extra: ${cardsPerRow} cards/row → ${roundedSize}px per card`);
@@ -3125,12 +3583,13 @@
                 const paddingRight = parseFloat(gridStyle.paddingRight) || 0;
                 const availableWidth = grid.clientWidth - paddingLeft - paddingRight;
 
-                const gap = deckType === 'main' ? 4 : (deckType === 'db' ? 4 : 8);
+                const gap = 0;
                 const cardsPerRow = getCurrentCardsPerRow(deckType);
 
                 // Calculate card size to fit exactly this many cards per row
+                // Use Math.ceil to ensure card size is never too small (which would allow extra cards to fit)
                 const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-                const roundedSize = Math.max(30, Math.min(300, Math.floor(cardSize)));
+                const roundedSize = Math.max(30, Math.min(300, Math.round(cardSize)));
 
                 // Apply the new card size
                 const cssVar = deckType === 'db' ? '--db-card-size' : `--${deckType}-deck-size`;
@@ -3267,7 +3726,7 @@
         let isPreloadingImages = false;
         let preloadQueue = new Set();
         const CACHE_STORAGE_KEY = 'snapshotImageCache';
-        const MAX_CACHE_SIZE = 500; // Limit cache size to prevent localStorage overflow
+        const MAX_CACHE_SIZE = 50; // Limit cache size to prevent localStorage overflow (localStorage ~5MB limit)
 
         // Load cache from localStorage on startup
         function loadSnapshotImageCache() {
@@ -3308,24 +3767,31 @@
                     localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cacheObj));
                     console.log(`[Cache] Saved ${count} card images to storage`);
                 } catch (error) {
-                    console.error('[Cache] Failed to save snapshot image cache:', error);
                     // If storage is full, try clearing old entries
                     if (error.name === 'QuotaExceededError') {
-                        console.log('[Cache] Storage full, clearing oldest entries...');
-                        const cacheObj = {};
-                        let count = 0;
-                        const entries = Array.from(snapshotImageCache.entries());
-                        // Keep only the most recent half
-                        const startIndex = Math.floor(entries.length / 2);
-                        for (let i = startIndex; i < entries.length && count < MAX_CACHE_SIZE / 2; i++) {
-                            cacheObj[entries[i][0]] = entries[i][1];
-                            count++;
+                        try {
+                            const cacheObj = {};
+                            let count = 0;
+                            const entries = Array.from(snapshotImageCache.entries());
+                            // Keep only the most recent 25 entries
+                            const startIndex = Math.max(0, entries.length - 25);
+                            for (let i = startIndex; i < entries.length && count < 25; i++) {
+                                cacheObj[entries[i][0]] = entries[i][1];
+                                count++;
+                            }
+                            snapshotImageCache.clear();
+                            for (const [url, dataUrl] of Object.entries(cacheObj)) {
+                                snapshotImageCache.set(url, dataUrl);
+                            }
+                            localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cacheObj));
+                            console.log(`[Cache] Storage full, reduced to ${count} images`);
+                        } catch (retryError) {
+                            // Storage completely full, disable caching
+                            console.log('[Cache] Storage completely full, cache disabled for session');
+                            snapshotImageCache.clear();
                         }
-                        snapshotImageCache.clear();
-                        for (const [url, dataUrl] of Object.entries(cacheObj)) {
-                            snapshotImageCache.set(url, dataUrl);
-                        }
-                        localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cacheObj));
+                    } else {
+                        console.error('[Cache] Failed to save snapshot image cache:', error);
                     }
                 }
             }, 2000); // Debounce: save 2 seconds after last update
@@ -3431,7 +3897,6 @@
             const proxies = [
                 { name: 'AllOrigins', url: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
                 { name: 'CodeTabs', url: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}` },
-                { name: 'ThingProxy', url: (u) => `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(u)}` },
             ];
 
             // Race all proxies in parallel - use the first successful one
@@ -4152,7 +4617,12 @@
             function initSandboxUI() {
                 const sandboxIds = [
                     'sandboxBoard', 'sandboxCloseBtn', 'sandboxUndoBtn', 'sandboxRedoBtn',
-                    'sandboxLoadDeckBtn', 'sandboxClearBtn', 'sandboxView2dBtn', 'sandboxView3dBtn'
+                    'sandboxLoadDeckBtn', 'sandboxClearBtn', 'sandboxView2dBtn', 'sandboxView3dBtn',
+                    'sandboxLayoutBtn', 'layoutAdjustPanel', 'layoutPanelClose',
+                    'fieldSizeSlider', 'fieldOffsetSlider', 'fieldGapSlider',
+                    'handOppSlider', 'handPlayerSlider', 'layoutExportBtn', 'layoutResetBtn',
+                    'fieldSizeValue', 'fieldOffsetValue', 'fieldGapValue',
+                    'handOppValue', 'handPlayerValue'
                 ];
                 sandboxIds.forEach(id => {
                     if (!UI[id]) {
@@ -4226,6 +4696,115 @@
                             }
                         }, { once: false });
                         UI.sandboxView3dBtn._hasListener = true;
+                    }
+
+                    // Layout Adjustment Panel
+                    if (UI.sandboxLayoutBtn && !UI.sandboxLayoutBtn._hasListener) {
+                        UI.sandboxLayoutBtn.addEventListener('click', () => {
+                            if (UI.layoutAdjustPanel) {
+                                UI.layoutAdjustPanel.classList.toggle('visible');
+                            }
+                        }, { once: false });
+                        UI.sandboxLayoutBtn._hasListener = true;
+                    }
+
+                    if (UI.layoutPanelClose && !UI.layoutPanelClose._hasListener) {
+                        UI.layoutPanelClose.addEventListener('click', () => {
+                            if (UI.layoutAdjustPanel) {
+                                UI.layoutAdjustPanel.classList.remove('visible');
+                            }
+                        }, { once: false });
+                        UI.layoutPanelClose._hasListener = true;
+                    }
+
+                    // Field Zone Size Slider
+                    if (UI.fieldSizeSlider && !UI.fieldSizeSlider._hasListener) {
+                        UI.fieldSizeSlider.addEventListener('input', (e) => {
+                            const value = e.target.value;
+                            if (UI.fieldSizeValue) UI.fieldSizeValue.textContent = parseFloat(value).toFixed(2);
+                            document.documentElement.style.setProperty('--field-zone-size-mult', value);
+                        }, { once: false });
+                        UI.fieldSizeSlider._hasListener = true;
+                    }
+
+                    // Field Vertical Offset Slider
+                    if (UI.fieldOffsetSlider && !UI.fieldOffsetSlider._hasListener) {
+                        UI.fieldOffsetSlider.addEventListener('input', (e) => {
+                            const value = e.target.value;
+                            if (UI.fieldOffsetValue) UI.fieldOffsetValue.textContent = value + 'px';
+                            document.documentElement.style.setProperty('--field-vertical-offset', value + 'px');
+                        }, { once: false });
+                        UI.fieldOffsetSlider._hasListener = true;
+                    }
+
+                    // Field Gap Spacing Slider
+                    if (UI.fieldGapSlider && !UI.fieldGapSlider._hasListener) {
+                        UI.fieldGapSlider.addEventListener('input', (e) => {
+                            const value = e.target.value;
+                            if (UI.fieldGapValue) UI.fieldGapValue.textContent = parseFloat(value).toFixed(2);
+                            document.documentElement.style.setProperty('--field-gap-mult', value);
+                        }, { once: false });
+                        UI.fieldGapSlider._hasListener = true;
+                    }
+
+                    // Opponent Hand Height Slider
+                    if (UI.handOppSlider && !UI.handOppSlider._hasListener) {
+                        UI.handOppSlider.addEventListener('input', (e) => {
+                            const value = e.target.value;
+                            if (UI.handOppValue) UI.handOppValue.textContent = parseFloat(value).toFixed(2);
+                            document.documentElement.style.setProperty('--hand-opponent-mult', value);
+                        }, { once: false });
+                        UI.handOppSlider._hasListener = true;
+                    }
+
+                    // Player Hand Height Slider
+                    if (UI.handPlayerSlider && !UI.handPlayerSlider._hasListener) {
+                        UI.handPlayerSlider.addEventListener('input', (e) => {
+                            const value = e.target.value;
+                            if (UI.handPlayerValue) UI.handPlayerValue.textContent = parseFloat(value).toFixed(2);
+                            document.documentElement.style.setProperty('--hand-player-mult', value);
+                        }, { once: false });
+                        UI.handPlayerSlider._hasListener = true;
+                    }
+
+                    // Export Settings Button
+                    if (UI.layoutExportBtn && !UI.layoutExportBtn._hasListener) {
+                        UI.layoutExportBtn.addEventListener('click', () => {
+                            const settings = {
+                                fieldZoneSizeMult: parseFloat(UI.fieldSizeSlider?.value || 1.0),
+                                fieldVerticalOffset: parseInt(UI.fieldOffsetSlider?.value || 0),
+                                fieldGapMult: parseFloat(UI.fieldGapSlider?.value || 1.0),
+                                handOpponentMult: parseFloat(UI.handOppSlider?.value || 1.0),
+                                handPlayerMult: parseFloat(UI.handPlayerSlider?.value || 1.0)
+                            };
+                            console.log('%c=== LAYOUT SETTINGS TO HARDCODE ===', 'color: #22c55e; font-weight: bold; font-size: 14px;');
+                            console.log('%cUpdate the default values in the CSS variables at :root:', 'color: #60a5fa;');
+                            console.log(`--field-zone-size-mult: ${settings.fieldZoneSizeMult};`);
+                            console.log(`--field-vertical-offset: ${settings.fieldVerticalOffset}px;`);
+                            console.log(`--field-gap-mult: ${settings.fieldGapMult};`);
+                            console.log(`--hand-opponent-mult: ${settings.handOpponentMult};`);
+                            console.log(`--hand-player-mult: ${settings.handPlayerMult};`);
+                            console.log('%c=====================================', 'color: #22c55e; font-weight: bold; font-size: 14px;');
+                            alert('Settings exported to console! Press F12 and check the console tab.');
+                        }, { once: false });
+                        UI.layoutExportBtn._hasListener = true;
+                    }
+
+                    // Reset Button
+                    if (UI.layoutResetBtn && !UI.layoutResetBtn._hasListener) {
+                        UI.layoutResetBtn.addEventListener('click', () => {
+                            if (UI.fieldSizeSlider) { UI.fieldSizeSlider.value = 1.0; UI.fieldSizeValue.textContent = '1.00'; }
+                            if (UI.fieldOffsetSlider) { UI.fieldOffsetSlider.value = 0; UI.fieldOffsetValue.textContent = '0px'; }
+                            if (UI.fieldGapSlider) { UI.fieldGapSlider.value = 1.0; UI.fieldGapValue.textContent = '1.00'; }
+                            if (UI.handOppSlider) { UI.handOppSlider.value = 1.0; UI.handOppValue.textContent = '1.00'; }
+                            if (UI.handPlayerSlider) { UI.handPlayerSlider.value = 1.0; UI.handPlayerValue.textContent = '1.00'; }
+                            document.documentElement.style.setProperty('--field-zone-size-mult', '1.0');
+                            document.documentElement.style.setProperty('--field-vertical-offset', '0px');
+                            document.documentElement.style.setProperty('--field-gap-mult', '1.0');
+                            document.documentElement.style.setProperty('--hand-opponent-mult', '1.0');
+                            document.documentElement.style.setProperty('--hand-player-mult', '1.0');
+                        }, { once: false });
+                        UI.layoutResetBtn._hasListener = true;
                     }
                 }
             }
@@ -4443,6 +5022,9 @@
 
             // Deck Options Dropdown
             UI.deckOptionsBtn.addEventListener('click', toggleDeckOptionsDropdown);
+            UI.autoAlignByCardSizeBtn.addEventListener('click', autoAlignByCardSize);
+            UI.autoAlignByTotalSizeBtn.addEventListener('click', autoAlignByTotalSize);
+            UI.resetHeightsBtn.addEventListener('click', resetDeckHeights);
             UI.resetToDefaultSizesBtn.addEventListener('click', resetToDefaultSizes);
 
             // Close dropdown when clicking outside
@@ -5103,6 +5685,22 @@
 
                     container.addEventListener('dragover', e => {
                         e.preventDefault();
+
+                        // On first dragover, create placeholder and hide the dragging card
+                        if (!placeholder && draggingElement) {
+                            // Create placeholder
+                            placeholder = document.createElement('div');
+                            placeholder.className = 'placeholder';
+                            placeholder.innerHTML = draggingElement.innerHTML;
+
+                            // Insert placeholder before the dragging element
+                            draggingElement.parentNode.insertBefore(placeholder, draggingElement);
+
+                            // Hide the dragging element completely (removes from layout)
+                            draggingElement.style.display = 'none';
+                            console.log('[DRAGOVER] Created placeholder and hid card');
+                        }
+
                         if (!placeholder) return;
 
                         const afterElement = getDragAfterElement(container, e.clientX, e.clientY);
@@ -5120,27 +5718,61 @@
                         // Remove visual highlight
                         container.classList.remove('ring-2', 'ring-blue-400', 'bg-blue-900/20');
 
-                        // Handle cards from grid (copy operation)
-                        const cardId = e.dataTransfer.getData('text/plain');
-                        if (cardId && cardDatabase.some(card => card.id === cardId)) {
+                        // Handle existing deck cards (reorder or move between decks) - check this FIRST
+                        if (draggingElement && placeholder) {
+                            const cardId = draggingElement.dataset.id;
+                            const fromPart = draggingElement.dataset.part;
+                            const toPart = container.id.replace('DeckList', '').toLowerCase();
+
+                            // Save old order for undo
+                            const oldOrder = { main: [...currentDeck.main], side: [...currentDeck.side], extra: [...currentDeck.extra] };
+
+                            placeholder.parentNode.replaceChild(draggingElement, placeholder);
+                            placeholder = null;
+
+                            // Show the card again (it was hidden during drag)
+                            draggingElement.style.display = '';
+
+                            // Update the data array from DOM (captures the correct position)
+                            updateDeckOrder();
+
+                            // Create undoable command
+                            const card = cardDatabase.find(c => c.id === cardId);
+                            const cardName = card ? card.name : 'Unknown card';
+                            const newOrder = { main: [...currentDeck.main], side: [...currentDeck.side], extra: [...currentDeck.extra] };
+
+                            const command = Command.create({
+                                description: fromPart !== toPart ? `Move ${cardName} from ${fromPart} to ${toPart}` : `Reorder ${fromPart} deck`,
+                                execute: () => {
+                                    currentDeck.main = [...newOrder.main];
+                                    currentDeck.side = [...newOrder.side];
+                                    currentDeck.extra = [...newOrder.extra];
+                                    markDeckDirty();
+                                    renderCurrentDeck();
+                                },
+                                undo: () => {
+                                    currentDeck.main = [...oldOrder.main];
+                                    currentDeck.side = [...oldOrder.side];
+                                    currentDeck.extra = [...oldOrder.extra];
+                                    markDeckDirty();
+                                    renderCurrentDeck();
+                                }
+                            });
+
+                            UndoManager.execute(command);
+                            return;
+                        }
+
+                        // Handle cards from grid (copy operation) - only if not a deck card
+                        const droppedCardId = e.dataTransfer.getData('text/plain');
+                        if (droppedCardId && cardDatabase.some(card => card.id === droppedCardId)) {
                             const partName = container.id.replace('DeckList', '').toLowerCase();
-                            addCardToDeck(cardId, partName);
+                            addCardToDeck(droppedCardId, partName);
 
                             // Visual feedback
                             NotificationManager.success(`Card added to ${partName} deck`, '', 1000);
                             return;
                         }
-
-                        // Handle existing deck cards (reorder operation)
-                        if (!draggingElement || !placeholder) return;
-
-                        placeholder.parentNode.replaceChild(draggingElement, placeholder);
-                        placeholder = null;
-
-                        updateDeckOrder();
-
-                        // Visual feedback for reorder
-                        Logger.info('Cards reordered in deck', { container: container.id });
                     });
 
                     // Mark this container as having drag listeners attached
@@ -5164,12 +5796,6 @@
                     saveCurrentDeck();
                 }
             }, 'Save deck');
-
-            KeyboardManager.register('ctrl+shift+s', () => {
-                if (typeof saveCurrentDeck === 'function') {
-                    saveCurrentDeck();
-                }
-            }, 'Quick save');
 
             KeyboardManager.register('ctrl+z', () => {
                 UndoManager.undo();
@@ -5209,7 +5835,7 @@
                 Logger.debug('Escape pressed - modals closed');
             }, 'Close modals/exit mode');
 
-            KeyboardManager.register('ctrl+d', () => {
+            KeyboardManager.register('d', () => {
                 // Toggle deck visibility
                 if (typeof toggleDatabaseBtn === 'function' && UI.toggleDatabaseBtn) {
                     UI.toggleDatabaseBtn.click();
@@ -5243,27 +5869,34 @@
                 }
             }, 'Focus extra deck');
 
-            KeyboardManager.register('ctrl+shift+h', () => {
-                // Show keyboard shortcuts help
-                KeyboardManager.showHelp();
-            }, 'Show keyboard shortcuts help');
+            KeyboardManager.register('h', () => {
+                // Toggle keyboard shortcuts modal
+                const modal = document.getElementById('shortcutsModal');
+                if (modal) {
+                    if (modal.classList.contains('hidden')) {
+                        modal.classList.remove('hidden');
+                    } else {
+                        modal.classList.add('hidden');
+                    }
+                }
+            }, 'Toggle keyboard shortcuts help');
 
-            KeyboardManager.register('ctrl+shift+n', () => {
+            KeyboardManager.register('n', () => {
                 // Show notification history
                 NotificationManager.showHistoryModal();
             }, 'Show notification history');
 
-            KeyboardManager.register('ctrl+shift+l', () => {
+            KeyboardManager.register('l', () => {
                 // Export debug log
                 Logger.export();
             }, 'Export debug log');
 
-            KeyboardManager.register('ctrl+shift+s', () => {
+            KeyboardManager.register('s', () => {
                 // Show deck statistics
                 showDeckStatistics();
             }, 'Show deck statistics');
 
-            KeyboardManager.register('ctrl+shift+t', () => {
+            KeyboardManager.register('t', () => {
                 // Cycle theme
                 ThemeManager.cycleTheme();
             }, 'Cycle theme');
@@ -5394,7 +6027,7 @@
             if (!container || !canvas || !importYdkBtn) return;
 
             let scene, camera, renderer, prism, innerPrism, edgeGlow, floorLight, clock;
-            let magentaReflection, cyanReflection; // Chromatic aberration reflections
+            let magentaReflection, cyanReflection, yellowReflection, blueReflection, greenReflection; // Chromatic aberration reflections
             let targetRotation = { x: 0, y: 0 };
             let currentRotation = { x: 0, y: 0 };
             let mouseVel = 0;
@@ -5567,6 +6200,54 @@
                 cyanReflection.position.y = -0.02;
                 scene.add(cyanReflection);
 
+                // Chromatic aberration reflections - Yellow (offset left, prominent)
+                const yellowGeom = geometry.clone();
+                const yellowMat = new THREE.MeshBasicMaterial({
+                    color: 0xffff00, // Yellow
+                    envMap: envMap,
+                    envMapIntensity: 1.5,
+                    transparent: true,
+                    opacity: 0.5,
+                    blending: THREE.AdditiveBlending,
+                    side: THREE.FrontSide
+                });
+                yellowReflection = new THREE.Mesh(yellowGeom, yellowMat);
+                yellowReflection.position.x = -0.05;
+                yellowReflection.position.y = 0.01;
+                scene.add(yellowReflection);
+
+                // Chromatic aberration reflections - Blue (subtle, offset far-right)
+                const blueGeom = geometry.clone();
+                const blueMat = new THREE.MeshBasicMaterial({
+                    color: 0x0066ff, // Blue
+                    envMap: envMap,
+                    envMapIntensity: 1.5,
+                    transparent: true,
+                    opacity: 0.12,
+                    blending: THREE.AdditiveBlending,
+                    side: THREE.FrontSide
+                });
+                blueReflection = new THREE.Mesh(blueGeom, blueMat);
+                blueReflection.position.x = 0.08;
+                blueReflection.position.y = -0.03;
+                scene.add(blueReflection);
+
+                // Chromatic aberration reflections - Green (subtle, offset top)
+                const greenGeom = geometry.clone();
+                const greenMat = new THREE.MeshBasicMaterial({
+                    color: 0x00ff66, // Green
+                    envMap: envMap,
+                    envMapIntensity: 1.5,
+                    transparent: true,
+                    opacity: 0.12,
+                    blending: THREE.AdditiveBlending,
+                    side: THREE.FrontSide
+                });
+                greenReflection = new THREE.Mesh(greenGeom, greenMat);
+                greenReflection.position.x = 0.0;
+                greenReflection.position.y = 0.08;
+                scene.add(greenReflection);
+
                 // Floor caustics
                 const floorMat = new THREE.MeshBasicMaterial({
                     color: 0xffffff,
@@ -5632,6 +6313,18 @@
                         cyanReflection.rotation.x = currentRotation.x;
                         cyanReflection.rotation.y = currentRotation.y;
                     }
+                    if (yellowReflection) {
+                        yellowReflection.rotation.x = currentRotation.x;
+                        yellowReflection.rotation.y = currentRotation.y;
+                    }
+                    if (blueReflection) {
+                        blueReflection.rotation.x = currentRotation.x;
+                        blueReflection.rotation.y = currentRotation.y;
+                    }
+                    if (greenReflection) {
+                        greenReflection.rotation.x = currentRotation.x;
+                        greenReflection.rotation.y = currentRotation.y;
+                    }
 
                     // Dynamic inner distortion
                     const shimmer = Math.sin(time * 10) * mouseVel * 0.05;
@@ -5648,6 +6341,15 @@
                     }
                     if (cyanReflection) {
                         cyanReflection.material.opacity = chromaGlow;
+                    }
+                    if (yellowReflection) {
+                        yellowReflection.material.opacity = chromaGlow;
+                    }
+                    if (blueReflection) {
+                        blueReflection.material.opacity = chromaGlow;
+                    }
+                    if (greenReflection) {
+                        greenReflection.material.opacity = chromaGlow;
                     }
 
                     // Spectral divergence
@@ -5943,6 +6645,18 @@
                         cyanReflection.scale.setScalar(scale);
                         cyanReflection.material.opacity = scale * 0.35;
                     }
+                    if (yellowReflection) {
+                        yellowReflection.scale.setScalar(scale);
+                        yellowReflection.material.opacity = scale * 0.4;
+                    }
+                    if (blueReflection) {
+                        blueReflection.scale.setScalar(scale);
+                        blueReflection.material.opacity = scale * 0.12;
+                    }
+                    if (greenReflection) {
+                        greenReflection.scale.setScalar(scale);
+                        greenReflection.material.opacity = scale * 0.12;
+                    }
 
                     // Hide crystal completely when absorbed
                     if (crystalAbsorbProgress >= 1) {
@@ -5951,6 +6665,9 @@
                         if (edgeGlow) edgeGlow.visible = false;
                         if (magentaReflection) magentaReflection.visible = false;
                         if (cyanReflection) cyanReflection.visible = false;
+                        if (yellowReflection) yellowReflection.visible = false;
+                        if (blueReflection) blueReflection.visible = false;
+                        if (greenReflection) greenReflection.visible = false;
                         isImported = true;
                         container.classList.add('imported');
                     }
@@ -6059,6 +6776,33 @@
                 if (edgeGlow) {
                     edgeGlow.visible = true;
                     edgeGlow.material.opacity = 0.12;
+                }
+
+                // Reset chromatic reflections
+                if (magentaReflection) {
+                    magentaReflection.visible = true;
+                    magentaReflection.scale.setScalar(1);
+                    magentaReflection.position.set(-0.04, 0.02, 0);
+                }
+                if (cyanReflection) {
+                    cyanReflection.visible = true;
+                    cyanReflection.scale.setScalar(1);
+                    cyanReflection.position.set(0.04, -0.02, 0);
+                }
+                if (yellowReflection) {
+                    yellowReflection.visible = true;
+                    yellowReflection.scale.setScalar(1);
+                    yellowReflection.position.set(-0.05, 0.01, 0);
+                }
+                if (blueReflection) {
+                    blueReflection.visible = true;
+                    blueReflection.scale.setScalar(1);
+                    blueReflection.position.set(0.08, -0.03, 0);
+                }
+                if (greenReflection) {
+                    greenReflection.visible = true;
+                    greenReflection.scale.setScalar(1);
+                    greenReflection.position.set(0.0, 0.08, 0);
                 }
 
                 // Re-enable tilt
@@ -10342,34 +11086,71 @@
 
             // Create modal HTML
             const modalHTML = `
-                <div id="newUserModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center p-4 z-50">
-                    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                        <h2 class="text-xl font-bold mb-4 text-center">Welcome to Kaihari Master Tool!</h2>
-                        <p class="text-gray-600 mb-6 text-center">Let's get you started by importing your Yu-Gi-Oh! deck files.</p>
-                        
+                <div id="newUserModal" class="fixed inset-0 bg-black/70 flex items-center p-4 z-50">
+                    <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl relative">
+                        <!-- Keyboard shortcuts help button -->
+                        <button id="shortcutsHelpBtn" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold flex items-center justify-center transition-colors" title="Keyboard shortcuts">
+                            ?
+                        </button>
+
+                        <h2 class="text-xl font-bold mb-2 text-center text-white">Welcome to Kaihari Master Tool!</h2>
+                        <p class="text-gray-400 mb-5 text-center text-sm">Let's get you started by importing your Yu-Gi-Oh! deck files.</p>
+
+                        <!-- Keyboard shortcuts hint -->
+                        <div class="bg-gray-800/50 rounded-lg p-3 mb-5 border border-gray-700/50">
+                            <p class="text-xs text-gray-400 text-center mb-2">Pro tip: Use keyboard shortcuts for faster navigation</p>
+                            <div class="flex justify-center gap-2 flex-wrap text-xs">
+                                <span class="bg-gray-700 text-gray-300 px-2 py-1 rounded font-mono">Ctrl+S</span>
+                                <span class="text-gray-500">Save</span>
+                                <span class="bg-gray-700 text-gray-300 px-2 py-1 rounded font-mono">Ctrl+F</span>
+                                <span class="text-gray-500">Search</span>
+                                <span class="bg-gray-700 text-gray-300 px-2 py-1 rounded font-mono">Ctrl+Z</span>
+                                <span class="text-gray-500">Undo</span>
+                                <span class="bg-gray-700 text-gray-300 px-2 py-1 rounded font-mono">Esc</span>
+                                <span class="text-gray-500">Close</span>
+                            </div>
+                        </div>
+
                         <div class="space-y-3">
-                            <button id="importFolderBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex items-center p-4">
-                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <button id="importFolderBtn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
                                 </svg>
                                 Import YDK Folder
                             </button>
-                            
-                            <button id="importSingleFileBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg flex items-center p-4">
-                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+                            <button id="importSingleFileBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
                                 Import Single YDK File
                             </button>
-                            
-                            <button id="skipImportBtn" class="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg">
+
+                            <button id="skipImportBtn" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold py-3 px-4 rounded-lg transition-colors">
                                 Skip for Now
                             </button>
                         </div>
-                        
-                        <p class="text-sm text-gray-500 mt-4 text-center">
+
+                        <p class="text-xs text-gray-500 mt-4 text-center">
                             You can import files later using the Import buttons in the deck builder.
                         </p>
+
+                        <!-- Keyboard shortcuts panel (hidden by default) -->
+                        <div id="shortcutsPanel" class="hidden mt-4 pt-4 border-t border-gray-700">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-3 text-center">Keyboard Shortcuts</h3>
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div class="flex justify-between"><span class="text-gray-400">Save Deck</span><span class="font-mono text-amber-400">Ctrl+S</span></div>
+                                <div class="flex justify-between"><span class="text-gray-400">Search</span><span class="font-mono text-amber-400">Ctrl+F</span></div>
+                                <div class="flex justify-between"><span class="text-gray-400">Undo</span><span class="font-mono text-amber-400">Ctrl+Z</span></div>
+                                <div class="flex justify-between"><span class="text-gray-400">Redo</span><span class="font-mono text-amber-400">Ctrl+Shift+Z</span></div>
+                                <div class="flex justify-between"><span class="text-gray-400">Toggle DB</span><span class="font-mono text-amber-400">D</span></div>
+                                <div class="flex justify-between"><span class="text-gray-400">Close</span><span class="font-mono text-amber-400">Esc</span></div>
+                                <div class="flex justify-between"><span class="text-gray-400">Main Deck</span><span class="font-mono text-amber-400">Ctrl+1</span></div>
+                                <div class="flex justify-between"><span class="text-gray-400">Side Deck</span><span class="font-mono text-amber-400">Ctrl+2</span></div>
+                                <div class="flex justify-between"><span class="text-gray-400">Extra Deck</span><span class="font-mono text-amber-400">Ctrl+3</span></div>
+                                <div class="flex justify-between"><span class="text-gray-400">Show Help</span><span class="font-mono text-amber-400">H</span></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -10385,17 +11166,32 @@
             const importFolderBtn = document.getElementById('importFolderBtn');
             const importSingleFileBtn = document.getElementById('importSingleFileBtn');
             const skipImportBtn = document.getElementById('skipImportBtn');
+            const shortcutsHelpBtn = document.getElementById('shortcutsHelpBtn');
+            const shortcutsPanel = document.getElementById('shortcutsPanel');
 
             console.log('[DEBUG] Modal elements found:', {
                 modal: !!modal,
                 importFolderBtn: !!importFolderBtn,
                 importSingleFileBtn: !!importSingleFileBtn,
-                skipImportBtn: !!skipImportBtn
+                skipImportBtn: !!skipImportBtn,
+                shortcutsHelpBtn: !!shortcutsHelpBtn,
+                shortcutsPanel: !!shortcutsPanel
             });
 
             if (!modal || !importFolderBtn || !importSingleFileBtn || !skipImportBtn) {
                 console.error('[DEBUG] Failed to find modal elements!');
                 return;
+            }
+
+            // Handle shortcuts help button toggle
+            if (shortcutsHelpBtn && shortcutsPanel) {
+                shortcutsHelpBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    shortcutsPanel.classList.toggle('hidden');
+                    shortcutsHelpBtn.classList.toggle('bg-amber-600');
+                    shortcutsHelpBtn.classList.toggle('bg-gray-700');
+                });
             }
 
             // Handle folder import
@@ -10704,9 +11500,9 @@
 
             // Update cards per row
             document.getElementById('mainDeckCardsPerRowValue').textContent = localStorage.getItem('mainDeckCardsPerRow') || '10';
-            document.getElementById('sideDeckCardsPerRowValue').textContent = localStorage.getItem('sideDeckCardsPerRow') || '4';
+            document.getElementById('sideDeckCardsPerRowValue').textContent = localStorage.getItem('sideDeckCardsPerRow') || '3';
             document.getElementById('extraDeckCardsPerRowValue').textContent = localStorage.getItem('extraDeckCardsPerRow') || '3';
-            document.getElementById('dbDeckCardsPerRowValue').textContent = localStorage.getItem('dbDeckCardsPerRow') || '7';
+            document.getElementById('dbDeckCardsPerRowValue').textContent = localStorage.getItem('dbDeckCardsPerRow') || '5';
 
             // Update panel configs
             const deckBuilderConfig = localStorage.getItem('deckBuilderConfig');
@@ -10963,9 +11759,9 @@
                     break;
                 case 'cards-per-row':
                     settings.mainDeckCardsPerRow = localStorage.getItem('mainDeckCardsPerRow') || '10';
-                    settings.sideDeckCardsPerRow = localStorage.getItem('sideDeckCardsPerRow') || '4';
+                    settings.sideDeckCardsPerRow = localStorage.getItem('sideDeckCardsPerRow') || '3';
                     settings.extraDeckCardsPerRow = localStorage.getItem('extraDeckCardsPerRow') || '3';
-                    settings.dbDeckCardsPerRow = localStorage.getItem('dbDeckCardsPerRow') || '7';
+                    settings.dbDeckCardsPerRow = localStorage.getItem('dbDeckCardsPerRow') || '5';
                     break;
                 case 'panel-configs':
                     settings.deckBuilderConfig = localStorage.getItem('deckBuilderConfig');
@@ -11004,9 +11800,9 @@
                 },
                 cardsPerRow: {
                     mainDeckCardsPerRow: localStorage.getItem('mainDeckCardsPerRow') || '10',
-                    sideDeckCardsPerRow: localStorage.getItem('sideDeckCardsPerRow') || '4',
+                    sideDeckCardsPerRow: localStorage.getItem('sideDeckCardsPerRow') || '3',
                     extraDeckCardsPerRow: localStorage.getItem('extraDeckCardsPerRow') || '3',
-                    dbDeckCardsPerRow: localStorage.getItem('dbDeckCardsPerRow') || '7'
+                    dbDeckCardsPerRow: localStorage.getItem('dbDeckCardsPerRow') || '5'
                 },
                 panelConfigs: {
                     deckBuilderConfig: localStorage.getItem('deckBuilderConfig'),
@@ -12160,6 +12956,7 @@
                 console.log(`[DEBUG] Rendering card ${index + 1}/${cardIds.length}: ${card.name} (${cardId})`);
 
                 const cardEl = document.createElement('div');
+                console.log('[DEBUG] Card element created, setting draggable=true');
                 cardEl.className = 'aspect-[2.5/3.5] shadow-lg cursor-grab transition-opacity deck-card-glass primatic-border';
                 cardEl.draggable = true;
                 cardEl.dataset.id = cardId;
@@ -12167,7 +12964,7 @@
 
                 cardEl.innerHTML = `
                     <div class="card-inner overflow-hidden">
-                        <img src="${card.imageUrl}" class="w-full h-full object-cover" title="${card.name}" onerror="this.onerror=null;this.src='https://placehold.co/100x140/2d3748/e2e8f0?text=?';">
+                        <img src="${card.imageUrl}" draggable="false" class="w-full h-full object-cover" title="${card.name}" onerror="this.onerror=null;this.src='https://placehold.co/100x140/2d3748/e2e8f0?text=?';">
                     </div>
                 `;
 
@@ -12225,24 +13022,30 @@
                 });
 
                 cardEl.addEventListener('dragstart', (e) => {
+                    console.log('[DRAG] dragstart firing for card:', cardId);
                     draggingElement = cardEl;
-                    placeholder = document.createElement('div');
-                    placeholder.className = 'placeholder';
 
-                    setTimeout(() => cardEl.classList.add('dragging'), 0);
+                    // Set dataTransfer - ONLY this, no DOM manipulation
+                    e.dataTransfer.setData('text/plain', cardId);
+                    e.dataTransfer.effectAllowed = 'move';
+                    console.log('[DRAG] DataTransfer set, nothing else');
                 });
 
                 cardEl.addEventListener('dragend', (e) => {
-                    cardEl.classList.remove('dragging');
-                    cardEl.style.transform = 'perspective(800px) rotateX(0) rotateY(0) translateZ(0) scale(1)';
-                    // Reset angle and reflection to base values
-                    cardEl.style.setProperty('--angle', '135deg');
-                    cardEl.style.setProperty('--reflect-x', '50%');
-                    cardEl.style.setProperty('--reflect-y', '30%');
-                    cardEl.style.setProperty('--reflect-color', 'rgba(255, 182, 193, 0.15)');
-                    draggingElement = null;
-                    placeholder?.remove();
+                    console.log('[DRAG] dragend firing for card:', cardId);
+
+                    // Show the card again (in case drag was cancelled)
+                    cardEl.style.display = '';
+
+                    // Remove placeholder if it still exists (drag was cancelled)
+                    if (placeholder && placeholder.parentNode) {
+                        placeholder.parentNode.removeChild(placeholder);
+                        console.log('[DRAG] Removed placeholder (drag cancelled)');
+                    }
+
+                    // Clean up
                     placeholder = null;
+                    draggingElement = null;
                 });
 
                 cardEl.addEventListener('contextmenu', (e) => {
@@ -13003,37 +13806,114 @@
             event.target.value = null;
         }
 
+        // Drag positioning - prioritizes Y (row) first, then X (position within row)
+        let lastDragState = { element: null, wasBefore: true, timestamp: 0 };
+
         function getDragAfterElement(container, x, y) {
             const draggableElements = [...container.querySelectorAll('[draggable="true"]:not(.dragging)')];
 
             if (draggableElements.length === 0) {
+                lastDragState = { element: null, wasBefore: true, timestamp: 0 };
                 return null;
             }
 
-            const closest = draggableElements.reduce(
-                (acc, child) => {
-                    const box = child.getBoundingClientRect();
-                    const centerX = box.left + box.width / 2;
-                    const centerY = box.top + box.height / 2;
-                    const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+            const now = Date.now();
 
-                    if (distance < acc.distance) {
-                        return { distance, element: child };
-                    } else {
-                        return acc;
+            // Step 1: Find elements in the same row (by Y position)
+            // Group elements by their row (top Y position, with tolerance)
+            const rows = new Map();
+            const ROW_TOLERANCE = 10; // pixels - elements within this Y range are in same row
+
+            for (const child of draggableElements) {
+                const box = child.getBoundingClientRect();
+                const centerY = box.top + box.height / 2;
+
+                // Find existing row or create new one
+                let foundRow = null;
+                for (const [rowY, elements] of rows) {
+                    if (Math.abs(rowY - centerY) < ROW_TOLERANCE) {
+                        foundRow = elements;
+                        break;
                     }
-                },
-                { distance: Number.POSITIVE_INFINITY, element: null }
-            );
+                }
 
-            const closestBox = closest.element.getBoundingClientRect();
-            const isBefore = x < closestBox.left + closestBox.width / 2;
-
-            if (isBefore) {
-                return closest.element;
-            } else {
-                return closest.element.nextElementSibling;
+                if (foundRow) {
+                    foundRow.push(child);
+                } else {
+                    rows.set(centerY, [child]);
+                }
             }
+
+            // Step 2: Find which row the cursor is in
+            let targetRowElements = null;
+            let minRowDist = Infinity;
+
+            for (const [rowY, elements] of rows) {
+                const dist = Math.abs(y - rowY);
+                if (dist < minRowDist) {
+                    minRowDist = dist;
+                    targetRowElements = elements;
+                }
+            }
+
+            if (!targetRowElements || targetRowElements.length === 0) {
+                return null;
+            }
+
+            // Step 3: Within the target row, find position by X
+            // Sort row elements by horizontal position
+            targetRowElements.sort((a, b) => {
+                const boxA = a.getBoundingClientRect();
+                const boxB = b.getBoundingClientRect();
+                return (boxA.left + boxA.width / 2) - (boxB.left + boxB.width / 2);
+            });
+
+            // Find where cursor sits in this row
+            let targetElement = null;
+            let targetX = null;
+
+            for (const child of targetRowElements) {
+                const box = child.getBoundingClientRect();
+                const centerX = box.left + box.width / 2;
+
+                if (x < centerX) {
+                    // Cursor is before this element
+                    targetElement = child;
+                    targetX = 'before';
+                    break;
+                }
+            }
+
+            // If cursor is after all elements in row
+            if (!targetElement) {
+                targetElement = targetRowElements[targetRowElements.length - 1];
+                targetX = 'after';
+            }
+
+            if (!targetElement) return null;
+
+            // Step 4: Apply deadzone only for before/after decision on SAME element
+            const DEADZONE = 10;
+            const box = targetElement.getBoundingClientRect();
+            const centerX = box.left + box.width / 2;
+            const distFromCenter = Math.abs(x - centerX);
+
+            let isBefore;
+            if (distFromCenter < DEADZONE && lastDragState.element === targetElement && now - lastDragState.timestamp < 150) {
+                // In deadzone, hovering same element - keep previous decision
+                isBefore = lastDragState.wasBefore;
+            } else {
+                isBefore = x < centerX;
+            }
+
+            // Update state
+            lastDragState = {
+                element: targetElement,
+                wasBefore: isBefore,
+                timestamp: now
+            };
+
+            return isBefore ? targetElement : targetElement.nextElementSibling;
         }
 
         function updateDeckOrder() {
@@ -19797,6 +20677,18 @@
             font-family: 'Helvetica Neue Haas Grotesk', 'Inter', sans-serif;
         }
 
+        /* Main container padding - optimized for space efficiency */
+        #mainContainer {
+            padding: 0.71rem;
+            max-width: 1680px;
+        }
+        @media (min-width: 768px) {
+            #mainContainer { padding: 1.065rem; }
+        }
+        @media (min-width: 1024px) {
+            #mainContainer { padding: 1.42rem; }
+        }
+
         ::-webkit-scrollbar {
             width: 8px;
         }
@@ -19819,7 +20711,7 @@
         .deck-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, var(--main-deck-size));
-            gap: 4px;
+            gap: 0;
             align-content: start;
             justify-content: start;
             perspective: 1000px;
@@ -19854,7 +20746,7 @@
         /* Side deck grid also gets the effect */
         .side-deck-grid {
             perspective: 1000px;
-            gap: 8px;
+            gap: 0;
             padding: 8px;
             margin: -8px;
         }
@@ -19863,7 +20755,7 @@
         .card-db-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(var(--db-card-size, 80px), 1fr));
-            gap: 4px;
+            gap: 0;
             align-content: start;
         }
 
@@ -20028,31 +20920,56 @@
 
         .side-deck-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(var(--side-deck-size), 1fr));
-            gap: 4px;
+            grid-template-columns: repeat(auto-fill, var(--side-deck-size));
+            gap: 0;
             align-content: start;
         }
 
         #extraDeckList.side-deck-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(var(--extra-deck-size), 1fr));
-            gap: 4px;
+            grid-template-columns: repeat(auto-fill, var(--extra-deck-size));
+            gap: 0;
             align-content: start;
         }
 
         .dragging {
-            opacity: 0.2;
+            /* Don't hide - let browser use it for drag image */
+            /* opacity is set inline in JS */
         }
 
         .placeholder {
-            background: rgba(71, 85, 105, 0.5);
-            /* slate-600/50 */
-            border: 2px dashed #94a3b8;
-            /* slate-400 */
+            position: relative;
+            overflow: hidden;
             border-radius: 0.375rem;
-            /* Match card rounding (rounded-md) */
             width: var(--main-deck-size);
             aspect-ratio: 2.5 / 3.5;
+            background: rgba(71, 85, 105, 0.3);
+            border: 2px dashed #60a5fa;
+            box-shadow: 0 0 10px rgba(96, 165, 250, 0.3);
+        }
+
+        .placeholder .card-inner {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            border-radius: 0.375rem;
+        }
+
+        .placeholder img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.2;
+            filter: grayscale(50%);
+        }
+
+        .placeholder::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border: 2px solid #60a5fa;
+            border-radius: 0.375rem;
+            box-shadow: inset 0 0 20px rgba(96, 165, 250, 0.2);
         }
 
         details>summary {
@@ -21909,6 +22826,15 @@
            DUEL SIMULATOR STYLES
            ======================================================================== */
 
+        /* Adjustable Layout Variables */
+        :root {
+            --field-zone-size-mult: 0.94; /* Multiplier for zone size */
+            --field-vertical-offset: -31px; /* Vertical offset for field */
+            --field-gap-mult: 1.0; /* Multiplier for gaps between rows */
+            --hand-opponent-mult: 1.0; /* Opponent hand height multiplier */
+            --hand-player-mult: 1.0; /* Player hand height multiplier */
+        }
+
         /* Duel Simulator Board Container */
         #sandboxBoard {
             position: fixed;
@@ -21976,27 +22902,168 @@
             border-color: rgba(59, 130, 246, 0.8);
         }
 
+        /* Layout Adjustment Panel */
+        #layoutAdjustPanel {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            width: 280px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            border-radius: 0 0 8px 8px;
+            padding: 12px 16px;
+            z-index: 100;
+            display: none;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        #layoutAdjustPanel.visible {
+            display: block;
+        }
+
+        .layout-panel-title {
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .layout-panel-close {
+            color: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .layout-panel-close:hover {
+            color: white;
+        }
+
+        .layout-control {
+            margin-bottom: 12px;
+        }
+
+        .layout-control:last-child {
+            margin-bottom: 0;
+        }
+
+        .layout-control-label {
+            display: flex;
+            justify-content: space-between;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+
+        .layout-control-value {
+            color: #60a5fa;
+            font-weight: 500;
+        }
+
+        .layout-slider {
+            width: 100%;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(59, 130, 246, 0.2);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .layout-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .layout-slider::-webkit-slider-thumb:hover {
+            background: #60a5fa;
+        }
+
+        .layout-slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            background: #3b82f6;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .layout-slider::-moz-range-thumb:hover {
+            background: #60a5fa;
+        }
+
+        .layout-export-btn {
+            width: 100%;
+            margin-top: 12px;
+            padding: 8px;
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            border-radius: 4px;
+            color: #22c55e;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .layout-export-btn:hover {
+            background: rgba(34, 197, 94, 0.3);
+            border-color: rgba(34, 197, 94, 0.6);
+        }
+
+        .layout-reset-btn {
+            width: 100%;
+            margin-top: 6px;
+            padding: 8px;
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 4px;
+            color: #ef4444;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .layout-reset-btn:hover {
+            background: rgba(239, 68, 68, 0.3);
+            border-color: rgba(239, 68, 68, 0.6);
+        }
+
         /* Board Content */
         .sandbox-board-content {
             flex: 1;
             display: flex;
             flex-direction: column;
-            overflow: visible;
-            padding: 4px;
+            overflow: hidden;
+            padding: 0;
             position: relative;
             min-height: 0;
         }
 
-        /* Field Container - 5 rows of zones */
+        /* Field Container - 5 rows of zones with smart auto-sizing */
         .sandbox-field-container {
-            flex: 0 0 auto;
+            flex: 1;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
-            gap: 1px;
-            padding: 2px 0;
-            max-height: calc(100vh - 200px);
+            gap: calc(2px * var(--field-gap-mult));
+            padding: 0;
+            min-height: 0;
+            margin-top: calc(0px - var(--field-vertical-offset));
+            margin-bottom: calc(0px + var(--field-vertical-offset));
         }
 
         /* Individual Row */
@@ -22028,8 +23095,8 @@
 
         /* Invisible placeholders maintain exact alignment with Row 2 */
         .extra-monster-placeholder {
-            width: clamp(100px, 13vw, 200px);
-            height: clamp(100px, 13vw, 200px);
+            width: calc(clamp(90px, min(13vw, calc((100vh - 200px) / 4.8)), 180px) * var(--field-zone-size-mult));
+            height: calc(clamp(90px, min(13vw, calc((100vh - 200px) / 4.8)), 180px) * var(--field-zone-size-mult));
             flex-shrink: 0;
             visibility: hidden;
             pointer-events: none;
@@ -22037,8 +23104,8 @@
 
         /* Extra Monster zones should match Monster zone dimensions */
         .sandbox-zone.extra-monster-zone {
-            width: clamp(100px, 13vw, 200px);
-            height: clamp(100px, 13vw, 200px);
+            width: calc(clamp(90px, min(13vw, calc((100vh - 200px) / 4.8)), 180px) * var(--field-zone-size-mult));
+            height: calc(clamp(90px, min(13vw, calc((100vh - 200px) / 4.8)), 180px) * var(--field-zone-size-mult));
             flex-shrink: 0;
         }
 
@@ -22055,8 +23122,8 @@
             background: rgba(0, 0, 0, 0.4);
             border: 1px solid rgba(255, 255, 255, 0.15);
             border-radius: 4px;
-            width: clamp(100px, 13vw, 200px);
-            height: clamp(100px, 13vw, 200px);
+            width: calc(clamp(90px, min(13vw, calc((100vh - 200px) / 4.8)), 180px) * var(--field-zone-size-mult));
+            height: calc(clamp(90px, min(13vw, calc((100vh - 200px) / 4.8)), 180px) * var(--field-zone-size-mult));
             flex-shrink: 0;
         }
 
@@ -22079,7 +23146,7 @@
             font-weight: 600;
         }
 
-        /* Hand Zone Labels */
+        /* Hand Zone Labels - hidden */
         .sandbox-hand-label {
             position: absolute;
             top: 2px;
@@ -22090,24 +23157,28 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             pointer-events: none;
+            opacity: 0; /* Hidden */
         }
 
-        /* Hand Zones */
+        /* Hand Zones - smart sizing, opponent shows 60%, player shows more */
         .sandbox-hand-zone {
-            min-height: clamp(60px, 8vw, 120px);
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px dashed rgba(255, 255, 255, 0.1);
+            background: transparent;
+            border: 1px dashed rgba(255, 255, 255, 0.03);
             border-radius: 4px;
-            padding: 2px;
+            padding: 0;
             position: relative;
+            overflow: visible;
+            flex-shrink: 0;
         }
 
         .sandbox-hand-zone.opponent-hand {
-            margin-bottom: 2px;
+            margin-bottom: 0;
+            height: calc(clamp(40px, calc(min(12vw, calc((100vh - 200px) / 5.2)) * 0.5), 68px) * var(--hand-opponent-mult)); /* 50% - compact for opponent */
         }
 
         .sandbox-hand-zone.player-hand {
-            margin-top: 2px;
+            margin-top: 0;
+            height: calc(clamp(64px, calc(min(13vw, calc((100vh - 200px) / 4.8)) * 0.85), 145px) * var(--hand-player-mult)); /* ~85% for more visibility */
         }
 
         /* Legacy Zone Container (for compatibility) */
@@ -22141,13 +23212,12 @@
             box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
         }
 
-        /* Zone Sizes */
-        /* Monster, Spell/Trap, and Extra Monster zones use viewport-relative sizing
-           to maximize card visibility while maintaining aspect ratio for defense position */
+        /* Zone Sizes - increased for better visibility */
+        /* Monster, Spell/Trap, and Extra Monster zones */
         .sandbox-zone.monster-zone,
         .sandbox-zone.spell-trap-zone {
-            width: clamp(100px, 13vw, 200px);
-            height: clamp(100px, 13vw, 200px);
+            width: calc(clamp(90px, min(13vw, calc((100vh - 200px) / 4.8)), 180px) * var(--field-zone-size-mult));
+            height: calc(clamp(90px, min(13vw, calc((100vh - 200px) / 4.8)), 180px) * var(--field-zone-size-mult));
         }
 
         /* Extra monster zones have special styling */
@@ -22156,14 +23226,14 @@
             background: rgba(255, 200, 100, 0.05);
         }
 
-        /* Field, Deck, ED, GY, and Banished zones remain rectangular with viewport-relative sizing */
+        /* Field, Deck, ED, GY, and Banished zones remain rectangular with smart sizing */
         .sandbox-zone.field-zone,
         .sandbox-zone.deck-zone,
         .sandbox-zone.extra-deck-zone,
         .sandbox-zone.graveyard-zone,
         .sandbox-zone.banished-zone {
-            width: clamp(70px, 9.5vw, 140px);
-            height: clamp(100px, 13vw, 200px);
+            width: calc(clamp(70px, min(10vw, calc((100vh - 200px) / 4.8 * 0.75)), 130px) * var(--field-zone-size-mult));
+            height: calc(clamp(90px, min(13vw, calc((100vh - 200px) / 4.8)), 180px) * var(--field-zone-size-mult));
             cursor: pointer;
         }
 
@@ -22216,11 +23286,20 @@
         /* Hand Zone */
         .sandbox-hand-zone {
             min-width: 300px;
-            height: clamp(70px, 9vw, 120px);
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px dashed rgba(255, 255, 255, 0.08);
+            background: transparent;
+            border: 1px dashed rgba(255, 255, 255, 0.03);
             border-radius: 4px;
-            padding: 2px;
+            padding: 0;
+            overflow: visible;
+            flex-shrink: 0;
+        }
+
+        .sandbox-hand-zone.opponent-hand {
+            height: clamp(40px, calc(min(12vw, calc((100vh - 200px) / 5.2)) * 0.5), 68px); /* 50% - compact for opponent */
+        }
+
+        .sandbox-hand-zone.player-hand {
+            height: clamp(64px, calc(min(13vw, calc((100vh - 200px) / 4.8)) * 0.85), 145px); /* ~85% for more visibility */
         }
 
         .sandbox-hand-zone .sandbox-zone-content {
@@ -22230,7 +23309,7 @@
             flex-wrap: wrap;
             gap: 0;
             height: 100%;
-            overflow-x: auto;
+            overflow: visible;
         }
 
         /* Sandbox Card */
@@ -22293,17 +23372,97 @@
             transform: rotate(0deg);
         }
 
-        /* Hand Card Styling */
+        /* Hand Card Styling - smart sizing matching larger field zones */
         .sandbox-hand-zone .sandbox-card {
-            width: clamp(45px, 6.5vw, 90px);
-            height: clamp(65px, 9.5vw, 130px);
+            width: calc(clamp(65px, min(13vw, calc((100vh - 200px) / 4.8)) * 0.75, 135px) * var(--field-zone-size-mult)); /* Card width based on zone size */
+            height: calc(clamp(75px, min(13vw, calc((100vh - 200px) / 4.8)) * 0.85, 153px) * var(--field-zone-size-mult)); /* ~60% visible normally, room for full on hover */
             margin: 0 -4px;
-            transition: transform 0.2s ease, z-index 0s;
+            transition: transform 0.2s ease-out;
+            position: relative;
+            overflow: visible;
+            cursor: pointer;
+            z-index: 1;
+            min-width: 40px;
+            min-height: 55px;
+            max-width: 135px;
+            max-height: 190px;
         }
 
-        .sandbox-hand-zone .sandbox-card:hover {
-            transform: translateY(-12px) scale(1.15);
-            z-index: 100;
+        /* Dynamic shadow for lifted cards - more dramatic */
+        .sandbox-hand-zone .sandbox-card::after {
+            content: '';
+            position: absolute;
+            left: 5%;
+            width: 90%;
+            height: 20px;
+            background: radial-gradient(ellipse at center,
+                rgba(0, 0, 0, 0.8) 0%,
+                rgba(0, 0, 0, 0.4) 30%,
+                transparent 70%);
+            opacity: 0;
+            transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+            pointer-events: none;
+            z-index: -1;
+            filter: blur(2px);
+        }
+
+        /* Shadow below player cards */
+        .sandbox-hand-zone.player-hand .sandbox-card::after {
+            bottom: -10px;
+            transform: scale(0.8);
+        }
+
+        /* Shadow above opponent cards */
+        .sandbox-hand-zone.opponent-hand .sandbox-card::after {
+            top: -10px;
+            bottom: auto;
+            transform: scale(0.8);
+        }
+
+        /* Inner card image - always shows correct portion, no height transition */
+        .sandbox-hand-zone .sandbox-card .sandbox-card-image {
+            position: absolute;
+            width: 100%;
+            height: 166.67%; /* Full image visible through the card window */
+            object-fit: contain;
+            left: 0;
+        }
+
+        /* Player hand: show top 60% of card */
+        .sandbox-hand-zone.player-hand .sandbox-card .sandbox-card-image {
+            top: 0;
+        }
+
+        /* Opponent hand: upside down, show bottom 60% */
+        .sandbox-hand-zone.opponent-hand .sandbox-card .sandbox-card-image {
+            top: auto;
+            bottom: 0;
+            transform: rotate(180deg);
+            transform-origin: center center;
+        }
+
+        /* Player hand hover - DRAMATIC lift and scale */
+        .sandbox-hand-zone.player-hand .sandbox-card:hover {
+            height: clamp(57px, 8.4vw, 114px); /* Keep same height */
+            transform: translateY(-30px) scale(1.8);
+            z-index: 1000;
+        }
+
+        .sandbox-hand-zone.player-hand .sandbox-card:hover::after {
+            opacity: 1;
+            transform: scale(1.2);
+        }
+
+        /* Opponent hand hover - DRAMATIC lift and scale */
+        .sandbox-hand-zone.opponent-hand .sandbox-card:hover {
+            height: clamp(57px, 8.4vw, 114px); /* Keep same height */
+            transform: translateY(30px) scale(1.8);
+            z-index: 1000;
+        }
+
+        .sandbox-hand-zone.opponent-hand .sandbox-card:hover::after {
+            opacity: 1;
+            transform: scale(1.2);
         }
 
         /* Zone Row Styling */
@@ -22448,14 +23607,14 @@
             .sandbox-zone.monster-zone,
             .sandbox-zone.spell-trap-zone,
             .sandbox-zone.extra-monster-zone {
-                width: clamp(60px, 14vw, 100px);
-                height: clamp(60px, 14vw, 100px);
+                width: clamp(70px, min(14vw, calc((100vh - 180px) / 5.5)), 100px);
+                height: clamp(70px, min(14vw, calc((100vh - 180px) / 5.5)), 100px);
             }
 
             /* Extra monster placeholders match mobile size */
             .extra-monster-placeholder {
-                width: clamp(60px, 14vw, 100px);
-                height: clamp(60px, 14vw, 100px);
+                width: clamp(70px, min(14vw, calc((100vh - 180px) / 5.5)), 100px);
+                height: clamp(70px, min(14vw, calc((100vh - 180px) / 5.5)), 100px);
             }
 
             /* Field, Deck, ED, GY, and Banished zones remain rectangular */
@@ -22464,18 +23623,89 @@
             .sandbox-zone.extra-deck-zone,
             .sandbox-zone.graveyard-zone,
             .sandbox-zone.banished-zone {
-                width: clamp(45px, 10vw, 75px);
-                height: clamp(60px, 14vw, 100px);
+                width: clamp(50px, min(11vw, calc((100vh - 180px) / 5.5 * 0.75)), 75px);
+                height: clamp(70px, min(14vw, calc((100vh - 180px) / 5.5)), 100px);
             }
 
             .sandbox-hand-zone {
                 min-width: 300px;
-                height: clamp(60px, 9vw, 100px);
+                background: transparent;
+                border: 1px dashed rgba(255, 255, 255, 0.02);
+            }
+
+            .sandbox-hand-zone.opponent-hand {
+                height: clamp(32px, calc(min(13vw, calc((100vh - 160px) / 5.5)) * 0.5), 50px); /* 50% - compact */
+            }
+
+            .sandbox-hand-zone.player-hand {
+                height: clamp(48px, calc(min(14vw, calc((100vh - 160px) / 5.2)) * 0.85), 75px); /* ~85% */
             }
 
             .sandbox-hand-zone .sandbox-card {
-                width: clamp(40px, 7vw, 65px);
-                height: clamp(58px, 10vw, 95px);
+                width: calc(min(14vw, calc((100vh - 180px) / 5.5)) * 0.75);
+                height: calc(min(14vw, calc((100vh - 180px) / 5.5)) * 0.85);
+                position: relative;
+                overflow: visible;
+                min-width: 30px;
+                min-height: 40px;
+                max-width: 75px;
+                max-height: 100px;
+            }
+
+            .sandbox-hand-zone .sandbox-card::after {
+                height: 15px;
+            }
+
+            .sandbox-hand-zone.player-hand .sandbox-card::after {
+                bottom: -8px;
+            }
+
+            .sandbox-hand-zone.opponent-hand .sandbox-card::after {
+                top: -8px;
+            }
+
+            .sandbox-hand-zone .sandbox-card .sandbox-card-image {
+                position: absolute;
+                width: 100%;
+                height: 166.67%;
+                object-fit: contain;
+                left: 0;
+            }
+
+            .sandbox-hand-zone.player-hand .sandbox-card .sandbox-card-image {
+                top: 0;
+            }
+
+            .sandbox-hand-zone.opponent-hand .sandbox-card .sandbox-card-image {
+                top: auto;
+                bottom: 0;
+                transform: rotate(180deg);
+            }
+
+            .sandbox-hand-zone.player-hand .sandbox-card:hover {
+                transform: translateY(-20px) scale(1.6);
+                z-index: 1000;
+            }
+
+            .sandbox-hand-zone.player-hand .sandbox-card:hover::after {
+                opacity: 1;
+            }
+
+            .sandbox-hand-zone.player-hand .sandbox-card:hover .sandbox-card-image {
+                height: 100%;
+            }
+
+            .sandbox-hand-zone.opponent-hand .sandbox-card:hover {
+                transform: translateY(20px) scale(1.6);
+                z-index: 1000;
+            }
+
+            .sandbox-hand-zone.opponent-hand .sandbox-card:hover::after {
+                opacity: 1;
+            }
+
+            .sandbox-hand-zone.opponent-hand .sandbox-card:hover .sandbox-card-image {
+                height: 100%;
             }
         }
 
@@ -24117,9 +25347,9 @@
         const dbDeckCardsPerRowValue = document.getElementById('dbDeckCardsPerRowValue');
 
         if (mainDeckCardsPerRowValue) mainDeckCardsPerRowValue.textContent = localStorage.getItem('mainDeckCardsPerRow') || '10';
-        if (sideDeckCardsPerRowValue) sideDeckCardsPerRowValue.textContent = localStorage.getItem('sideDeckCardsPerRow') || '4';
+        if (sideDeckCardsPerRowValue) sideDeckCardsPerRowValue.textContent = localStorage.getItem('sideDeckCardsPerRow') || '3';
         if (extraDeckCardsPerRowValue) extraDeckCardsPerRowValue.textContent = localStorage.getItem('extraDeckCardsPerRow') || '3';
-        if (dbDeckCardsPerRowValue) dbDeckCardsPerRowValue.textContent = localStorage.getItem('dbDeckCardsPerRow') || '7';
+        if (dbDeckCardsPerRowValue) dbDeckCardsPerRowValue.textContent = localStorage.getItem('dbDeckCardsPerRow') || '5';
 
         // Update panel configs
         const deckBuilderConfigStatus = document.getElementById('deckBuilderConfigStatus');
@@ -24403,9 +25633,9 @@
                 break;
             case 'cards-per-row':
                 settings.mainDeckCardsPerRow = localStorage.getItem('mainDeckCardsPerRow') || '10';
-                settings.sideDeckCardsPerRow = localStorage.getItem('sideDeckCardsPerRow') || '4';
+                settings.sideDeckCardsPerRow = localStorage.getItem('sideDeckCardsPerRow') || '3';
                 settings.extraDeckCardsPerRow = localStorage.getItem('extraDeckCardsPerRow') || '3';
-                settings.dbDeckCardsPerRow = localStorage.getItem('dbDeckCardsPerRow') || '7';
+                settings.dbDeckCardsPerRow = localStorage.getItem('dbDeckCardsPerRow') || '5';
                 break;
             case 'panel-configs':
                 settings.deckBuilderConfig = localStorage.getItem('deckBuilderConfig');
@@ -24444,9 +25674,9 @@
             },
             cardsPerRow: {
                 mainDeckCardsPerRow: localStorage.getItem('mainDeckCardsPerRow') || '10',
-                sideDeckCardsPerRow: localStorage.getItem('sideDeckCardsPerRow') || '4',
+                sideDeckCardsPerRow: localStorage.getItem('sideDeckCardsPerRow') || '3',
                 extraDeckCardsPerRow: localStorage.getItem('extraDeckCardsPerRow') || '3',
-                dbDeckCardsPerRow: localStorage.getItem('dbDeckCardsPerRow') || '7'
+                dbDeckCardsPerRow: localStorage.getItem('dbDeckCardsPerRow') || '5'
             },
             panelConfigs: {
                 deckBuilderConfig: localStorage.getItem('deckBuilderConfig'),
@@ -25660,7 +26890,7 @@
     <!-- Banlist Management Modal -->
     <!-- Banlist management modal moved to modules/banlist-management.html -->
 
-    <div class="container mx-auto p-4 md:p-6 lg:p-8">
+    <div id="mainContainer" class="container mx-auto">
         <header class="flex flex-wrap justify-between items-center mb-6 gap-4">
             <div class="flex items-center gap-4">
                 <div id="chibiLogo" class="relative h-12 w-12 rounded-full cursor-pointer overflow-hidden"
@@ -25845,11 +27075,11 @@
                                 <button id="scaleTargetBtn"
                                     class="text-xs bg-slate-600 hover:bg-slate-500 font-semibold px-2 py-1 rounded-md transition-colors"
                                     title="Click to cycle between Main, Side, and Extra deck">Main</button>
-                                <input type="range" id="deckScaleSlider" min="3" max="16" step="1" value="8"
+                                <input type="range" id="deckScaleSlider" min="1" max="16" step="1" value="10"
                                     class="w-24 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer"
                                     title="Set number of cards per row">
                                 <span id="cardsPerRowDisplay"
-                                    class="text-xs font-semibold text-[var(--color-primary)] min-w-[2rem] text-center">8</span>
+                                    class="text-xs font-semibold text-[var(--color-primary)] min-w-[2rem] text-center">10</span>
                             </div>
                         </div>
                         <div class="flex items-center justify-between mb-2">
@@ -25869,6 +27099,18 @@
                                 <div id="deckOptionsDropdown"
                                     class="hidden absolute top-full left-0 mt-1 w-48 bg-slate-800 border border-[var(--color-border)] rounded-md shadow-lg z-50">
                                     <div class="py-1">
+                                        <button id="autoAlignByCardSizeBtn"
+                                            class="w-full text-left px-4 py-2 text-sm text-white hover:bg-slate-700 transition-colors">
+                                            Align by Card Size (Rows)
+                                        </button>
+                                        <button id="autoAlignByTotalSizeBtn"
+                                            class="w-full text-left px-4 py-2 text-sm text-white hover:bg-slate-700 transition-colors">
+                                            Align by Total Size (All Cards)
+                                        </button>
+                                        <button id="resetHeightsBtn"
+                                            class="w-full text-left px-4 py-2 text-sm text-white hover:bg-slate-700 transition-colors">
+                                            Reset Heights
+                                        </button>
                                         <button id="resetToDefaultSizesBtn"
                                             class="w-full text-left px-4 py-2 text-sm text-white hover:bg-slate-700 transition-colors">
                                             Reset to Default Sizes
@@ -26411,6 +27653,61 @@
                     <div class="sandbox-toolbar-divider"></div>
                     <button id="sandboxNextPhaseBtn" class="sandbox-toolbar-btn">Next Phase</button>
                     <button id="sandboxEndTurnBtn" class="sandbox-toolbar-btn">End Turn</button>
+                    <div class="sandbox-toolbar-divider"></div>
+                    <!-- Temporary Layout Adjustment Tool -->
+                    <button id="sandboxLayoutBtn" class="sandbox-toolbar-btn" title="Adjust Layout">🔧 Layout</button>
+
+                    <!-- Layout Adjustment Panel -->
+                    <div id="layoutAdjustPanel">
+                        <div class="layout-panel-title">
+                            <span>Layout Adjustment</span>
+                            <span class="layout-panel-close" id="layoutPanelClose">&times;</span>
+                        </div>
+
+                        <div class="layout-control">
+                            <div class="layout-control-label">
+                                <span>Field Zone Size</span>
+                                <span class="layout-control-value" id="fieldSizeValue">1.00</span>
+                            </div>
+                            <input type="range" class="layout-slider" id="fieldSizeSlider" min="0.5" max="1.5" step="0.01" value="1.0">
+                        </div>
+
+                        <div class="layout-control">
+                            <div class="layout-control-label">
+                                <span>Field Vertical Offset</span>
+                                <span class="layout-control-value" id="fieldOffsetValue">0px</span>
+                            </div>
+                            <input type="range" class="layout-slider" id="fieldOffsetSlider" min="-50" max="50" step="1" value="0">
+                        </div>
+
+                        <div class="layout-control">
+                            <div class="layout-control-label">
+                                <span>Field Gap Spacing</span>
+                                <span class="layout-control-value" id="fieldGapValue">1.00</span>
+                            </div>
+                            <input type="range" class="layout-slider" id="fieldGapSlider" min="0" max="2" step="0.05" value="1.0">
+                        </div>
+
+                        <div class="layout-control">
+                            <div class="layout-control-label">
+                                <span>Opponent Hand Height</span>
+                                <span class="layout-control-value" id="handOppValue">1.00</span>
+                            </div>
+                            <input type="range" class="layout-slider" id="handOppSlider" min="0.5" max="1.5" step="0.01" value="1.0">
+                        </div>
+
+                        <div class="layout-control">
+                            <div class="layout-control-label">
+                                <span>Player Hand Height</span>
+                                <span class="layout-control-value" id="handPlayerValue">1.00</span>
+                            </div>
+                            <input type="range" class="layout-slider" id="handPlayerSlider" min="0.5" max="1.5" step="0.01" value="1.0">
+                        </div>
+
+                        <button class="layout-export-btn" id="layoutExportBtn">📋 Export Settings to Console</button>
+                        <button class="layout-reset-btn" id="layoutResetBtn">↺ Reset to Defaults</button>
+                    </div>
+
                     <div class="sandbox-toolbar-divider"></div>
                     <button id="sandboxView2dBtn" class="sandbox-toolbar-btn active">2D View</button>
                     <button id="sandboxView3dBtn" class="sandbox-toolbar-btn">3D View</button>
@@ -27013,13 +28310,13 @@
         body, body * {
             cursor: none !important;
         }
-        /* During drag, use SVG circle cursor (browser shows this during HTML5 drag) */
+        /* During drag, keep custom cursor visible */
         body.is-dragging {
-            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="none" stroke="%23bfa4d0" stroke-width="2" opacity="0.7"/></svg>') 10 10, auto !important;
+            cursor: none !important;
         }
-        /* Hide custom canvas cursor during drag (browser handles it) */
+        /* Keep custom canvas cursor visible during drag */
         body.is-dragging .custom-cursor-canvas {
-            opacity: 0 !important;
+            opacity: 1 !important;
         }
         /* ONLY show text cursor on inputs */
         input, textarea, [contenteditable] {
@@ -27382,8 +28679,11 @@
                 return dragCanvas;
             }
 
-            // Handle drag start - keep custom cursor visible, show card
+            // Handle drag start - keep custom cursor visible
             document.addEventListener('dragstart', (e) => {
+                // Note: Deck cards use their own drag image (canvas) in their specific handler
+                // We don't override it here with an empty canvas
+
                 // Add dragging class to body for SVG cursor
                 document.body.classList.add('is-dragging');
 
@@ -27392,7 +28692,8 @@
 
                 // Get the dragged element (target with .cursor-grab class)
                 const dragEl = e.target.closest('.cursor-grab');
-                if (dragEl) {
+                // Only set custom drag image for grid cards, NOT deck cards
+                if (dragEl && !dragEl.classList.contains('deck-card-glass')) {
                     // Use the element itself as drag image, offset so card appears below cursor
                     const rect = dragEl.getBoundingClientRect();
                     e.dataTransfer.setDragImage(dragEl, rect.width / 2, rect.height + 10);
