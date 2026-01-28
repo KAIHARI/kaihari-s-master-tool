@@ -1480,7 +1480,7 @@
             cardDatabaseSection: null, resizeHandle: null, deckBuilderSection: null, deckBuilderContainer: null,
             advancedSearchBtn: null,
             // UX Improvements - Sort Controls
-            dbSortSelect: null, dbSortOrderBtn: null, dbResultCount: null,
+            dbSortSelect: null, dbResultCount: null,
             // UX Improvements - Preview Modal
             cardPreviewModal: null, closePreviewModal: null,
             previewCardImage: null, previewCardName: null, previewCardType: null,
@@ -4851,22 +4851,6 @@
             if (UI.dbSortSelect) {
                 UI.dbSortSelect.addEventListener('change', (e) => {
                     dbSortBy = e.target.value;
-                    renderCardDatabase();
-                });
-            }
-
-            if (UI.dbSortOrderBtn) {
-                UI.dbSortOrderBtn.addEventListener('click', () => {
-                    dbSortOrder = dbSortOrder === 'asc' ? 'desc' : 'asc';
-                    // Update icon
-                    const icon = UI.dbSortOrderBtn.querySelector('svg');
-                    if (icon) {
-                        if (dbSortOrder === 'asc') {
-                            icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"></path>';
-                        } else {
-                            icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m5-4v12m0 0l-4-4m4 4l4-4"></path>';
-                        }
-                    }
                     renderCardDatabase();
                 });
             }
