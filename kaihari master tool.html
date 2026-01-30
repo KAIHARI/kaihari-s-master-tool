@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 
+<!-- ============================================================================
+     SECTION: HTML HEAD & METADATA
+     Lines: 1-17
+     Description: HTML document setup, CDN dependencies, CSS imports
+     Dependencies: Tailwind CSS, jsPDF, html2canvas, Three.js, GLTFLoader
+     Updates: When adding new CDN links or metadata
+============================================================================ -->
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,6 +23,29 @@
     <!-- GLTFLoader for loading GLB models -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script type="module">
+        // ============================================================================
+        //     SECTION: JAVASCRIPT MODULES
+        //     Lines: 17-19610
+        //     Description: All JavaScript code using Revealing Module Pattern
+        //
+        //     MODULES INCLUDED:
+        //     - Logger (28-123): Debug logging with levels and history
+        //     - KeyboardManager (128-214): Global keyboard shortcuts
+        //     - NotificationManager (219-438): Toast notifications
+        //     - UndoManager (443-576): Command pattern for undo/redo
+        //     - Command (578-684): Base class for undoable actions
+        //     - SmartSearch (686-982): Fuzzy card search with Levenshtein distance
+        //     - DeckStatistics (984-1112): Card type/level/attribute distribution
+        //     - ThemeManager (983-1112): Dark/light/cyber/classic themes
+        //     - BulkOperations (1117-1288): Multi-card add/remove/move operations
+        //
+        //     To add a new module:
+        //     1. Use the revealing module pattern: const ModuleName = (function() { ... })();
+        //     2. Place it before the GLOBAL STATE section
+        //     3. Add init() method and call it in main()
+        //     4. Update this marker comment
+        // ============================================================================
+
         // Module-level global variable declarations (must come before any access)
         let ydkDB;  // FIX: Declare before any access to prevent Temporal Dead Zone error
 
@@ -26,7 +57,11 @@
 
         // ============================================================================
         // MODULE: Logger
+        // Lines: 28-123
+        // Purpose: Debug logging with levels (DEBUG, INFO, WARN, ERROR)
+        // Key Methods: debug(), info(), warn(), error(), export()
         // ============================================================================
+
         const Logger = (function() {
             'use strict';
 
@@ -124,7 +159,12 @@
 
         // ============================================================================
         // MODULE: KeyboardManager
+        // Lines: 128-214
+        // Purpose: Global keyboard shortcut registration and handling
+        // Key Methods: register(), unregister(), enable(), disable(), showHelp()
+        // Usage: KeyboardManager.register('ctrl+s', () => save(), 'Save deck');
         // ============================================================================
+
         const KeyboardManager = (function() {
             'use strict';
 
@@ -215,7 +255,11 @@
 
         // ============================================================================
         // MODULE: NotificationManager
+        // Lines: 219-438
+        // Purpose: Toast notifications with auto-dismiss and action buttons
+        // Key Methods: info(), success(), warning(), error(), show()
         // ============================================================================
+
         const NotificationManager = (function() {
             'use strict';
 
@@ -439,7 +483,11 @@
 
         // ============================================================================
         // MODULE: UndoManager
+        // Lines: 443-576
+        // Purpose: Command pattern for undo/redo operations
+        // Key Methods: execute(), undo(), redo()
         // ============================================================================
+
         const UndoManager = (function() {
             'use strict';
 
@@ -547,6 +595,12 @@
         // ============================================================================
         // MODULE: Command (Base class for undoable actions)
         // ============================================================================
+        // MODULE: Command
+        // Lines: 598-613
+        // Purpose: Base class for undoable command objects
+        // Key Methods: create(), execute(), undo(), getDescription()
+        // ============================================================================
+
         const Command = (function() {
             'use strict';
 
@@ -564,6 +618,12 @@
         // ============================================================================
         // MODULE: SmartSearch
         // ============================================================================
+        // MODULE: SmartSearch
+        // Lines: 615-831
+        // Purpose: Fuzzy card search with Levenshtein distance and synergy detection
+        // Key Methods: search(), calculateLevenshtein(), findSynergies()
+        // ============================================================================
+
         const SmartSearch = (function() {
             'use strict';
 
@@ -783,6 +843,12 @@
         // ============================================================================
         // MODULE: DeckStatistics
         // ============================================================================
+        // MODULE: DeckStatistics
+        // Lines: 834-1019
+        // Purpose: Card type/level/attribute distribution analysis and recommendations
+        // Key Methods: calculate(), getRecommendations(), showStatistics()
+        // ============================================================================
+
         const DeckStatistics = (function() {
             'use strict';
 
@@ -970,6 +1036,12 @@
         // ============================================================================
         // MODULE: ThemeManager
         // ============================================================================
+        // MODULE: ThemeManager
+        // Lines: 1021-1163
+        // Purpose: Dark/light/cyber/classic theme management with CSS variables
+        // Key Methods: init(), apply(), cycleTheme(), getThemes()
+        // ============================================================================
+
         const ThemeManager = (function() {
             'use strict';
 
@@ -1114,6 +1186,12 @@
         // ============================================================================
         // MODULE: BulkOperations
         // ============================================================================
+        // MODULE: BulkOperations
+        // Lines: 1165-1288
+        // Purpose: Multi-card add/remove/move operations for deck management
+        // Key Methods: addCardsToDeck(), removeCardsFromDeck(), moveCardsBetweenSections()
+        // ============================================================================
+
         const BulkOperations = (function() {
             'use strict';
 
@@ -1286,6 +1364,359 @@
                 }
             };
         })();
+        // ============================================================================
+        //     MODULE: UITuner
+        //     Lines: 1367-1550
+        //     Purpose: Temporary UI fine-tuning module for visual adjustments
+        //     Key Methods: init(), show(), hide(), applyTuning(), exportConfig()
+        //     Shortcut: Ctrl+Shift+U to toggle panel
+        // ============================================================================
+        const UITuner = (function() {
+            'use strict';
+
+            // Tunable parameters with current defaults (in pixels)
+            let tuningParams = {
+                gridGap: 0,              // Gap between cards in grid
+                gridPadding: 1,          // Padding inside deck grids
+                gridPaddingTop: 31,      // Top padding to clear section headers
+                gridMargin: -11,         // Negative margin for grid
+                sectionPadding: 0,       // Padding on deck sections
+                resizeHandleWidth: 8,    // Width of resize handles (w-2 = 8px)
+                cardBorderWidth: 1,      // Border around cards
+                cardBorderRadius: 3,     // Card corner radius
+                selectedBorderWidth: 3,  // Selected card highlight border
+                selectedBorderInset: -4  // Selected card border inset
+            };
+
+            const defaultParams = { ...tuningParams };
+            let panelElement = null;
+            let isVisible = false;
+
+            // Create floating control panel
+            function createTunerPanel() {
+                if (panelElement) return panelElement;
+
+                const panel = document.createElement('div');
+                panel.id = 'uituner-panel';
+                panel.className = 'fixed top-4 right-4 w-80 bg-slate-900 border border-slate-600 rounded-lg shadow-xl z-50 hidden';
+                panel.innerHTML = `
+                    <div id="uituner-header" class="flex justify-between items-center p-3 border-b border-slate-600 cursor-move select-none">
+                        <h3 class="text-white font-bold text-sm">UI Fine-Tuning</h3>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-500">Ctrl+Shift+U</span>
+                            <button id="uituner-close" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+                        </div>
+                    </div>
+                    <div class="p-4 space-y-3 max-h-80 overflow-y-auto">
+                        ${createSlider('gridGap', 'Grid Gap', 0, 20, 'px')}
+                        ${createSlider('gridPadding', 'Grid Padding', 0, 20, 'px')}
+                        ${createSlider('gridPaddingTop', 'Grid Top Padding', 0, 50, 'px')}
+                        ${createSlider('gridMargin', 'Grid Margin', -20, 0, 'px')}
+                        ${createSlider('sectionPadding', 'Section Padding', 0, 24, 'px')}
+                        ${createSlider('resizeHandleWidth', 'Resize Handle Width', 2, 20, 'px')}
+                        ${createSlider('cardBorderWidth', 'Card Border Width', 0, 5, 'px')}
+                        ${createSlider('cardBorderRadius', 'Card Border Radius', 0, 12, 'px')}
+                        ${createSlider('selectedBorderWidth', 'Selected Border Width', 1, 8, 'px')}
+                        ${createSlider('selectedBorderInset', 'Selected Border Inset', -10, 0, 'px')}
+                    </div>
+                    <div class="p-3 border-t border-slate-600 flex gap-2">
+                        <button id="uituner-copy" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors">
+                            Copy Config
+                        </button>
+                        <button id="uituner-reset" class="flex-1 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition-colors">
+                            Reset Defaults
+                        </button>
+                    </div>
+                `;
+
+                document.body.appendChild(panel);
+                panelElement = panel;
+
+                // Setup event listeners
+                setupPanelEvents();
+
+                return panel;
+            }
+
+            function createSlider(key, label, min, max, unit) {
+                const value = tuningParams[key];
+                return `
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs">
+                            <label class="text-slate-300">${label}</label>
+                            <span id="uituner-value-${key}" class="text-slate-400 font-mono">${value}${unit}</span>
+                        </div>
+                        <input type="range"
+                            id="uituner-slider-${key}"
+                            data-key="${key}"
+                            min="${min}"
+                            max="${max}"
+                            value="${value}"
+                            class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                    </div>
+                `;
+            }
+
+            function setupPanelEvents() {
+                if (!panelElement) return;
+
+                // Close button
+                const closeBtn = panelElement.querySelector('#uituner-close');
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', hide);
+                }
+
+                // Sliders
+                const sliders = panelElement.querySelectorAll('input[type="range"]');
+                sliders.forEach(slider => {
+                    slider.addEventListener('input', (e) => {
+                        const key = e.target.dataset.key;
+                        const value = parseInt(e.target.value, 10);
+                        tuningParams[key] = value;
+
+                        // Update display value
+                        const valueDisplay = panelElement.querySelector(`#uituner-value-${key}`);
+                        if (valueDisplay) {
+                            const unit = getUnitForKey(key);
+                            valueDisplay.textContent = `${value}${unit}`;
+                        }
+
+                        applyTuning();
+                    });
+                });
+
+                // Copy button
+                const copyBtn = panelElement.querySelector('#uituner-copy');
+                if (copyBtn) {
+                    copyBtn.addEventListener('click', exportConfig);
+                }
+
+                // Reset button
+                const resetBtn = panelElement.querySelector('#uituner-reset');
+                if (resetBtn) {
+                    resetBtn.addEventListener('click', resetToDefaults);
+                }
+
+                // Make panel draggable
+                makeDraggable();
+            }
+
+            function getUnitForKey(key) {
+                return 'px';
+            }
+
+            function makeDraggable() {
+                if (!panelElement) return;
+
+                const header = panelElement.querySelector('#uituner-header');
+                if (!header) return;
+
+                let isDragging = false;
+                let startX, startY, initialX, initialY;
+
+                header.addEventListener('mousedown', (e) => {
+                    if (e.target.tagName === 'BUTTON') return;
+                    isDragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    const rect = panelElement.getBoundingClientRect();
+                    initialX = rect.left;
+                    initialY = rect.top;
+                    panelElement.style.transition = 'none';
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    panelElement.style.left = `${initialX + dx}px`;
+                    panelElement.style.top = `${initialY + dy}px`;
+                    panelElement.style.right = 'auto';
+                });
+
+                document.addEventListener('mouseup', () => {
+                    if (isDragging) {
+                        isDragging = false;
+                        panelElement.style.transition = '';
+                    }
+                });
+            }
+
+            // Apply values to CSS variables
+            function applyTuning() {
+                const root = document.documentElement;
+
+                root.style.setProperty('--tuner-grid-gap', `${tuningParams.gridGap}px`);
+                root.style.setProperty('--tuner-grid-padding', `${tuningParams.gridPadding}px`);
+                root.style.setProperty('--tuner-grid-padding-top', `${tuningParams.gridPaddingTop}px`);
+                root.style.setProperty('--tuner-grid-margin', `${tuningParams.gridMargin}px`);
+                root.style.setProperty('--tuner-section-padding', `${tuningParams.sectionPadding}px`);
+                root.style.setProperty('--tuner-resize-handle-width', `${tuningParams.resizeHandleWidth}px`);
+                root.style.setProperty('--tuner-card-border-width', `${tuningParams.cardBorderWidth}px`);
+                root.style.setProperty('--tuner-card-border-radius', `${tuningParams.cardBorderRadius}px`);
+                root.style.setProperty('--tuner-selected-border-width', `${tuningParams.selectedBorderWidth}px`);
+                root.style.setProperty('--tuner-selected-border-inset', `${tuningParams.selectedBorderInset}px`);
+
+                // Update deck section padding via inline styles
+                const sections = ['mainDeckSection', 'sideDeckSection', 'extraDeckSection'];
+                sections.forEach(sectionId => {
+                    const section = document.getElementById(sectionId);
+                    if (section) {
+                        section.style.padding = `${tuningParams.sectionPadding}px`;
+                    }
+                });
+
+                // Apply top padding to grid containers
+                const grids = document.querySelectorAll('.deck-grid, .side-deck-grid');
+                grids.forEach(grid => {
+                    grid.style.paddingTop = `${tuningParams.gridPaddingTop}px`;
+                });
+
+                // Update card border radius dynamically
+                const styleId = 'uituner-dynamic-styles';
+                let styleEl = document.getElementById(styleId);
+                if (!styleEl) {
+                    styleEl = document.createElement('style');
+                    styleEl.id = styleId;
+                    document.head.appendChild(styleEl);
+                }
+                styleEl.textContent = `
+                    .deck-grid > div > img,
+                    .side-deck-grid > div > img,
+                    .card-db-grid .card-item {
+                        border-radius: ${tuningParams.cardBorderRadius}px !important;
+                    }
+                    .deck-grid > div.card-selected::before,
+                    .side-deck-grid > div.card-selected::before {
+                        inset: ${tuningParams.selectedBorderInset}px !important;
+                        border-width: ${tuningParams.selectedBorderWidth}px !important;
+                    }
+                `;
+            }
+
+            // Generate copy-paste output
+            function exportConfig() {
+                const config = {
+                    gridGap: tuningParams.gridGap,
+                    gridPadding: tuningParams.gridPadding,
+                    gridPaddingTop: tuningParams.gridPaddingTop,
+                    gridMargin: tuningParams.gridMargin,
+                    sectionPadding: tuningParams.sectionPadding,
+                    resizeHandleWidth: tuningParams.resizeHandleWidth,
+                    cardBorderWidth: tuningParams.cardBorderWidth,
+                    cardBorderRadius: tuningParams.cardBorderRadius,
+                    selectedBorderWidth: tuningParams.selectedBorderWidth,
+                    selectedBorderInset: tuningParams.selectedBorderInset
+                };
+
+                const output = JSON.stringify(config, null, 2);
+                const cssOutput = `
+/* CSS Variables to hardcode: */
+--tuner-grid-gap: ${tuningParams.gridGap}px;
+--tuner-grid-padding: ${tuningParams.gridPadding}px;
+--tuner-grid-padding-top: ${tuningParams.gridPaddingTop}px;
+--tuner-grid-margin: ${tuningParams.gridMargin}px;
+--tuner-section-padding: ${tuningParams.sectionPadding}px;
+--tuner-resize-handle-width: ${tuningParams.resizeHandleWidth}px;
+--tuner-card-border-width: ${tuningParams.cardBorderWidth}px;
+--tuner-card-border-radius: ${tuningParams.cardBorderRadius}px;
+--tuner-selected-border-width: ${tuningParams.selectedBorderWidth}px;
+--tuner-selected-border-inset: ${tuningParams.selectedBorderInset}px;
+`;
+
+                console.log('=== UI TUNER CONFIG ===');
+                console.log('JSON:', output);
+                console.log('CSS Variables:', cssOutput);
+
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(cssOutput.trim()).then(() => {
+                        NotificationManager.success('Config copied to clipboard! Check console too.');
+                    }).catch(() => {
+                        NotificationManager.success('Config logged to console (F12)');
+                    });
+                } else {
+                    NotificationManager.success('Config logged to console (F12)');
+                }
+            }
+
+            function resetToDefaults() {
+                tuningParams = { ...defaultParams };
+
+                // Update sliders
+                if (panelElement) {
+                    Object.keys(tuningParams).forEach(key => {
+                        const slider = panelElement.querySelector(`#uituner-slider-${key}`);
+                        if (slider) {
+                            slider.value = tuningParams[key];
+                        }
+                        const valueDisplay = panelElement.querySelector(`#uituner-value-${key}`);
+                        if (valueDisplay) {
+                            valueDisplay.textContent = `${tuningParams[key]}px`;
+                        }
+                    });
+                }
+
+                applyTuning();
+                NotificationManager.info('Reset to defaults');
+            }
+
+            function show() {
+                if (!panelElement) {
+                    createTunerPanel();
+                }
+                panelElement.classList.remove('hidden');
+                isVisible = true;
+                applyTuning();
+            }
+
+            function hide() {
+                if (panelElement) {
+                    panelElement.classList.add('hidden');
+                }
+                isVisible = false;
+            }
+
+            function toggle() {
+                if (isVisible) {
+                    hide();
+                } else {
+                    show();
+                }
+            }
+
+            function init() {
+                // Panel is created on first toggle
+                Logger.info('UITuner initialized - Press Ctrl+Shift+U to open');
+            }
+
+            return {
+                init,
+                show,
+                hide,
+                toggle,
+                applyTuning,
+                exportConfig
+            };
+        })();
+        // ============================================================================
+        //     SECTION: GLOBAL STATE VARIABLES
+        //     Lines: 1289-1470
+        //     Description: All global variables for application state
+        //
+        //     KEY VARIABLES:
+        //     - cardDatabase: Array of all cards from API
+        //     - originalCardDatabase: Backup of full database
+        //     - currentDeck: { main: [], side: [], extra: [], sidingPatterns: {} }
+        //     - currentDeckId: 'unsaved' or offline deck ID
+        //     - currentDeckSource: 'offline' | 'unsaved'
+        //     - isDeckDirty: Boolean tracking unsaved changes
+        //     - ydkFiles: Array of YDK files from IndexedDB
+        //     - offlineDecks: Array of saved decks
+        //     - UI: Object containing DOM element references
+        //
+        //     UPDATES: When adding new global state variables
+        // ============================================================================
+
         let originalCardDatabase = []; // Backup of full database for deck-specific filtering
         let easterEggCardPool = []; // Custom card pool for easter egg animation
         let chibiAnimationState = { hopInterval: null, physicsInterval: null, isPaused: false }; // Global animation state
@@ -1570,6 +2001,31 @@
 
         document.addEventListener('DOMContentLoaded', main);
 
+        // ============================================================================
+        //     SECTION: CORE FUNCTIONS
+        //     Lines: 1669-1750
+        //     Description: Main initialization and UI setup functions
+        //
+        //     FUNCTIONS:
+        //     - initializeUI() (1670): Cache DOM element references
+        //     - main() (1753): Main application initialization sequence
+        //
+        //     INITIALIZATION ORDER (in main()):
+        //     1. Show loading overlay
+        //     2. ThemeManager.init()
+        //     3. initializeUI()
+        //     4. loadEasterEggCardPool()
+        //     5. createFloatingHelpButton()
+        //     6. attachEventListeners()
+        //     7. StorageManager.init()
+        //     8. Initialize resize handles
+        //     9. Load card database from API
+        //     10. StorageManager.loadYDKFiles()
+        //     11. Auto-load default deck if set
+        //
+        //     UPDATES: When changing initialization order or adding startup tasks
+        // ============================================================================
+
         function initializeUI() {
             const uiKeys = Object.keys(UI); // This function finds all the elements by their ID.
             for (const key of uiKeys) {
@@ -1611,6 +2067,7 @@
                         <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Notif History</span><span class="font-mono text-amber-400">N</span></div>
                         <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Show Help</span><span class="font-mono text-amber-400">H</span></div>
                         <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">Export Log</span><span class="font-mono text-amber-400">L</span></div>
+                        <div class="flex justify-between p-2 bg-gray-800/50 rounded"><span class="text-gray-300">UI Tuner</span><span class="font-mono text-amber-400">Ctrl+Shift+U</span></div>
                     </div>
                     <p class="text-xs text-gray-500 mt-4 text-center">Press H anytime to show this help</p>
                 </div>
@@ -1695,6 +2152,9 @@
 
             // 5. Initialize the deck resize handles
             initializeDeckResizeHandles();
+
+            // 5.1. Initialize UI Tuner module (temporary fine-tuning panel)
+            UITuner.init();
 
             // 4.5. Run one-time cleanup to fix any existing issues
             performOneTimeCleanup();
@@ -2027,24 +2487,24 @@
         }
 
         function loadLocalData() {
-            // Load individual deck scales (pixel sizes)
-            // Use reasonable defaults if not set (will be recalculated during initialization)
-            const mainScale = localStorage.getItem('mainDeckScale') || '100';
-            const sideScale = localStorage.getItem('sideDeckScale') || '100';
-            const extraScale = localStorage.getItem('extraDeckScale') || '100';
-            const dbScale = localStorage.getItem('dbDeckScale') || '100';
+            // Load cards per row values for each deck
+            const mainColumns = localStorage.getItem('mainDeckCardsPerRow') || '10';
+            const sideColumns = localStorage.getItem('sideDeckCardsPerRow') || '3';
+            const extraColumns = localStorage.getItem('extraDeckCardsPerRow') || '3';
+            const dbColumns = localStorage.getItem('dbDeckCardsPerRow') || '5';
 
-            document.documentElement.style.setProperty('--main-deck-size', `${mainScale}px`);
-            document.documentElement.style.setProperty('--side-deck-size', `${sideScale}px`);
-            document.documentElement.style.setProperty('--extra-deck-size', `${extraScale}px`);
-            document.documentElement.style.setProperty('--db-card-size', `${dbScale}px`);
+            // Set column count CSS variables
+            document.documentElement.style.setProperty('--main-deck-columns', mainColumns);
+            document.documentElement.style.setProperty('--side-deck-columns', sideColumns);
+            document.documentElement.style.setProperty('--extra-deck-columns', extraColumns);
+            document.documentElement.style.setProperty('--db-columns', dbColumns);
 
             // Load snapshot image cache
             loadSnapshotImageCache();
 
             // Initialize cards per row if not already set
             if (!localStorage.getItem('mainDeckCardsPerRow')) {
-                localStorage.setItem('mainDeckCardsPerRow', '8');
+                localStorage.setItem('mainDeckCardsPerRow', '10');
             }
             if (!localStorage.getItem('sideDeckCardsPerRow')) {
                 localStorage.setItem('sideDeckCardsPerRow', '3');
@@ -2053,7 +2513,7 @@
                 localStorage.setItem('extraDeckCardsPerRow', '3');
             }
             if (!localStorage.getItem('dbDeckCardsPerRow')) {
-                localStorage.setItem('dbDeckCardsPerRow', '4');
+                localStorage.setItem('dbDeckCardsPerRow', '5');
             }
 
             // Load the saved panel configuration
@@ -2116,24 +2576,15 @@
                                     deckType === 'db' ? UI.cardDatabaseSection : null;
                         if (section) {
                             const grid = section.querySelector('.deck-grid, .side-deck-grid, .card-db-grid');
-                            if (grid && grid.clientWidth > 0) {
-                                // Use grid's clientWidth (actual rendered width)
-                                // Grid has padding: 8px on each side = 16px total
-                                const availableWidth = grid.clientWidth - 16;
-                                // Calculate scale to fit exactly cardsPerRow cards
-                                const cardSize = Math.floor(availableWidth / cardsPerRow);
-                                const cssVar = deckType === 'db' ? '--db-card-size' : `--${deckType}-deck-size`;
-                                document.documentElement.style.setProperty(cssVar, `${cardSize}px`);
-                                localStorage.setItem(`${deckType}DeckScale`, cardSize);
-                                console.log(`[INIT] Set ${deckType} scale: ${cardSize}px for ${cardsPerRow} cards/row (grid clientWidth: ${grid.clientWidth}px, available: ${availableWidth}px)`);
-                            } else {
-                                // Fallback: use section width
-                                const availableWidth = section.offsetWidth - 16;
-                                const cardSize = Math.max(30, Math.floor(availableWidth / cardsPerRow));
-                                const cssVar = deckType === 'db' ? '--db-card-size' : `--${deckType}-deck-size`;
-                                document.documentElement.style.setProperty(cssVar, `${cardSize}px`);
-                                localStorage.setItem(`${deckType}DeckScale`, cardSize);
-                                console.log(`[INIT] Set ${deckType} scale (fallback): ${cardSize}px for ${cardsPerRow} cards/row (section width: ${section.offsetWidth}px)`);
+                            // Set column count - CSS grid will handle sizing with 1fr
+                            const columnVar = deckType === 'main' ? '--main-deck-columns' :
+                                deckType === 'side' ? '--side-deck-columns' :
+                                    deckType === 'extra' ? '--extra-deck-columns' :
+                                        deckType === 'db' ? '--db-columns' : null;
+                            if (columnVar) {
+                                document.documentElement.style.setProperty(columnVar, cardsPerRow);
+                                localStorage.setItem(`${deckType}DeckCardsPerRow`, cardsPerRow);
+                                console.log(`[INIT] Set ${deckType} columns: ${cardsPerRow}`);
                             }
                         }
                     }
@@ -2221,7 +2672,7 @@
         }
 
         function updateCardsPerRow(target, cardsPerRow) {
-            // Convert cards per row to card size and update
+            // Set the column count CSS variable - CSS grid will handle sizing automatically with 1fr
             const section = target === 'main' ? UI.mainDeckSection :
                 target === 'side' ? UI.sideDeckSection :
                     target === 'extra' ? UI.extraDeckSection :
@@ -2231,41 +2682,29 @@
             const grid = section.querySelector('.deck-grid, .side-deck-grid, .card-db-grid');
             if (!grid) return;
 
-            // Get the actual padding from computed style
-            const gridStyle = window.getComputedStyle(grid);
-            const paddingLeft = parseFloat(gridStyle.paddingLeft) || 0;
-            const paddingRight = parseFloat(gridStyle.paddingRight) || 0;
-            const totalPadding = paddingLeft + paddingRight;
+            // Map target to the correct CSS variable name
+            const columnVar = target === 'main' ? '--main-deck-columns' :
+                target === 'side' ? '--side-deck-columns' :
+                    target === 'extra' ? '--extra-deck-columns' :
+                        target === 'db' ? '--db-columns' : null;
 
-            // Use clientWidth and subtract padding to get actual content area
-            // With box-sizing: border-box, clientWidth includes padding
-            let availableWidth = grid.clientWidth - totalPadding;
-
-            // Fallback: if clientWidth is 0 (grid not rendered yet), estimate from section
-            if (availableWidth <= 0) {
-                availableWidth = section.offsetWidth - totalPadding;
+            if (columnVar) {
+                // Set the column count - CSS will use 1fr to size cards evenly
+                document.documentElement.style.setProperty(columnVar, cardsPerRow);
             }
 
-            const gap = 0;
-
-            // Calculate card size to fit exactly this many cards per row
-            // In a grid with N cards, there are N-1 gaps
-            // Use Math.floor to ensure cards aren't too large (which would prevent N cards from fitting)
-            const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-            const roundedSize = Math.max(30, Math.min(300, Math.floor(cardSize)));
-
-            // Update CSS variable and localStorage
-            const cssVar = target === 'db' ? '--db-card-size' : `--${target}-deck-size`;
-            document.documentElement.style.setProperty(cssVar, `${roundedSize}px`);
-            localStorage.setItem(`${target}DeckScale`, roundedSize);
+            // Store to localStorage for persistence
             localStorage.setItem(`${target}DeckCardsPerRow`, cardsPerRow);
+            // Also store a scale value for compatibility (approximate card size in px)
+            const approxCardSize = target === 'db' ? 80 : 100;
+            localStorage.setItem(`${target}DeckScale`, approxCardSize);
 
             // Update display
             if (UI.cardsPerRowDisplay) {
                 UI.cardsPerRowDisplay.textContent = cardsPerRow;
             }
 
-            console.log(`Updated ${target} deck: ${cardsPerRow} cards/row = ${roundedSize}px per card (clientWidth: ${grid.clientWidth}px, padding: ${totalPadding}px, available: ${availableWidth}px, raw calc: ${cardSize.toFixed(1)}px)`);
+            console.log(`Updated ${target} deck: ${cardsPerRow} columns`);
         }
 
         // DEBUG: Card layout analyzer
@@ -2299,13 +2738,18 @@
                 }
             }
 
-            // Get the CSS variable value
-            const cssVar = target === 'db' ? '--db-card-size' : `--${target}-deck-size`;
-            const computedCss = getComputedStyle(document.documentElement).getPropertyValue(cssVar);
-            const appliedCardSize = parseFloat(computedCss) || 0;
+            // Get the column count CSS variable value
+            const columnVar = target === 'main' ? '--main-deck-columns' :
+                target === 'side' ? '--side-deck-columns' :
+                    target === 'extra' ? '--extra-deck-columns' :
+                        target === 'db' ? '--db-columns' : null;
+            const computedCss = columnVar ? getComputedStyle(document.documentElement).getPropertyValue(columnVar) : '0';
+            const appliedColumns = parseInt(computedCss) || 0;
 
             // Calculate expected total width using gridClientWidth (actual available space)
-            const expectedTotal = (appliedCardSize * actualCardsPerRow) + (gap * (actualCardsPerRow - 1));
+            // With 1fr sizing, each card takes equal space
+            const avgCardSize = actualCardsPerRow > 0 ? gridClientWidth / actualCardsPerRow : 0;
+            const expectedTotal = gridClientWidth;
 
             return {
                 target,
@@ -2313,7 +2757,8 @@
                 gridOffsetWidth,
                 gridClientWidth,
                 gap,
-                appliedCardSize,
+                appliedColumns,
+                avgCardSize,
                 actualCardsPerRow,
                 expectedTotal,
                 overflow: expectedTotal - gridClientWidth,
@@ -2978,7 +3423,7 @@
                     return; // Skip if section is too small
                 }
 
-                // Get the grid and calculate available width (excluding padding)
+                // Get the section
                 const section = deckType === 'main' ? UI.mainDeckSection :
                     deckType === 'side' ? UI.sideDeckSection :
                         deckType === 'extra' ? UI.extraDeckSection :
@@ -2988,24 +3433,22 @@
                 const grid = section.querySelector('.deck-grid, .side-deck-grid, .card-db-grid');
                 if (!grid) return;
 
-                const gridStyle = window.getComputedStyle(grid);
-                const paddingLeft = parseFloat(gridStyle.paddingLeft) || 0;
-                const paddingRight = parseFloat(gridStyle.paddingRight) || 0;
-                const availableWidth = grid.clientWidth - paddingLeft - paddingRight;
-
-                const gap = 0;
+                // Get the current cards per row (maintain the same count)
                 const cardsPerRow = getCurrentCardsPerRow(deckType);
 
-                // Calculate card size to fit exactly this many cards per row
-                // Use Math.ceil to ensure card size is never too small (which would allow extra cards to fit)
-                const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-                const roundedSize = Math.max(30, Math.min(300, Math.round(cardSize)));
+                // Map target to the correct CSS variable name
+                const columnVar = deckType === 'main' ? '--main-deck-columns' :
+                    deckType === 'side' ? '--side-deck-columns' :
+                        deckType === 'extra' ? '--extra-deck-columns' :
+                            deckType === 'db' ? '--db-columns' : null;
 
-                // Apply the new card size
-                const cssVar = deckType === 'db' ? '--db-card-size' : `--${deckType}-deck-size`;
-                document.documentElement.style.setProperty(cssVar, `${roundedSize}px`);
-                localStorage.setItem(`${deckType}DeckScale`, roundedSize);
-                console.log(`[DB RESIZE] ${deckType}: ${cardsPerRow} cards/row → ${roundedSize}px per card (available: ${availableWidth}px)`);
+                if (columnVar) {
+                    // Set the column count - CSS will use 1fr to size cards evenly
+                    document.documentElement.style.setProperty(columnVar, cardsPerRow);
+                }
+
+                localStorage.setItem(`${deckType}DeckCardsPerRow`, cardsPerRow);
+                console.log(`[DB RESIZE] ${deckType}: ${cardsPerRow} columns`);
 
                 // Update slider and display if this is the current target
                 if (scaleTarget === deckType) {
@@ -3068,6 +3511,17 @@
                     document.body.style.cursor = '';
                     document.body.style.userSelect = '';
 
+                    // Capture current deck section proportions BEFORE saving layout
+                    const currentMainWidth = UI.mainDeckSection ? UI.mainDeckSection.offsetWidth : 0;
+                    const currentSideWidth = UI.sideDeckSection ? UI.sideDeckSection.offsetWidth : 0;
+                    const currentExtraWidth = UI.extraDeckSection ? UI.extraDeckSection.offsetWidth : 0;
+                    const totalDeckWidth = currentMainWidth + currentSideWidth + currentExtraWidth;
+
+                    // Calculate ratios (0-1) for each section
+                    const mainRatio = totalDeckWidth > 0 ? currentMainWidth / totalDeckWidth : 0.5;
+                    const sideRatio = totalDeckWidth > 0 ? currentSideWidth / totalDeckWidth : 0.25;
+                    const extraRatio = totalDeckWidth > 0 ? currentExtraWidth / totalDeckWidth : 0.25;
+
                     // Auto-adjust DB card size when DB section is resized
                     const newDbWidth = UI.cardDatabaseSection.offsetWidth;
                     if (newDbWidth > 0) {
@@ -3075,6 +3529,11 @@
                     }
 
                     savePanelConfiguration();
+
+                    // Resize deck sections proportionally to fit new available space
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => applyDeckSectionProportions(mainRatio, sideRatio, extraRatio));
+                    });
                 }
             });
 
@@ -3271,36 +3730,20 @@
         function toggleDatabase() {
             if (!UI.cardDatabaseSection || !UI.toggleDatabaseBtn) return;
 
+            // Capture current proportions BEFORE toggling
+            const currentMainWidth = UI.mainDeckSection ? UI.mainDeckSection.offsetWidth : 0;
+            const currentSideWidth = UI.sideDeckSection ? UI.sideDeckSection.offsetWidth : 0;
+            const currentExtraWidth = UI.extraDeckSection ? UI.extraDeckSection.offsetWidth : 0;
+            const totalDeckWidth = currentMainWidth + currentSideWidth + currentExtraWidth;
+
+            // Calculate ratios (0-1) for each section
+            const mainRatio = totalDeckWidth > 0 ? currentMainWidth / totalDeckWidth : 0.5;
+            const sideRatio = totalDeckWidth > 0 ? currentSideWidth / totalDeckWidth : 0.25;
+            const extraRatio = totalDeckWidth > 0 ? currentExtraWidth / totalDeckWidth : 0.25;
+
             databaseVisible = !databaseVisible;
 
             if (databaseVisible) {
-                // IMPORTANT: Reset inline styles FIRST before showing DB
-                // This allows flexbox to naturally shrink deck sections when DB appears
-                if (UI.mainDeckSection) {
-                    UI.mainDeckSection.style.removeProperty('width');
-                    UI.mainDeckSection.style.removeProperty('min-width');
-                    UI.mainDeckSection.style.flexGrow = '1';
-                    UI.mainDeckSection.style.flexShrink = '1';
-                }
-                if (UI.sideDeckSection) {
-                    UI.sideDeckSection.style.removeProperty('width');
-                    UI.sideDeckSection.style.removeProperty('min-width');
-                    // Reset to HTML defaults
-                    UI.sideDeckSection.style.width = '280px';
-                    UI.sideDeckSection.style.minWidth = '200px';
-                    UI.sideDeckSection.style.flexGrow = '0';
-                    UI.sideDeckSection.style.flexShrink = '1';
-                }
-                if (UI.extraDeckSection) {
-                    UI.extraDeckSection.style.removeProperty('width');
-                    UI.extraDeckSection.style.removeProperty('min-width');
-                    // Reset to HTML defaults
-                    UI.extraDeckSection.style.width = '280px';
-                    UI.extraDeckSection.style.minWidth = '200px';
-                    UI.extraDeckSection.style.flexGrow = '0';
-                    UI.extraDeckSection.style.flexShrink = '1';
-                }
-
                 // Show database with smooth transition
                 UI.cardDatabaseSection.style.display = '';
                 UI.cardDatabaseSection.classList.remove('hidden');
@@ -3349,52 +3792,71 @@
                     UI.cardDatabaseSection.removeEventListener('transitionend', onEnd);
                     if (!databaseVisible) {
                         UI.cardDatabaseSection.style.display = 'none';
-                        // Reset inline styles to allow sections to expand to fill available space
-                        if (UI.mainDeckSection) {
-                            UI.mainDeckSection.style.removeProperty('width');
-                            UI.mainDeckSection.style.removeProperty('min-width');
-                            UI.mainDeckSection.style.flexGrow = '1';
-                            UI.mainDeckSection.style.flexShrink = '1';
-                        }
-                        if (UI.sideDeckSection) {
-                            UI.sideDeckSection.style.removeProperty('width');
-                            UI.sideDeckSection.style.removeProperty('min-width');
-                            // Reset to HTML defaults
-                            UI.sideDeckSection.style.width = '280px';
-                            UI.sideDeckSection.style.minWidth = '200px';
-                            UI.sideDeckSection.style.flexGrow = '0';
-                            UI.sideDeckSection.style.flexShrink = '1';
-                        }
-                        if (UI.extraDeckSection) {
-                            UI.extraDeckSection.style.removeProperty('width');
-                            UI.extraDeckSection.style.removeProperty('min-width');
-                            // Reset to HTML defaults
-                            UI.extraDeckSection.style.width = '280px';
-                            UI.extraDeckSection.style.minWidth = '200px';
-                            UI.extraDeckSection.style.flexGrow = '0';
-                            UI.extraDeckSection.style.flexShrink = '1';
-                        }
                     }
                 };
                 UI.cardDatabaseSection.addEventListener('transitionend', onEnd, { once: true });
             }
+
+            // Apply preserved proportions after a short delay to allow DOM to update
+            requestAnimationFrame(() => {
+                setTimeout(() => applyDeckSectionProportions(mainRatio, sideRatio, extraRatio), 50);
+            });
 
             // Save the state
             saveDatabaseVisibility();
 
             // Clean up any bad saved configs that might have been created
             cleanupBadConfigs();
+        }
 
-            // Clear saved deck resize config to allow proper flex behavior
-            // The saved config might have flex-shrink: 0 which prevents proper resizing
-            try {
-                localStorage.removeItem('deckResizeConfig');
-            } catch (e) {
-                console.error('Error clearing deck resize config:', e);
+        function applyDeckSectionProportions(mainRatio, sideRatio, extraRatio) {
+            if (!UI.deckGridContainer) return;
+
+            const containerWidth = UI.deckGridContainer.offsetWidth;
+            const resizeHandleWidth = 8;
+            const gap = 16;
+            const totalOverhead = (resizeHandleWidth * 2) + (gap * 2) + 24;
+
+            const availableWidth = containerWidth - totalOverhead;
+            if (availableWidth <= 0) return;
+
+            // Calculate new widths based on preserved ratios
+            const minWidth = 100;
+            let newMainWidth = availableWidth * mainRatio;
+            let newSideWidth = availableWidth * sideRatio;
+            let newExtraWidth = availableWidth * extraRatio;
+
+            // Apply minimum widths
+            const minMain = Math.max(minWidth, availableWidth * 0.3);
+            const minSide = Math.max(minWidth, availableWidth * 0.15);
+            const minExtra = Math.max(minWidth, availableWidth * 0.15);
+
+            newMainWidth = Math.max(minMain, newMainWidth);
+            newSideWidth = Math.max(minSide, newSideWidth);
+            newExtraWidth = Math.max(minExtra, newExtraWidth);
+
+            // Apply the new widths
+            if (UI.mainDeckSection) {
+                UI.mainDeckSection.style.width = `${newMainWidth}px`;
+                UI.mainDeckSection.style.minWidth = `${newMainWidth}px`;
+                UI.mainDeckSection.style.flexGrow = '0';
+                UI.mainDeckSection.style.flexShrink = '0';
+            }
+            if (UI.sideDeckSection) {
+                UI.sideDeckSection.style.width = `${newSideWidth}px`;
+                UI.sideDeckSection.style.minWidth = `${newSideWidth}px`;
+                UI.sideDeckSection.style.flexGrow = '0';
+                UI.sideDeckSection.style.flexShrink = '0';
+            }
+            if (UI.extraDeckSection) {
+                UI.extraDeckSection.style.width = `${newExtraWidth}px`;
+                UI.extraDeckSection.style.minWidth = `${newExtraWidth}px`;
+                UI.extraDeckSection.style.flexGrow = '0';
+                UI.extraDeckSection.style.flexShrink = '0';
             }
 
-            // Don't call autoFitDeckSections here - let flexbox handle the layout naturally
-            // The deck sections will properly shrink/grow based on the flex properties we set
+            // Save the new configuration
+            saveDeckResizeConfiguration();
         }
 
         function autoFitDeckSections() {
@@ -3549,8 +4011,8 @@
         }
 
         function autoAdjustCardScales(newMainWidth, newSideWidth, newExtraWidth, oldMainWidth, oldSideWidth, oldExtraWidth) {
-            // Automatically adjust card scales to maintain saved cards-per-row setting
-            // when section widths change. Cards-per-row is the truth; scale is derived.
+            // Refresh column counts after section width changes
+            // CSS grid with 1fr will handle card sizing automatically
 
             // Don't adjust during initial page load
             if (!allowAutoAdjust) {
@@ -3558,69 +4020,33 @@
                 return;
             }
 
-            console.log('[CARD SCALE ADJUST] Adjusting to maintain cards-per-row...');
+            console.log('[CARD SCALE ADJUST] Refreshing column counts...');
 
-            // Helper to get available width (excluding padding)
-            function getAvailableWidth(deckType) {
-                const section = deckType === 'main' ? UI.mainDeckSection :
-                    deckType === 'side' ? UI.sideDeckSection :
-                        deckType === 'extra' ? UI.extraDeckSection : null;
-                if (!section) return 0;
-                const grid = section.querySelector('.deck-grid, .side-deck-grid');
-                if (!grid) return 0;
-                const gridStyle = window.getComputedStyle(grid);
-                const paddingLeft = parseFloat(gridStyle.paddingLeft) || 0;
-                const paddingRight = parseFloat(gridStyle.paddingRight) || 0;
-                return grid.clientWidth - paddingLeft - paddingRight;
-            }
-
-            // Helper to get gap for deck type
-            function getGap(deckType) {
-                return deckType === 'main' ? 4 : (deckType === 'db' ? 4 : 8);
+            // Helper to refresh column count for a deck type
+            function refreshColumnCount(deckType, columnVar) {
+                const cardsPerRow = getCurrentCardsPerRow(deckType);
+                if (columnVar) {
+                    document.documentElement.style.setProperty(columnVar, cardsPerRow);
+                }
+                localStorage.setItem(`${deckType}DeckCardsPerRow`, cardsPerRow);
+                console.log(`[CARD SCALE ADJUST] ${deckType}: ${cardsPerRow} columns`);
             }
 
             // Adjust main deck
             if (newMainWidth > 0) {
-                const cardsPerRow = getCurrentCardsPerRow('main');
-                const availableWidth = getAvailableWidth('main');
-                const gap = getGap('main');
-                if (availableWidth > 0) {
-                    const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-                    const roundedSize = Math.max(30, Math.min(300, Math.round(cardSize)));
-                    document.documentElement.style.setProperty('--main-deck-size', `${roundedSize}px`);
-                    localStorage.setItem('mainDeckScale', roundedSize);
-                    console.log(`[CARD SCALE ADJUST] Main: ${cardsPerRow} cards/row → ${roundedSize}px per card`);
-                }
+                refreshColumnCount('main', '--main-deck-columns');
             }
 
             // Adjust side deck (if visible)
             const isSideVisible = UI.sideDeckSection && UI.sideDeckSection.style.display !== 'none' && !UI.sideDeckSection.classList.contains('hidden');
             if (isSideVisible && newSideWidth > 0) {
-                const cardsPerRow = getCurrentCardsPerRow('side');
-                const availableWidth = getAvailableWidth('side');
-                const gap = getGap('side');
-                if (availableWidth > 0) {
-                    const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-                    const roundedSize = Math.max(30, Math.min(300, Math.round(cardSize)));
-                    document.documentElement.style.setProperty('--side-deck-size', `${roundedSize}px`);
-                    localStorage.setItem('sideDeckScale', roundedSize);
-                    console.log(`[CARD SCALE ADJUST] Side: ${cardsPerRow} cards/row → ${roundedSize}px per card`);
-                }
+                refreshColumnCount('side', '--side-deck-columns');
             }
 
             // Adjust extra deck (if visible)
             const isExtraVisible = UI.extraDeckSection && UI.extraDeckSection.style.display !== 'none' && !UI.extraDeckSection.classList.contains('hidden');
             if (isExtraVisible && newExtraWidth > 0) {
-                const cardsPerRow = getCurrentCardsPerRow('extra');
-                const availableWidth = getAvailableWidth('extra');
-                const gap = getGap('extra');
-                if (availableWidth > 0) {
-                    const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-                    const roundedSize = Math.max(30, Math.min(300, Math.round(cardSize)));
-                    document.documentElement.style.setProperty('--extra-deck-size', `${roundedSize}px`);
-                    localStorage.setItem('extraDeckScale', roundedSize);
-                    console.log(`[CARD SCALE ADJUST] Extra: ${cardsPerRow} cards/row → ${roundedSize}px per card`);
-                }
+                refreshColumnCount('extra', '--extra-deck-columns');
             }
 
             // Update slider and display to show current cards per row for active target
@@ -3646,7 +4072,7 @@
                     return; // Skip if section is too small
                 }
 
-                // Get the grid and calculate available width (excluding padding)
+                // Get the section
                 const section = deckType === 'main' ? UI.mainDeckSection :
                     deckType === 'side' ? UI.sideDeckSection :
                         deckType === 'extra' ? UI.extraDeckSection :
@@ -3656,24 +4082,22 @@
                 const grid = section.querySelector('.deck-grid, .side-deck-grid, .card-db-grid');
                 if (!grid) return;
 
-                const gridStyle = window.getComputedStyle(grid);
-                const paddingLeft = parseFloat(gridStyle.paddingLeft) || 0;
-                const paddingRight = parseFloat(gridStyle.paddingRight) || 0;
-                const availableWidth = grid.clientWidth - paddingLeft - paddingRight;
-
-                const gap = 0;
+                // Get the current cards per row (maintain the same count)
                 const cardsPerRow = getCurrentCardsPerRow(deckType);
 
-                // Calculate card size to fit exactly this many cards per row
-                // Use Math.ceil to ensure card size is never too small (which would allow extra cards to fit)
-                const cardSize = (availableWidth - (gap * (cardsPerRow - 1))) / cardsPerRow;
-                const roundedSize = Math.max(30, Math.min(300, Math.round(cardSize)));
+                // Map target to the correct CSS variable name
+                const columnVar = deckType === 'main' ? '--main-deck-columns' :
+                    deckType === 'side' ? '--side-deck-columns' :
+                        deckType === 'extra' ? '--extra-deck-columns' :
+                            deckType === 'db' ? '--db-columns' : null;
 
-                // Apply the new card size
-                const cssVar = deckType === 'db' ? '--db-card-size' : `--${deckType}-deck-size`;
-                document.documentElement.style.setProperty(cssVar, `${roundedSize}px`);
-                localStorage.setItem(`${deckType}DeckScale`, roundedSize);
-                console.log(`[MANUAL RESIZE] ${deckType}: ${cardsPerRow} cards/row → ${roundedSize}px per card (available: ${availableWidth}px)`);
+                if (columnVar) {
+                    // Set the column count - CSS will use 1fr to size cards evenly
+                    document.documentElement.style.setProperty(columnVar, cardsPerRow);
+                }
+
+                localStorage.setItem(`${deckType}DeckCardsPerRow`, cardsPerRow);
+                console.log(`[MANUAL RESIZE] ${deckType}: ${cardsPerRow} columns`);
 
                 // Update slider and display if this is the current target
                 if (scaleTarget === deckType) {
@@ -4441,6 +4865,47 @@
                     applyDefaultDeckLayout();
                 }
             }, 200);
+
+            // Add ResizeObserver to detect section size changes and update card layout
+            initializeDeckResizeObserver();
+        }
+
+        function initializeDeckResizeObserver() {
+            // Debounce function to prevent excessive updates
+            let resizeTimeout;
+            const debouncedUpdate = () => {
+                if (resizeTimeout) clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    // Refresh column counts for all visible sections
+                    ['main', 'side', 'extra', 'db'].forEach(target => {
+                        const section = target === 'main' ? UI.mainDeckSection :
+                            target === 'side' ? UI.sideDeckSection :
+                                target === 'extra' ? UI.extraDeckSection :
+                                    target === 'db' ? UI.cardDatabaseSection : null;
+                        if (section && section.offsetParent !== null) { // Section is visible
+                            const cardsPerRow = getCurrentCardsPerRow(target);
+                            const columnVar = target === 'main' ? '--main-deck-columns' :
+                                target === 'side' ? '--side-deck-columns' :
+                                    target === 'extra' ? '--extra-deck-columns' :
+                                        target === 'db' ? '--db-columns' : null;
+                            if (columnVar) {
+                                document.documentElement.style.setProperty(columnVar, cardsPerRow);
+                            }
+                        }
+                    });
+                }, 100);
+            };
+
+            // Create ResizeObserver
+            const resizeObserver = new ResizeObserver(debouncedUpdate);
+
+            // Observe all deck sections
+            if (UI.mainDeckSection) resizeObserver.observe(UI.mainDeckSection);
+            if (UI.sideDeckSection) resizeObserver.observe(UI.sideDeckSection);
+            if (UI.extraDeckSection) resizeObserver.observe(UI.extraDeckSection);
+            if (UI.cardDatabaseSection) resizeObserver.observe(UI.cardDatabaseSection);
+
+            console.log('[ResizeObserver] Initialized for deck sections');
         }
 
         function initializeDeckResizeHandle(handle, leftSection, rightSection, handleType) {
@@ -4448,12 +4913,41 @@
             let startX = 0;
             let startLeftWidth = 0;
             let startRightWidth = 0;
+            // For proportional resizing of the third section
+            let startMainWidth = 0;
+            let startSideWidth = 0;
+            let startExtraWidth = 0;
+            let sideRatio = 0.5;
+            let extraRatio = 0.5;
+            let mainRatio = 0.5;
 
             handle.addEventListener('mousedown', (e) => {
                 isResizing = true;
                 startX = e.clientX;
                 startLeftWidth = leftSection.offsetWidth;
                 startRightWidth = rightSection.offsetWidth;
+
+                // Capture initial widths and ratios for all three sections
+                startMainWidth = UI.mainDeckSection ? UI.mainDeckSection.offsetWidth : 0;
+                startSideWidth = UI.sideDeckSection ? UI.sideDeckSection.offsetWidth : 0;
+                startExtraWidth = UI.extraDeckSection ? UI.extraDeckSection.offsetWidth : 0;
+
+                if (handleType === 'mainSide') {
+                    // When resizing main vs (side+extra), maintain side:extra ratio
+                    const combinedSideExtra = startSideWidth + startExtraWidth;
+                    if (combinedSideExtra > 0) {
+                        sideRatio = startSideWidth / combinedSideExtra;
+                        extraRatio = startExtraWidth / combinedSideExtra;
+                    }
+                } else {
+                    // When resizing extra vs (main+side), maintain main:side ratio
+                    const combinedMainSide = startMainWidth + startSideWidth;
+                    if (combinedMainSide > 0) {
+                        mainRatio = startMainWidth / combinedMainSide;
+                        sideRatio = startSideWidth / combinedMainSide;
+                    }
+                }
+
                 document.body.style.cursor = 'col-resize';
                 document.body.style.userSelect = 'none';
                 e.preventDefault();
@@ -4467,40 +4961,88 @@
                     deckResizeRaf = null;
                     const containerWidth = UI.deckGridContainer.offsetWidth;
                     const deltaX = e.clientX - startX;
-                    let newLeftWidth = startLeftWidth + deltaX;
-                    let newRightWidth = startRightWidth - deltaX;
                     const minWidth = 100;
-                    newLeftWidth = Math.max(minWidth, newLeftWidth);
-                    newRightWidth = Math.max(minWidth, newRightWidth);
-                    const totalOverhead = 64 + 16 + 10;
-                    const availableSpace = containerWidth - totalOverhead;
-                    let mainWidth, sideWidth, extraWidth;
+
+                    let newMainWidth, newSideWidth, newExtraWidth;
+
                     if (handleType === 'mainSide') {
-                        mainWidth = newLeftWidth;
-                        sideWidth = newRightWidth;
-                        extraWidth = UI.extraDeckSection && UI.extraDeckSection.style.display !== 'none'
-                            ? UI.extraDeckSection.offsetWidth
-                            : 0;
+                        // Resizing main deck vs combined side+extra
+                        const combinedSideExtra = startSideWidth + startExtraWidth;
+                        let newMainWidth = startMainWidth + deltaX;
+                        let newCombinedSideExtra = combinedSideExtra - deltaX;
+
+                        // Apply minimum width constraints
+                        newMainWidth = Math.max(minWidth, newMainWidth);
+                        newCombinedSideExtra = Math.max(minWidth * 2, newCombinedSideExtra);
+
+                        // Ensure we don't exceed container
+                        const totalOverhead = 64 + 16 + 10;
+                        const availableSpace = containerWidth - totalOverhead;
+                        const totalWidth = newMainWidth + newCombinedSideExtra;
+                        if (totalWidth > availableSpace) {
+                            const excess = totalWidth - availableSpace;
+                            newMainWidth = Math.max(minWidth, newMainWidth - excess / 2);
+                            newCombinedSideExtra = Math.max(minWidth * 2, newCombinedSideExtra - excess / 2);
+                        }
+
+                        // Distribute side+extra proportionally
+                        newSideWidth = newCombinedSideExtra * sideRatio;
+                        newExtraWidth = newCombinedSideExtra * extraRatio;
+
+                        // Apply widths to all three sections
+                        if (UI.mainDeckSection) {
+                            UI.mainDeckSection.style.width = `${newMainWidth}px`;
+                            UI.mainDeckSection.style.minWidth = `${newMainWidth}px`;
+                            UI.mainDeckSection.style.flexGrow = '0';
+                            UI.mainDeckSection.style.flexShrink = '0';
+                        }
+                        if (UI.sideDeckSection) {
+                            UI.sideDeckSection.style.width = `${newSideWidth}px`;
+                            UI.sideDeckSection.style.minWidth = `${newSideWidth}px`;
+                        }
+                        if (UI.extraDeckSection) {
+                            UI.extraDeckSection.style.width = `${newExtraWidth}px`;
+                            UI.extraDeckSection.style.minWidth = `${newExtraWidth}px`;
+                        }
                     } else {
-                        mainWidth = UI.mainDeckSection ? UI.mainDeckSection.offsetWidth : 0;
-                        sideWidth = newLeftWidth;
-                        extraWidth = newRightWidth;
-                    }
-                    let totalWidth = mainWidth + (sideWidth > 0 ? sideWidth : 0) + (extraWidth > 0 ? extraWidth : 0);
-                    if (totalWidth > availableSpace) {
-                        const excess = totalWidth - availableSpace;
-                        const totalBeingResized = newLeftWidth + newRightWidth;
-                        const scale = Math.max(0.5, (totalBeingResized - excess) / totalBeingResized);
-                        newLeftWidth = Math.max(minWidth, newLeftWidth * scale);
-                        newRightWidth = Math.max(minWidth, newRightWidth * scale);
-                    }
-                    leftSection.style.width = `${newLeftWidth}px`;
-                    leftSection.style.minWidth = `${newLeftWidth}px`;
-                    rightSection.style.width = `${newRightWidth}px`;
-                    rightSection.style.minWidth = `${newRightWidth}px`;
-                    if (handleType === 'mainSide') {
-                        leftSection.style.flexGrow = '0';
-                        leftSection.style.flexShrink = '0';
+                        // sideExtra handle: resizing extra deck vs combined main+side
+                        const combinedMainSide = startMainWidth + startSideWidth;
+                        let newExtraWidth = startExtraWidth - deltaX;
+                        let newCombinedMainSide = combinedMainSide + deltaX;
+
+                        // Apply minimum width constraints
+                        newExtraWidth = Math.max(minWidth, newExtraWidth);
+                        newCombinedMainSide = Math.max(minWidth * 2, newCombinedMainSide);
+
+                        // Ensure we don't exceed container
+                        const totalOverhead = 64 + 16 + 10;
+                        const availableSpace = containerWidth - totalOverhead;
+                        const totalWidth = newCombinedMainSide + newExtraWidth;
+                        if (totalWidth > availableSpace) {
+                            const excess = totalWidth - availableSpace;
+                            newExtraWidth = Math.max(minWidth, newExtraWidth - excess / 2);
+                            newCombinedMainSide = Math.max(minWidth * 2, newCombinedMainSide - excess / 2);
+                        }
+
+                        // Distribute main+side proportionally
+                        newMainWidth = newCombinedMainSide * mainRatio;
+                        newSideWidth = newCombinedMainSide * sideRatio;
+
+                        // Apply widths to all three sections
+                        if (UI.mainDeckSection) {
+                            UI.mainDeckSection.style.width = `${newMainWidth}px`;
+                            UI.mainDeckSection.style.minWidth = `${newMainWidth}px`;
+                        }
+                        if (UI.sideDeckSection) {
+                            UI.sideDeckSection.style.width = `${newSideWidth}px`;
+                            UI.sideDeckSection.style.minWidth = `${newSideWidth}px`;
+                        }
+                        if (UI.extraDeckSection) {
+                            UI.extraDeckSection.style.width = `${newExtraWidth}px`;
+                            UI.extraDeckSection.style.minWidth = `${newExtraWidth}px`;
+                            UI.extraDeckSection.style.flexGrow = '0';
+                            UI.extraDeckSection.style.flexShrink = '0';
+                        }
                     }
                 });
             });
@@ -4618,6 +5160,27 @@
                 applyDefaultDeckLayout();
             }
         }
+
+        // ============================================================================
+        //     SECTION: EVENT LISTENERS
+        //     Lines: 4706-6089
+        //     Description: All UI event bindings in a single centralized function
+        //
+        //     CATEGORIES:
+        //     - Keyboard shortcuts (5900-6089)
+        //     - Navigation buttons
+        //     - Card search and autocomplete
+        //     - Deck operations (save, load, delete, export)
+        //     - YDK file management
+        //     - Siding pattern controls
+        //     - Shootout mode controls
+        //     - Sandbox board controls
+        //
+        //     TO ADD NEW EVENT LISTENER:
+        //     1. Add it inside attachEventListeners() function
+        //     2. Include null checks for UI elements
+        //     3. Update this marker if adding a new category
+        // ============================================================================
 
         // --- EVENT LISTENERS ---
         function attachEventListeners() {
@@ -6031,6 +6594,11 @@
                 ThemeManager.cycleTheme();
             }, 'Cycle theme');
 
+            KeyboardManager.register('ctrl+shift+u', () => {
+                // Toggle UI Tuner panel
+                UITuner.toggle();
+            }, 'Toggle UI fine-tuning panel');
+
             // Bulk operations shortcuts
             KeyboardManager.register('ctrl+a', () => {
                 // Select all cards in current section (when in selection mode)
@@ -7160,6 +7728,21 @@
             confirmCallback = onConfirm;
             UI.confirmModal.classList.remove('hidden');
         }
+
+        // ============================================================================
+        //     SECTION: CARD DATABASE FUNCTIONS
+        //     Lines: ~7150-8300
+        //     Description: Card search, loading, autocomplete, and database management
+        //
+        //     KEY FUNCTIONS:
+        //     - loadCardDatabase(): Load cards from localStorage or API
+        //     - handleCardSearch(): Search API for card by name
+        //     - addCardToDatabase(): Add card to local database
+        //     - fetchAndAddMissingCards(): Fetch missing cards from API
+        //     - handleAutocomplete(): Autocomplete dropdown logic
+        //
+        //     UPDATES: When modifying card search or database behavior
+        // ============================================================================
 
         // --- CARD DATABASE LOGIC ---
         let isDatabaseLoaded = false; // Prevent multiple loads
@@ -9908,6 +10491,23 @@
 
             return normalized;
         }
+
+        // ============================================================================
+        //     SECTION: DECK MANAGEMENT FUNCTIONS
+        //     Lines: ~10056-11000
+        //     Description: Save, load, export, import deck operations
+        //
+        //     KEY FUNCTIONS:
+        //     - saveCurrentDeck(): Save deck to IndexedDB
+        //     - loadSelectedDeck(): Load selected saved deck
+        //     - exportDeckToYDK(): Export as .ydk file
+        //     - exportDeckToYDKX(): Export as .ydkx file with siding patterns
+        //     - exportDeckToClipboard(): Export as YDKe code
+        //     - importDeckFromClipboard(): Import YDKe code
+        //     - importDeckFromYDK(): Import .ydk/.ydkx file
+        //
+        //     UPDATES: When adding new export formats or import sources
+        // ============================================================================
 
         async function saveCurrentDeck() {
             const deckName = UI.deckNameInput.value.trim();
@@ -18756,6 +19356,26 @@
             }
         };
 
+        // ============================================================================
+        //     SECTION: SHOOTOUT MANAGER MODULE
+        //     Lines: 18921-19700+
+        //     Description: Tournament shootout mode with siding and duel simulation
+        //
+        //     MODULE: ShootoutManager (object literal, not IIFE)
+        //     Properties: state, opponent, sidingState, trialHistory
+        //     Methods:
+        //       - initialize(): Setup shootout mode
+        //       - startMatchup(deck1, deck2, mode): Start a matchup
+        //       - renderSiding(): Render siding selection UI
+        //       - finalizeSiding(): Apply siding and start simulation
+        //       - handleJudgment(winner): Record trial result
+        //       - nextTrial(): Start next trial
+        //       - undo(): Undo last judgment
+        //       - end(): Generate report
+        //
+        //     UPDATES: When modifying shootout flow or adding new simulation features
+        // ============================================================================
+
         // --- SHOOTOUT MANAGER ---
         const ShootoutManager = {
             state: {},
@@ -19622,6 +20242,13 @@
         // ============================================================================
         // MODULE: BoardStateManager
         // ============================================================================
+        // MODULE: BoardStateManager
+        // Lines: 19611-20450
+        // Purpose: Sandbox board state management for duel simulation
+        // Key Methods: loadDeck(), clearBoard(), placeCard(), removeCard()
+        // State: Tracks cards in all zones (hand, field, GY, banished, deck, ED)
+        // ============================================================================
+
         const BoardStateManager = (function() {
             'use strict';
 
@@ -20462,6 +21089,13 @@
         // ============================================================================
         // MODULE: BoardRenderer
         // ============================================================================
+        // MODULE: BoardRenderer
+        // Lines: 20451-25023
+        // Purpose: 2D/3D board rendering with Three.js for sandbox simulator
+        // Key Methods: renderBoard(), renderCard(), toggle3DView(), initThreeJS()
+        // Dependencies: Three.js, GLTFLoader
+        // ============================================================================
+
         const BoardRenderer = (function() {
             'use strict';
 
@@ -21428,10 +22062,25 @@
             --color-border: #475569;
             /* slate-600 */
             --card-size: 68px;
-            --main-deck-size: 68px;
-            --side-deck-size: 68px;
-            --extra-deck-size: 68px;
-            --db-card-size: 80px;
+            /* Column count variables for deck grids */
+            --main-deck-columns: 10;
+            --side-deck-columns: 3;
+            --extra-deck-columns: 3;
+            --db-columns: 5;
+            /* ============================================================================
+             * UI TUNER VARIABLES - Hardcoded fine-tuned values
+             * These can still be adjusted via the UITuner module (Ctrl+Shift+U)
+             * ============================================================================ */
+            --tuner-grid-gap: 0px;
+            --tuner-grid-padding: 1px;
+            --tuner-grid-padding-top: 31px;
+            --tuner-grid-margin: -11px;
+            --tuner-section-padding: 0px;
+            --tuner-resize-handle-width: 8px;
+            --tuner-card-border-width: 1px;
+            --tuner-card-border-radius: 3px;
+            --tuner-selected-border-width: 3px;
+            --tuner-selected-border-inset: -4px;
         }
 
         html,
@@ -21474,13 +22123,14 @@
 
         .deck-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, var(--main-deck-size));
-            gap: 0;
+            grid-template-columns: repeat(var(--main-deck-columns, 10), 1fr);
+            gap: var(--tuner-grid-gap, 0px);
             align-content: start;
             justify-content: start;
             perspective: 1000px;
-            padding: 8px;
-            margin: -8px;
+            padding: var(--tuner-grid-padding, 8px);
+            padding-top: var(--tuner-grid-padding-top, 31px);
+            margin: var(--tuner-grid-margin, -8px);
         }
 
         /* Glass overlay for deck cards */
@@ -21509,17 +22159,20 @@
 
         /* Side deck grid also gets the effect */
         .side-deck-grid {
+            display: grid;
+            grid-template-columns: repeat(var(--side-deck-columns, 3), 1fr);
             perspective: 1000px;
-            gap: 0;
-            padding: 8px;
-            margin: -8px;
+            gap: var(--tuner-grid-gap, 0px);
+            padding: var(--tuner-grid-padding, 8px);
+            padding-top: var(--tuner-grid-padding-top, 31px);
+            margin: var(--tuner-grid-margin, -8px);
         }
 
         /* Card Database Grid View */
         .card-db-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(var(--db-card-size, 80px), 1fr));
-            gap: 0;
+            grid-template-columns: repeat(var(--db-columns, 5), 1fr);
+            gap: var(--tuner-grid-gap, 0px);
             align-content: start;
         }
 
@@ -21804,14 +22457,14 @@
 
         .side-deck-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, var(--side-deck-size));
+            grid-template-columns: repeat(var(--side-deck-columns, 3), 1fr);
             gap: 0;
             align-content: start;
         }
 
         #extraDeckList.side-deck-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, var(--extra-deck-size));
+            grid-template-columns: repeat(var(--extra-deck-columns, 3), 1fr);
             gap: 0;
             align-content: start;
         }
@@ -21825,7 +22478,7 @@
             position: relative;
             overflow: hidden;
             border-radius: 0.375rem;
-            width: var(--main-deck-size);
+            width: 100%;
             aspect-ratio: 2.5 / 3.5;
             background: rgba(71, 85, 105, 0.3);
             border: 2px dashed #60a5fa;
@@ -22023,6 +22676,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            width: var(--tuner-resize-handle-width, 8px);
+            flex-shrink: 0;
             background: linear-gradient(to right, transparent 0%, var(--color-border) 50%, transparent 100%);
             transition: background-color 0.2s ease;
         }
@@ -25026,11 +25681,35 @@
     </style>
 </head>
 
+<!-- ============================================================================
+     SECTION: HTML BODY & STORAGE MANAGER MODULE
+     Lines: 25173-25845
+     Description: Main HTML structure and StorageManager module
+
+     SUB-SECTIONS:
+     - StorageManager Module (25178-end): IndexedDB wrapper for YDK files, decks, patterns
+
+     StorageManager API:
+     - init(): Initialize IndexedDB
+     - getYDKFiles(), saveYDKFile(): YDK file persistence
+     - getOfflineDecks(), saveOfflineDeck(): Deck storage
+     - getSidingPatterns(), saveSidingPattern(): Siding patterns
+     - loadYDKFiles(): Bulk load on startup
+     - openModal(): Open storage management UI
+
+     UPDATES: When modifying IndexedDB schema or storage operations
+============================================================================ -->
+
 <body class="min-h-screen flex flex-col overflow-x-hidden">
     <!-- Storage Manager Module (inline for single-file application) -->
     <script>
-    // Storage Manager Module
-    // Handles IndexedDB, localStorage, YDK file management, and storage diagnostics
+    // ============================================================================
+    // MODULE: StorageManager
+    // Lines: 25178-25845 (end of file)
+    // Purpose: IndexedDB wrapper for persistent data storage
+    // Key Methods: init(), saveYDKFile(), getYDKFiles(), saveOfflineDeck()
+    // Database: 'YDKStorage' v4 with stores: ydkFiles, offlineDecks, universalSidingPatterns
+    // ============================================================================
 
     const StorageManager = (function() {
         'use strict';
