@@ -1398,6 +1398,13 @@
         let cardDatabaseSource = 'db'; // 'db' or 'all' - controls whether to show database cards or all game cards in database view
         let showExtraDeckCards = true; // Controls whether extra deck cards are shown in database view
 
+        // Infinite scroll pagination state for card database
+        let cardDatabasePagination = {
+            currentPage: 1,
+            perPage: 100,
+            hasMore: true
+        };
+
         // --- UX IMPROVEMENTS STATE ---
         let dbSortBy = 'name'; // Database sort field: 'name', 'type', 'atk', 'def', 'level'
         let dbSortOrder = 'asc'; // Database sort order: 'asc' or 'desc'
@@ -2813,16 +2820,17 @@
 
         function applyDefaultDeckLayout() {
             console.log('Applying default deck layout...');
-            // Apply clean default layout
+            // Apply clean default layout using flexbox, not fixed widths
+            // This allows sections to properly shrink/grow when database is toggled
             if (UI.mainDeckSection) {
-                UI.mainDeckSection.style.width = '755.367px';
+                UI.mainDeckSection.style.removeProperty('width');
                 UI.mainDeckSection.style.minWidth = '300px';
-                UI.mainDeckSection.style.flexGrow = '0';
-                UI.mainDeckSection.style.flexShrink = '0';
+                UI.mainDeckSection.style.flexGrow = '1';
+                UI.mainDeckSection.style.flexShrink = '1';
                 console.log('Main deck layout applied:', UI.mainDeckSection.style.cssText);
             }
             if (UI.sideDeckSection) {
-                UI.sideDeckSection.style.width = '216.633px';
+                UI.sideDeckSection.style.width = '280px';
                 UI.sideDeckSection.style.minWidth = '200px';
                 UI.sideDeckSection.style.flexGrow = '0';
                 UI.sideDeckSection.style.flexShrink = '1';
@@ -3117,9 +3125,6 @@
                 UI.toggleExtraDeckBtn.title = 'Hide Extra Deck';
                 UI.toggleExtraDeckBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
                 UI.toggleExtraDeckBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
-
-                // AUTO-FIT: Adjust deck section sizes to fit everything on screen
-                setTimeout(() => autoFitDeckSections(), 50);
             } else {
                 // Hide extra deck with smooth transition
                 UI.extraDeckSection.classList.add('hidden');
@@ -3139,15 +3144,15 @@
                     }
                 };
                 UI.extraDeckSection.addEventListener('transitionend', onEnd, { once: true });
-
-                // AUTO-FIT: Adjust deck section sizes to fit everything on screen
-                setTimeout(() => autoFitDeckSections(), 50);
             }
 
             // Save the state
             saveExtraDeckVisibility();
-            // Normalize widths post-visibility change
-            autoFitDeckSections();
+
+            // Normalize widths post-visibility change - wait for layout to settle
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => autoFitDeckSections());
+            });
         }
 
         function saveExtraDeckVisibility() {
@@ -3203,9 +3208,6 @@
                 UI.toggleSideDeckBtn.title = 'Hide Side Deck';
                 UI.toggleSideDeckBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
                 UI.toggleSideDeckBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
-
-                // AUTO-FIT: Adjust deck section sizes to fit everything on screen
-                setTimeout(() => autoFitDeckSections(), 50);
             } else {
                 // Hide side deck with smooth transition
                 UI.sideDeckSection.classList.add('hidden');
@@ -3225,14 +3227,15 @@
                     }
                 };
                 UI.sideDeckSection.addEventListener('transitionend', onEnd, { once: true });
-
-                // AUTO-FIT: Adjust deck section sizes to fit everything on screen
-                setTimeout(() => autoFitDeckSections(), 50);
             }
 
             // Save the state
             saveSideDeckVisibility();
-            autoFitDeckSections();
+
+            // Normalize widths post-visibility change - wait for layout to settle
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => autoFitDeckSections());
+            });
         }
 
         function saveSideDeckVisibility() {
@@ -3271,6 +3274,33 @@
             databaseVisible = !databaseVisible;
 
             if (databaseVisible) {
+                // IMPORTANT: Reset inline styles FIRST before showing DB
+                // This allows flexbox to naturally shrink deck sections when DB appears
+                if (UI.mainDeckSection) {
+                    UI.mainDeckSection.style.removeProperty('width');
+                    UI.mainDeckSection.style.removeProperty('min-width');
+                    UI.mainDeckSection.style.flexGrow = '1';
+                    UI.mainDeckSection.style.flexShrink = '1';
+                }
+                if (UI.sideDeckSection) {
+                    UI.sideDeckSection.style.removeProperty('width');
+                    UI.sideDeckSection.style.removeProperty('min-width');
+                    // Reset to HTML defaults
+                    UI.sideDeckSection.style.width = '280px';
+                    UI.sideDeckSection.style.minWidth = '200px';
+                    UI.sideDeckSection.style.flexGrow = '0';
+                    UI.sideDeckSection.style.flexShrink = '1';
+                }
+                if (UI.extraDeckSection) {
+                    UI.extraDeckSection.style.removeProperty('width');
+                    UI.extraDeckSection.style.removeProperty('min-width');
+                    // Reset to HTML defaults
+                    UI.extraDeckSection.style.width = '280px';
+                    UI.extraDeckSection.style.minWidth = '200px';
+                    UI.extraDeckSection.style.flexGrow = '0';
+                    UI.extraDeckSection.style.flexShrink = '1';
+                }
+
                 // Show database with smooth transition
                 UI.cardDatabaseSection.style.display = '';
                 UI.cardDatabaseSection.classList.remove('hidden');
@@ -3291,9 +3321,6 @@
                     UI.deckBuilderContainer.classList.add('database-visible');
                 }
 
-                // Normalize after visibility change
-                autoFitDeckSections();
-
                 // Update button appearance
                 UI.toggleDatabaseBtn.textContent = 'Hide DB';
                 UI.toggleDatabaseBtn.title = 'Hide Card Database';
@@ -3311,9 +3338,6 @@
                     UI.deckBuilderContainer.classList.remove('database-visible');
                 }
 
-                // AUTO-FIT: Adjust deck section sizes to fit everything on screen
-                autoFitDeckSections();
-
                 // Update button appearance
                 UI.toggleDatabaseBtn.textContent = 'Show DB';
                 UI.toggleDatabaseBtn.title = 'Show Card Database';
@@ -3325,6 +3349,31 @@
                     UI.cardDatabaseSection.removeEventListener('transitionend', onEnd);
                     if (!databaseVisible) {
                         UI.cardDatabaseSection.style.display = 'none';
+                        // Reset inline styles to allow sections to expand to fill available space
+                        if (UI.mainDeckSection) {
+                            UI.mainDeckSection.style.removeProperty('width');
+                            UI.mainDeckSection.style.removeProperty('min-width');
+                            UI.mainDeckSection.style.flexGrow = '1';
+                            UI.mainDeckSection.style.flexShrink = '1';
+                        }
+                        if (UI.sideDeckSection) {
+                            UI.sideDeckSection.style.removeProperty('width');
+                            UI.sideDeckSection.style.removeProperty('min-width');
+                            // Reset to HTML defaults
+                            UI.sideDeckSection.style.width = '280px';
+                            UI.sideDeckSection.style.minWidth = '200px';
+                            UI.sideDeckSection.style.flexGrow = '0';
+                            UI.sideDeckSection.style.flexShrink = '1';
+                        }
+                        if (UI.extraDeckSection) {
+                            UI.extraDeckSection.style.removeProperty('width');
+                            UI.extraDeckSection.style.removeProperty('min-width');
+                            // Reset to HTML defaults
+                            UI.extraDeckSection.style.width = '280px';
+                            UI.extraDeckSection.style.minWidth = '200px';
+                            UI.extraDeckSection.style.flexGrow = '0';
+                            UI.extraDeckSection.style.flexShrink = '1';
+                        }
                     }
                 };
                 UI.cardDatabaseSection.addEventListener('transitionend', onEnd, { once: true });
@@ -3332,10 +3381,20 @@
 
             // Save the state
             saveDatabaseVisibility();
-            autoFitDeckSections();
 
             // Clean up any bad saved configs that might have been created
             cleanupBadConfigs();
+
+            // Clear saved deck resize config to allow proper flex behavior
+            // The saved config might have flex-shrink: 0 which prevents proper resizing
+            try {
+                localStorage.removeItem('deckResizeConfig');
+            } catch (e) {
+                console.error('Error clearing deck resize config:', e);
+            }
+
+            // Don't call autoFitDeckSections here - let flexbox handle the layout naturally
+            // The deck sections will properly shrink/grow based on the flex properties we set
         }
 
         function autoFitDeckSections() {
@@ -3664,9 +3723,11 @@
                         if (UI.deckBuilderContainer) {
                             UI.deckBuilderContainer.classList.remove('database-visible');
                         }
-                    } else if (databaseVisible && UI.deckBuilderContainer) {
-                        // Add class to container for responsive layout when database is visible
-                        UI.deckBuilderContainer.classList.add('database-visible');
+                    } else if (databaseVisible && UI.deckBuilderContainer && UI.cardDatabaseSection) {
+                        // Only add database-visible class if database is actually 100% width (vertical layout)
+                        if (UI.cardDatabaseSection.style.width === '100%') {
+                            UI.deckBuilderContainer.classList.add('database-visible');
+                        }
                     }
                 }
             } catch (e) {
@@ -4523,7 +4584,7 @@
                     UI.mainDeckSection.style.width = config.mainDeckWidth;
                     UI.mainDeckSection.style.minWidth = config.mainDeckWidth;
                     UI.mainDeckSection.style.flexGrow = '0';
-                    UI.mainDeckSection.style.flexShrink = '0';
+                    UI.mainDeckSection.style.flexShrink = '1';
                 } else {
                     UI.mainDeckSection.style.width = '';
                     UI.mainDeckSection.style.minWidth = '300px';
@@ -4847,11 +4908,24 @@
             UI.databaseSourceToggle.addEventListener('click', toggleDatabaseSource);
             UI.extraDeckToggle.addEventListener('click', toggleExtraDeckCards);
 
+            // Infinite scroll for card database
+            let scrollTimeout;
+            UI.cardDbList.addEventListener('scroll', () => {
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(() => {
+                    const { scrollTop, scrollHeight, clientHeight } = UI.cardDbList;
+                    // Load more when user is 150px from bottom
+                    if (scrollHeight - scrollTop - clientHeight < 150) {
+                        loadMoreCards();
+                    }
+                }, 100); // 100ms debounce to prevent excessive loads
+            });
+
             // UX Improvements - Sort Controls
             if (UI.dbSortSelect) {
                 UI.dbSortSelect.addEventListener('change', (e) => {
                     dbSortBy = e.target.value;
-                    renderCardDatabase();
+                    renderCardDatabase(true);
                 });
             }
 
@@ -7132,12 +7206,12 @@
                 }
 
                 isDatabaseLoaded = true; // Mark as loaded
-                renderCardDatabase();
+                renderCardDatabase(true);
                 console.log(`loadCardDatabase: Loaded ${cardDatabase.length} unique cards into memory.`);
             } catch (e) {
                 console.error("Error loading card database:", e);
                 cardDatabase = [];
-                renderCardDatabase();
+                renderCardDatabase(true);
             }
         }
 
@@ -7884,7 +7958,7 @@
             }
 
             // Re-render the card database to show/hide delete buttons
-            renderCardDatabase();
+            renderCardDatabase(false); // Don't reset pagination when just toggling edit mode
         }
 
         function toggleCardDatabaseView() {
@@ -7897,7 +7971,7 @@
             localStorage.setItem('cardDatabaseView', cardDatabaseView);
 
             // Re-render the card database with the new view
-            renderCardDatabase();
+            renderCardDatabase(false); // Don't reset pagination when just switching views
         }
 
         function toggleDatabaseSource() {
@@ -7921,7 +7995,7 @@
             UI.cardSearchInput.value = '';
 
             // Re-render the card database with the new source
-            renderCardDatabase();
+            renderCardDatabase(true); // Reset pagination when switching sources
         }
 
         function toggleExtraDeckCards() {
@@ -7932,7 +8006,7 @@
             if (label) label.textContent = statusText;
 
             // Re-render the card database with the extra deck filter applied
-            renderCardDatabase();
+            renderCardDatabase(true); // Reset pagination when toggling extra deck filter
         }
 
         function handleAutocompleteKeydown(e) {
@@ -9546,7 +9620,7 @@
                 showTooltip(`Card '${newCard.name}' already exists in database.`);
                 return; // Exit early since card already exists
             }
-            renderCardDatabase();
+            renderCardDatabase(true); // Reset pagination when adding to database
 
             // Save to localStorage
             try {
@@ -9584,7 +9658,7 @@
 
                 cardDatabase = cardDatabase.filter(card => card.id !== cardId);
                 originalCardDatabase = originalCardDatabase.filter(card => card.id !== cardId);
-                renderCardDatabase();
+                renderCardDatabase(true); // Reset pagination when deleting from database
                 populateSimulationSetup();
 
                 // Save to localStorage
@@ -9960,7 +10034,7 @@
             }
 
             renderCurrentDeck();
-            renderCardDatabase();
+            renderCardDatabase(true); // Reset pagination when loading deck
             populateSimulationSetup();
             showTooltip(`Loaded deck '${selectedDeck.name}'.`);
             isDeckDirty = false;
@@ -9988,7 +10062,7 @@
                         UI.deckNameInput.value = '';
                         cardDatabase = [...originalCardDatabase];
                         renderCurrentDeck();
-                        renderCardDatabase();
+                        renderCardDatabase(true); // Reset pagination after deleting deck
                     }
                     await loadOfflineDecks();
                     populateSimulationSetup();
@@ -10381,8 +10455,13 @@
 
             // Render the deck immediately
             renderCurrentDeck();
-            renderCardDatabase(); // Re-render card database with imported card pool
+            renderCardDatabase(true); // Reset pagination when importing deck with new card pool
             populateSimulationSetup(); // Ensure simulator is updated
+
+            // Auto-align by total size (only when main and side decks both have cards)
+            if (currentDeck.main.length > 0 && currentDeck.side.length > 0) {
+                autoAlignByTotalSize();
+            }
 
             showTooltip(`Switched to imported deck: ${deckName}`);
             console.log(`[DEBUG] Successfully switched to imported deck: ${deckName}`);
@@ -11925,7 +12004,7 @@
                     databaseVisible = true;
                     // Reset card database view to grid
                     if (UI.cardDbList) {
-                        UI.cardDbList.className = 'card-db-grid overflow-y-auto pr-2 flex-grow';
+                        UI.cardDbList.className = 'card-db-grid overflow-y-auto overflow-x-hidden pr-2';
                     }
                     location.reload();
                     break;
@@ -12627,7 +12706,7 @@
             const cardsToAddToFiltered = cardsToAdd.filter(newCard => !cardDatabase.some(existingCard => existingCard.id === newCard.id));
             cardDatabase.push(...cardsToAddToFiltered);
             cardDatabase.sort((a, b) => a.name.localeCompare(b.name));
-            renderCardDatabase(); // Refresh the DB view
+            renderCardDatabase(true); // Reset pagination after adding cards to database
 
             // Save to localStorage
             try {
@@ -12647,7 +12726,7 @@
         // --- RENDERING & DRAG-DROP LOGIC ---
 
         // Helper function to get cards to display based on current settings
-        async function getCardsToDisplay() {
+        async function getCardsToDisplay(resetPagination = false) {
             let cards;
 
             if (cardDatabaseSource === 'all') {
@@ -12694,6 +12773,23 @@
                 cards = cards.filter(card => !isExtraDeckMonster(card));
             }
 
+            // Reset pagination if requested (e.g., on search/filter/source change)
+            if (resetPagination) {
+                cardDatabasePagination.currentPage = 1;
+                cardDatabasePagination.hasMore = true;
+            }
+
+            // Store filtered cards globally for pagination
+            window.currentFilteredCards = cards;
+
+            // For DB mode (smaller dataset), load all cards at once
+            // For All mode, use infinite scroll pagination
+            if (cardDatabaseSource === 'all' && cards.length > cardDatabasePagination.perPage) {
+                const endIdx = cardDatabasePagination.currentPage * cardDatabasePagination.perPage;
+                cardDatabasePagination.hasMore = endIdx < cards.length;
+                return cards.slice(0, endIdx);
+            }
+
             return cards;
         }
 
@@ -12705,20 +12801,268 @@
             return 'Unknown';
         }
 
-        async function renderCardDatabase() {
+        // Load more cards for infinite scroll pagination
+        async function loadMoreCards() {
+            if (!cardDatabasePagination.hasMore || !window.currentFilteredCards) return;
+
+            cardDatabasePagination.currentPage++;
+            const endIdx = cardDatabasePagination.currentPage * cardDatabasePagination.perPage;
+            const newCards = window.currentFilteredCards.slice(0, endIdx);
+
+            cardDatabasePagination.hasMore = endIdx < window.currentFilteredCards.length;
+
             if (cardDatabaseView === 'grid') {
-                await renderCardDatabaseGrid();
-                return;
+                await appendCardsToGrid(newCards);
+            } else {
+                await appendCardsToList(newCards);
             }
-
-            const cards = await getCardsToDisplay();
-
-            UI.cardDbList.innerHTML = '';
-            UI.cardDbList.className = 'space-y-2 overflow-y-auto pr-2 flex-grow';
 
             // Update result count
             if (UI.dbResultCount) {
-                UI.dbResultCount.textContent = `${cards.length} cards`;
+                UI.dbResultCount.textContent = `Showing ${newCards.length} of ${window.currentFilteredCards.length} cards`;
+            }
+        }
+
+        // Append cards to list view (for infinite scroll)
+        async function appendCardsToList(cards) {
+            const currentCount = UI.cardDbList.querySelectorAll('.card-list-item').length;
+            const cardsToAppend = cards.slice(currentCount);
+
+            cardsToAppend.forEach(card => {
+                const cardEl = document.createElement('div');
+                cardEl.className = 'card-list-item group';
+                cardEl.setAttribute('data-card-id', card.id);
+                cardEl.draggable = !editMode;
+
+                const imgUrl = card.card_images?.[0]?.image_url || card.imageUrl || '';
+
+                let statsHtml = '';
+                if (card.type?.includes('Monster')) {
+                    const atk = card.atk !== undefined ? card.atk : '?';
+                    const def = card.def !== undefined ? card.def : '?';
+                    const level = card.level || card.rank || 0;
+                    const stars = level > 0 ? '★'.repeat(level) : '';
+                    const race = card.race || '';
+                    const attr = card.attribute || '';
+                    statsHtml = `
+                        <div class="text-xs text-slate-400">${stars} ${race} / ${attr}</div>
+                        <div class="text-xs text-slate-400">ATK/${atk} DEF/${def}</div>
+                    `;
+                } else {
+                    statsHtml = `
+                        <div class="text-xs text-slate-400">${card.type || ''}</div>
+                        <div class="text-xs text-slate-500">${card.race || ''}</div>
+                    `;
+                }
+
+                let banlistBadge = '';
+                const banStatus = card.banlist_info?.ban_tcg || card.banlist_status;
+                if (banStatus && banStatus !== 'Unlimited' && banStatus !== 'Unlimited') {
+                    const banColors = {
+                        'Forbidden': 'bg-red-600',
+                        'Limited': 'bg-orange-600',
+                        'Semi-Limited': 'bg-yellow-600'
+                    };
+                    const banLabels = {
+                        'Forbidden': 'BANNED',
+                        'Limited': 'LIMITED',
+                        'Semi-Limited': 'SEMI'
+                    };
+                    const colorClass = banColors[banStatus] || 'bg-slate-600';
+                    const label = banLabels[banStatus] || banStatus;
+                    banlistBadge = `<span class="banlist-badge ${colorClass} text-white">${label}</span>`;
+                }
+
+                let buttonsHtml = '';
+                if (editMode) {
+                    buttonsHtml = `
+                        <button data-action="delete" data-id="${card.id}" class="text-red-400 hover:text-red-300 text-xs font-bold flex items-center gap-1" title="Delete from Database">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>`;
+                } else {
+                    buttonsHtml = `
+                        <button data-action="add-side" data-id="${card.id}" class="text-yellow-400 hover:text-yellow-300 text-xs font-bold px-1.5 py-0.5 rounded bg-yellow-600/20" title="Add to Side Deck">S</button>
+                        <button data-action="add-main" data-id="${card.id}" class="text-green-400 hover:text-green-300 text-xs font-bold px-1.5 py-0.5 rounded bg-green-600/20" title="Add to Main Deck">M</button>
+                        <button data-action="add-extra" data-id="${card.id}" class="text-blue-400 hover:text-blue-300 text-xs font-bold px-1.5 py-0.5 rounded bg-blue-600/20" title="Add to Extra Deck">E</button>`;
+                }
+
+                cardEl.innerHTML = `
+                    <div class="flex items-center gap-2 overflow-hidden flex-grow min-w-0">
+                        <img src="${imgUrl}" class="w-10 h-auto rounded-md flex-shrink-0" onerror="this.onerror=null;this.src='https://placehold.co/40x58/2d3748/e2e8f0?text=?';">
+                        <div class="min-w-0 flex-grow">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-sm font-medium truncate">${card.name}</span>
+                                ${banlistBadge}
+                            </div>
+                            <div class="flex flex-wrap gap-x-3">
+                                ${statsHtml}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 flex-shrink-0">
+                        ${buttonsHtml}
+                    </div>
+                `;
+
+                // Add event listeners
+                if (!editMode) {
+                    cardEl.addEventListener('dragstart', (e) => {
+                        e.dataTransfer.setData('text/plain', card.id);
+                        e.dataTransfer.effectAllowed = 'copy';
+                        cardEl.classList.add('dragging');
+                    });
+
+                    cardEl.addEventListener('dragend', (e) => {
+                        cardEl.classList.remove('dragging');
+                    });
+
+                    // Click to show preview modal
+                    cardEl.addEventListener('click', (e) => {
+                        if (e.target.tagName !== 'BUTTON') {
+                            showCardPreview(card);
+                        }
+                    });
+                } else {
+                    const deleteBtn = cardEl.querySelector('[data-action="delete"]');
+                    deleteBtn.addEventListener('click', () => removeCardFromDatabase(card.id));
+                }
+
+                UI.cardDbList.appendChild(cardEl);
+            });
+        }
+
+        // Append cards to grid view (for infinite scroll)
+        async function appendCardsToGrid(cards) {
+            const currentCount = UI.cardDbList.querySelectorAll('.card-item').length;
+            const cardsToAppend = cards.slice(currentCount);
+
+            cardsToAppend.forEach(card => {
+                const cardEl = document.createElement('div');
+                cardEl.className = 'card-item';
+                cardEl.setAttribute('data-card-id', card.id);
+                cardEl.draggable = !editMode;
+
+                const imgUrl = card.card_images?.[0]?.image_url || card.imageUrl || '';
+
+                let statsOverlay = '';
+                if (!editMode && card.type?.includes('Monster')) {
+                    const stars = '★'.repeat(card.level || card.rank || 0);
+                    const atk = card.atk !== undefined ? card.atk : '?';
+                    const def = card.def !== undefined ? card.def : '?';
+                    statsOverlay = `
+                        <div class="stats-overlay">
+                            <div class="stat-row"><span>${stars}</span></div>
+                            <div class="stat-row"><span>ATK/${atk}</span><span>DEF/${def}</span></div>
+                        </div>`;
+                }
+
+                let content = `
+                    <div class="relative w-full h-full">
+                        <img src="${imgUrl}"
+                             class="w-full h-full object-cover"
+                             title="${card.name}"
+                             onerror="this.onerror=null;this.src='https://placehold.co/80x112/2d3748/e2e8f0?text=?';">
+                        ${statsOverlay}
+                    </div>
+                `;
+
+                if (editMode) {
+                    const isSelected = selectedGridCards.has(card.id);
+                    cardEl.classList.add('edit-mode');
+                    content = `
+                        <div class="relative w-full h-full">
+                            <input type="checkbox"
+                                   class="absolute top-2 left-2 z-10 w-4 h-4 text-blue-600 bg-white rounded border-gray-300 focus:ring-blue-500"
+                                   ${isSelected ? 'checked' : ''}
+                                   data-card-id="${card.id}">
+                            <img src="${imgUrl}"
+                                 class="w-full h-full object-cover"
+                                 title="${card.name}"
+                                 onerror="this.onerror=null;this.src='https://placehold.co/80x112/2d3748/e2e8f0?text=?';">
+                        </div>
+                    `;
+                    if (isSelected) {
+                        cardEl.classList.add('selected');
+                    }
+                }
+
+                cardEl.innerHTML = content;
+
+                if (editMode) {
+                    const checkbox = cardEl.querySelector('input[type="checkbox"]');
+                    cardEl.addEventListener('click', (e) => {
+                        if (e.target.type === 'checkbox') return;
+                        checkbox.checked = !checkbox.checked;
+                        checkbox.dispatchEvent(new Event('change'));
+                    });
+
+                    checkbox.addEventListener('change', (e) => {
+                        if (e.target.checked) {
+                            selectedGridCards.add(card.id);
+                            cardEl.classList.add('selected');
+                        } else {
+                            selectedGridCards.delete(card.id);
+                            cardEl.classList.remove('selected');
+                        }
+                        updateSelectedCount();
+                    });
+                } else {
+                    cardEl.addEventListener('dragstart', (e) => {
+                        e.dataTransfer.setData('text/plain', card.id);
+                        e.dataTransfer.effectAllowed = 'copy';
+                        cardEl.classList.add('dragging');
+                    });
+
+                    cardEl.addEventListener('dragend', (e) => {
+                        cardEl.classList.remove('dragging');
+                    });
+
+                    cardEl.addEventListener('click', (e) => {
+                        if (!e.shiftKey) {
+                            e.preventDefault();
+                            showCardPreview(card);
+                        }
+                    });
+
+                    cardEl.addEventListener('click', (e) => {
+                        if (e.shiftKey) {
+                            e.preventDefault();
+                            addCardToDeck(card.id, 'side');
+                        }
+                    });
+
+                    cardEl.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        addCardToDeck(card.id, 'main');
+                    });
+                }
+
+                UI.cardDbList.appendChild(cardEl);
+            });
+        }
+
+        async function renderCardDatabase(resetPagination = true) {
+            if (cardDatabaseView === 'grid') {
+                await renderCardDatabaseGrid(resetPagination);
+                return;
+            }
+
+            const cards = await getCardsToDisplay(resetPagination);
+
+            UI.cardDbList.innerHTML = '';
+            UI.cardDbList.className = 'space-y-2 overflow-y-auto overflow-x-hidden pr-2';
+
+            // Update result count - show total and loaded counts
+            if (UI.dbResultCount) {
+                const total = window.currentFilteredCards?.length || cards.length;
+                const loaded = cards.length;
+                if (total > loaded) {
+                    UI.dbResultCount.textContent = `Showing ${loaded} of ${total} cards`;
+                } else {
+                    UI.dbResultCount.textContent = `${total} cards`;
+                }
             }
 
             cards.forEach(card => {
@@ -13053,15 +13397,21 @@
             return 'rarity-common';
         }
 
-        async function renderCardDatabaseGrid() {
-            const cards = await getCardsToDisplay();
+        async function renderCardDatabaseGrid(resetPagination = true) {
+            const cards = await getCardsToDisplay(resetPagination);
 
             UI.cardDbList.innerHTML = '';
-            UI.cardDbList.className = 'card-db-grid overflow-y-auto pr-2 flex-grow';
+            UI.cardDbList.className = 'card-db-grid overflow-y-auto overflow-x-hidden pr-2';
 
-            // Update result count
+            // Update result count - show total and loaded counts
             if (UI.dbResultCount) {
-                UI.dbResultCount.textContent = `${cards.length} cards`;
+                const total = window.currentFilteredCards?.length || cards.length;
+                const loaded = cards.length;
+                if (total > loaded) {
+                    UI.dbResultCount.textContent = `Showing ${loaded} of ${total} cards`;
+                } else {
+                    UI.dbResultCount.textContent = `${total} cards`;
+                }
             }
 
             // Show/hide selection controls based on edit mode and view
@@ -13273,7 +13623,7 @@
 
                     // Clear selection and re-render
                     selectedGridCards.clear();
-                    renderCardDatabase();
+                    renderCardDatabase(true); // Reset pagination after deleting selected cards
                     populateSimulationSetup();
                     updateSelectedCount();
 
@@ -13299,7 +13649,7 @@
                 } catch (e) {
                     console.error('Error updating localStorage:', e);
                 }
-                renderCardDatabase();
+                renderCardDatabase(true); // Reset pagination after clearing database
                 populateSimulationSetup();
                 showMessage("Database cleared.");
                 return;
@@ -13337,7 +13687,7 @@
                         selectedGridCards.clear();
 
                         // Re-render everything
-                        renderCardDatabase();
+                        renderCardDatabase(true); // Reset pagination after resetting database
                         populateSimulationSetup();
 
                         showMessage(`Database reset! Now contains ${cardDatabase.length} cards from your deck.`);
@@ -24676,7 +25026,7 @@
     </style>
 </head>
 
-<body class="min-h-screen">
+<body class="min-h-screen flex flex-col overflow-x-hidden">
     <!-- Storage Manager Module (inline for single-file application) -->
     <script>
     // Storage Manager Module
@@ -26274,7 +26624,7 @@
                 if (typeof databaseVisible !== 'undefined') databaseVisible = true;
                 // Reset card database view to grid
                 if (typeof UI !== 'undefined' && UI.cardDbList) {
-                    UI.cardDbList.className = 'card-db-grid overflow-y-auto pr-2 flex-grow';
+                    UI.cardDbList.className = 'card-db-grid overflow-y-auto overflow-x-hidden pr-2';
                 }
                 location.reload();
                 break;
@@ -27501,7 +27851,7 @@
     <!-- Banlist Management Modal -->
     <!-- Banlist management modal moved to modules/banlist-management.html -->
 
-    <div id="mainContainer" class="container mx-auto">
+    <div id="mainContainer" class="container mx-auto flex-1 flex flex-col overflow-hidden">
         <header class="flex flex-wrap justify-between items-center mb-6 gap-4">
             <div class="flex items-center gap-4">
                 <div id="chibiLogo" class="relative h-12 w-12 rounded-full cursor-pointer overflow-hidden"
@@ -27566,8 +27916,8 @@
             </div>
         </header>
 
-        <main>
-            <div id="deckBuilderView">
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <div id="deckBuilderView" class="flex-1 flex flex-col overflow-hidden">
                 <div id="deckBuilderContainer" class="flex gap-6 h-full">
                     <div id="cardDatabaseSection"
                         class="bg-[var(--color-surface-1) p-4 rounded-lg flex flex-col min-w-0 flex-shrink-0"
@@ -27667,7 +28017,7 @@
                                 class="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold py-2 px-4 rounded-md transition-colors flex-shrink-0">Search</button>
                         </div>
                         <!-- Card Database List -->
-                        <div id="cardDbList" class="space-y-2 overflow-y-auto pr-2 flex-grow"></div>
+                        <div id="cardDbList" class="overflow-y-auto overflow-x-hidden pr-2" style="max-height: 900px;"></div>
                     </div>
                     <div id="resizeHandle"
                         class="w-2 bg-slate-600 hover:bg-slate-500 cursor-col-resize flex-shrink-0 transition-colors"
