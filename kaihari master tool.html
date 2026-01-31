@@ -54,6 +54,11 @@
         const appId = 'ygo-evaluator-default';
 
         let cardDatabase = [];
+        let isDatabaseLoaded = false; // Prevent multiple card database loads
+
+        // Snapshot image cache constants
+        const CACHE_STORAGE_KEY = 'snapshotImageCache';
+        const MAX_CACHE_SIZE = 50; // Limit cache size to prevent localStorage overflow (~5MB limit)
 
         // ============================================================================
         // MODULE: Logger
@@ -2491,7 +2496,14 @@
             const mainColumns = localStorage.getItem('mainDeckCardsPerRow') || '10';
             const sideColumns = localStorage.getItem('sideDeckCardsPerRow') || '3';
             const extraColumns = localStorage.getItem('extraDeckCardsPerRow') || '3';
-            const dbColumns = localStorage.getItem('dbDeckCardsPerRow') || '5';
+
+            // For db, load both desktop and portrait values
+            const dbColumnsDesktop = localStorage.getItem('dbDeckCardsPerRow') || '5';
+            const dbColumnsPortrait = localStorage.getItem('dbDeckCardsPerRowPortrait') || '8';
+
+            // Set the appropriate value based on current mode
+            const isPortrait = window.innerWidth < 1024;
+            const dbColumns = isPortrait ? dbColumnsPortrait : dbColumnsDesktop;
 
             // Set column count CSS variables
             document.documentElement.style.setProperty('--main-deck-columns', mainColumns);
@@ -2513,7 +2525,15 @@
                 localStorage.setItem('extraDeckCardsPerRow', '3');
             }
             if (!localStorage.getItem('dbDeckCardsPerRow')) {
-                localStorage.setItem('dbDeckCardsPerRow', '5');
+                localStorage.setItem('dbDeckCardsPerRow', '3');
+            }
+            // Initialize portrait value if not set
+            // Clear the problematic '10' default if it exists, and use '8' instead
+            if (localStorage.getItem('dbDeckCardsPerRowPortrait') === '10') {
+                localStorage.removeItem('dbDeckCardsPerRowPortrait');
+            }
+            if (!localStorage.getItem('dbDeckCardsPerRowPortrait')) {
+                localStorage.setItem('dbDeckCardsPerRowPortrait', '8');
             }
 
             // Load the saved panel configuration
@@ -2608,6 +2628,62 @@
             }, 100);
         }
 
+        // Track current orientation for db cards-per-row mode switching
+        let lastIsPortrait = window.innerWidth < 1024;
+
+        // Function to update database columns based on current orientation
+        // This can be called from multiple places (init, resize, before render)
+        function updateDatabaseColumns() {
+            const dbColumnsDesktop = localStorage.getItem('dbDeckCardsPerRow') || '5';
+            const dbColumnsPortrait = localStorage.getItem('dbDeckCardsPerRowPortrait') || '8';
+            const isPortrait = window.innerWidth < 1024;
+            const dbColumns = isPortrait ? dbColumnsPortrait : dbColumnsDesktop;
+
+            document.documentElement.style.setProperty('--db-columns', dbColumns);
+            console.log(`[DB-COLUMNS] Updated to ${dbColumns} (${isPortrait ? 'portrait' : 'desktop'} mode)`);
+        }
+
+        // Make function globally accessible for use by renderCardDatabaseGrid
+        window.updateDatabaseColumns = updateDatabaseColumns;
+
+        // Simple debounce function to limit function call rate
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Handle window resize to switch db cards-per-row between portrait/desktop modes
+        window.addEventListener('resize', debounce(function() {
+            const isPortrait = window.innerWidth < 1024;
+
+            if (lastIsPortrait !== isPortrait) {
+                // Mode changed - update db column count and re-render cards
+                updateDatabaseColumns();
+
+                // Re-render card database to ensure proper grid layout
+                if (typeof renderCardDatabase === 'function') {
+                    renderCardDatabase(true);
+                }
+
+                // Update slider to show current cards per row for the new orientation
+                if (scaleTarget === 'db' && UI.deckScaleSlider && UI.cardsPerRowDisplay) {
+                    const currentCardsPerRow = getCurrentCardsPerRow('db');
+                    UI.deckScaleSlider.value = Math.min(currentCardsPerRow, parseInt(UI.deckScaleSlider.max));
+                    UI.cardsPerRowDisplay.textContent = currentCardsPerRow;
+                    console.log(`[ORIENTATION] Slider updated to ${currentCardsPerRow} cards/row (${isPortrait ? 'portrait' : 'desktop'})`);
+                }
+            }
+
+            lastIsPortrait = isPortrait;
+        }, 100));
+
         // --- DECK SCALE FUNCTIONS ---
         function cycleScaleTarget() {
             const targets = ['main', 'side', 'extra', 'db'];
@@ -2630,7 +2706,19 @@
         }
 
         function getCurrentCardsPerRow(target) {
-            // Get saved cards per row, or calculate from current scale
+            // For db, use mode-specific storage
+            if (target === 'db') {
+                const isPortrait = window.innerWidth < 1024;
+                const storageKey = isPortrait ? 'dbDeckCardsPerRowPortrait' : 'dbDeckCardsPerRow';
+                const saved = localStorage.getItem(storageKey);
+                if (saved) {
+                    return parseInt(saved);
+                }
+                // Return mode-specific default (matches loadLocalData initialization)
+                return isPortrait ? 8 : 5;
+            }
+
+            // For other decks, get saved cards per row, or calculate from current scale
             const saved = localStorage.getItem(`${target}DeckCardsPerRow`);
             if (saved) {
                 return parseInt(saved);
@@ -2641,13 +2729,11 @@
             const defaults = isMobile ? {
                 main: 5,
                 side: 2,
-                extra: 2,
-                db: 3
+                extra: 2
             } : {
                 main: 10,
                 side: 3,
-                extra: 3,
-                db: 5
+                extra: 3
             };
 
             if (defaults[target] !== undefined) {
@@ -2694,7 +2780,17 @@
             }
 
             // Store to localStorage for persistence
-            localStorage.setItem(`${target}DeckCardsPerRow`, cardsPerRow);
+            // For db, use mode-specific storage key
+            if (target === 'db') {
+                if (window.innerWidth < 1024) {
+                    localStorage.setItem('dbDeckCardsPerRowPortrait', cardsPerRow);
+                } else {
+                    localStorage.setItem('dbDeckCardsPerRow', cardsPerRow);
+                }
+            } else {
+                localStorage.setItem(`${target}DeckCardsPerRow`, cardsPerRow);
+            }
+
             // Also store a scale value for compatibility (approximate card size in px)
             const approxCardSize = target === 'db' ? 80 : 100;
             localStorage.setItem(`${target}DeckScale`, approxCardSize);
@@ -2927,17 +3023,19 @@
         }
 
         function resetToDefaultSizes() {
-            // Reset all deck cards-per-row to default values (desktop)
+            // Reset all deck cards-per-row to default values
             const defaultMainCardsPerRow = 10;
             const defaultSideCardsPerRow = 3;
             const defaultExtraCardsPerRow = 3;
-            const defaultDbCardsPerRow = 5;
+            const defaultDbCardsPerRow = 3; // Desktop default (narrow panel)
+            const defaultDbCardsPerRowPortrait = 5; // Portrait default (full width)
 
             // Save cards per row settings
             localStorage.setItem('mainDeckCardsPerRow', defaultMainCardsPerRow);
             localStorage.setItem('sideDeckCardsPerRow', defaultSideCardsPerRow);
             localStorage.setItem('extraDeckCardsPerRow', defaultExtraCardsPerRow);
             localStorage.setItem('dbDeckCardsPerRow', defaultDbCardsPerRow);
+            localStorage.setItem('dbDeckCardsPerRowPortrait', defaultDbCardsPerRowPortrait);
 
             // Use updateCardsPerRow for consistent calculation
             updateCardsPerRow('main', defaultMainCardsPerRow);
@@ -3411,7 +3509,8 @@
             let startY = 0;
             let startWidth = 0;
             let startHeight = 0;
-            let isVertical = false;
+            // Initialize isVertical to current orientation (not just false)
+            let isVertical = UI.deckBuilderContainer && UI.deckBuilderContainer.offsetWidth < 1024;
 
             function checkOrientation() {
                 const container = UI.deckBuilderContainer;
@@ -3556,11 +3655,17 @@
                         // Reset to default layout when orientation changes
                         if (newIsVertical) {
                             UI.cardDatabaseSection.style.width = '100%';
-                            UI.cardDatabaseSection.style.height = '40vh';
+                            UI.cardDatabaseSection.style.height = '50vh';
+                            UI.cardDatabaseSection.style.minHeight = '50vh';
+                            UI.cardDatabaseSection.style.maxHeight = '50vh';
                         } else {
                             UI.cardDatabaseSection.style.height = '';
+                            UI.cardDatabaseSection.style.minHeight = '';
+                            UI.cardDatabaseSection.style.maxHeight = '';
                             UI.cardDatabaseSection.style.width = '33.333%';
                         }
+                        // Update isVertical to track the new orientation
+                        isVertical = newIsVertical;
                         savePanelConfiguration();
                     }
                 }
@@ -4229,8 +4334,6 @@
         const snapshotImageCache = new Map();
         let isPreloadingImages = false;
         let preloadQueue = new Set();
-        const CACHE_STORAGE_KEY = 'snapshotImageCache';
-        const MAX_CACHE_SIZE = 50; // Limit cache size to prevent localStorage overflow (localStorage ~5MB limit)
 
         // Load cache from localStorage on startup
         function loadSnapshotImageCache() {
@@ -7745,8 +7848,6 @@
         // ============================================================================
 
         // --- CARD DATABASE LOGIC ---
-        let isDatabaseLoaded = false; // Prevent multiple loads
-
         async function loadCardDatabase() {
             if (isDatabaseLoaded) {
                 console.log('Database already loaded, skipping duplicate load');
@@ -12590,6 +12691,7 @@
                     localStorage.removeItem('sideDeckCardsPerRow');
                     localStorage.removeItem('extraDeckCardsPerRow');
                     localStorage.removeItem('dbDeckCardsPerRow');
+                    localStorage.removeItem('dbDeckCardsPerRowPortrait');
                     location.reload();
                     break;
                 case 'panel-configs':
@@ -13998,6 +14100,11 @@
         }
 
         async function renderCardDatabaseGrid(resetPagination = true) {
+            // Ensure CSS variable is current before rendering (fixes stacking issues on startup/orientation change)
+            if (window.updateDatabaseColumns) {
+                window.updateDatabaseColumns();
+            }
+
             const cards = await getCardsToDisplay(resetPagination);
 
             UI.cardDbList.innerHTML = '';
@@ -22174,6 +22281,10 @@
             grid-template-columns: repeat(var(--db-columns, 5), 1fr);
             gap: var(--tuner-grid-gap, 0px);
             align-content: start;
+            /* Ensure grid has minimum height to prevent cards from stacking */
+            min-height: min-content;
+            /* Ensure rows auto-size based on content */
+            grid-auto-rows: min-content;
         }
 
         .card-db-grid .card-item {
@@ -22725,7 +22836,14 @@
 
             #cardDatabaseSection {
                 width: 100% !important;
-                min-height: 40vh;
+                height: 50vh;
+                min-height: 50vh;
+                max-height: 50vh;
+            }
+
+            /* Ensure card list fills available space in portrait mode */
+            #cardDbList {
+                min-height: 200px;
             }
         }
 
@@ -27289,6 +27407,7 @@
                 localStorage.removeItem('sideDeckCardsPerRow');
                 localStorage.removeItem('extraDeckCardsPerRow');
                 localStorage.removeItem('dbDeckCardsPerRow');
+                localStorage.removeItem('dbDeckCardsPerRowPortrait');
                 location.reload();
                 break;
             case 'panel-configs':
@@ -28599,7 +28718,7 @@
             <div id="deckBuilderView" class="flex-1 flex flex-col overflow-hidden">
                 <div id="deckBuilderContainer" class="flex gap-6 h-full">
                     <div id="cardDatabaseSection"
-                        class="bg-[var(--color-surface-1) p-4 rounded-lg flex flex-col min-w-0 flex-shrink-0"
+                        class="bg-[var(--color-surface-1) p-4 rounded-lg flex flex-col min-w-0 flex-shrink-0 h-full"
                         style="width: 322px;">
                         <h2 class="text-xl font-semibold mb-3">Card Database</h2>
                         <div class="flex flex-wrap items-center gap-1.5 mb-2">
@@ -28696,7 +28815,7 @@
                                 class="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold py-2 px-4 rounded-md transition-colors flex-shrink-0">Search</button>
                         </div>
                         <!-- Card Database List -->
-                        <div id="cardDbList" class="overflow-y-auto overflow-x-hidden pr-2" style="max-height: 900px;"></div>
+                        <div id="cardDbList" class="overflow-y-auto overflow-x-hidden pr-2 flex-1 min-h-0"></div>
                     </div>
                     <div id="resizeHandle"
                         class="w-2 bg-slate-600 hover:bg-slate-500 cursor-col-resize flex-shrink-0 transition-colors"
