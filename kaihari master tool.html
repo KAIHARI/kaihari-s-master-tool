@@ -1370,6 +1370,265 @@
             };
         })();
         // ============================================================================
+        // MODULE: LongPressManager
+        // Lines: 1373-1523
+        // Purpose: Reusable long-press detection with circular progress indicator
+        // Key Methods: attach(), cancel(), createProgressIndicator()
+        // ============================================================================
+        const LongPressManager = (function() {
+            'use strict';
+
+            const LONG_PRESS_DURATION = 500; // ms
+            const MOVEMENT_THRESHOLD = 10; // px - cancels long-press if moved beyond this
+
+            // Store active long-press instances
+            const activeInstances = new WeakMap();
+
+            /**
+             * Create a circular progress indicator element
+             * @param {HTMLElement} targetElement - The element to position over
+             * @returns {HTMLElement} The progress indicator element
+             */
+            function createProgressIndicator(targetElement) {
+                const indicator = document.createElement('div');
+                indicator.className = 'long-press-indicator';
+
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.classList.add('progress-ring');
+                svg.setAttribute('width', '40');
+                svg.setAttribute('height', '40');
+                svg.setAttribute('viewBox', '0 0 40 40');
+
+                // Background circle
+                const bgCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                bgCircle.classList.add('progress-ring-bg');
+                bgCircle.setAttribute('cx', '20');
+                bgCircle.setAttribute('cy', '20');
+                bgCircle.setAttribute('r', '18');
+
+                // Progress circle
+                const progressCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                progressCircle.classList.add('progress-ring-circle');
+                progressCircle.setAttribute('cx', '20');
+                progressCircle.setAttribute('cy', '20');
+                progressCircle.setAttribute('r', '18');
+
+                svg.appendChild(bgCircle);
+                svg.appendChild(progressCircle);
+                indicator.appendChild(svg);
+
+                return indicator;
+            }
+
+            /**
+             * Show progress indicator on target element
+             * @param {HTMLElement} target - The target element
+             * @returns {HTMLElement} The indicator element
+             */
+            function showIndicator(target) {
+                const indicator = createProgressIndicator(target);
+                document.body.appendChild(indicator);
+
+                // Position indicator over the target element
+                const rect = target.getBoundingClientRect();
+                indicator.style.left = `${rect.left + rect.width / 2 - 20}px`;
+                indicator.style.top = `${rect.top + rect.height / 2 - 20}px`;
+
+                // Trigger animation
+                requestAnimationFrame(() => {
+                    indicator.classList.add('active');
+                });
+
+                return indicator;
+            }
+
+            /**
+             * Hide and remove progress indicator
+             * @param {HTMLElement} indicator - The indicator element to remove
+             */
+            function hideIndicator(indicator) {
+                if (indicator && indicator.parentNode) {
+                    indicator.classList.remove('active');
+                    indicator.classList.add('complete');
+
+                    // Remove from DOM after animation completes
+                    setTimeout(() => {
+                        if (indicator.parentNode) {
+                            indicator.parentNode.removeChild(indicator);
+                        }
+                    }, 200);
+                }
+            }
+
+            /**
+             * Handle pointer down event - start long-press timer
+             */
+            function handlePointerDown(e) {
+                // Only handle left mouse button or touch
+                if (e.type === 'mousedown' && e.button !== 0) return;
+
+                const target = e.currentTarget;
+                const instance = activeInstances.get(target);
+
+                if (!instance) {
+                    return;
+                }
+
+                // Store initial position for movement detection
+                instance.startX = e.clientX || e.touches?.[0]?.clientX;
+                instance.startY = e.clientY || e.touches?.[0]?.clientY;
+                instance.hasMoved = false;
+
+                // Start the timer
+                instance.timer = setTimeout(() => {
+                    if (instance && !instance.hasMoved && !instance.cancelled) {
+                        // Long press completed!
+                        if (instance.onPress) {
+                            instance.onPress();
+                        }
+                        cleanup(target);
+                    }
+                }, LONG_PRESS_DURATION);
+
+                // Show progress indicator
+                instance.indicator = showIndicator(target);
+            }
+
+            /**
+             * Handle pointer move event - check for movement threshold
+             */
+            function handlePointerMove(e) {
+                const target = e.currentTarget;
+                const instance = activeInstances.get(target);
+                if (!instance || !instance.timer) return;
+
+                const currentX = e.clientX || e.touches?.[0]?.clientX;
+                const currentY = e.clientY || e.touches?.[0]?.clientY;
+
+                const deltaX = Math.abs(currentX - instance.startX);
+                const deltaY = Math.abs(currentY - instance.startY);
+
+                // Cancel if moved beyond threshold
+                if (deltaX > MOVEMENT_THRESHOLD || deltaY > MOVEMENT_THRESHOLD) {
+                    instance.hasMoved = true;
+                    cancel(target);
+                }
+            }
+
+            /**
+             * Handle pointer up event - cancel if timer hasn't fired
+             */
+            function handlePointerUp(e) {
+                const target = e.currentTarget;
+                cancel(target);
+            }
+
+            /**
+             * Handle pointer leave event - cancel if pointer leaves element
+             */
+            function handlePointerLeave(e) {
+                const target = e.currentTarget;
+                cancel(target);
+            }
+
+            /**
+             * Clean up event listeners and state for a target element
+             */
+            function cleanup(target) {
+                const instance = activeInstances.get(target);
+                if (!instance) return;
+
+                // Clear timer
+                if (instance.timer) {
+                    clearTimeout(instance.timer);
+                    instance.timer = null;
+                }
+
+                // Hide indicator
+                if (instance.indicator) {
+                    hideIndicator(instance.indicator);
+                    instance.indicator = null;
+                }
+
+                // Clear the WeakMap entry
+                activeInstances.delete(target);
+            }
+
+            /**
+             * Cancel long-press for a target element
+             * @param {HTMLElement} target - The target element
+             */
+            function cancel(target) {
+                const instance = activeInstances.get(target);
+                if (!instance) return;
+
+                instance.cancelled = true;
+
+                // Clear timer
+                if (instance.timer) {
+                    clearTimeout(instance.timer);
+                    instance.timer = null;
+                }
+
+                // Hide indicator
+                if (instance.indicator) {
+                    hideIndicator(instance.indicator);
+                    instance.indicator = null;
+                }
+
+                // Call cancel callback if provided
+                if (instance.onCancel) {
+                    instance.onCancel();
+                }
+
+                // Clean up
+                activeInstances.delete(target);
+            }
+
+            /**
+             * Attach long-press handler to an element
+             * @param {HTMLElement} element - The element to attach to
+             * @param {Object} options - Configuration options
+             * @param {Function} options.onPress - Callback when long-press completes
+             * @param {Function} [options.onCancel] - Optional callback when cancelled
+             */
+            function attach(element, options) {
+                if (!element || !options.onPress) {
+                    console.warn('LongPressManager: Invalid element or missing onPress callback');
+                    return;
+                }
+
+                // Store instance data
+                const instance = {
+                    onPress: options.onPress,
+                    onCancel: options.onCancel,
+                    timer: null,
+                    indicator: null,
+                    startX: 0,
+                    startY: 0,
+                    hasMoved: false,
+                    cancelled: false
+                };
+
+                activeInstances.set(element, instance);
+
+                // Attach event listeners
+                element.addEventListener('mousedown', handlePointerDown);
+                element.addEventListener('touchstart', handlePointerDown, { passive: true });
+                element.addEventListener('mousemove', handlePointerMove);
+                element.addEventListener('touchmove', handlePointerMove, { passive: true });
+                element.addEventListener('mouseup', handlePointerUp);
+                element.addEventListener('touchend', handlePointerUp);
+                element.addEventListener('mouseleave', handlePointerLeave);
+            }
+
+            return {
+                attach,
+                cancel,
+                LONG_PRESS_DURATION
+            };
+        })();
+        // ============================================================================
         //     MODULE: UITuner
         //     Lines: 1367-1550
         //     Purpose: Temporary UI fine-tuning module for visual adjustments
@@ -1825,8 +2084,14 @@
         let allCardsCache = []; // Cache for all cards fetched from API
         let lastAutocompleteMatches = []; // Store last autocomplete matches for space key shortcut
         let editMode = false; // Controls whether delete buttons are shown
-        let extraDeckVisible = false; // Controls whether extra deck section is visible
+        let extraDeckVisible = true; // Controls whether extra deck section is visible
         let sideDeckVisible = true; // Controls whether side deck section is visible
+        // Store flex-grow ratios for each visibility state to preserve user sizing preferences
+        let deckRatios = {
+            allVisible: { mainRatio: 0.5, sideRatio: 0.25, extraRatio: 0.25 },
+            extraHidden: { mainRatio: 0.67, sideRatio: 0.33, extraRatio: 0 },
+            sideHidden: { mainRatio: 0.67, sideRatio: 0, extraRatio: 0.33 }
+        };
         let databaseVisible = true; // Controls whether card database section is visible
         let cardDatabaseView = 'grid'; // 'list' or 'grid' - controls card database view mode
         let currentDeckFormat = 'ydk'; // 'ydk' or 'ydkx' - current deck file format
@@ -1915,7 +2180,7 @@
             sandboxBoard: null,
 
             // Navigation
-            navDeckBuilder: null, navShootout: null, headerTitle: null, snapshotBtn: null, fullscreenBtn: null, duelSimulatorBtn: null, chibiLogo: null,
+            navDeckBuilder: null, navSiding: null, navShootout: null, headerTitle: null, snapshotBtn: null, fullscreenBtn: null, duelSimulatorBtn: null, chibiLogo: null,
 
             // Card Database
             cardSearchInput: null, addCardBtn: null, cardDbList: null, cardAutocompleteList: null, autocompleteModeToggle: null, editDbToggle: null, viewToggleBtn: null, resetDbBtn: null, databaseSourceToggle: null, extraDeckToggle: null,
@@ -1956,10 +2221,11 @@
             mainDeckList: null, sideDeckList: null, extraDeckList: null, deckNameInput: null, saveDeckBtn: null,
             deckSelector: null, loadDeckBtn: null, deleteDeckBtn: null, exportDeckBtn: null, exportDeckYDKXBtn: null,
             exportDeckClipboardBtn: null, importDeckClipboardBtn: null, importDeckInput: null, deckCountDisplay: null, deckTypeCountsDisplay: null,
-            deckScaleSlider: null, scaleTargetBtn: null, cardsPerRowDisplay: null, manageSidingBtn: null, toggleExtraDeckBtn: null, extraDeckSection: null, deckGridContainer: null,
+            deckScaleSlider: null, scaleTargetBtn: null, cardsPerRowDisplay: null, toggleExtraDeckBtn: null, extraDeckSection: null, deckGridContainer: null,
             deckOptionsBtn: null, deckOptionsDropdown: null, autoAlignByCardSizeBtn: null, autoAlignByTotalSizeBtn: null, resetHeightsBtn: null, resetToDefaultSizesBtn: null,
             toggleSideDeckBtn: null, toggleDatabaseBtn: null, sideDeckSection: null, mainDeckSection: null,
             mainSideResizeHandle: null, sideExtraResizeHandle: null,
+            alignByCardSizeBtn: null, alignByTotalSizeBtn: null,
 
             // YDK Folder Management
             ydkFolderStatus: null, ydkDeckSelector: null, setDefaultDeckBtn: null, quickReselectBtn: null,
@@ -2035,6 +2301,33 @@
             const uiKeys = Object.keys(UI); // This function finds all the elements by their ID.
             for (const key of uiKeys) {
                 UI[key] = document.getElementById(key);
+            }
+        }
+
+        // ============================================================================
+        // CARD DATABASE SCROLLBAR FIX
+        // ============================================================================
+        /**
+         * Sets explicit height on card database section to enable scrolling.
+         *
+         * The scrollbar requires an explicit constrained height on the parent element.
+         * CSS `h-full` (height: 100%) doesn't provide this when the parent's height is
+         * determined by flex layout (flex-1). This function calculates and sets the
+         * height in JavaScript as an explicit pixel value.
+         */
+        function setCardDatabaseHeight() {
+            if (UI.cardDatabaseSection && UI.deckBuilderContainer) {
+                // Only set explicit height in horizontal mode (not vertical/portrait)
+                const isVertical = UI.deckBuilderContainer.offsetWidth < 1024;
+                if (!isVertical) {
+                    const parentHeight = UI.deckBuilderContainer.offsetHeight;
+                    UI.cardDatabaseSection.style.height = `${parentHeight}px`;
+                    console.log(`[setCardDatabaseHeight] Set explicit height: ${parentHeight}px`);
+                } else {
+                    // In vertical mode, use flex-basis instead of explicit height
+                    // This allows the vertical resize to work properly
+                    UI.cardDatabaseSection.style.height = '';
+                }
             }
         }
 
@@ -2142,6 +2435,14 @@
             // 2. Find all UI elements and set up the theme.
             initializeUI();
             loadEasterEggCardPool(); // Initialize easter egg card pool
+
+            // 2.05. Fix card database scrollbar by setting explicit height
+            setCardDatabaseHeight();
+
+            // Add window resize listener to update card database height
+            window.addEventListener('resize', () => {
+                requestAnimationFrame(setCardDatabaseHeight);
+            });
 
             // 2.1. Create floating help button for keyboard shortcuts
             createFloatingHelpButton();
@@ -2544,7 +2845,7 @@
             if (UI.cardDatabaseSection && UI.cardDatabaseSection.style.width === '100%') {
                 console.log('SAFETY FIX: Card database was set to 100% width, resetting to 33.333%');
                 UI.cardDatabaseSection.style.width = '33.333%';
-                UI.cardDatabaseSection.style.height = '';
+                // Don't clear height - let CSS h-full class work to maintain scrolling capability
             }
 
             // Load the extra deck visibility state
@@ -2569,7 +2870,12 @@
             }
 
             // Load deck resize configuration
-            loadDeckResizeConfiguration();
+            // Use requestAnimationFrame to ensure DOM is ready
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    loadDeckResizeConfiguration();
+                });
+            });
 
             // Load YDK folder configuration
             loadDefaultYDKDeck();
@@ -2660,6 +2966,7 @@
         }
 
         // Handle window resize to switch db cards-per-row between portrait/desktop modes
+        // Also handle deck section proportional resizing
         window.addEventListener('resize', debounce(function() {
             const isPortrait = window.innerWidth < 1024;
 
@@ -2681,8 +2988,27 @@
                 }
             }
 
+            // Always reapply deck section ratios on window resize to maintain proportions
+            // Use requestAnimationFrame to ensure container has finished reflowing
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    try {
+                        const savedConfig = localStorage.getItem('deckResizeConfig');
+                        if (savedConfig && savedConfig !== '{}') {
+                            const config = JSON.parse(savedConfig);
+                            // Only apply if we have ratio-based config
+                            if (config.mainRatio !== undefined && config.sideRatio !== undefined && config.extraRatio !== undefined) {
+                                applyDeckRatios(config.mainRatio, config.sideRatio, config.extraRatio);
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Error applying deck ratios on resize:', e);
+                    }
+                });
+            });
+
             lastIsPortrait = isPortrait;
-        }, 100));
+        }, 150));
 
         // --- DECK SCALE FUNCTIONS ---
         function cycleScaleTarget() {
@@ -3075,6 +3401,157 @@
             showMessage('All deck settings reset to default values');
         }
 
+        /**
+         * Iteratively adjusts flex ratios until card widths are equal across sections.
+         * This accounts for browser rendering quirks that mathematical formulas cannot capture.
+         *
+         * @param {number} mainCardsPerRow - Number of cards per row in main deck
+         * @param {number} sideCardsPerRow - Number of cards per row in side deck
+         * @param {number} extraCardsPerRow - Number of cards per row in extra deck
+         * @param {number} maxIterations - Maximum iterations (default: 10)
+         * @param {number} tolerance - Acceptable variation in pixels (default: 0.5px)
+         * @returns {Promise<Object>} The final flex ratios
+         */
+        function iterativeAlignByCardSize(mainCardsPerRow, sideCardsPerRow, extraCardsPerRow,
+                                           maxIterations = 10, tolerance = 0.5) {
+            return new Promise((resolve) => {
+                const gridContainer = UI.deckGridContainer;
+                const extraVisible = UI.extraDeckSection?.offsetParent !== null;
+                const availableWidth = getAvailableFlexWidth(gridContainer);
+
+                // Read CSS values
+                const mainGridStyles = UI.mainDeckList ? window.getComputedStyle(UI.mainDeckList) : null;
+                const gridPadding = mainGridStyles ?
+                    (parseFloat(mainGridStyles.paddingLeft) + parseFloat(mainGridStyles.paddingRight)) : 2;
+
+                // Calculate initial ratios using the formula as starting point
+                const numSections = extraVisible ? 3 : 2;
+                const totalCardsPerRow = mainCardsPerRow + sideCardsPerRow + (extraVisible ? extraCardsPerRow : 0);
+                const cardWidth = (availableWidth - numSections * gridPadding) / totalCardsPerRow;
+
+                let mainRatio = (mainCardsPerRow * cardWidth + gridPadding) / availableWidth;
+                let sideRatio = (sideCardsPerRow * cardWidth + gridPadding) / availableWidth;
+                let extraRatio = extraVisible ? (extraCardsPerRow * cardWidth + gridPadding) / availableWidth : 0;
+
+                // Normalize
+                let totalRatio = mainRatio + sideRatio + extraRatio;
+                mainRatio /= totalRatio;
+                sideRatio /= totalRatio;
+                extraRatio /= totalRatio;
+
+                console.log(`[Iterative Align] Starting alignment with initial ratios:`,
+                            `main=${mainRatio.toFixed(4)}, side=${sideRatio.toFixed(4)}, extra=${extraRatio.toFixed(4)}`);
+
+                let iteration = 0;
+
+                function applyAndMeasure() {
+                    // Apply current ratios
+                    if (UI.mainDeckSection) {
+                        UI.mainDeckSection.style.flexGrow = mainRatio;
+                        UI.mainDeckSection.style.flexShrink = '1';
+                        UI.mainDeckSection.style.flexBasis = '0';
+                        UI.mainDeckSection.style.minWidth = '100px';
+                        UI.mainDeckSection.style.removeProperty('width');
+                        UI.mainDeckSection.style.removeProperty('max-width');
+                    }
+                    if (UI.sideDeckSection) {
+                        UI.sideDeckSection.style.flexGrow = sideRatio;
+                        UI.sideDeckSection.style.flexShrink = '1';
+                        UI.sideDeckSection.style.flexBasis = '0';
+                        UI.sideDeckSection.style.minWidth = '100px';
+                        UI.sideDeckSection.style.removeProperty('width');
+                        UI.sideDeckSection.style.removeProperty('max-width');
+                    }
+                    if (UI.extraDeckSection && extraVisible) {
+                        UI.extraDeckSection.style.flexGrow = extraRatio;
+                        UI.extraDeckSection.style.flexShrink = '1';
+                        UI.extraDeckSection.style.flexBasis = '0';
+                        UI.extraDeckSection.style.minWidth = '100px';
+                        UI.extraDeckSection.style.removeProperty('width');
+                        UI.extraDeckSection.style.removeProperty('max-width');
+                    }
+
+                    // Force layout reflow
+                    gridContainer.offsetHeight;
+
+                    // Wait for layout to settle, then measure
+                    setTimeout(() => {
+                        // Measure actual card widths
+                        const mainGrid = UI.mainDeckList;
+                        const sideGrid = UI.sideDeckList;
+                        const extraGrid = UI.extraDeckList;
+
+                        if (!mainGrid || !sideGrid) {
+                            console.error('[Iterative Align] Grids not found');
+                            resolve({ mainRatio, sideRatio, extraRatio });
+                            return;
+                        }
+
+                        const mainCardW = mainGrid.clientWidth / mainCardsPerRow;
+                        const sideCardW = sideGrid.clientWidth / sideCardsPerRow;
+                        const extraCardW = extraVisible && extraGrid ? extraGrid.clientWidth / extraCardsPerRow : sideCardW;
+
+                        const avgWidth = (mainCardW + sideCardW + (extraVisible ? extraCardW : sideCardW)) /
+                                         (extraVisible ? 3 : 2);
+
+                        const maxDiff = Math.max(
+                            Math.abs(mainCardW - avgWidth),
+                            Math.abs(sideCardW - avgWidth),
+                            extraVisible ? Math.abs(extraCardW - avgWidth) : 0
+                        );
+
+                        console.log(`[Iterative Align] Iteration ${iteration + 1}:`,
+                                    `mainCard=${mainCardW.toFixed(2)}px, sideCard=${sideCardW.toFixed(2)}px,`,
+                                    `extraCard=${extraCardW.toFixed(2)}px, maxDiff=${maxDiff.toFixed(2)}px`);
+
+                        // Check convergence
+                        if (maxDiff <= tolerance || iteration >= maxIterations) {
+                            console.log(`[Iterative Align] ✓ Converged after ${iteration + 1} iterations!`);
+                            resolve({ mainRatio, sideRatio, extraRatio, avgWidth });
+                            return;
+                        }
+
+                        // Calculate adjustment factors (proportional correction)
+                        // If main cards are too wide, reduce mainRatio, etc.
+                        const targetWidth = avgWidth;
+
+                        // Proportional adjustment: adjust ratio by (target / actual)
+                        // This is a smooth convergence method
+                        const adjustFactor = 0.5; // Damping factor to prevent oscillation
+
+                        if (mainCardsPerRow > 0) {
+                            const mainTarget = mainCardsPerRow * targetWidth;
+                            const mainActual = mainGrid.clientWidth;
+                            mainRatio = mainRatio * (1 + adjustFactor * (mainTarget - mainActual) / mainActual);
+                        }
+
+                        if (sideCardsPerRow > 0) {
+                            const sideTarget = sideCardsPerRow * targetWidth;
+                            const sideActual = sideGrid.clientWidth;
+                            sideRatio = sideRatio * (1 + adjustFactor * (sideTarget - sideActual) / sideActual);
+                        }
+
+                        if (extraVisible && extraCardsPerRow > 0 && extraGrid) {
+                            const extraTarget = extraCardsPerRow * targetWidth;
+                            const extraActual = extraGrid.clientWidth;
+                            extraRatio = extraRatio * (1 + adjustFactor * (extraTarget - extraActual) / extraActual);
+                        }
+
+                        // Normalize to sum to 1
+                        totalRatio = mainRatio + sideRatio + extraRatio;
+                        mainRatio /= totalRatio;
+                        sideRatio /= totalRatio;
+                        extraRatio /= totalRatio;
+
+                        iteration++;
+                        applyAndMeasure();
+                    }, 50); // Short delay for layout to settle
+                }
+
+                applyAndMeasure();
+            });
+        }
+
         // Align by Card Size (Rows): Makes all sections have the same number of rows
         function autoAlignByCardSize() {
             const gridContainer = UI.deckGridContainer;
@@ -3098,96 +3575,189 @@
                 return;
             }
 
-            // Calculate rows for each section
-            const mainRows = Math.ceil(mainCardCount / mainCardsPerRow);
-            const sideRows = Math.ceil(sideCardCount / sideCardsPerRow);
-            const extraRows = Math.ceil(extraCardCount / extraCardsPerRow);
+            // Read CSS values dynamically from computed styles to account for tuning parameters
+            const mainGridStyles = UI.mainDeckList ? window.getComputedStyle(UI.mainDeckList) : null;
+            if (!mainGridStyles) {
+                showMessage('Cannot read computed styles');
+                return;
+            }
 
-            // Find the section with the most rows (will be our reference)
-            const maxRows = Math.max(mainRows, sideRows, extraRows);
+            console.log(`[Align by Card Size] Starting iterative alignment...`);
+            console.log(`[Align by Card Size] Cards per row: main=${mainCardsPerRow}, side=${sideCardsPerRow}, extra=${extraCardsPerRow}`);
 
-            console.log(`[Align by Rows] Rows: main=${mainRows}, side=${sideRows}, extra=${extraRows}, max=${maxRows}`);
+            // Run iterative alignment - uses feedback loop to adjust ratios until card widths match
+            iterativeAlignByCardSize(mainCardsPerRow, sideCardsPerRow, extraCardsPerRow)
+                .then((ratios) => {
+                    // Update card sizes using updateCardsPerRow which handles padding correctly
+                    updateCardsPerRow('main', mainCardsPerRow);
+                    updateCardsPerRow('side', sideCardsPerRow);
+                    updateCardsPerRow('extra', extraCardsPerRow);
 
-            // Get available width from container
-            const containerWidth = gridContainer.clientWidth;
-            const gap = 16; // gap-4 = 16px between flex items
-            const resizeHandleWidth = 8; // w-2 = 8px for each resize handle
-            const visibleSections = (UI.extraDeckSection?.offsetParent !== null) ? 3 : 2;
-            const numResizeHandles = visibleSections - 1; // 2 handles for 3 sections, 1 handle for 2 sections
-            const totalGap = (gap * (visibleSections + numResizeHandles - 1)) + (resizeHandleWidth * numResizeHandles);
+                    // Update the display
+                    if (UI.cardsPerRowDisplay && scaleTarget) {
+                        const currentCardsPerRow = getCurrentCardsPerRow(scaleTarget);
+                        UI.cardsPerRowDisplay.textContent = currentCardsPerRow;
+                    }
 
-            // For equal card size across all sections, calculate required card size
-            // Each section needs: sectionWidth = cardsPerRow × cardSize + 16 (grid padding)
-            // Total width: sections + gaps + resize handles
-            const totalCardsPerRow = mainCardsPerRow + sideCardsPerRow + (UI.extraDeckSection?.offsetParent !== null ? extraCardsPerRow : 0);
-            const totalPadding = 16 * visibleSections;
-            const cardSize = (containerWidth - totalPadding - totalGap) / totalCardsPerRow;
+                    // Store the aligned state
+                    gridContainer.dataset.autoAligned = 'true';
 
-            // Calculate section widths based on card size
-            let mainSectionWidth = (mainCardsPerRow * cardSize) + 16;
-            let sideSectionWidth = (sideCardsPerRow * cardSize) + 16;
-            let extraSectionWidth = (extraCardsPerRow * cardSize) + 16;
+                    // Save the new ratio-based configuration so window resizes maintain proportions
+                    saveDeckResizeConfiguration();
 
-            // Floor to ensure we never exceed container width
-            mainSectionWidth = Math.floor(mainSectionWidth);
-            sideSectionWidth = Math.floor(sideSectionWidth);
-            extraSectionWidth = Math.floor(extraSectionWidth);
+                    // Close dropdown
+                    UI.deckOptionsDropdown.classList.add('hidden');
 
-            // Calculate total and distribute remaining pixels
-            const totalWidth = mainSectionWidth + sideSectionWidth + (UI.extraDeckSection?.offsetParent !== null ? extraSectionWidth : 0) + totalGap;
-            let remainder = containerWidth - totalWidth;
+                    console.log(`[Align by Card Size] Complete! Final ratios:`,
+                                `main=${ratios.mainRatio.toFixed(4)}, side=${ratios.sideRatio.toFixed(4)},`,
+                                `extra=${ratios.extraRatio.toFixed(4)}, avgWidth=${ratios.avgWidth.toFixed(2)}px`);
+                })
+                .catch((error) => {
+                    console.error('[Align by Card Size] Alignment failed:', error);
+                    showMessage('Alignment failed');
+                });
+        }
 
-            // Distribute remainder to main (and extra if visible) up to 1px each to avoid overflow
-            if (remainder > 0) {
-                mainSectionWidth += 1;
-                remainder -= 1;
-                if (remainder > 0 && UI.extraDeckSection?.offsetParent !== null) {
-                    extraSectionWidth += 1;
-                    remainder -= 1;
+        /**
+         * Iteratively adjusts flex ratios until total heights are equal across sections.
+         * Measures actual rendered heights to account for browser rendering quirks.
+         *
+         * @param {number} mainCardsPerRow - Number of cards per row in main deck
+         * @param {number} sideCardsPerRow - Number of cards per row in side deck
+         * @param {number} extraCardsPerRow - Number of cards per row in extra deck
+         * @param {number} mainCardCount - Number of cards in main deck
+         * @param {number} sideCardCount - Number of cards in side deck
+         * @param {number} extraCardCount - Number of cards in extra deck
+         * @param {number} maxIterations - Maximum iterations (default: 15)
+         * @param {number} tolerance - Acceptable variation in pixels (default: 1px)
+         * @returns {Promise<Object>} The final flex ratios
+         */
+        function iterativeAlignByTotalSize(mainCardsPerRow, sideCardsPerRow, extraCardsPerRow,
+                                           mainCardCount, sideCardCount, extraCardCount,
+                                           maxIterations = 15, tolerance = 1) {
+            return new Promise((resolve) => {
+                const gridContainer = UI.deckGridContainer;
+                const extraVisible = UI.extraDeckSection?.offsetParent !== null;
+                const availableWidth = getAvailableFlexWidth(gridContainer);
+
+                // Get grid gap for height calculations
+                const mainGrid = UI.mainDeckList;
+                const gridGap = mainGrid ? parseFloat(getComputedStyle(mainGrid).columnGap) || 0 : 0;
+
+                // Calculate initial ratios using square root of card count as starting point
+                const totalSqrt = Math.sqrt(mainCardCount) + Math.sqrt(sideCardCount) + (extraVisible ? Math.sqrt(extraCardCount) : 0);
+                let mainRatio = Math.sqrt(mainCardCount) / totalSqrt;
+                let sideRatio = Math.sqrt(sideCardCount) / totalSqrt;
+                let extraRatio = extraVisible ? Math.sqrt(extraCardCount) / totalSqrt : 0;
+
+                console.log(`[Iterative Align Total] Starting alignment with initial ratios:`,
+                            `main=${mainRatio.toFixed(4)}, side=${sideRatio.toFixed(4)}, extra=${extraRatio.toFixed(4)}`);
+
+                let iteration = 0;
+
+                function applyAndMeasure() {
+                    // Apply current ratios
+                    if (UI.mainDeckSection) {
+                        UI.mainDeckSection.style.flexGrow = mainRatio;
+                        UI.mainDeckSection.style.flexShrink = '1';
+                        UI.mainDeckSection.style.flexBasis = '0';
+                        UI.mainDeckSection.style.minWidth = '100px';
+                        UI.mainDeckSection.style.removeProperty('width');
+                        UI.mainDeckSection.style.removeProperty('max-width');
+                    }
+                    if (UI.sideDeckSection) {
+                        UI.sideDeckSection.style.flexGrow = sideRatio;
+                        UI.sideDeckSection.style.flexShrink = '1';
+                        UI.sideDeckSection.style.flexBasis = '0';
+                        UI.sideDeckSection.style.minWidth = '100px';
+                        UI.sideDeckSection.style.removeProperty('width');
+                        UI.sideDeckSection.style.removeProperty('max-width');
+                    }
+                    if (UI.extraDeckSection && extraVisible) {
+                        UI.extraDeckSection.style.flexGrow = extraRatio;
+                        UI.extraDeckSection.style.flexShrink = '1';
+                        UI.extraDeckSection.style.flexBasis = '0';
+                        UI.extraDeckSection.style.minWidth = '100px';
+                        UI.extraDeckSection.style.removeProperty('width');
+                        UI.extraDeckSection.style.removeProperty('max-width');
+                    }
+
+                    // Force layout reflow
+                    gridContainer.offsetHeight;
+
+                    // Wait for layout to settle, then measure
+                    setTimeout(() => {
+                        // Measure actual heights from the grids (scrollHeight gives total content height)
+                        const mainGrid = UI.mainDeckList;
+                        const sideGrid = UI.sideDeckList;
+                        const extraGrid = UI.extraDeckList;
+
+                        if (!mainGrid || !sideGrid) {
+                            console.error('[Iterative Align Total] Grids not found');
+                            resolve({ mainRatio, sideRatio, extraRatio });
+                            return;
+                        }
+
+                        // Use offsetHeight to get the visible rendered height (not scrollable overflow)
+                        const mainH = mainGrid.offsetHeight;
+                        const sideH = sideGrid.offsetHeight;
+                        const extraH = extraVisible && extraGrid ? extraGrid.offsetHeight : mainH;
+
+                        const avgHeight = (mainH + sideH + (extraVisible ? extraH : sideH)) / (extraVisible ? 3 : 2);
+
+                        const maxDiff = Math.max(
+                            Math.abs(mainH - avgHeight),
+                            Math.abs(sideH - avgHeight),
+                            extraVisible ? Math.abs(extraH - avgHeight) : 0
+                        );
+
+                        console.log(`[Iterative Align Total] Iteration ${iteration + 1}:`,
+                                    `mainH=${mainH.toFixed(1)}px, sideH=${sideH.toFixed(1)}px,`,
+                                    `extraH=${extraH.toFixed(1)}px, maxDiff=${maxDiff.toFixed(1)}px`);
+
+                        // Check convergence
+                        if (maxDiff <= tolerance || iteration >= maxIterations) {
+                            console.log(`[Iterative Align Total] ✓ Converged after ${iteration + 1} iterations!`);
+                            resolve({ mainRatio, sideRatio, extraRatio, avgHeight });
+                            return;
+                        }
+
+                        // Calculate adjustment factors (proportional correction)
+                        // If main height is too tall, reduce mainRatio, etc.
+                        const targetHeight = avgHeight;
+
+                        // Proportional adjustment: adjust ratio by (target / actual)
+                        // This is a smooth convergence method
+                        const adjustFactor = 0.4; // Damping factor to prevent oscillation
+
+                        if (mainCardCount > 0) {
+                            const mainActual = mainH;
+                            mainRatio = mainRatio * (1 + adjustFactor * (targetHeight - mainActual) / mainActual);
+                        }
+
+                        if (sideCardCount > 0) {
+                            const sideActual = sideH;
+                            sideRatio = sideRatio * (1 + adjustFactor * (targetHeight - sideActual) / sideActual);
+                        }
+
+                        if (extraVisible && extraCardCount > 0 && extraGrid) {
+                            const extraActual = extraH;
+                            extraRatio = extraRatio * (1 + adjustFactor * (targetHeight - extraActual) / extraActual);
+                        }
+
+                        // Normalize to sum to 1
+                        const total = mainRatio + sideRatio + extraRatio;
+                        mainRatio /= total;
+                        sideRatio /= total;
+                        extraRatio /= total;
+
+                        iteration++;
+                        applyAndMeasure();
+                    }, 100); // Increased delay for layout to settle
                 }
-                if (remainder > 0) {
-                    sideSectionWidth += 1;
-                }
-            }
 
-            console.log(`Card size: ${cardSize.toFixed(1)}px, Section widths: main=${mainSectionWidth}px, side=${sideSectionWidth}px, extra=${extraSectionWidth}px, total=${mainSectionWidth + sideSectionWidth + (UI.extraDeckSection?.offsetParent !== null ? extraSectionWidth : 0) + totalGap}px, container=${containerWidth}px`);
-
-            // Apply the new section widths
-            if (UI.mainDeckSection) {
-                UI.mainDeckSection.style.width = `${mainSectionWidth}px`;
-                UI.mainDeckSection.style.minWidth = `${mainSectionWidth}px`;
-                UI.mainDeckSection.style.flexGrow = '0';
-                UI.mainDeckSection.style.flexShrink = '0';
-            }
-            if (UI.sideDeckSection) {
-                UI.sideDeckSection.style.width = `${sideSectionWidth}px`;
-                UI.sideDeckSection.style.minWidth = `${sideSectionWidth}px`;
-                UI.sideDeckSection.style.flexGrow = '0';
-                UI.sideDeckSection.style.flexShrink = '0';
-            }
-            if (UI.extraDeckSection && UI.extraDeckSection.offsetParent !== null) {
-                UI.extraDeckSection.style.width = `${extraSectionWidth}px`;
-                UI.extraDeckSection.style.minWidth = `${extraSectionWidth}px`;
-                UI.extraDeckSection.style.flexGrow = '0';
-                UI.extraDeckSection.style.flexShrink = '0';
-            }
-
-            // Update card sizes using updateCardsPerRow which handles padding correctly
-            updateCardsPerRow('main', mainCardsPerRow);
-            updateCardsPerRow('side', sideCardsPerRow);
-            updateCardsPerRow('extra', extraCardsPerRow);
-
-            // Update the display
-            if (UI.cardsPerRowDisplay && scaleTarget) {
-                const currentCardsPerRow = getCurrentCardsPerRow(scaleTarget);
-                UI.cardsPerRowDisplay.textContent = currentCardsPerRow;
-            }
-
-            // Store the aligned state
-            gridContainer.dataset.autoAligned = 'true';
-
-            // Close dropdown
-            UI.deckOptionsDropdown.classList.add('hidden');
+                applyAndMeasure();
+            });
         }
 
         // Align by Total Size: Makes total height of all cards equal across sections
@@ -3213,101 +3783,42 @@
                 return;
             }
 
-            // For equal total height: (cardCount / cardsPerRow) × cardSize must be equal
-            // This means sections with more cards need proportionally smaller card sizes
-            // cardSize[i] = (H × cardsPerRow[i]) / cardCount[i] where H is common total height
+            console.log(`[Align by Total Size] Starting iterative alignment...`);
+            console.log(`[Align by Total Size] Cards: main=${mainCardCount}, side=${sideCardCount}, extra=${extraCardCount}`);
+            console.log(`[Align by Total Size] Cards per row: main=${mainCardsPerRow}, side=${sideCardsPerRow}, extra=${extraCardsPerRow}`);
 
-            // Get container width
-            const containerWidth = gridContainer.clientWidth;
-            const gap = 16; // gap-4 = 16px between flex items
-            const resizeHandleWidth = 8; // w-2 = 8px for each resize handle
-            const visibleSections = (UI.extraDeckSection?.offsetParent !== null) ? 3 : 2;
-            const numResizeHandles = visibleSections - 1;
-            const totalGap = (gap * (visibleSections + numResizeHandles - 1)) + (resizeHandleWidth * numResizeHandles);
+            // Run iterative alignment - uses feedback loop to adjust ratios until heights match
+            iterativeAlignByTotalSize(mainCardsPerRow, sideCardsPerRow, extraCardsPerRow,
+                                     mainCardCount, sideCardCount, extraCardCount)
+                .then((ratios) => {
+                    // Update card sizes using updateCardsPerRow which handles padding correctly
+                    updateCardsPerRow('main', mainCardsPerRow);
+                    updateCardsPerRow('side', sideCardsPerRow);
+                    updateCardsPerRow('extra', extraCardsPerRow);
 
-            // For equal total height, we need:
-            // sectionWidth = cardsPerRow × cardSize + 16
-            // and cardSize scales with: (cardsPerRow / cardCount)
-            // So sectionWidth ratio is proportional to: (cardsPerRow^2 / cardCount)
+                    // Update the display
+                    if (UI.cardsPerRowDisplay && scaleTarget) {
+                        const currentCardsPerRow = getCurrentCardsPerRow(scaleTarget);
+                        UI.cardsPerRowDisplay.textContent = currentCardsPerRow;
+                    }
 
-            const mainWidthRatio = (mainCardsPerRow * mainCardsPerRow) / mainCardCount;
-            const sideWidthRatio = (sideCardsPerRow * sideCardsPerRow) / sideCardCount;
-            const extraWidthRatio = (extraCardsPerRow * extraCardsPerRow) / extraCardCount;
-            const totalRatio = mainWidthRatio + sideWidthRatio + (UI.extraDeckSection?.offsetParent !== null ? extraWidthRatio : 0);
+                    // Store the aligned state
+                    gridContainer.dataset.autoAligned = 'true';
 
-            // Calculate section widths (accounting for 16px padding each and gaps + resize handles)
-            // First, calculate width available for actual card content
-            const contentWidth = containerWidth - (16 * visibleSections) - totalGap;
-            const mainContentWidth = (mainWidthRatio / totalRatio) * contentWidth;
-            const sideContentWidth = (sideWidthRatio / totalRatio) * contentWidth;
-            const extraContentWidth = (extraWidthRatio / totalRatio) * contentWidth;
+                    // Save the new ratio-based configuration so window resizes maintain proportions
+                    saveDeckResizeConfiguration();
 
-            // Add padding back to get section widths
-            let mainSectionWidth = mainContentWidth + 16;
-            let sideSectionWidth = sideContentWidth + 16;
-            let extraSectionWidth = extraContentWidth + 16;
+                    // Close dropdown
+                    UI.deckOptionsDropdown.classList.add('hidden');
 
-            // Floor to ensure we never exceed container width
-            mainSectionWidth = Math.floor(mainSectionWidth);
-            sideSectionWidth = Math.floor(sideSectionWidth);
-            extraSectionWidth = Math.floor(extraSectionWidth);
-
-            // Calculate total and distribute remaining pixels
-            const totalWidth = mainSectionWidth + sideSectionWidth + (UI.extraDeckSection?.offsetParent !== null ? extraSectionWidth : 0) + totalGap;
-            let remainder = containerWidth - totalWidth;
-
-            // Distribute remainder to main (and extra if visible) up to 1px each to avoid overflow
-            if (remainder > 0) {
-                mainSectionWidth += 1;
-                remainder -= 1;
-                if (remainder > 0 && UI.extraDeckSection?.offsetParent !== null) {
-                    extraSectionWidth += 1;
-                    remainder -= 1;
-                }
-                if (remainder > 0) {
-                    sideSectionWidth += 1;
-                }
-            }
-
-            console.log(`[Align by Total] Cards: main=${mainCardCount}, side=${sideCardCount}, extra=${extraCardCount}`);
-            console.log(`Section widths: main=${mainSectionWidth}px, side=${sideSectionWidth}px, extra=${extraSectionWidth}px, total=${mainSectionWidth + sideSectionWidth + (UI.extraDeckSection?.offsetParent !== null ? extraSectionWidth : 0) + totalGap}px, container=${containerWidth}px`);
-
-            // Apply the new section widths
-            if (UI.mainDeckSection) {
-                UI.mainDeckSection.style.width = `${mainSectionWidth}px`;
-                UI.mainDeckSection.style.minWidth = `${mainSectionWidth}px`;
-                UI.mainDeckSection.style.flexGrow = '0';
-                UI.mainDeckSection.style.flexShrink = '0';
-            }
-            if (UI.sideDeckSection) {
-                UI.sideDeckSection.style.width = `${sideSectionWidth}px`;
-                UI.sideDeckSection.style.minWidth = `${sideSectionWidth}px`;
-                UI.sideDeckSection.style.flexGrow = '0';
-                UI.sideDeckSection.style.flexShrink = '0';
-            }
-            if (UI.extraDeckSection && UI.extraDeckSection.offsetParent !== null) {
-                UI.extraDeckSection.style.width = `${extraSectionWidth}px`;
-                UI.extraDeckSection.style.minWidth = `${extraSectionWidth}px`;
-                UI.extraDeckSection.style.flexGrow = '0';
-                UI.extraDeckSection.style.flexShrink = '0';
-            }
-
-            // Update card sizes using updateCardsPerRow which handles padding correctly
-            updateCardsPerRow('main', mainCardsPerRow);
-            updateCardsPerRow('side', sideCardsPerRow);
-            updateCardsPerRow('extra', extraCardsPerRow);
-
-            // Update the display
-            if (UI.cardsPerRowDisplay && scaleTarget) {
-                const currentCardsPerRow = getCurrentCardsPerRow(scaleTarget);
-                UI.cardsPerRowDisplay.textContent = currentCardsPerRow;
-            }
-
-            // Store the aligned state
-            gridContainer.dataset.autoAligned = 'true';
-
-            // Close dropdown
-            UI.deckOptionsDropdown.classList.add('hidden');
+                    console.log(`[Align by Total Size] Complete! Final ratios:`,
+                                `main=${ratios.mainRatio.toFixed(4)}, side=${ratios.sideRatio.toFixed(4)},`,
+                                `extra=${ratios.extraRatio.toFixed(4)}, avgHeight=${ratios.avgHeight.toFixed(1)}px`);
+                })
+                .catch((error) => {
+                    console.error('[Align by Total Size] Alignment failed:', error);
+                    showMessage('Alignment failed');
+                });
         }
 
         // Reset deck section heights (restore flexible layout)
@@ -3363,27 +3874,39 @@
 
         function applyDefaultDeckLayout() {
             console.log('Applying default deck layout...');
-            // Apply clean default layout using flexbox, not fixed widths
+            // Apply default layout using flex-grow ratios (50/25/25 split)
             // This allows sections to properly shrink/grow when database is toggled
+
+            // Default ratios: 50% main, 25% side, 25% extra
+            const mainRatio = 0.50;
+            const sideRatio = 0.25;
+            const extraRatio = 0.25;
+
             if (UI.mainDeckSection) {
+                UI.mainDeckSection.style.setProperty('flex-grow', mainRatio.toFixed(3), 'important');
+                UI.mainDeckSection.style.setProperty('flex-shrink', '1', 'important');
+                UI.mainDeckSection.style.setProperty('flex-basis', '0', 'important');
+                UI.mainDeckSection.style.setProperty('min-width', '0', 'important');
                 UI.mainDeckSection.style.removeProperty('width');
-                UI.mainDeckSection.style.minWidth = '300px';
-                UI.mainDeckSection.style.flexGrow = '1';
-                UI.mainDeckSection.style.flexShrink = '1';
+                UI.mainDeckSection.style.removeProperty('max-width');
                 console.log('Main deck layout applied:', UI.mainDeckSection.style.cssText);
             }
             if (UI.sideDeckSection) {
-                UI.sideDeckSection.style.width = '280px';
-                UI.sideDeckSection.style.minWidth = '200px';
-                UI.sideDeckSection.style.flexGrow = '0';
-                UI.sideDeckSection.style.flexShrink = '1';
+                UI.sideDeckSection.style.setProperty('flex-grow', sideRatio.toFixed(3), 'important');
+                UI.sideDeckSection.style.setProperty('flex-shrink', '1', 'important');
+                UI.sideDeckSection.style.setProperty('flex-basis', '0', 'important');
+                UI.sideDeckSection.style.setProperty('min-width', '0', 'important');
+                UI.sideDeckSection.style.removeProperty('width');
+                UI.sideDeckSection.style.removeProperty('max-width');
                 console.log('Side deck layout applied:', UI.sideDeckSection.style.cssText);
             }
             if (UI.extraDeckSection) {
-                UI.extraDeckSection.style.width = '280px';
-                UI.extraDeckSection.style.minWidth = '200px';
-                UI.extraDeckSection.style.flexGrow = '0';
-                UI.extraDeckSection.style.flexShrink = '1';
+                UI.extraDeckSection.style.setProperty('flex-grow', extraRatio.toFixed(3), 'important');
+                UI.extraDeckSection.style.setProperty('flex-shrink', '1', 'important');
+                UI.extraDeckSection.style.setProperty('flex-basis', '0', 'important');
+                UI.extraDeckSection.style.setProperty('min-width', '0', 'important');
+                UI.extraDeckSection.style.removeProperty('width');
+                UI.extraDeckSection.style.removeProperty('max-width');
                 console.log('Extra deck layout applied:', UI.extraDeckSection.style.cssText);
             }
             console.log('Default deck layout applied successfully');
@@ -3454,7 +3977,9 @@
             // Reset card database section
             if (UI.cardDatabaseSection) {
                 UI.cardDatabaseSection.style.width = '322px';
+                // Clear the problematic height and flex-basis settings
                 UI.cardDatabaseSection.style.height = '';
+                UI.cardDatabaseSection.style.flexBasis = '';
             }
 
             // Apply default deck layout
@@ -3471,9 +3996,8 @@
                 if (config.cardDatabaseWidth) {
                     UI.cardDatabaseSection.style.width = config.cardDatabaseWidth;
                 }
-                if (config.cardDatabaseHeight) {
-                    UI.cardDatabaseSection.style.height = config.cardDatabaseHeight;
-                }
+                // Don't override height - let CSS h-full class handle it naturally
+                // Height is now determined by flex layout, not explicit pixels from config
             } catch (e) {
                 console.error('Error loading panel configuration:', e);
             }
@@ -3492,8 +4016,8 @@
                 }
 
                 const config = {
-                    cardDatabaseWidth: UI.cardDatabaseSection.style.width,
-                    cardDatabaseHeight: UI.cardDatabaseSection.style.height
+                    cardDatabaseWidth: UI.cardDatabaseSection.style.width
+                    // Don't save height - let CSS h-full class handle it naturally
                 };
                 localStorage.setItem('deckBuilderConfig', JSON.stringify(config));
             } catch (e) {
@@ -3589,7 +4113,8 @@
                         const minHeight = containerHeight * 0.2;
                         const maxHeight = containerHeight * 0.6;
                         const constrainedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-                        UI.cardDatabaseSection.style.height = `${constrainedHeight}px`;
+                        // Use flex-basis instead of height to maintain scrollability
+                        UI.cardDatabaseSection.style.flexBasis = `${constrainedHeight}px`;
                         UI.cardDatabaseSection.style.width = '100%';
                     } else {
                         const containerWidth = UI.deckBuilderContainer.offsetWidth;
@@ -3599,7 +4124,7 @@
                         const maxWidth = containerWidth * 0.6;
                         const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
                         UI.cardDatabaseSection.style.width = `${constrainedWidth}px`;
-                        UI.cardDatabaseSection.style.height = '';
+                        // Don't clear height - maintain scrolling capability
                     }
                 });
             });
@@ -3631,7 +4156,11 @@
 
                     // Resize deck sections proportionally to fit new available space
                     requestAnimationFrame(() => {
-                        requestAnimationFrame(() => applyDeckSectionProportions(mainRatio, sideRatio, extraRatio));
+                        requestAnimationFrame(() => {
+                            applyDeckSectionProportions(mainRatio, sideRatio, extraRatio);
+                            // Fix: Update card database height after deck resize
+                            setCardDatabaseHeight();
+                        });
                     });
                 }
             });
@@ -3655,14 +4184,20 @@
                         // Reset to default layout when orientation changes
                         if (newIsVertical) {
                             UI.cardDatabaseSection.style.width = '100%';
-                            UI.cardDatabaseSection.style.height = '50vh';
+                            // Use flex-basis for vertical mode to maintain scrollability
+                            UI.cardDatabaseSection.style.flexBasis = '50vh';
                             UI.cardDatabaseSection.style.minHeight = '50vh';
                             UI.cardDatabaseSection.style.maxHeight = '50vh';
-                        } else {
+                            // Remove explicit height in vertical mode
                             UI.cardDatabaseSection.style.height = '';
+                        } else {
+                            // Only clear min/max height constraints
                             UI.cardDatabaseSection.style.minHeight = '';
                             UI.cardDatabaseSection.style.maxHeight = '';
+                            UI.cardDatabaseSection.style.flexBasis = '';
                             UI.cardDatabaseSection.style.width = '33.333%';
+                            // Fix: Set explicit height in horizontal mode
+                            setTimeout(() => setCardDatabaseHeight(), 0);
                         }
                         // Update isVertical to track the new orientation
                         isVertical = newIsVertical;
@@ -3675,6 +4210,35 @@
         // --- EXTRA DECK TOGGLE FUNCTIONALITY ---
         function toggleExtraDeck() {
             if (!UI.extraDeckSection || !UI.toggleExtraDeckBtn) return;
+
+            if (extraDeckVisible) {
+                // Currently visible - about to hide, so SAVE current flex-grow ratios
+                // Use getComputedStyle to get actual applied flex-grow values (handles '0' correctly)
+                const mainComputed = window.getComputedStyle(UI.mainDeckSection);
+                const sideComputed = window.getComputedStyle(UI.sideDeckSection);
+                const extraComputed = window.getComputedStyle(UI.extraDeckSection);
+                const mainGrow = parseFloat(mainComputed.flexGrow);
+                const sideGrow = parseFloat(sideComputed.flexGrow);
+                const extraGrow = parseFloat(extraComputed.flexGrow);
+
+                // Save the allVisible state with flex-grow ratios
+                deckRatios.allVisible = {
+                    mainRatio: mainGrow,
+                    sideRatio: sideGrow,
+                    extraRatio: extraGrow
+                };
+
+                // Also save the main:side ratio (normalized) for when extra is hidden
+                const mainSideTotal = mainGrow + sideGrow;
+                if (mainSideTotal > 0) {
+                    deckRatios.extraHidden = {
+                        mainRatio: mainGrow / mainSideTotal,
+                        sideRatio: sideGrow / mainSideTotal,
+                        extraRatio: 0
+                    };
+                }
+                console.log('Saved ratios before hiding extra deck:', deckRatios.allVisible);
+            }
 
             extraDeckVisible = !extraDeckVisible;
 
@@ -3715,8 +4279,118 @@
 
             // Normalize widths post-visibility change - wait for layout to settle
             requestAnimationFrame(() => {
-                requestAnimationFrame(() => autoFitDeckSections());
+                requestAnimationFrame(() => {
+                    if (extraDeckVisible) {
+                        // When showing extra deck, restore saved flex-grow ratios
+                        const { mainRatio, sideRatio, extraRatio } = deckRatios.allVisible;
+                        console.log('Restoring extra deck with saved ratios:', { mainRatio, sideRatio, extraRatio });
+
+                        // Apply flex-grow directly without recalculating
+                        if (UI.mainDeckSection) {
+                            UI.mainDeckSection.style.flexGrow = mainRatio;
+                            UI.mainDeckSection.style.flexShrink = '1';
+                            UI.mainDeckSection.style.flexBasis = '0';
+                            UI.mainDeckSection.style.minWidth = '100px';
+                            UI.mainDeckSection.style.removeProperty('width');
+                            UI.mainDeckSection.style.removeProperty('max-width');
+                        }
+                        if (UI.sideDeckSection) {
+                            UI.sideDeckSection.style.flexGrow = sideRatio;
+                            UI.sideDeckSection.style.flexShrink = '1';
+                            UI.sideDeckSection.style.flexBasis = '0';
+                            UI.sideDeckSection.style.minWidth = '100px';
+                            UI.sideDeckSection.style.removeProperty('width');
+                            UI.sideDeckSection.style.removeProperty('max-width');
+                        }
+                        if (UI.extraDeckSection) {
+                            UI.extraDeckSection.style.flexGrow = extraRatio;
+                            UI.extraDeckSection.style.flexShrink = '1';
+                            UI.extraDeckSection.style.flexBasis = '0';
+                            UI.extraDeckSection.style.minWidth = '100px';
+                            UI.extraDeckSection.style.removeProperty('width');
+                            UI.extraDeckSection.style.removeProperty('max-width');
+                        }
+                        // Save after applying ratios
+                        saveDeckResizeConfiguration();
+                    } else {
+                        // When hiding extra deck, apply saved main:side ratios
+                        const { mainRatio, sideRatio } = deckRatios.extraHidden;
+                        console.log('Hiding extra deck, applying main:side ratios:', { mainRatio, sideRatio });
+
+                        if (UI.mainDeckSection) {
+                            UI.mainDeckSection.style.flexGrow = mainRatio;
+                            UI.mainDeckSection.style.flexShrink = '1';
+                            UI.mainDeckSection.style.flexBasis = '0';
+                            UI.mainDeckSection.style.minWidth = '100px';
+                            UI.mainDeckSection.style.removeProperty('width');
+                            UI.mainDeckSection.style.removeProperty('max-width');
+                        }
+                        if (UI.sideDeckSection) {
+                            UI.sideDeckSection.style.flexGrow = sideRatio;
+                            UI.sideDeckSection.style.flexShrink = '1';
+                            UI.sideDeckSection.style.flexBasis = '0';
+                            UI.sideDeckSection.style.minWidth = '100px';
+                            UI.sideDeckSection.style.removeProperty('width');
+                            UI.sideDeckSection.style.removeProperty('max-width');
+                        }
+                        // Save after applying ratios
+                        saveDeckResizeConfiguration();
+                    }
+                });
             });
+        }
+
+        // Helper function to restore deck section widths using flexbox ratios
+        function restoreDeckSectionWidths(mainWidth, sideWidth, extraWidth) {
+            // Calculate ratios from saved widths
+            let totalSavedWidth = 0;
+            if (mainWidth) totalSavedWidth += mainWidth;
+            if (sideWidth) totalSavedWidth += sideWidth;
+            if (extraWidth) totalSavedWidth += extraWidth;
+
+            // Use saved ratios, or defaults if no saved widths
+            const mainRatio = totalSavedWidth > 0 ? mainWidth / totalSavedWidth : 0.5;
+            const sideRatio = totalSavedWidth > 0 ? sideWidth / totalSavedWidth : 0.25;
+            const extraRatio = totalSavedWidth > 0 ? extraWidth / totalSavedWidth : 0.25;
+
+            // Check which sections are visible
+            const mainVisible = UI.mainDeckSection && UI.mainDeckSection.style.display !== 'none';
+            const sideVisible = UI.sideDeckSection && UI.sideDeckSection.style.display !== 'none';
+            const extraVisible = UI.extraDeckSection && UI.extraDeckSection.style.display !== 'none';
+
+            // Calculate total ratio of visible sections only
+            let totalVisibleRatio = 0;
+            if (mainVisible) totalVisibleRatio += mainRatio;
+            if (sideVisible) totalVisibleRatio += sideRatio;
+            if (extraVisible) totalVisibleRatio += extraRatio;
+
+            // Normalize ratios for visible sections and apply via flexbox
+            if (UI.mainDeckSection && mainVisible) {
+                UI.mainDeckSection.style.flexGrow = (mainRatio / totalVisibleRatio);
+                UI.mainDeckSection.style.flexShrink = '1';
+                UI.mainDeckSection.style.flexBasis = '0';
+                UI.mainDeckSection.style.removeProperty('width');
+                UI.mainDeckSection.style.removeProperty('max-width');
+                UI.mainDeckSection.style.minWidth = '100px';
+            }
+            if (UI.sideDeckSection && sideVisible) {
+                UI.sideDeckSection.style.flexGrow = (sideRatio / totalVisibleRatio);
+                UI.sideDeckSection.style.flexShrink = '1';
+                UI.sideDeckSection.style.flexBasis = '0';
+                UI.sideDeckSection.style.removeProperty('width');
+                UI.sideDeckSection.style.removeProperty('max-width');
+                UI.sideDeckSection.style.minWidth = '100px';
+            }
+            if (UI.extraDeckSection && extraVisible) {
+                UI.extraDeckSection.style.flexGrow = (extraRatio / totalVisibleRatio);
+                UI.extraDeckSection.style.flexShrink = '1';
+                UI.extraDeckSection.style.flexBasis = '0';
+                UI.extraDeckSection.style.removeProperty('width');
+                UI.extraDeckSection.style.removeProperty('max-width');
+                UI.extraDeckSection.style.minWidth = '100px';
+            }
+
+            console.log(`Restoring widths with ratios: main=${mainRatio.toFixed(2)}, side=${sideRatio.toFixed(2)}, extra=${extraRatio.toFixed(2)}`);
         }
 
         function saveExtraDeckVisibility() {
@@ -3732,22 +4406,40 @@
                 const saved = localStorage.getItem('extraDeckVisible');
                 if (saved !== null) {
                     extraDeckVisible = JSON.parse(saved);
-                    if (!extraDeckVisible && UI.extraDeckSection && UI.toggleExtraDeckBtn) {
-                        // Apply the hidden state without calling toggle
-                        UI.extraDeckSection.style.display = 'none';
-                        UI.extraDeckSection.classList.add('hidden');
-                        if (UI.sideExtraResizeHandle) UI.sideExtraResizeHandle.style.display = 'none';
-                        UI.toggleExtraDeckBtn.textContent = 'Show Extra';
-                        UI.toggleExtraDeckBtn.title = 'Show Extra Deck';
-                        UI.toggleExtraDeckBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
-                        UI.toggleExtraDeckBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                }
 
-                        // Make side deck expand to fill the space
-                        if (UI.sideDeckSection) {
-                            UI.sideDeckSection.style.flexGrow = '1';
-                            UI.sideDeckSection.style.width = '';
-                            UI.sideDeckSection.style.minWidth = '200px';
-                        }
+                // Always ensure UI state matches the extraDeckVisible variable
+                if (!extraDeckVisible && UI.extraDeckSection && UI.toggleExtraDeckBtn) {
+                    // Apply the hidden state without calling toggle
+                    UI.extraDeckSection.style.display = 'none';
+                    UI.extraDeckSection.classList.add('hidden');
+                    if (UI.sideExtraResizeHandle) UI.sideExtraResizeHandle.style.display = 'none';
+                    UI.toggleExtraDeckBtn.textContent = 'Show Extra';
+                    UI.toggleExtraDeckBtn.title = 'Show Extra Deck';
+                    UI.toggleExtraDeckBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
+                    UI.toggleExtraDeckBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+
+                    // Make side deck expand to fill the space
+                    if (UI.sideDeckSection) {
+                        UI.sideDeckSection.style.flexGrow = '1';
+                        UI.sideDeckSection.style.width = '';
+                        UI.sideDeckSection.style.minWidth = '200px';
+                    }
+                } else if (extraDeckVisible && UI.extraDeckSection && UI.toggleExtraDeckBtn) {
+                    // Ensure extra deck is visible
+                    UI.extraDeckSection.style.display = '';
+                    UI.extraDeckSection.classList.remove('hidden');
+                    if (UI.sideExtraResizeHandle) UI.sideExtraResizeHandle.style.display = '';
+                    UI.toggleExtraDeckBtn.textContent = 'Hide Extra';
+                    UI.toggleExtraDeckBtn.title = 'Hide Extra Deck';
+                    UI.toggleExtraDeckBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    UI.toggleExtraDeckBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
+
+                    // Reset side deck flex growth
+                    if (UI.sideDeckSection) {
+                        UI.sideDeckSection.style.flexGrow = '';
+                        UI.sideDeckSection.style.width = '';
+                        UI.sideDeckSection.style.minWidth = '';
                     }
                 }
             } catch (e) {
@@ -3758,6 +4450,37 @@
         // --- SIDE DECK TOGGLE FUNCTIONALITY ---
         function toggleSideDeck() {
             if (!UI.sideDeckSection || !UI.toggleSideDeckBtn) return;
+
+            if (sideDeckVisible) {
+                // Currently visible - about to hide, so SAVE current flex-grow ratios
+                // Use getComputedStyle to get actual applied flex-grow values (handles '0' correctly)
+                const mainComputed = window.getComputedStyle(UI.mainDeckSection);
+                const sideComputed = window.getComputedStyle(UI.sideDeckSection);
+                const extraComputed = UI.extraDeckSection ? window.getComputedStyle(UI.extraDeckSection) : null;
+                const mainGrow = parseFloat(mainComputed.flexGrow);
+                const sideGrow = parseFloat(sideComputed.flexGrow);
+                const extraGrow = extraComputed ? parseFloat(extraComputed.flexGrow) : 0;
+
+                // Save the allVisible state with flex-grow ratios
+                deckRatios.allVisible = {
+                    mainRatio: mainGrow,
+                    sideRatio: sideGrow,
+                    extraRatio: extraGrow
+                };
+
+                // Also save the main:extra ratio (normalized) for when side is hidden (if extra is visible)
+                if (extraDeckVisible) {
+                    const mainExtraTotal = mainGrow + extraGrow;
+                    if (mainExtraTotal > 0) {
+                        deckRatios.sideHidden = {
+                            mainRatio: mainGrow / mainExtraTotal,
+                            sideRatio: 0,
+                            extraRatio: extraGrow / mainExtraTotal
+                        };
+                    }
+                }
+                console.log('Saved ratios before hiding side deck:', deckRatios.allVisible);
+            }
 
             sideDeckVisible = !sideDeckVisible;
 
@@ -3798,7 +4521,76 @@
 
             // Normalize widths post-visibility change - wait for layout to settle
             requestAnimationFrame(() => {
-                requestAnimationFrame(() => autoFitDeckSections());
+                requestAnimationFrame(() => {
+                    if (sideDeckVisible) {
+                        // When showing side deck, restore saved flex-grow ratios
+                        const { mainRatio, sideRatio, extraRatio } = deckRatios.allVisible;
+                        console.log('Restoring side deck with saved ratios:', { mainRatio, sideRatio, extraRatio });
+
+                        // Apply flex-grow directly without recalculating
+                        if (UI.mainDeckSection) {
+                            UI.mainDeckSection.style.flexGrow = mainRatio;
+                            UI.mainDeckSection.style.flexShrink = '1';
+                            UI.mainDeckSection.style.flexBasis = '0';
+                            UI.mainDeckSection.style.minWidth = '100px';
+                            UI.mainDeckSection.style.removeProperty('width');
+                            UI.mainDeckSection.style.removeProperty('max-width');
+                        }
+                        if (UI.sideDeckSection) {
+                            UI.sideDeckSection.style.flexGrow = sideRatio;
+                            UI.sideDeckSection.style.flexShrink = '1';
+                            UI.sideDeckSection.style.flexBasis = '0';
+                            UI.sideDeckSection.style.minWidth = '100px';
+                            UI.sideDeckSection.style.removeProperty('width');
+                            UI.sideDeckSection.style.removeProperty('max-width');
+                        }
+                        if (UI.extraDeckSection) {
+                            UI.extraDeckSection.style.flexGrow = extraRatio;
+                            UI.extraDeckSection.style.flexShrink = '1';
+                            UI.extraDeckSection.style.flexBasis = '0';
+                            UI.extraDeckSection.style.minWidth = '100px';
+                            UI.extraDeckSection.style.removeProperty('width');
+                            UI.extraDeckSection.style.removeProperty('max-width');
+                        }
+                        // Save after applying ratios
+                        saveDeckResizeConfiguration();
+                    } else {
+                        // When hiding side deck, apply saved main:extra ratios (if extra is visible)
+                        if (extraDeckVisible && deckRatios.sideHidden.mainRatio !== undefined) {
+                            const { mainRatio, extraRatio } = deckRatios.sideHidden;
+                            console.log('Hiding side deck, applying main:extra ratios:', { mainRatio, extraRatio });
+
+                            if (UI.mainDeckSection) {
+                                UI.mainDeckSection.style.flexGrow = mainRatio;
+                                UI.mainDeckSection.style.flexShrink = '1';
+                                UI.mainDeckSection.style.flexBasis = '0';
+                                UI.mainDeckSection.style.minWidth = '100px';
+                                UI.mainDeckSection.style.removeProperty('width');
+                                UI.mainDeckSection.style.removeProperty('max-width');
+                            }
+                            if (UI.extraDeckSection) {
+                                UI.extraDeckSection.style.flexGrow = extraRatio;
+                                UI.extraDeckSection.style.flexShrink = '1';
+                                UI.extraDeckSection.style.flexBasis = '0';
+                                UI.extraDeckSection.style.minWidth = '100px';
+                                UI.extraDeckSection.style.removeProperty('width');
+                                UI.extraDeckSection.style.removeProperty('max-width');
+                            }
+                        } else {
+                            // Extra not visible, just let main grow
+                            if (UI.mainDeckSection) {
+                                UI.mainDeckSection.style.flexGrow = '1';
+                                UI.mainDeckSection.style.flexShrink = '1';
+                                UI.mainDeckSection.style.flexBasis = '0';
+                                UI.mainDeckSection.style.removeProperty('width');
+                                UI.mainDeckSection.style.removeProperty('max-width');
+                                UI.mainDeckSection.style.minWidth = '200px';
+                            }
+                        }
+                        // Save after applying ratios
+                        saveDeckResizeConfiguration();
+                    }
+                });
             });
         }
 
@@ -3815,16 +4607,27 @@
                 const saved = localStorage.getItem('sideDeckVisible');
                 if (saved !== null) {
                     sideDeckVisible = JSON.parse(saved);
-                    if (!sideDeckVisible && UI.sideDeckSection && UI.toggleSideDeckBtn) {
-                        // Apply the hidden state without calling toggle
-                        UI.sideDeckSection.style.display = 'none';
-                        UI.sideDeckSection.classList.add('hidden');
-                        if (UI.mainSideResizeHandle) UI.mainSideResizeHandle.style.display = 'none';
-                        UI.toggleSideDeckBtn.textContent = 'Show Side';
-                        UI.toggleSideDeckBtn.title = 'Show Side Deck';
-                        UI.toggleSideDeckBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
-                        UI.toggleSideDeckBtn.classList.add('bg-green-600', 'hover:bg-green-700');
-                    }
+                }
+
+                // Always ensure UI state matches the sideDeckVisible variable
+                if (!sideDeckVisible && UI.sideDeckSection && UI.toggleSideDeckBtn) {
+                    // Apply the hidden state without calling toggle
+                    UI.sideDeckSection.style.display = 'none';
+                    UI.sideDeckSection.classList.add('hidden');
+                    if (UI.mainSideResizeHandle) UI.mainSideResizeHandle.style.display = 'none';
+                    UI.toggleSideDeckBtn.textContent = 'Show Side';
+                    UI.toggleSideDeckBtn.title = 'Show Side Deck';
+                    UI.toggleSideDeckBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
+                    UI.toggleSideDeckBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                } else if (sideDeckVisible && UI.sideDeckSection && UI.toggleSideDeckBtn) {
+                    // Ensure side deck is visible
+                    UI.sideDeckSection.style.display = '';
+                    UI.sideDeckSection.classList.remove('hidden');
+                    if (UI.mainSideResizeHandle) UI.mainSideResizeHandle.style.display = '';
+                    UI.toggleSideDeckBtn.textContent = 'Hide Side';
+                    UI.toggleSideDeckBtn.title = 'Hide Side Deck';
+                    UI.toggleSideDeckBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    UI.toggleSideDeckBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
                 }
             } catch (e) {
                 console.error('Error loading side deck visibility:', e);
@@ -3834,17 +4637,6 @@
         // --- DATABASE TOGGLE FUNCTIONALITY ---
         function toggleDatabase() {
             if (!UI.cardDatabaseSection || !UI.toggleDatabaseBtn) return;
-
-            // Capture current proportions BEFORE toggling
-            const currentMainWidth = UI.mainDeckSection ? UI.mainDeckSection.offsetWidth : 0;
-            const currentSideWidth = UI.sideDeckSection ? UI.sideDeckSection.offsetWidth : 0;
-            const currentExtraWidth = UI.extraDeckSection ? UI.extraDeckSection.offsetWidth : 0;
-            const totalDeckWidth = currentMainWidth + currentSideWidth + currentExtraWidth;
-
-            // Calculate ratios (0-1) for each section
-            const mainRatio = totalDeckWidth > 0 ? currentMainWidth / totalDeckWidth : 0.5;
-            const sideRatio = totalDeckWidth > 0 ? currentSideWidth / totalDeckWidth : 0.25;
-            const extraRatio = totalDeckWidth > 0 ? currentExtraWidth / totalDeckWidth : 0.25;
 
             databaseVisible = !databaseVisible;
 
@@ -3860,9 +4652,11 @@
                 if (!isNarrowScreen && UI.cardDatabaseSection.style.width === '100%') {
                     // Reset to normal width on wide screens
                     UI.cardDatabaseSection.style.width = '33.333%';
-                    UI.cardDatabaseSection.style.height = '';
                     console.log('Database shown: Reset from 100% to 33.333% width (wide screen detected)');
                 }
+
+                // Fix: Set explicit height to enable scrolling after showing database
+                setTimeout(() => setCardDatabaseHeight(), 0);
 
                 // Only add database-visible class if actually taking 100% width
                 if (UI.deckBuilderContainer && UI.cardDatabaseSection.style.width === '100%') {
@@ -3893,19 +4687,19 @@
                 UI.toggleDatabaseBtn.classList.add('bg-green-600', 'hover:bg-green-700');
 
                 // Hide completely after transition
-                const onEnd = () => {
-                    UI.cardDatabaseSection.removeEventListener('transitionend', onEnd);
+                // Use both transitionend event AND a timeout as fallback for reliability
+                let transitionHandled = false;
+                const hideDatabase = () => {
+                    if (transitionHandled) return;
+                    transitionHandled = true;
                     if (!databaseVisible) {
                         UI.cardDatabaseSection.style.display = 'none';
                     }
                 };
-                UI.cardDatabaseSection.addEventListener('transitionend', onEnd, { once: true });
+                UI.cardDatabaseSection.addEventListener('transitionend', hideDatabase, { once: true });
+                // Fallback timeout in case transitionend doesn't fire (transition duration is 0.2s)
+                setTimeout(hideDatabase, 250);
             }
-
-            // Apply preserved proportions after a short delay to allow DOM to update
-            requestAnimationFrame(() => {
-                setTimeout(() => applyDeckSectionProportions(mainRatio, sideRatio, extraRatio), 50);
-            });
 
             // Save the state
             saveDatabaseVisibility();
@@ -3914,50 +4708,217 @@
             cleanupBadConfigs();
         }
 
+        // ============================================================================
+        // SYNC VISIBILITY STATE
+        // ============================================================================
+        /**
+         * Syncs the UI state (DOM elements and buttons) to match the current visibility
+         * state variables (databaseVisible, extraDeckVisible, sideDeckVisible).
+         *
+         * This is needed after loading a deck with saved visibility states, to ensure
+         * the actual DOM state matches the variables.
+         */
+        function syncVisibilityState() {
+            // Sync database visibility
+            if (UI.cardDatabaseSection && UI.toggleDatabaseBtn) {
+                if (databaseVisible) {
+                    // Ensure database is visible
+                    UI.cardDatabaseSection.style.display = '';
+                    UI.cardDatabaseSection.classList.remove('hidden');
+                    if (UI.resizeHandle) UI.resizeHandle.style.display = '';
+                    UI.toggleDatabaseBtn.textContent = 'Hide DB';
+                    UI.toggleDatabaseBtn.title = 'Hide Card Database';
+                    UI.toggleDatabaseBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    UI.toggleDatabaseBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
+                } else {
+                    // Ensure database is hidden
+                    UI.cardDatabaseSection.classList.add('hidden');
+                    UI.cardDatabaseSection.style.display = 'none';
+                    if (UI.resizeHandle) UI.resizeHandle.style.display = 'none';
+                    UI.toggleDatabaseBtn.textContent = 'Show DB';
+                    UI.toggleDatabaseBtn.title = 'Show Card Database';
+                    UI.toggleDatabaseBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
+                    UI.toggleDatabaseBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                }
+                // Remove class from container for normal layout
+                if (UI.deckBuilderContainer) {
+                    UI.deckBuilderContainer.classList.remove('database-visible');
+                }
+            }
+
+            // Sync extra deck visibility
+            if (UI.extraDeckSection && UI.toggleExtraDeckBtn) {
+                if (extraDeckVisible) {
+                    // Section is visible - button should be slate ("Hide Extra")
+                    UI.extraDeckSection.style.display = '';
+                    UI.extraDeckSection.classList.remove('hidden');
+                    UI.toggleExtraDeckBtn.textContent = 'Hide Extra';
+                    UI.toggleExtraDeckBtn.title = 'Hide Extra Deck';
+                    UI.toggleExtraDeckBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    UI.toggleExtraDeckBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
+                } else {
+                    // Section is hidden - button should be green ("Show Extra")
+                    UI.extraDeckSection.classList.add('hidden');
+                    UI.toggleExtraDeckBtn.textContent = 'Show Extra';
+                    UI.toggleExtraDeckBtn.title = 'Show Extra Deck';
+                    UI.toggleExtraDeckBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
+                    UI.toggleExtraDeckBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                }
+            }
+
+            // Sync side deck visibility
+            if (UI.sideDeckSection && UI.toggleSideDeckBtn) {
+                if (sideDeckVisible) {
+                    // Section is visible - button should be slate ("Hide Side")
+                    UI.sideDeckSection.style.display = '';
+                    UI.sideDeckSection.classList.remove('hidden');
+                    UI.toggleSideDeckBtn.textContent = 'Hide Side';
+                    UI.toggleSideDeckBtn.title = 'Hide Side Deck';
+                    UI.toggleSideDeckBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    UI.toggleSideDeckBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
+                } else {
+                    // Section is hidden - button should be green ("Show Side")
+                    UI.sideDeckSection.classList.add('hidden');
+                    UI.toggleSideDeckBtn.textContent = 'Show Side';
+                    UI.toggleSideDeckBtn.title = 'Show Side Deck';
+                    UI.toggleSideDeckBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
+                    UI.toggleSideDeckBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                }
+            }
+
+            console.log('[Sync Visibility] Synced UI state: database=' + databaseVisible +
+                        ', extra=' + extraDeckVisible + ', side=' + sideDeckVisible);
+        }
+
+        // ============================================================================
+        // HELPER: Calculate available flex width accounting for gaps and resize handles
+        // ============================================================================
+        function getAvailableFlexWidth(container) {
+            /**
+             * Calculates the actual available width for flex content in deckGridContainer.
+             *
+             * The container structure is:
+             *   [section] [gap-4] [handle w-2] [gap-4] [section] [gap-4] [handle w-2] [gap-4] [section]
+             *
+             * Where:
+             *   - gap-4 = 16px (CSS flex gap between each flex child)
+             *   - w-2 = 8px (resize handle width)
+             *
+             * Total overhead = (numFlexChildren - 1) * gap + (numResizeHandles) * handleWidth
+             *
+             * For 3 sections with 2 handles:
+             *   - 5 flex children → 4 gaps × 16px = 64px
+             *   - 2 handles × 8px = 16px
+             *   - Total overhead: 80px
+             */
+            if (!container) {
+                console.warn('[getAvailableFlexWidth] No container provided');
+                return 0;
+            }
+
+            // Read the actual CSS gap value from computed styles (more accurate than hardcoded)
+            const computedGap = getComputedStyle(container).gap;
+            const gap = parseFloat(computedGap) || 16; // Default to gap-4 (16px)
+
+            // Count visible flex children (sections and resize handles)
+            const visibleChildren = Array.from(container.children).filter(
+                el => el.offsetParent !== null && el.style.display !== 'none'
+            );
+
+            const numFlexChildren = visibleChildren.length;
+            const numGaps = Math.max(0, numFlexChildren - 1);
+            const totalGapWidth = gap * numGaps;
+
+            // Count resize handles (they have IDs containing 'ResizeHandle')
+            const resizeHandles = visibleChildren.filter(
+                el => el.id && el.id.includes('ResizeHandle')
+            );
+            const handleWidth = 8; // w-2 class = 8px
+            const totalHandleWidth = resizeHandles.length * handleWidth;
+
+            const availableWidth = container.clientWidth - totalGapWidth - totalHandleWidth;
+
+            // Diagnostic logging
+            console.log(`[getAvailableFlexWidth] Calculation:
+  Container clientWidth: ${container.clientWidth}px
+  Visible flex children: ${numFlexChildren}
+  Gaps: ${numGaps} × ${gap}px = ${totalGapWidth}px
+  Resize handles: ${resizeHandles.length} × ${handleWidth}px = ${totalHandleWidth}px
+  Total overhead: ${totalGapWidth + totalHandleWidth}px
+  Available width: ${availableWidth}px`);
+
+            return Math.max(0, availableWidth);
+        }
+
+        // ============================================================================
+        // SECTION PADDING CONSTANT
+        // ============================================================================
+        // Deck sections have p-3 class (12px padding each side = 24px total)
+        // This must be accounted for in card width calculations
+        const DECK_SECTION_PADDING = 24; // p-3 = 12px × 2 sides
+
         function applyDeckSectionProportions(mainRatio, sideRatio, extraRatio) {
             if (!UI.deckGridContainer) return;
 
-            const containerWidth = UI.deckGridContainer.offsetWidth;
-            const resizeHandleWidth = 8;
-            const gap = 16;
-            const totalOverhead = (resizeHandleWidth * 2) + (gap * 2) + 24;
+            // Check which sections are visible
+            const mainVisible = UI.mainDeckSection && UI.mainDeckSection.style.display !== 'none';
+            const sideVisible = UI.sideDeckSection && UI.sideDeckSection.style.display !== 'none';
+            const extraVisible = UI.extraDeckSection && UI.extraDeckSection.style.display !== 'none';
 
-            const availableWidth = containerWidth - totalOverhead;
+            // Use helper function to calculate available width (accounts for gaps and resize handles correctly)
+            const availableWidth = getAvailableFlexWidth(UI.deckGridContainer);
             if (availableWidth <= 0) return;
 
-            // Calculate new widths based on preserved ratios
+            // Calculate new widths based on preserved ratios (only for visible sections)
             const minWidth = 100;
-            let newMainWidth = availableWidth * mainRatio;
-            let newSideWidth = availableWidth * sideRatio;
-            let newExtraWidth = availableWidth * extraRatio;
+            let newMainWidth = mainVisible ? availableWidth * mainRatio : 0;
+            let newSideWidth = sideVisible ? availableWidth * sideRatio : 0;
+            let newExtraWidth = extraVisible ? availableWidth * extraRatio : 0;
 
             // Apply minimum widths
             const minMain = Math.max(minWidth, availableWidth * 0.3);
             const minSide = Math.max(minWidth, availableWidth * 0.15);
             const minExtra = Math.max(minWidth, availableWidth * 0.15);
 
-            newMainWidth = Math.max(minMain, newMainWidth);
-            newSideWidth = Math.max(minSide, newSideWidth);
-            newExtraWidth = Math.max(minExtra, newExtraWidth);
+            if (mainVisible) newMainWidth = Math.max(minMain, newMainWidth);
+            if (sideVisible) newSideWidth = Math.max(minSide, newSideWidth);
+            if (extraVisible) newExtraWidth = Math.max(minExtra, newExtraWidth);
 
-            // Apply the new widths
-            if (UI.mainDeckSection) {
-                UI.mainDeckSection.style.width = `${newMainWidth}px`;
-                UI.mainDeckSection.style.minWidth = `${newMainWidth}px`;
-                UI.mainDeckSection.style.flexGrow = '0';
-                UI.mainDeckSection.style.flexShrink = '0';
+            // Calculate total ratio of visible sections for proper flex distribution
+            let totalVisibleRatio = 0;
+            if (mainVisible) totalVisibleRatio += mainRatio;
+            if (sideVisible) totalVisibleRatio += sideRatio;
+            if (extraVisible) totalVisibleRatio += extraRatio;
+
+            // Normalize ratios to sum to 1 for visible sections only
+            const finalMainRatio = mainVisible ? mainRatio / totalVisibleRatio : 0;
+            const finalSideRatio = sideVisible ? sideRatio / totalVisibleRatio : 0;
+            const finalExtraRatio = extraVisible ? extraRatio / totalVisibleRatio : 0;
+
+            // Apply flexbox to visible sections so they fill the available space
+            if (UI.mainDeckSection && mainVisible) {
+                UI.mainDeckSection.style.flexGrow = finalMainRatio;
+                UI.mainDeckSection.style.flexShrink = '1';
+                UI.mainDeckSection.style.flexBasis = '0';
+                UI.mainDeckSection.style.minWidth = '0';
+                UI.mainDeckSection.style.removeProperty('width');
+                UI.mainDeckSection.style.removeProperty('max-width');
             }
-            if (UI.sideDeckSection) {
-                UI.sideDeckSection.style.width = `${newSideWidth}px`;
-                UI.sideDeckSection.style.minWidth = `${newSideWidth}px`;
-                UI.sideDeckSection.style.flexGrow = '0';
-                UI.sideDeckSection.style.flexShrink = '0';
+            if (UI.sideDeckSection && sideVisible) {
+                UI.sideDeckSection.style.flexGrow = finalSideRatio;
+                UI.sideDeckSection.style.flexShrink = '1';
+                UI.sideDeckSection.style.flexBasis = '0';
+                UI.sideDeckSection.style.minWidth = '0';
+                UI.sideDeckSection.style.removeProperty('width');
+                UI.sideDeckSection.style.removeProperty('max-width');
             }
-            if (UI.extraDeckSection) {
-                UI.extraDeckSection.style.width = `${newExtraWidth}px`;
-                UI.extraDeckSection.style.minWidth = `${newExtraWidth}px`;
-                UI.extraDeckSection.style.flexGrow = '0';
-                UI.extraDeckSection.style.flexShrink = '0';
+            if (UI.extraDeckSection && extraVisible) {
+                UI.extraDeckSection.style.flexGrow = finalExtraRatio;
+                UI.extraDeckSection.style.flexShrink = '1';
+                UI.extraDeckSection.style.flexBasis = '0';
+                UI.extraDeckSection.style.minWidth = '0';
+                UI.extraDeckSection.style.removeProperty('width');
+                UI.extraDeckSection.style.removeProperty('max-width');
             }
 
             // Save the new configuration
@@ -4070,47 +5031,84 @@
                     }
                 }
 
-                // Apply new widths (no transitions on width to avoid jitter)
-                UI.mainDeckSection.style.width = `${mainWidth}px`;
-                UI.mainDeckSection.style.minWidth = `${mainWidth}px`;
-                UI.mainDeckSection.style.flexGrow = '0';
-                UI.mainDeckSection.style.flexShrink = '1';
+                // Calculate ratios from the calculated widths
+                const totalCalculatedWidth = mainWidth + sideWidth + extraWidth;
+                const mainRatio = mainWidth / totalCalculatedWidth;
+                const sideRatio = sideWidth / totalCalculatedWidth;
+                const extraRatio = extraWidth / totalCalculatedWidth;
+
+                // Apply using flex-grow ratios (same approach as applyDeckRatios)
+                UI.mainDeckSection.style.setProperty('flex-grow', mainRatio.toFixed(3), 'important');
+                UI.mainDeckSection.style.setProperty('flex-shrink', '1', 'important');
+                UI.mainDeckSection.style.setProperty('flex-basis', '0', 'important');
+                UI.mainDeckSection.style.setProperty('min-width', '0', 'important');
+                UI.mainDeckSection.style.removeProperty('width');
+                UI.mainDeckSection.style.removeProperty('max-width');
 
                 if (sideVisible) {
-                    UI.sideDeckSection.style.width = `${sideWidth}px`;
-                    UI.sideDeckSection.style.minWidth = `${sideWidth}px`;
-                    // If extra deck is hidden, make side deck expand to fill available space
-                    if (!extraVisible) {
-                        UI.sideDeckSection.style.flexGrow = '1';
-                    } else {
-                        UI.sideDeckSection.style.flexGrow = '0';
-                    }
-                    UI.sideDeckSection.style.flexShrink = '1';
+                    UI.sideDeckSection.style.setProperty('flex-grow', sideRatio.toFixed(3), 'important');
+                    UI.sideDeckSection.style.setProperty('flex-shrink', '1', 'important');
+                    UI.sideDeckSection.style.setProperty('flex-basis', '0', 'important');
+                    UI.sideDeckSection.style.setProperty('min-width', '0', 'important');
+                    UI.sideDeckSection.style.removeProperty('width');
+                    UI.sideDeckSection.style.removeProperty('max-width');
                 }
 
                 if (extraVisible) {
-                    UI.extraDeckSection.style.width = `${extraWidth}px`;
-                    UI.extraDeckSection.style.minWidth = `${extraWidth}px`;
-                    UI.extraDeckSection.style.flexGrow = '0';
-                    UI.extraDeckSection.style.flexShrink = '1';
+                    UI.extraDeckSection.style.setProperty('flex-grow', extraRatio.toFixed(3), 'important');
+                    UI.extraDeckSection.style.setProperty('flex-shrink', '1', 'important');
+                    UI.extraDeckSection.style.setProperty('flex-basis', '0', 'important');
+                    UI.extraDeckSection.style.setProperty('min-width', '0', 'important');
+                    UI.extraDeckSection.style.removeProperty('width');
+                    UI.extraDeckSection.style.removeProperty('max-width');
                 }
 
-                console.log(`Adjusted widths - Main: ${Math.round(mainWidth)}px, Side: ${Math.round(sideWidth)}px, Extra: ${Math.round(extraWidth)}px`);
+                console.log(`Auto-fit applied ratios - Main: ${mainRatio.toFixed(3)}, Side: ${sideRatio.toFixed(3)}, Extra: ${extraRatio.toFixed(3)}`);
 
                 // AUTO-ADJUST card scales once after widths applied
                 autoAdjustCardScales(mainWidth, sideWidth, extraWidth, oldMainWidth, oldSideWidth, oldExtraWidth);
 
-                // Save the new configuration
+                // Save the new configuration (ratios will be calculated from offsetWidth)
                 saveDeckResizeConfiguration();
             } else {
                 console.log('Sections fit within available space, no adjustment needed');
 
-                // Even if no width adjustment is needed, we still need to handle flex properties
-                // when extra deck is hidden to ensure side deck expands properly
-                if (sideVisible && !extraVisible) {
-                    UI.sideDeckSection.style.flexGrow = '1';
-                } else if (sideVisible && extraVisible) {
-                    UI.sideDeckSection.style.flexGrow = '0';
+                // Even if no adjustment is needed, ensure flex properties are set correctly
+                // Calculate current ratios from actual widths
+                const currentMainWidth = UI.mainDeckSection.offsetWidth || mainWidth;
+                const currentSideWidth = sideVisible ? (UI.sideDeckSection.offsetWidth || sideWidth) : 0;
+                const currentExtraWidth = extraVisible ? (UI.extraDeckSection.offsetWidth || extraWidth) : 0;
+                const totalCurrentWidth = currentMainWidth + currentSideWidth + currentExtraWidth;
+
+                if (totalCurrentWidth > 0) {
+                    const mainRatio = currentMainWidth / totalCurrentWidth;
+                    const sideRatio = currentSideWidth / totalCurrentWidth;
+                    const extraRatio = currentExtraWidth / totalCurrentWidth;
+
+                    UI.mainDeckSection.style.setProperty('flex-grow', mainRatio.toFixed(3), 'important');
+                    UI.mainDeckSection.style.setProperty('flex-shrink', '1', 'important');
+                    UI.mainDeckSection.style.setProperty('flex-basis', '0', 'important');
+                    UI.mainDeckSection.style.setProperty('min-width', '0', 'important');
+                    UI.mainDeckSection.style.removeProperty('width');
+                    UI.mainDeckSection.style.removeProperty('max-width');
+
+                    if (sideVisible) {
+                        UI.sideDeckSection.style.setProperty('flex-grow', sideRatio.toFixed(3), 'important');
+                        UI.sideDeckSection.style.setProperty('flex-shrink', '1', 'important');
+                        UI.sideDeckSection.style.setProperty('flex-basis', '0', 'important');
+                        UI.sideDeckSection.style.setProperty('min-width', '0', 'important');
+                        UI.sideDeckSection.style.removeProperty('width');
+                        UI.sideDeckSection.style.removeProperty('max-width');
+                    }
+
+                    if (extraVisible) {
+                        UI.extraDeckSection.style.setProperty('flex-grow', extraRatio.toFixed(3), 'important');
+                        UI.extraDeckSection.style.setProperty('flex-shrink', '1', 'important');
+                        UI.extraDeckSection.style.setProperty('flex-basis', '0', 'important');
+                        UI.extraDeckSection.style.setProperty('min-width', '0', 'important');
+                        UI.extraDeckSection.style.removeProperty('width');
+                        UI.extraDeckSection.style.removeProperty('max-width');
+                    }
                 }
             }
         }
@@ -4238,25 +5236,36 @@
                 const saved = localStorage.getItem('databaseVisible');
                 if (saved !== null) {
                     databaseVisible = JSON.parse(saved);
-                    if (!databaseVisible && UI.cardDatabaseSection && UI.toggleDatabaseBtn) {
-                        // Apply the hidden state without calling toggle
-                        UI.cardDatabaseSection.style.display = 'none';
-                        UI.cardDatabaseSection.classList.add('hidden');
-                        if (UI.resizeHandle) UI.resizeHandle.style.display = 'none';
-                        UI.toggleDatabaseBtn.textContent = 'Show DB';
-                        UI.toggleDatabaseBtn.title = 'Show Card Database';
-                        UI.toggleDatabaseBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
-                        UI.toggleDatabaseBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                }
 
-                        // Remove class from container for normal layout
-                        if (UI.deckBuilderContainer) {
-                            UI.deckBuilderContainer.classList.remove('database-visible');
-                        }
-                    } else if (databaseVisible && UI.deckBuilderContainer && UI.cardDatabaseSection) {
-                        // Only add database-visible class if database is actually 100% width (vertical layout)
-                        if (UI.cardDatabaseSection.style.width === '100%') {
-                            UI.deckBuilderContainer.classList.add('database-visible');
-                        }
+                // Always ensure UI state matches the databaseVisible variable
+                if (!databaseVisible && UI.cardDatabaseSection && UI.toggleDatabaseBtn) {
+                    // Apply the hidden state without calling toggle
+                    UI.cardDatabaseSection.style.display = 'none';
+                    UI.cardDatabaseSection.classList.add('hidden');
+                    if (UI.resizeHandle) UI.resizeHandle.style.display = 'none';
+                    UI.toggleDatabaseBtn.textContent = 'Show DB';
+                    UI.toggleDatabaseBtn.title = 'Show Card Database';
+                    UI.toggleDatabaseBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
+                    UI.toggleDatabaseBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+
+                    // Remove class from container for normal layout
+                    if (UI.deckBuilderContainer) {
+                        UI.deckBuilderContainer.classList.remove('database-visible');
+                    }
+                } else if (databaseVisible && UI.cardDatabaseSection && UI.toggleDatabaseBtn) {
+                    // Ensure database is visible
+                    UI.cardDatabaseSection.style.display = '';
+                    UI.cardDatabaseSection.classList.remove('hidden');
+                    if (UI.resizeHandle) UI.resizeHandle.style.display = '';
+                    UI.toggleDatabaseBtn.textContent = 'Hide DB';
+                    UI.toggleDatabaseBtn.title = 'Hide Card Database';
+                    UI.toggleDatabaseBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    UI.toggleDatabaseBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
+
+                    // Only add database-visible class if database is actually 100% width (vertical layout)
+                    if (UI.deckBuilderContainer && UI.cardDatabaseSection.style.width === '100%') {
+                        UI.deckBuilderContainer.classList.add('database-visible');
                     }
                 }
             } catch (e) {
@@ -5156,14 +6165,39 @@
                     document.body.style.cursor = '';
                     document.body.style.userSelect = '';
 
-                    // Manual resize complete - adjust card scales to maintain layout
+                    // Manual resize complete - keep the exact pixel widths the user dragged to
                     const newMainWidth = parseFloat(UI.mainDeckSection.style.width) || UI.mainDeckSection.offsetWidth;
                     const newSideWidth = parseFloat(UI.sideDeckSection.style.width) || UI.sideDeckSection.offsetWidth;
                     const newExtraWidth = parseFloat(UI.extraDeckSection.style.width) || UI.extraDeckSection.offsetWidth;
 
+                    // Keep explicit pixel widths and disable flex for precise control
+                    // This prevents the sections from jumping to different sizes after resize
+                    if (UI.mainDeckSection) {
+                        UI.mainDeckSection.style.width = `${newMainWidth}px`;
+                        UI.mainDeckSection.style.minWidth = `${newMainWidth}px`;
+                        UI.mainDeckSection.style.maxWidth = `${newMainWidth}px`;
+                        UI.mainDeckSection.style.flexGrow = '0';
+                        UI.mainDeckSection.style.flexShrink = '0';
+                    }
+                    if (UI.sideDeckSection) {
+                        UI.sideDeckSection.style.width = `${newSideWidth}px`;
+                        UI.sideDeckSection.style.minWidth = `${newSideWidth}px`;
+                        UI.sideDeckSection.style.maxWidth = `${newSideWidth}px`;
+                        UI.sideDeckSection.style.flexGrow = '0';
+                        UI.sideDeckSection.style.flexShrink = '0';
+                    }
+                    if (UI.extraDeckSection) {
+                        UI.extraDeckSection.style.width = `${newExtraWidth}px`;
+                        UI.extraDeckSection.style.minWidth = `${newExtraWidth}px`;
+                        UI.extraDeckSection.style.maxWidth = `${newExtraWidth}px`;
+                        UI.extraDeckSection.style.flexGrow = '0';
+                        UI.extraDeckSection.style.flexShrink = '0';
+                    }
+
                     // Auto-adjust card scales for manual resize
                     autoAdjustCardScalesForManualResize(newMainWidth, newSideWidth, newExtraWidth, startLeftWidth, startRightWidth, handleType);
 
+                    // Save the new configuration
                     saveDeckResizeConfiguration();
                 }
             });
@@ -5176,28 +6210,140 @@
 
         function saveDeckResizeConfiguration() {
             try {
-                // Only save if sections have been manually resized (have explicit widths set)
-                const mainWidth = UI.mainDeckSection.style.width;
-                const sideWidth = UI.sideDeckSection.style.width;
-                const extraWidth = UI.extraDeckSection.style.width;
+                // Determine current visibility state using offsetParent (matches align functions)
+                // offsetParent is null when element is hidden (display: none) or not in layout
+                const extraVisible = UI.extraDeckSection?.offsetParent !== null;
+                const sideVisible = UI.sideDeckSection?.offsetParent !== null;
 
-                // Don't save empty values or if all are at defaults
-                if (!mainWidth && !sideWidth && !extraWidth) {
-                    // All at defaults, remove any saved config
-                    localStorage.removeItem('deckResizeConfig');
-                    return;
+                // Try to read flex-grow values directly first (when using proportional sizing)
+                let mainRatio, sideRatio, extraRatio;
+
+                const mainGrow = parseFloat(UI.mainDeckSection.style.flexGrow) || 0;
+                const sideGrow = sideVisible ? (parseFloat(UI.sideDeckSection.style.flexGrow) || 0) : 0;
+                const extraGrow = extraVisible ? (parseFloat(UI.extraDeckSection.style.flexGrow) || 0) : 0;
+
+                // If all sections have non-zero flex-grow, use those values directly
+                if (mainGrow > 0 || sideGrow > 0 || extraGrow > 0) {
+                    const totalGrow = mainGrow + sideGrow + extraGrow;
+                    if (totalGrow > 0) {
+                        mainRatio = mainGrow / totalGrow;
+                        sideRatio = sideGrow / totalGrow;
+                        extraRatio = extraGrow / totalGrow;
+                    } else {
+                        // Fallback to default ratios
+                        mainRatio = 0.5;
+                        sideRatio = sideVisible ? 0.25 : 0;
+                        extraRatio = extraVisible ? 0.25 : 0;
+                    }
+                } else {
+                    // Fall back to calculating from offsetWidth (for manual resize mode)
+                    const mainWidth = UI.mainDeckSection.offsetWidth;
+                    const sideWidth = sideVisible ? UI.sideDeckSection.offsetWidth : 0;
+                    const extraWidth = extraVisible ? UI.extraDeckSection.offsetWidth : 0;
+                    const totalWidth = mainWidth + sideWidth + extraWidth;
+
+                    // Don't save if total width is invalid
+                    if (totalWidth <= 0) {
+                        return;
+                    }
+
+                    // Calculate ratios (as percentages)
+                    mainRatio = mainWidth / totalWidth;
+                    sideRatio = sideWidth / totalWidth;
+                    extraRatio = extraWidth / totalWidth;
                 }
 
+                // Determine which state key to use based on visibility
+                let stateKey;
+                if (extraVisible && sideVisible) {
+                    stateKey = 'allVisible';
+                } else if (!extraVisible && sideVisible) {
+                    stateKey = 'extraHidden';
+                } else if (extraVisible && !sideVisible) {
+                    stateKey = 'sideHidden';
+                } else {
+                    // Both hidden - unlikely case, but save anyway
+                    stateKey = 'allVisible';
+                }
+
+                // Update the in-memory deckRatios for the current state
+                deckRatios[stateKey] = {
+                    mainRatio: mainRatio,
+                    sideRatio: sideRatio,
+                    extraRatio: extraRatio
+                };
+
+                // Save all ratio states to localStorage
                 const config = {
-                    mainDeckWidth: mainWidth || '',
-                    sideDeckWidth: sideWidth || '',
-                    extraDeckWidth: extraWidth || ''
+                    allVisible: deckRatios.allVisible,
+                    extraHidden: deckRatios.extraHidden,
+                    sideHidden: deckRatios.sideHidden
                 };
 
                 localStorage.setItem('deckResizeConfig', JSON.stringify(config));
+                console.log(`Saved deck resize ratios for state '${stateKey}':`, deckRatios[stateKey]);
             } catch (e) {
                 console.error('Error saving deck resize configuration:', e);
             }
+        }
+
+        // Helper function to apply ratios to deck sections
+        function applyDeckRatios(mainRatio, sideRatio, extraRatio) {
+            if (!UI.deckGridContainer) return;
+
+            const containerWidth = UI.deckGridContainer.offsetWidth;
+
+            // If container width is 0 (not ready yet), retry after a delay
+            if (containerWidth === 0) {
+                console.log('[DECK RESIZE] Container width is 0, retrying...');
+                setTimeout(() => applyDeckRatios(mainRatio, sideRatio, extraRatio), 50);
+                return;
+            }
+
+            // Use helper function to correctly calculate available width (accounts for gaps and resize handles)
+            const availableWidth = getAvailableFlexWidth(UI.deckGridContainer);
+
+            // Calculate pixel widths from ratios (using available width, not full container)
+            // Use floor() for first two, then give remaining to last to avoid overflow
+            const mainWidth = Math.floor(availableWidth * mainRatio);
+            const sideWidth = Math.floor(availableWidth * sideRatio);
+            // Extra deck gets whatever is left (ensures sum equals available width)
+            const extraWidth = availableWidth - mainWidth - sideWidth;
+
+            // Apply widths using flex-grow ratios - this maintains proportions
+            // while allowing sections to shrink when needed (e.g., when database is visible)
+            UI.mainDeckSection.style.setProperty('flex-grow', String(mainRatio), 'important');
+            UI.mainDeckSection.style.setProperty('flex-shrink', '1', 'important');
+            UI.mainDeckSection.style.setProperty('flex-basis', '0', 'important');
+            UI.mainDeckSection.style.setProperty('min-width', '100px', 'important');
+            UI.mainDeckSection.style.removeProperty('width');
+            UI.mainDeckSection.style.removeProperty('max-width');
+
+            UI.sideDeckSection.style.setProperty('flex-grow', String(sideRatio), 'important');
+            UI.sideDeckSection.style.setProperty('flex-shrink', '1', 'important');
+            UI.sideDeckSection.style.setProperty('flex-basis', '0', 'important');
+            UI.sideDeckSection.style.setProperty('min-width', '100px', 'important');
+            UI.sideDeckSection.style.removeProperty('width');
+            UI.sideDeckSection.style.removeProperty('max-width');
+
+            UI.extraDeckSection.style.setProperty('flex-grow', String(extraRatio), 'important');
+            UI.extraDeckSection.style.setProperty('flex-shrink', '1', 'important');
+            UI.extraDeckSection.style.setProperty('flex-basis', '0', 'important');
+            UI.extraDeckSection.style.setProperty('min-width', '100px', 'important');
+            UI.extraDeckSection.style.removeProperty('width');
+            UI.extraDeckSection.style.removeProperty('max-width');
+
+            // Verify after applying
+            requestAnimationFrame(() => {
+                const actualMain = UI.mainDeckSection.offsetWidth;
+                const actualSide = UI.sideDeckSection.offsetWidth;
+                const actualExtra = UI.extraDeckSection.offsetWidth;
+                console.log('[DECK RESIZE] Applied ratios:', { mainRatio, sideRatio, extraRatio });
+                console.log('[DECK RESIZE] Container width:', containerWidth);
+                console.log('[DECK RESIZE] Available width (after gaps/handles):', availableWidth);
+                console.log('[DECK RESIZE] Calculated widths:', { mainWidth, sideWidth, extraWidth, totalContent: mainWidth + sideWidth + extraWidth });
+                console.log('[DECK RESIZE] Actual rendered widths:', { actualMain, actualSide, actualExtra, total: actualMain + actualSide + actualExtra });
+            });
         }
 
         function loadDeckResizeConfiguration() {
@@ -5216,7 +6362,53 @@
                 const config = JSON.parse(savedConfig);
                 console.log('Parsed deck resize config:', config);
 
-                // Check if config has valid data (all three sections)
+                // Check for new multi-state ratio-based config format
+                if (config.allVisible || config.extraHidden || config.sideHidden) {
+                    // Load all states into deckRatios
+                    if (config.allVisible) deckRatios.allVisible = config.allVisible;
+                    if (config.extraHidden) deckRatios.extraHidden = config.extraHidden;
+                    if (config.sideHidden) deckRatios.sideHidden = config.sideHidden;
+
+                    // Determine current visibility state and apply appropriate ratios
+                    const extraVisible = extraDeckVisible && UI.extraDeckSection.style.display !== 'none';
+                    const sideVisible = sideDeckVisible && UI.sideDeckSection.style.display !== 'none';
+
+                    let ratiosToApply;
+                    if (extraVisible && sideVisible) {
+                        ratiosToApply = deckRatios.allVisible;
+                        console.log('Applying allVisible ratios');
+                    } else if (!extraVisible && sideVisible) {
+                        ratiosToApply = deckRatios.extraHidden;
+                        console.log('Applying extraHidden ratios');
+                    } else if (extraVisible && !sideVisible) {
+                        ratiosToApply = deckRatios.sideHidden;
+                        console.log('Applying sideHidden ratios');
+                    } else {
+                        ratiosToApply = deckRatios.allVisible; // Fallback
+                        console.log('Both hidden, applying allVisible ratios as fallback');
+                    }
+
+                    if (ratiosToApply && ratiosToApply.mainRatio !== undefined) {
+                        applyDeckRatios(ratiosToApply.mainRatio, ratiosToApply.sideRatio, ratiosToApply.extraRatio);
+                    }
+                    return;
+                }
+
+                // Check for old single-state ratio-based config format (backward compatibility)
+                if (config.mainRatio !== undefined && config.sideRatio !== undefined && config.extraRatio !== undefined) {
+                    // Migrate old single-state config to allVisible
+                    deckRatios.allVisible = {
+                        mainRatio: config.mainRatio,
+                        sideRatio: config.sideRatio,
+                        extraRatio: config.extraRatio
+                    };
+                    applyDeckRatios(config.mainRatio, config.sideRatio, config.extraRatio);
+                    // Save in new multi-state format
+                    saveDeckResizeConfiguration();
+                    return;
+                }
+
+                // Legacy format: check for old pixel-based config for backward compatibility
                 const hasValidConfig = config.mainDeckWidth || config.sideDeckWidth || config.extraDeckWidth;
 
                 if (!hasValidConfig) {
@@ -5224,39 +6416,36 @@
                     return;
                 }
 
-                // Load saved configuration
+                // Migrate legacy config to ratios by calculating from pixel values
+                let mainWidth, sideWidth, extraWidth;
+
                 if (config.mainDeckWidth) {
-                    UI.mainDeckSection.style.width = config.mainDeckWidth;
-                    UI.mainDeckSection.style.minWidth = config.mainDeckWidth;
-                    UI.mainDeckSection.style.flexGrow = '0';
-                    UI.mainDeckSection.style.flexShrink = '1';
+                    mainWidth = parseInt(config.mainDeckWidth) || 0;
                 } else {
-                    UI.mainDeckSection.style.width = '';
-                    UI.mainDeckSection.style.minWidth = '300px';
-                    UI.mainDeckSection.style.flexGrow = '1';
-                    UI.mainDeckSection.style.flexShrink = '1';
+                    mainWidth = 300; // default
                 }
                 if (config.sideDeckWidth) {
-                    UI.sideDeckSection.style.width = config.sideDeckWidth;
-                    UI.sideDeckSection.style.minWidth = config.sideDeckWidth;
-                    UI.sideDeckSection.style.flexGrow = '0';
-                    UI.sideDeckSection.style.flexShrink = '1';
+                    sideWidth = parseInt(config.sideDeckWidth) || 0;
                 } else {
-                    UI.sideDeckSection.style.width = '280px';
-                    UI.sideDeckSection.style.minWidth = '200px';
-                    UI.sideDeckSection.style.flexGrow = '0';
-                    UI.sideDeckSection.style.flexShrink = '1';
+                    sideWidth = 280; // default
                 }
                 if (config.extraDeckWidth) {
-                    UI.extraDeckSection.style.width = config.extraDeckWidth;
-                    UI.extraDeckSection.style.minWidth = config.extraDeckWidth;
-                    UI.extraDeckSection.style.flexGrow = '0';
-                    UI.extraDeckSection.style.flexShrink = '1';
+                    extraWidth = parseInt(config.extraDeckWidth) || 0;
                 } else {
-                    UI.extraDeckSection.style.width = '280px';
-                    UI.extraDeckSection.style.minWidth = '200px';
-                    UI.extraDeckSection.style.flexGrow = '0';
-                    UI.extraDeckSection.style.flexShrink = '1';
+                    extraWidth = 280; // default
+                }
+
+                const totalWidth = mainWidth + sideWidth + extraWidth;
+                if (totalWidth > 0) {
+                    // Convert legacy pixel config to ratios and save to allVisible
+                    deckRatios.allVisible = {
+                        mainRatio: mainWidth / totalWidth,
+                        sideRatio: sideWidth / totalWidth,
+                        extraRatio: extraWidth / totalWidth
+                    };
+                    applyDeckRatios(deckRatios.allVisible.mainRatio, deckRatios.allVisible.sideRatio, deckRatios.allVisible.extraRatio);
+                    // Save in new multi-state format
+                    saveDeckResizeConfiguration();
                 }
             } catch (e) {
                 console.error('Error loading deck resize configuration:', e);
@@ -5357,6 +6546,27 @@
             UI.navShootout.addEventListener('click', () => {
                 ShootoutManager.populateSetup();
                 showView('shootoutView');
+            });
+
+            UI.navSiding.addEventListener('click', () => {
+                // Check if deck is empty before opening siding builder
+                const isDeckEmpty = (!currentDeck.main || currentDeck.main.length === 0) &&
+                                    (!currentDeck.side || currentDeck.side.length === 0) &&
+                                    (!currentDeck.extra || currentDeck.extra.length === 0);
+
+                if (isDeckEmpty) {
+                    // Highlight import button and show tooltip
+                    UI.importYdkBtn.classList.add('ring-2', 'ring-yellow-400', 'animate-pulse');
+                    NotificationManager.warning('Please import a deck first before managing siding patterns.');
+                    setTimeout(() => {
+                        UI.importYdkBtn.classList.remove('ring-2', 'ring-yellow-400', 'animate-pulse');
+                    }, 3000);
+                    return;
+                }
+
+                // Render all existing matchup cards and the "Add New Matchup" card
+                renderAllMatchupCards();
+                showView('sidingBuilderView');
             });
 
             // Function to initialize sandbox UI elements (in case they weren't found during initial UI init)
@@ -5823,6 +7033,14 @@
             UI.resetHeightsBtn.addEventListener('click', resetDeckHeights);
             UI.resetToDefaultSizesBtn.addEventListener('click', resetToDefaultSizes);
 
+            // Quick align icon buttons (next to section toggles)
+            if (UI.alignByCardSizeBtn) {
+                UI.alignByCardSizeBtn.addEventListener('click', autoAlignByCardSize);
+            }
+            if (UI.alignByTotalSizeBtn) {
+                UI.alignByTotalSizeBtn.addEventListener('click', autoAlignByTotalSize);
+            }
+
             // Close dropdown when clicking outside
             document.addEventListener('click', (e) => {
                 if (!UI.deckOptionsBtn.contains(e.target) && !UI.deckOptionsDropdown.contains(e.target)) {
@@ -5907,53 +7125,13 @@
                 });
             }
 
-            UI.manageSidingBtn.addEventListener('click', () => {
-                // Check if deck is empty before opening siding builder
-                const isDeckEmpty = (!currentDeck.main || currentDeck.main.length === 0) &&
-                                    (!currentDeck.side || currentDeck.side.length === 0) &&
-                                    (!currentDeck.extra || currentDeck.extra.length === 0);
-
-                if (isDeckEmpty) {
-                    // Highlight the import YDK button instead of showing popup
-                    const importLabel = document.querySelector('label[for="importDeckInput"]');
-                    if (importLabel) {
-                        // Flash animation to highlight the button
-                        importLabel.style.animation = 'none';
-                        importLabel.offsetHeight; // Trigger reflow
-                        importLabel.style.animation = 'highlightPulse 1s ease-in-out 3';
-
-                        // Add the animation if it doesn't exist
-                        if (!document.getElementById('highlightPulseStyle')) {
-                            const style = document.createElement('style');
-                            style.id = 'highlightPulseStyle';
-                            style.textContent = `
-                                @keyframes highlightPulse {
-                                    0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); transform: scale(1); }
-                                    50% { box-shadow: 0 0 20px 10px rgba(34, 197, 94, 0.3); transform: scale(1.05); }
-                                }
-                            `;
-                            document.head.appendChild(style);
-                        }
-
-                        showTooltip('Import a deck first to manage siding patterns.');
-                    }
-                    return;
-                }
-
-                UI.deckBuilderView.classList.add('hidden');
-                UI.sidingBuilderView.classList.remove('hidden');
-                // Render all existing matchup cards and the "Add New Matchup" card
-                renderAllMatchupCards();
-            });
             UI.sidingBuilderCloseBtn.addEventListener('click', () => {
-                UI.sidingBuilderView.classList.add('hidden');
-                UI.deckBuilderView.classList.remove('hidden');
+                showView('deckBuilderView');
             });
             // ESC key to close siding builder
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && !UI.sidingBuilderView.classList.contains('hidden')) {
-                    UI.sidingBuilderView.classList.add('hidden');
-                    UI.deckBuilderView.classList.remove('hidden');
+                    showView('deckBuilderView');
                 }
             });
             // Upload Opponent YDK input - change event listener
@@ -7780,6 +8958,7 @@
             if (activeView) activeView.classList.remove('hidden');
 
             UI.navDeckBuilder.classList.toggle('bg-[var(--color-primary)]', viewId === 'deckBuilderView');
+            UI.navSiding.classList.toggle('bg-[var(--color-primary)]', viewId === 'sidingBuilderView');
             UI.navShootout.classList.toggle('bg-[var(--color-primary)]', ['shootoutView', 'shootoutSidingView', 'shootoutSimulatorView', 'shootoutReportView'].includes(viewId)); // MODIFIED
 
         }
@@ -11142,15 +12321,8 @@
                             }
                         }
                     }
-                    if (config.extraDeckVisible !== undefined) {
-                        extraDeckVisible = config.extraDeckVisible;
-                    }
-                    if (config.sideDeckVisible !== undefined) {
-                        sideDeckVisible = config.sideDeckVisible;
-                    }
-                    if (config.databaseVisible !== undefined) {
-                        databaseVisible = config.databaseVisible;
-                    }
+                    // NOTE: Visibility states (databaseVisible, extraDeckVisible, sideDeckVisible) are
+                    // global UI preferences, NOT per-deck settings. Do not override them when importing.
                 }
             }
 
@@ -14522,6 +15694,17 @@
                 cardEl.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
                     removeCardFromDeck(cardId, partName);
+                });
+
+                // Attach long-press handler for card duplication
+                LongPressManager.attach(cardEl, {
+                    onPress: () => {
+                        // Duplicate the card in the same deck section
+                        addCardToDeck(cardId, partName);
+                    },
+                    onCancel: () => {
+                        // Optional: visual feedback for cancelled press
+                    }
                 });
 
                 element.appendChild(cardEl);
@@ -22222,6 +23405,32 @@
             border-radius: 4px;
         }
 
+        /* Hover-only minimal scrollbar for card database */
+        #cardDbList::-webkit-scrollbar {
+            width: 2px;
+        }
+
+        #cardDbList::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #cardDbList::-webkit-scrollbar-thumb {
+            background: transparent;
+        }
+
+        #cardDbList:hover::-webkit-scrollbar-thumb {
+            background: rgba(139, 92, 246, 0.4);
+        }
+
+        #cardDbList {
+            scrollbar-width: none; /* Hide by default in Firefox */
+        }
+
+        #cardDbList:hover {
+            scrollbar-width: thin; /* Show on hover in Firefox */
+            scrollbar-color: rgba(139, 92, 246, 0.4) transparent;
+        }
+
         .card-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
@@ -22329,6 +23538,7 @@
                 rgba(0, 255, 255, 1) 65%,
                 rgba(255, 255, 255, 1) 100%
             );
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor;
             mask-composite: exclude;
@@ -22569,21 +23779,21 @@
         .side-deck-grid {
             display: grid;
             grid-template-columns: repeat(var(--side-deck-columns, 3), 1fr);
-            gap: 0;
+            gap: var(--tuner-grid-gap, 0px);
             align-content: start;
+            justify-content: start;
         }
 
         #extraDeckList.side-deck-grid {
             display: grid;
             grid-template-columns: repeat(var(--extra-deck-columns, 3), 1fr);
-            gap: 0;
+            gap: var(--tuner-grid-gap, 0px);
             align-content: start;
+            justify-content: start;
         }
 
-        .dragging {
-            /* Don't hide - let browser use it for drag image */
-            /* opacity is set inline in JS */
-        }
+        /* .dragging - Don't hide - let browser use it for drag image */
+        /* opacity is set inline in JS */
 
         .placeholder {
             position: relative;
@@ -22771,6 +23981,12 @@
         #cardDatabaseSection {
             transition: opacity 0.2s ease, transform 0.2s ease;
             /* avoid animating width/flex to prevent jitter */
+        }
+
+        /* Card database section - constrain height for internal scrolling */
+        #cardDatabaseSection {
+            max-height: 100vh;
+            /* Constrain to viewport height while allowing child to scroll */
         }
 
         #extraDeckSection.hidden,
@@ -23621,6 +24837,80 @@
                 transform: scale(0);
                 opacity: 0;
             }
+        }
+
+        /* Long-Press Progress Indicator Styles */
+        .long-press-indicator {
+            position: fixed;
+            z-index: 9999;
+            pointer-events: none;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+        }
+
+        .long-press-indicator.active {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .long-press-indicator.complete {
+            opacity: 0;
+            transform: scale(1.2);
+            transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+        }
+
+        .progress-ring {
+            display: block;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+        }
+
+        .progress-ring-bg {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.2);
+            stroke-width: 3;
+        }
+
+        .progress-ring-circle {
+            fill: none;
+            stroke: #4ade80; /* Green-400 */
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-dasharray: 113; /* 2 * PI * 18 */
+            stroke-dashoffset: 113;
+            transform: rotate(-90deg);
+            transform-origin: 20px 20px;
+        }
+
+        .long-press-indicator.active .progress-ring-circle {
+            animation: progressFill 500ms linear forwards;
+        }
+
+        @keyframes progressFill {
+            0% {
+                stroke-dashoffset: 113;
+            }
+            100% {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        /* Dark theme variant */
+        [data-theme="dark"] .progress-ring-bg,
+        .dark .progress-ring-bg {
+            stroke: rgba(255, 255, 255, 0.3);
+        }
+
+        [data-theme="dark"] .progress-ring-circle,
+        .dark .progress-ring-circle {
+            stroke: #22c55e; /* Green-500 */
+        }
+
+        /* Cyber theme variant */
+        [data-theme="cyber"] .progress-ring-circle,
+        .cyber .progress-ring-circle {
+            stroke: #00ff88; /* Neon green */
+            filter: drop-shadow(0 0 4px #00ff88);
         }
 
         .chibi-trap {
@@ -24733,15 +26023,11 @@
         }
 
         /* Row-specific styles */
-        .sandbox-row.opponent-row-1,
-        .sandbox-row.player-row-5 {
-            /* Deck/ED rows with Spell/Traps */
-        }
+        /* Deck/ED rows with Spell/Traps */
+        /* .sandbox-row.opponent-row-1, .sandbox-row.player-row-5 */
 
-        .sandbox-row.opponent-row-2,
-        .sandbox-row.player-row-4 {
-            /* Monster rows with GY/Field */
-        }
+        /* Monster rows with GY/Field */
+        /* .sandbox-row.opponent-row-2, .sandbox-row.player-row-4 */
 
         /* Fix field alignment: ensure all rows use available viewport width */
         .sandbox-field-container .sandbox-row {
@@ -28708,14 +29994,16 @@
                 <nav class="flex gap-2 p-1 bg-[var(--color-surface-1) rounded-lg">
                     <button id="navDeckBuilder"
                         class="px-4 py-2 rounded-md text-sm font-semibold transition-colors hover:bg-[var(--color-primary-hover)]">Deckbuilder</button>
+                    <button id="navSiding"
+                        class="px-4 py-2 rounded-md text-sm font-semibold transition-colors hover:bg-[var(--color-primary-hover)]">Siding</button>
                     <button id="navShootout"
                         class="px-4 py-2 rounded-md text-sm font-semibold transition-colors hover:bg-[var(--color-primary-hover)]">Shootout</button>
                 </nav>
             </div>
         </header>
 
-        <main class="flex-1 flex flex-col overflow-hidden">
-            <div id="deckBuilderView" class="flex-1 flex flex-col overflow-hidden">
+        <main class="flex-1 flex flex-col overflow-hidden min-h-0">
+            <div id="deckBuilderView" class="flex-1 flex flex-col overflow-hidden min-h-0">
                 <div id="deckBuilderContainer" class="flex gap-6 h-full">
                     <div id="cardDatabaseSection"
                         class="bg-[var(--color-surface-1) p-4 rounded-lg flex flex-col min-w-0 flex-shrink-0 h-full"
@@ -28835,9 +30123,6 @@
                             <p class="text-xs text-[var(--color-text-muted)]">Right-click to remove. Drag & drop to
                                 reorder.</p>
                             <div class="flex items-center gap-2">
-                                <button id="manageSidingBtn"
-                                    class="text-xs bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] font-semibold px-3 py-1 rounded-md"
-                                    title="Create and manage siding strategies for this deck.">Manage Siding</button>
                                 <button id="toggleSideDeckBtn"
                                     class="text-xs bg-slate-700 hover:bg-slate-600 font-semibold px-3 py-1 rounded-md transition-colors"
                                     title="Toggle Side Deck visibility">Hide Side</button>
@@ -28847,6 +30132,29 @@
                                 <button id="toggleDatabaseBtn"
                                     class="text-xs bg-slate-700 hover:bg-slate-600 font-semibold px-3 py-1 rounded-md transition-colors"
                                     title="Toggle Card Database visibility">Hide DB</button>
+                                <!-- Align buttons -->
+                                <div class="w-px h-5 bg-slate-600 mx-1"></div>
+                                <button id="alignByCardSizeBtn"
+                                    class="text-xs bg-slate-700 hover:bg-slate-600 p-1 rounded-md transition-colors"
+                                    title="Align by Card Size (all cards same size)">
+                                    <svg class="w-5 h-3" viewBox="0 0 20 12" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <!-- Two equal-sized cards side by side -->
+                                        <rect x="0.5" y="0.5" width="8" height="11" rx="1"/>
+                                        <rect x="11.5" y="0.5" width="8" height="11" rx="1"/>
+                                    </svg>
+                                </button>
+                                <button id="alignByTotalSizeBtn"
+                                    class="text-xs bg-slate-700 hover:bg-slate-600 p-1 rounded-md transition-colors"
+                                    title="Align by Total Size (all sections same height)">
+                                    <svg class="w-5 h-3" viewBox="0 0 20 12" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <!-- One tall card on left, two stacked smaller cards on right -->
+                                        <rect x="0.5" y="0.5" width="7" height="11" rx="1"/>
+                                        <rect x="10.5" y="0.5" width="8" height="4.5" rx="0.75"/>
+                                        <rect x="10.5" y="6.5" width="8" height="4.5" rx="0.75"/>
+                                        <!-- Horizontal line showing equal height -->
+                                        <line x1="0" y1="12" x2="20" y2="12" stroke-dasharray="2 1"/>
+                                    </svg>
+                                </button>
                                 <label for="deckScaleSlider"
                                     class="text-xs text-[var(--color-text-muted)]">Cards/Row</label>
                                 <button id="scaleTargetBtn"
