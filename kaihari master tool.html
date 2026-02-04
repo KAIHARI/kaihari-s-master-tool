@@ -1189,6 +1189,552 @@
         })();
 
         // ============================================================================
+        // MODULE: FilterManager
+        // ============================================================================
+        // MODULE: FilterManager
+        // Lines: 1191-1500
+        // Purpose: Quick filter panel for card database with collapsible interface
+        // Key Methods: init(), toggleFilter(), applyFilters(), renderQuickFilters()
+        // ============================================================================
+
+        const FilterManager = (function() {
+            'use strict';
+
+            // Private state
+            let activeFilters = {
+                cardType: [],        // ['monster', 'spell', 'trap']
+                attribute: [],       // ['dark', 'light', 'water', 'fire', 'earth', 'wind', 'divine']
+                race: [],            // ['warrior', 'dragon', 'fiend', 'zombie', ...]
+                level: { min: 0, max: 12 },
+                atk: { min: null, max: null },
+                def: { min: null, max: null }
+            };
+
+            let isPanelExpanded = true;
+            let currentCategory = 'cardType';
+
+            // Filter category definitions
+            const categories = {
+                cardType: {
+                    label: 'Type',
+                    type: 'multi-select',
+                    options: [
+                        { value: 'monster', label: 'Monster', color: 'bg-blue-600' },
+                        { value: 'spell', label: 'Spell', color: 'bg-green-600' },
+                        { value: 'trap', label: 'Trap', color: 'bg-purple-600' }
+                    ]
+                },
+                attribute: {
+                    label: 'Attribute',
+                    type: 'multi-select',
+                    options: [
+                        { value: 'dark', label: 'DARK', color: 'bg-purple-700' },
+                        { value: 'light', label: 'LIGHT', color: 'bg-yellow-500' },
+                        { value: 'water', label: 'WATER', color: 'bg-blue-500' },
+                        { value: 'fire', label: 'FIRE', color: 'bg-red-600' },
+                        { value: 'earth', label: 'EARTH', color: 'bg-orange-700' },
+                        { value: 'wind', label: 'WIND', color: 'bg-green-500' },
+                        { value: 'divine', label: 'DIVINE', color: 'bg-amber-400' }
+                    ]
+                },
+                race: {
+                    label: 'Race',
+                    type: 'multi-select',
+                    options: [
+                        { value: 'warrior', label: 'Warrior' },
+                        { value: 'dragon', label: 'Dragon' },
+                        { value: 'spellcaster', label: 'Spellcaster' },
+                        { value: 'fiend', label: 'Fiend' },
+                        { value: 'zombie', label: 'Zombie' },
+                        { value: 'machine', label: 'Machine' },
+                        { value: 'aqua', label: 'Aqua' },
+                        { value: 'pyro', label: 'Pyro' },
+                        { value: 'rock', label: 'Rock' },
+                        { value: 'winged beast', label: 'Winged Beast' },
+                        { value: 'plant', label: 'Plant' },
+                        { value: 'insect', label: 'Insect' },
+                        { value: 'thunder', label: 'Thunder' },
+                        { value: 'beast', label: 'Beast' },
+                        { value: 'beast-warrior', label: 'Beast-Warrior' },
+                        { value: 'dinosaur', label: 'Dinosaur' },
+                        { value: 'fish', label: 'Fish' },
+                        { value: 'sea serpent', label: 'Sea Serpent' },
+                        { value: 'reptile', label: 'Reptile' },
+                        { value: 'psychic', label: 'Psychic' },
+                        { value: 'wyrm', label: 'Wyrm' },
+                        { value: 'cyberse', label: 'Cyberse' },
+                        { value: 'illusion', label: 'Illusion' }
+                    ]
+                },
+                level: {
+                    label: 'Level',
+                    type: 'range',
+                    min: 0,
+                    max: 12
+                },
+                stats: {
+                    label: 'ATK/DEF',
+                    type: 'dual-range'
+                }
+            };
+
+            // Get display label for a filter value
+            function getFilterLabel(category, value) {
+                const cat = categories[category];
+                if (cat && cat.options) {
+                    const option = cat.options.find(opt => opt.value === value);
+                    return option ? option.label : value;
+                }
+                return value;
+            }
+
+            // Load panel state from localStorage
+            function loadPanelState() {
+                try {
+                    const saved = localStorage.getItem('quickFilterPanelState');
+                    if (saved) {
+                        const state = JSON.parse(saved);
+                        isPanelExpanded = state.expanded !== undefined ? state.expanded : true;
+                        activeFilters = state.filters || activeFilters;
+                    }
+
+                    // Apply panel state
+                    const content = document.getElementById('quickFilterPanelContent');
+                    const icon = document.getElementById('filterPanelIcon');
+                    if (content && icon) {
+                        if (!isPanelExpanded) {
+                            content.classList.add('collapsed');
+                            icon.classList.add('rotated');
+                        } else {
+                            // Ensure panel is expanded by default
+                            content.classList.remove('collapsed');
+                            icon.classList.remove('rotated');
+                        }
+                        console.log('[FilterManager] Panel state loaded, expanded:', isPanelExpanded);
+                    } else {
+                        console.warn('[FilterManager] Panel elements not found in loadPanelState');
+                    }
+                } catch (e) {
+                    Logger.warn('Failed to load filter panel state', e);
+                }
+            }
+
+            // Save panel state to localStorage
+            function savePanelState() {
+                try {
+                    const state = {
+                        expanded: isPanelExpanded,
+                        filters: activeFilters
+                    };
+                    localStorage.setItem('quickFilterPanelState', JSON.stringify(state));
+                } catch (e) {
+                    Logger.warn('Failed to save filter panel state', e);
+                }
+            }
+
+            // Apply filters to card list
+            function applyFilters(cards = null) {
+                // Trigger card rendering - the actual filtering happens in getCardsToDisplay()
+                if (typeof renderCardDatabase === 'function') {
+                    renderCardDatabase(false);
+                }
+
+                // Recalculate database height to accommodate panel state changes
+                if (typeof setCardDatabaseHeight === 'function') {
+                    requestAnimationFrame(setCardDatabaseHeight);
+                }
+
+                updateFilterUI();
+                return window.currentFilteredCards || [];
+            }
+
+            // Update filter UI elements
+            function updateFilterUI() {
+                renderActiveFilters();
+                updateActiveCount();
+            }
+
+            // Update active filter count display
+            function updateActiveCount() {
+                const countEl = document.getElementById('activeFilterCount');
+                if (!countEl) return;
+
+                let count = 0;
+                count += activeFilters.cardType.length;
+                count += activeFilters.attribute.length;
+                count += activeFilters.race.length;
+                if (activeFilters.level.min > 0 || activeFilters.level.max < 12) count++;
+                if (activeFilters.atk.min !== null || activeFilters.atk.max !== null) count++;
+                if (activeFilters.def.min !== null || activeFilters.def.max !== null) count++;
+
+                countEl.textContent = count > 0 ? `(${count} active)` : '';
+            }
+
+            // Private helper: Check if any filters are active
+            function hasActiveFilters() {
+                if (activeFilters.cardType.length > 0) return true;
+                if (activeFilters.attribute.length > 0) return true;
+                if (activeFilters.race.length > 0) return true;
+                if (activeFilters.level.min > 0 || activeFilters.level.max < 12) return true;
+                if (activeFilters.atk.min !== null || activeFilters.atk.max !== null) return true;
+                if (activeFilters.def.min !== null || activeFilters.def.max !== null) return true;
+                return false;
+            }
+
+            // Private helper: Get active filters for display
+            function getActiveFilters() {
+                const active = [];
+
+                activeFilters.cardType.forEach(v => {
+                    active.push({ type: 'cardType', value: v, label: getFilterLabel('cardType', v) });
+                });
+
+                activeFilters.attribute.forEach(v => {
+                    active.push({ type: 'attribute', value: v, label: getFilterLabel('attribute', v) });
+                });
+
+                activeFilters.race.forEach(v => {
+                    active.push({ type: 'race', value: v, label: getFilterLabel('race', v) });
+                });
+
+                if (activeFilters.level.min > 0 || activeFilters.level.max < 12) {
+                    active.push({
+                        type: 'level',
+                        value: 'range',
+                        label: `Lvl ${activeFilters.level.min}-${activeFilters.level.max}`
+                    });
+                }
+
+                if (activeFilters.atk.min !== null || activeFilters.atk.max !== null) {
+                    const min = activeFilters.atk.min !== null ? activeFilters.atk.min : '';
+                    const max = activeFilters.atk.max !== null ? activeFilters.atk.max : '';
+                    active.push({ type: 'atk', value: 'range', label: `ATK ${min}-${max}` });
+                }
+
+                if (activeFilters.def.min !== null || activeFilters.def.max !== null) {
+                    const min = activeFilters.def.min !== null ? activeFilters.def.min : '';
+                    const max = activeFilters.def.max !== null ? activeFilters.def.max : '';
+                    active.push({ type: 'def', value: 'range', label: `DEF ${min}-${max}` });
+                }
+
+                return active;
+            }
+
+            // Private helper: Check if a filter is active
+            function isFilterActive(category, value) {
+                const currentState = activeFilters[category];
+                if (Array.isArray(currentState)) {
+                    return currentState.includes(value);
+                }
+                return false;
+            }
+
+            // Private helper: Toggle a filter on/off
+            function toggleFilter(category, value) {
+                const currentState = activeFilters[category];
+
+                if (Array.isArray(currentState)) {
+                    const index = currentState.indexOf(value);
+                    if (index === -1) {
+                        currentState.push(value);
+                    } else {
+                        currentState.splice(index, 1);
+                    }
+                }
+
+                updateFilterUI();
+                applyFilters();
+                savePanelState();
+                renderQuickFilters();
+            }
+
+            // Render filter chips for current category
+            function renderQuickFilters() {
+                const container = document.getElementById('filterChipsContainer');
+                if (!container) return;
+
+                const category = categories[currentCategory];
+                container.innerHTML = '';
+
+                if (category.type === 'multi-select') {
+                    category.options.forEach(option => {
+                        const chip = document.createElement('button');
+                        chip.className = 'filter-chip';
+                        chip.dataset.category = currentCategory;
+                        chip.dataset.value = option.value;
+                        chip.textContent = option.label;
+
+                        if (isFilterActive(currentCategory, option.value)) {
+                            chip.classList.add('active');
+                        }
+
+                        chip.addEventListener('click', () => {
+                            toggleFilter(currentCategory, option.value);
+                        });
+
+                        container.appendChild(chip);
+                    });
+                } else if (category.type === 'range') {
+                    // Level range inputs
+                    const rangeDiv = document.createElement('div');
+                    rangeDiv.className = 'flex items-center gap-3 p-2';
+                    rangeDiv.innerHTML = `
+                        <label class="text-xs text-slate-400">Level:</label>
+                        <input type="number" id="levelMin" min="0" max="12" value="${activeFilters.level.min}"
+                            class="w-16 bg-slate-700 border border-[var(--color-border)] rounded px-2 py-1 text-xs text-center">
+                        <span class="text-xs text-slate-400">to</span>
+                        <input type="number" id="levelMax" min="0" max="12" value="${activeFilters.level.max}"
+                            class="w-16 bg-slate-700 border border-[var(--color-border)] rounded px-2 py-1 text-xs text-center">
+                        <button id="applyLevelBtn" class="text-xs bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-md transition-colors">Apply</button>
+                    `;
+                    container.appendChild(rangeDiv);
+
+                    // Attach event listeners
+                    setTimeout(() => {
+                        document.getElementById('applyLevelBtn')?.addEventListener('click', () => {
+                            const min = parseInt(document.getElementById('levelMin')?.value || 0);
+                            const max = parseInt(document.getElementById('levelMax')?.value || 12);
+                            activeFilters.level = { min: Math.min(min, max), max: Math.max(min, max) };
+                            savePanelState();
+                            applyFilters();
+                        });
+                    }, 0);
+                } else if (category.type === 'dual-range') {
+                    // ATK/DEF range inputs
+                    const statsDiv = document.createElement('div');
+                    statsDiv.className = 'space-y-3 p-2';
+                    statsDiv.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-400 w-8">ATK:</span>
+                            <input type="number" id="atkMin" placeholder="Min" min="0"
+                                class="w-20 bg-slate-700 border border-[var(--color-border)] rounded px-2 py-1 text-xs">
+                            <span class="text-xs text-slate-400">to</span>
+                            <input type="number" id="atkMax" placeholder="Max" min="0"
+                                class="w-20 bg-slate-700 border border-[var(--color-border)] rounded px-2 py-1 text-xs">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-400 w-8">DEF:</span>
+                            <input type="number" id="defMin" placeholder="Min" min="0"
+                                class="w-20 bg-slate-700 border border-[var(--color-border)] rounded px-2 py-1 text-xs">
+                            <span class="text-xs text-slate-400">to</span>
+                            <input type="number" id="defMax" placeholder="Max" min="0"
+                                class="w-20 bg-slate-700 border border-[var(--color-border)] rounded px-2 py-1 text-xs">
+                        </div>
+                        <button id="applyStatsBtn" class="text-xs bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-md transition-colors w-full">Apply Stats</button>
+                    `;
+                    container.appendChild(statsDiv);
+
+                    // Set current values
+                    setTimeout(() => {
+                        if (activeFilters.atk.min !== null) document.getElementById('atkMin').value = activeFilters.atk.min;
+                        if (activeFilters.atk.max !== null) document.getElementById('atkMax').value = activeFilters.atk.max;
+                        if (activeFilters.def.min !== null) document.getElementById('defMin').value = activeFilters.def.min;
+                        if (activeFilters.def.max !== null) document.getElementById('defMax').value = activeFilters.def.max;
+
+                        document.getElementById('applyStatsBtn')?.addEventListener('click', () => {
+                            activeFilters.atk = {
+                                min: document.getElementById('atkMin').value ? parseInt(document.getElementById('atkMin').value) : null,
+                                max: document.getElementById('atkMax').value ? parseInt(document.getElementById('atkMax').value) : null
+                            };
+                            activeFilters.def = {
+                                min: document.getElementById('defMin').value ? parseInt(document.getElementById('defMin').value) : null,
+                                max: document.getElementById('defMax').value ? parseInt(document.getElementById('defMax').value) : null
+                            };
+                            savePanelState();
+                            applyFilters();
+                        });
+                    }, 0);
+                }
+            }
+
+            // Private helper: Remove a filter
+            function removeFilter(category, value) {
+                if (Array.isArray(activeFilters[category])) {
+                    const index = activeFilters[category].indexOf(value);
+                    if (index > -1) {
+                        activeFilters[category].splice(index, 1);
+                    }
+                } else if (typeof activeFilters[category] === 'object') {
+                    if (category === 'level') {
+                        activeFilters[category] = { min: 0, max: 12 };
+                    } else {
+                        activeFilters[category] = { min: null, max: null };
+                    }
+                }
+                updateFilterUI();
+                applyFilters();
+                savePanelState();
+                renderQuickFilters();
+            }
+
+            // Render active filters display
+            function renderActiveFilters() {
+                const bar = document.getElementById('activeFiltersBar');
+                const container = document.getElementById('activeFiltersContainer');
+
+                if (!bar || !container) return;
+
+                if (!hasActiveFilters()) {
+                    bar.classList.add('hidden');
+                    return;
+                }
+
+                bar.classList.remove('hidden');
+                container.innerHTML = '';
+
+                const active = getActiveFilters();
+
+                active.forEach(filter => {
+                    const badge = document.createElement('div');
+                    badge.className = 'active-filter-badge';
+                    badge.innerHTML = `
+                        <span>${filter.label}</span>
+                        <button data-type="${filter.type}" data-value="${filter.value}" aria-label="Remove filter">×</button>
+                    `;
+
+                    badge.querySelector('button').addEventListener('click', () => {
+                        removeFilter(filter.type, filter.value);
+                    });
+
+                    container.appendChild(badge);
+                });
+            }
+
+            return {
+                init() {
+                    this.renderQuickFilters();
+                    this.attachEventListeners();
+                    this.loadPanelState();
+                    Logger.info('FilterManager initialized');
+                },
+
+                toggleFilter(category, value) {
+                    // Call the private toggleFilter function
+                    toggleFilter(category, value);
+                },
+
+                clearFilters(category) {
+                    if (Array.isArray(activeFilters[category])) {
+                        activeFilters[category] = [];
+                    } else if (typeof activeFilters[category] === 'object') {
+                        if (category === 'level') {
+                            activeFilters[category] = { min: 0, max: 12 };
+                        } else {
+                            activeFilters[category] = { min: null, max: null };
+                        }
+                    }
+                    this.updateFilterUI();
+                    this.applyFilters();
+                    this.savePanelState();
+                    this.renderQuickFilters();
+                },
+
+                clearAllFilters() {
+                    activeFilters.cardType = [];
+                    activeFilters.attribute = [];
+                    activeFilters.race = [];
+                    activeFilters.level = { min: 0, max: 12 };
+                    activeFilters.atk = { min: null, max: null };
+                    activeFilters.def = { min: null, max: null };
+                    this.updateFilterUI();
+                    this.applyFilters();
+                    this.savePanelState();
+                    this.renderQuickFilters();
+                    NotificationManager.success('All filters cleared');
+                },
+
+                applyFilters(cards) {
+                    return applyFilters(cards);
+                },
+
+                hasActiveFilters() {
+                    return hasActiveFilters();
+                },
+
+                getActiveFilters() {
+                    return getActiveFilters();
+                },
+
+                isFilterActive(category, value) {
+                    // Call the private isFilterActive function
+                    return isFilterActive(category, value);
+                },
+
+                removeFilter(category, value) {
+                    // Call the private removeFilter function
+                    removeFilter(category, value);
+                },
+
+                togglePanel() {
+                    const content = document.getElementById('quickFilterPanelContent');
+                    const icon = document.getElementById('filterPanelIcon');
+
+                    isPanelExpanded = !isPanelExpanded;
+
+                    if (isPanelExpanded) {
+                        content.classList.remove('collapsed');
+                        icon.classList.remove('rotated');
+                    } else {
+                        content.classList.add('collapsed');
+                        icon.classList.add('rotated');
+                    }
+
+                    this.savePanelState();
+
+                    // Recalculate database height after panel expansion/collapse
+                    if (typeof setCardDatabaseHeight === 'function') {
+                        requestAnimationFrame(setCardDatabaseHeight);
+                    }
+                },
+
+                renderQuickFilters() {
+                    renderQuickFilters();
+                },
+
+                renderActiveFilters() {
+                    renderActiveFilters();
+                },
+
+                updateFilterUI() {
+                    updateFilterUI();
+                },
+
+                loadPanelState() {
+                    loadPanelState();
+                },
+
+                savePanelState() {
+                    savePanelState();
+                },
+
+                attachEventListeners() {
+                    // Panel collapse
+                    document.getElementById('quickFilterPanelHeader')?.addEventListener('click', (e) => {
+                        if (e.target.id !== 'clearAllFiltersBtn' && !e.target.closest('#clearAllFiltersBtn')) {
+                            this.togglePanel();
+                        }
+                    });
+
+                    // Category tabs
+                    document.querySelectorAll('.filter-tab').forEach(tab => {
+                        tab.addEventListener('click', (e) => {
+                            document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                            e.target.classList.add('active');
+                            currentCategory = e.target.dataset.category;
+                            this.renderQuickFilters();
+                        });
+                    });
+
+                    // Clear all button
+                    document.getElementById('clearAllFiltersBtn')?.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.clearAllFilters();
+                    });
+                }
+            };
+        })();
+
+        // ============================================================================
         // MODULE: BulkOperations
         // ============================================================================
         // MODULE: BulkOperations
@@ -1532,6 +2078,27 @@
             }
 
             /**
+             * Handle drag start event - cancel long press when drag begins
+             */
+            function handleDragStart(e) {
+                const target = e.currentTarget;
+                const instance = activeInstances.get(target);
+
+                if (instance && instance.timer) {
+                    // Drag operation started - cancel long press immediately
+                    cancel(target);
+                }
+            }
+
+            /**
+             * Handle drag end event - ensure cleanup
+             */
+            function handleDragEnd(e) {
+                const target = e.currentTarget;
+                cleanup(target);
+            }
+
+            /**
              * Clean up event listeners and state for a target element
              */
             function cleanup(target) {
@@ -1620,6 +2187,8 @@
                 element.addEventListener('mouseup', handlePointerUp);
                 element.addEventListener('touchend', handlePointerUp);
                 element.addEventListener('mouseleave', handlePointerLeave);
+                element.addEventListener('dragstart', handleDragStart);
+                element.addEventListener('dragend', handleDragEnd);
             }
 
             return {
@@ -2187,6 +2756,12 @@
             gridSelectionControls: null, selectAllGridBtn: null, clearSelectionGridBtn: null, deleteSelectedGridBtn: null, selectedCount: null,
             cardDatabaseSection: null, resizeHandle: null, deckBuilderSection: null, deckBuilderContainer: null,
             advancedSearchBtn: null,
+
+            // Quick Filter Panel
+            quickFilterPanel: null, quickFilterPanelHeader: null, quickFilterPanelContent: null,
+            filterPanelIcon: null, filterChipsContainer: null, clearAllFiltersBtn: null,
+            activeFiltersBar: null, activeFiltersContainer: null, activeFilterCount: null,
+
             // UX Improvements - Sort Controls
             dbSortSelect: null, dbResultCount: null,
             // UX Improvements - Preview Modal
@@ -2224,6 +2799,7 @@
             deckScaleSlider: null, scaleTargetBtn: null, cardsPerRowDisplay: null, toggleExtraDeckBtn: null, extraDeckSection: null, deckGridContainer: null,
             deckOptionsBtn: null, deckOptionsDropdown: null, autoAlignByCardSizeBtn: null, autoAlignByTotalSizeBtn: null, resetHeightsBtn: null, resetToDefaultSizesBtn: null,
             toggleSideDeckBtn: null, toggleDatabaseBtn: null, sideDeckSection: null, mainDeckSection: null,
+            mainDeckHeader: null, sideDeckHeader: null, extraDeckHeader: null,
             mainSideResizeHandle: null, sideExtraResizeHandle: null,
             alignByCardSizeBtn: null, alignByTotalSizeBtn: null,
 
@@ -2314,19 +2890,71 @@
          * CSS `h-full` (height: 100%) doesn't provide this when the parent's height is
          * determined by flex layout (flex-1). This function calculates and sets the
          * height in JavaScript as an explicit pixel value.
+         *
+         * In wide screen mode (≥1024px), we also need to ensure the inner scrollable
+         * element (cardDbList) gets proper height constraints for scrolling to work.
          */
         function setCardDatabaseHeight() {
             if (UI.cardDatabaseSection && UI.deckBuilderContainer) {
                 // Only set explicit height in horizontal mode (not vertical/portrait)
                 const isVertical = UI.deckBuilderContainer.offsetWidth < 1024;
+                console.log(`[setCardDatabaseHeight] Mode: ${isVertical ? 'vertical' : 'horizontal'}, Width: ${UI.deckBuilderContainer.offsetWidth}px`);
+
                 if (!isVertical) {
                     const parentHeight = UI.deckBuilderContainer.offsetHeight;
                     UI.cardDatabaseSection.style.height = `${parentHeight}px`;
-                    console.log(`[setCardDatabaseHeight] Set explicit height: ${parentHeight}px`);
+
+                    // Also ensure the inner scrollable element (cardDbList) has explicit height
+                    // Calculate available height by subtracting the height of non-scrollable content
+                    // (header, search bar, controls) from the parent height
+                    if (UI.cardDbList) {
+                        // Get all sibling elements before cardDbList to calculate their total height
+                        const siblings = Array.from(UI.cardDatabaseSection.children);
+                        console.log(`[setCardDatabaseHeight] Total siblings: ${siblings.length}`);
+                        const cardDbListIndex = siblings.indexOf(UI.cardDbList);
+                        let fixedHeight = 0;
+
+                        for (let i = 0; i < cardDbListIndex; i++) {
+                            const sibling = siblings[i];
+                            if (sibling instanceof HTMLElement) {
+                                // Skip quick filter panel from height calculation (it has flexible height)
+                                if (sibling.id === 'quickFilterPanel') {
+                                    console.log(`[setCardDatabaseHeight] Skipping quickFilterPanel (offsetHeight: ${sibling.offsetHeight}px)`);
+                                    continue;
+                                }
+                                // Include outerHeight to account for margins, borders, padding
+                                fixedHeight += sibling.offsetHeight;
+                                const styles = window.getComputedStyle(sibling);
+                                fixedHeight += parseFloat(styles.marginTop) || 0;
+                                fixedHeight += parseFloat(styles.marginBottom) || 0;
+                            }
+                        }
+
+                        // Also account for padding on the parent container
+                        const parentStyles = window.getComputedStyle(UI.cardDatabaseSection);
+                        const paddingTop = parseFloat(parentStyles.paddingTop) || 0;
+                        const paddingBottom = parseFloat(parentStyles.paddingBottom) || 0;
+                        const verticalPadding = paddingTop + paddingBottom;
+
+                        // Set explicit height on cardDbList to enable scrolling
+                        const availableHeight = parentHeight - fixedHeight - verticalPadding;
+                        console.log(`[setCardDatabaseHeight] parent: ${parentHeight}px, fixed: ${fixedHeight}px, padding: ${verticalPadding}px, available: ${availableHeight}px`);
+                        // Disable flex grow/shrink so the explicit height takes effect
+                        UI.cardDbList.style.flex = '0 0 auto';
+                        UI.cardDbList.style.minHeight = '0';  // Override .card-db-grid min-height: min-content
+                        UI.cardDbList.style.height = `${availableHeight}px`;
+                        console.log(`[setCardDatabaseHeight] Set cardDbList height: ${availableHeight}px (parent: ${parentHeight}px, fixed: ${fixedHeight}px, padding: ${verticalPadding}px)`);
+                    }
                 } else {
                     // In vertical mode, use flex-basis instead of explicit height
                     // This allows the vertical resize to work properly
                     UI.cardDatabaseSection.style.height = '';
+                    if (UI.cardDbList) {
+                        // Reset both flex and height to restore flex behavior
+                        UI.cardDbList.style.flex = '';
+                        UI.cardDbList.style.minHeight = '';
+                        UI.cardDbList.style.height = '';
+                    }
                 }
             }
         }
@@ -2436,8 +3064,13 @@
             initializeUI();
             loadEasterEggCardPool(); // Initialize easter egg card pool
 
-            // 2.05. Fix card database scrollbar by setting explicit height
-            setCardDatabaseHeight();
+            // 2.1. Initialize FilterManager module
+            FilterManager.init();
+
+            // 2.05. Fix card database scrollbar - wait for panel to render properly
+            requestAnimationFrame(() => {
+                setCardDatabaseHeight();
+            });
 
             // Add window resize listener to update card database height
             window.addEventListener('resize', () => {
@@ -2572,6 +3205,11 @@
                     queueCardImagesForPreload();
                     console.log('[Startup] Background card image preloading initiated');
                 }, 2000);
+
+                // Initialize header wrapping state after all UI is loaded
+                requestAnimationFrame(() => {
+                    syncHeaderWrapping();
+                });
             }, 100);
         }
 
@@ -3004,6 +3642,9 @@
                     } catch (e) {
                         console.error('Error applying deck ratios on resize:', e);
                     }
+
+                    // Sync header wrapping after deck ratios are applied
+                    syncHeaderWrapping();
                 });
             });
 
@@ -4336,6 +4977,9 @@
                         // Save after applying ratios
                         saveDeckResizeConfiguration();
                     }
+
+                    // Sync header wrapping after layout settles
+                    syncHeaderWrapping();
                 });
             });
         }
@@ -4590,6 +5234,9 @@
                         // Save after applying ratios
                         saveDeckResizeConfiguration();
                     }
+
+                    // Sync header wrapping after layout settles
+                    syncHeaderWrapping();
                 });
             });
         }
@@ -6116,6 +6763,11 @@
                             UI.extraDeckSection.style.width = `${newExtraWidth}px`;
                             UI.extraDeckSection.style.minWidth = `${newExtraWidth}px`;
                         }
+
+                        // Sync header wrapping (deferred to read updated layout)
+                        requestAnimationFrame(() => {
+                            syncHeaderWrapping();
+                        });
                     } else {
                         // sideExtra handle: resizing extra deck vs combined main+side
                         const combinedMainSide = startMainWidth + startSideWidth;
@@ -6155,6 +6807,11 @@
                             UI.extraDeckSection.style.flexGrow = '0';
                             UI.extraDeckSection.style.flexShrink = '0';
                         }
+
+                        // Sync header wrapping (deferred to read updated layout)
+                        requestAnimationFrame(() => {
+                            syncHeaderWrapping();
+                        });
                     }
                 });
             });
@@ -6205,6 +6862,58 @@
             // Prevent text selection while dragging
             handle.addEventListener('selectstart', (e) => {
                 e.preventDefault();
+            });
+        }
+
+        // Synchronized header wrapping for deck sections
+        // If ANY section is narrow enough to cause text wrapping, ALL headers should wrap
+        // Uses zero-width space (\u200B) to force wrapping regardless of container width
+        function syncHeaderWrapping() {
+            if (!UI.mainDeckSection || !UI.sideDeckSection || !UI.extraDeckSection) return;
+            if (!UI.mainDeckHeader || !UI.sideDeckHeader || !UI.extraDeckHeader) return;
+
+            // Get the width of all three sections
+            const mainWidth = UI.mainDeckSection.offsetWidth;
+            const sideWidth = UI.sideDeckSection.offsetWidth;
+            const extraWidth = UI.extraDeckSection.offsetWidth;
+
+            // Find the narrowest section
+            const minWidth = Math.min(mainWidth, sideWidth, extraWidth);
+
+            // Threshold: if any section is narrower than ~160px, all headers should wrap
+            const WRAP_THRESHOLD = 160;
+
+            const shouldWrap = minWidth < WRAP_THRESHOLD;
+
+            // Store original text (without zero-width space)
+            if (!UI.mainDeckHeader.dataset.originalText) {
+                UI.mainDeckHeader.dataset.originalText = UI.mainDeckHeader.textContent.trim();
+            }
+            if (!UI.sideDeckHeader.dataset.originalText) {
+                UI.sideDeckHeader.dataset.originalText = UI.sideDeckHeader.textContent.trim();
+            }
+            if (!UI.extraDeckHeader.dataset.originalText) {
+                UI.extraDeckHeader.dataset.originalText = UI.extraDeckHeader.textContent.trim();
+            }
+
+            // Zero-width space character
+            const ZWSP = '\u200B';
+
+            // Apply or remove wrapping
+            [UI.mainDeckHeader, UI.sideDeckHeader, UI.extraDeckHeader].forEach(header => {
+                const originalText = header.dataset.originalText;
+
+                if (shouldWrap) {
+                    // Insert zero-width space between words to force wrapping
+                    // Handles "Main Deck", "Side Deck", "Extra Deck"
+                    const parts = originalText.split(' ');
+                    if (parts.length > 1) {
+                        header.textContent = parts.join(ZWSP);
+                    }
+                } else {
+                    // Restore original text without zero-width space
+                    header.textContent = originalText;
+                }
             });
         }
 
@@ -7786,6 +8495,12 @@
                     UI.cardSearchInput.select();
                 }
             }, 'Focus search');
+
+            KeyboardManager.register('ctrl+shift+f', () => {
+                if (typeof FilterManager !== 'undefined') {
+                    FilterManager.togglePanel();
+                }
+            }, 'Toggle quick filter panel');
 
             KeyboardManager.register('escape', () => {
                 // Close all modals
@@ -14647,6 +15362,91 @@
                 cards = cards.filter(card => !isExtraDeckMonster(card));
             }
 
+            // Apply FilterManager quick filters if active
+            if (typeof FilterManager !== 'undefined' && FilterManager.hasActiveFilters()) {
+                const activeFilters = FilterManager.getActiveFilters();
+
+                // Apply card type filter
+                const typeFilters = activeFilters.filter(f => f.type === 'cardType').map(f => f.value);
+                if (typeFilters.length > 0) {
+                    cards = cards.filter(card => {
+                        return typeFilters.some(type => {
+                            const typeLower = card.type?.toLowerCase() || '';
+                            if (type === 'monster') return typeLower.includes('monster');
+                            if (type === 'spell') return typeLower.includes('spell');
+                            if (type === 'trap') return typeLower.includes('trap');
+                            return false;
+                        });
+                    });
+                }
+
+                // Apply attribute filter
+                const attrFilters = activeFilters.filter(f => f.type === 'attribute').map(f => f.value);
+                if (attrFilters.length > 0) {
+                    cards = cards.filter(card => {
+                        const attr = card.attribute?.toLowerCase() || '';
+                        return attrFilters.includes(attr);
+                    });
+                }
+
+                // Apply race filter
+                const raceFilters = activeFilters.filter(f => f.type === 'race').map(f => f.value);
+                if (raceFilters.length > 0) {
+                    cards = cards.filter(card => {
+                        const race = card.race?.toLowerCase() || '';
+                        return raceFilters.some(r => race.includes(r));
+                    });
+                }
+
+                // Apply level filter
+                const levelFilter = activeFilters.find(f => f.type === 'level');
+                if (levelFilter) {
+                    // Parse level range from label (e.g., "Lvl 4-8")
+                    const match = levelFilter.label.match(/Lvl (\d+)-(\d+)/);
+                    if (match) {
+                        const minLevel = parseInt(match[1]);
+                        const maxLevel = parseInt(match[2]);
+                        cards = cards.filter(card => {
+                            const level = card.level || card.rank;
+                            if (!level) return false;
+                            return level >= minLevel && level <= maxLevel;
+                        });
+                    }
+                }
+
+                // Apply ATK filter
+                const atkFilter = activeFilters.find(f => f.type === 'atk');
+                if (atkFilter) {
+                    const match = atkFilter.label.match(/ATK (\d+)-(\d+)/);
+                    if (match) {
+                        const minAtk = match[1] ? parseInt(match[1]) : null;
+                        const maxAtk = match[2] ? parseInt(match[2]) : null;
+                        if (minAtk !== null) {
+                            cards = cards.filter(card => card.atk !== null && card.atk >= minAtk);
+                        }
+                        if (maxAtk !== null) {
+                            cards = cards.filter(card => card.atk !== null && card.atk <= maxAtk);
+                        }
+                    }
+                }
+
+                // Apply DEF filter
+                const defFilter = activeFilters.find(f => f.type === 'def');
+                if (defFilter) {
+                    const match = defFilter.label.match(/DEF (\d+)-(\d+)/);
+                    if (match) {
+                        const minDef = match[1] ? parseInt(match[1]) : null;
+                        const maxDef = match[2] ? parseInt(match[2]) : null;
+                        if (minDef !== null) {
+                            cards = cards.filter(card => card.def !== null && card.def >= minDef);
+                        }
+                        if (maxDef !== null) {
+                            cards = cards.filter(card => card.def !== null && card.def <= maxDef);
+                        }
+                    }
+                }
+            }
+
             // Reset pagination if requested (e.g., on search/filter/source change)
             if (resetPagination) {
                 cardDatabasePagination.currentPage = 1;
@@ -15055,6 +15855,11 @@
                     else if (action === 'delete') deleteCardFromDb(id);
                 });
             });
+
+            // Update filter UI after rendering
+            if (typeof FilterManager !== 'undefined') {
+                FilterManager.updateFilterUI();
+            }
         }
 
         // --- CARD PREVIEW MODAL FUNCTIONS ---
@@ -15417,6 +16222,11 @@
 
                 UI.cardDbList.appendChild(cardEl);
             });
+
+            // Update filter UI after rendering
+            if (typeof FilterManager !== 'undefined') {
+                FilterManager.updateFilterUI();
+            }
         }
 
         function updateSelectedCount() {
@@ -27082,6 +27892,162 @@
             opacity: 0.9;
             pointer-events: none;
         }
+
+        /* ============================================================================
+         * QUICK FILTER PANEL STYLES
+         * ============================================================================ */
+
+        /* Quick Filter Panel */
+        #quickFilterPanel {
+            transition: all 0.3s ease;
+        }
+
+        #quickFilterPanelHeader {
+            user-select: none;
+        }
+
+        #quickFilterPanelContent.collapsed {
+            max-height: 0;
+            overflow: hidden;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+
+        #quickFilterPanelContent {
+            max-height: 500px;
+            min-height: 120px;  /* Changed from 100px to 120px for better visibility */
+            height: auto !important;  /* Force auto height to prevent collapse */
+            transition: max-height 0.3s ease;
+        }
+
+        #filterPanelIcon {
+            transition: transform 0.3s ease;
+        }
+
+        #filterPanelIcon.rotated {
+            transform: rotate(-90deg);
+        }
+
+        /* Filter Tabs */
+        .filter-tab {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border-radius: 0.375rem 0.375rem 0 0;
+            transition: all 0.2s;
+            color: rgb(148 163 184);
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+        }
+
+        .filter-tab:hover {
+            background-color: rgb(51 65 85);
+            color: rgb(203 213 225);
+        }
+
+        .filter-tab.active {
+            background-color: var(--color-surface-1);
+            color: var(--color-primary);
+            border-bottom: 2px solid var(--color-primary);
+        }
+
+        /* Filter Chips */
+        .filter-chip {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border-radius: 9999px;
+            border: 1px solid var(--color-border);
+            transition: all 0.2s;
+            white-space: nowrap;
+            background-color: rgb(51 65 85);
+            color: rgb(203 213 225);
+            cursor: pointer;
+        }
+
+        .filter-chip:hover {
+            background-color: rgb(71 85 105);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .filter-chip.active {
+            box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 4px var(--color-surface-1);
+            color: white;
+        }
+
+        /* Category-specific active colors */
+        .filter-chip[data-value="monster"].active { background-color: rgb(37 99 235); }
+        .filter-chip[data-value="spell"].active { background-color: rgb(22 163 74); }
+        .filter-chip[data-value="trap"].active { background-color: rgb(147 51 234); }
+
+        .filter-chip[data-value="dark"].active { background-color: rgb(107 33 168); }
+        .filter-chip[data-value="light"].active { background-color: rgb(234 179 8); color: black; }
+        .filter-chip[data-value="water"].active { background-color: rgb(59 130 246); }
+        .filter-chip[data-value="fire"].active { background-color: rgb(220 38 38); }
+        .filter-chip[data-value="earth"].active { background-color: rgb(162 69 11); }
+        .filter-chip[data-value="wind"].active { background-color: rgb(34 197 94); }
+        .filter-chip[data-value="divine"].active { background-color: rgb(251 191 36); color: black; }
+
+        /* Active Filter Badges */
+        .active-filter-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            background-color: var(--color-primary);
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .active-filter-badge button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 9999px;
+            background-color: rgba(255, 255, 255, 0.2);
+            transition: background-color 0.2s;
+            border: none;
+            color: white;
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .active-filter-badge button:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Scrollbar */
+        .scrollbar-thin {
+            scrollbar-width: thin;
+            scrollbar-color: rgb(71 85 105) transparent;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background-color: rgb(71 85 105);
+            border-radius: 3px;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+            background-color: rgb(100 116 139);
+        }
     </style>
 </head>
 
@@ -30102,6 +31068,49 @@
                             </div><button id="addCardBtn"
                                 class="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold py-2 px-4 rounded-md transition-colors flex-shrink-0">Search</button>
                         </div>
+
+                        <!-- Quick Filter Panel -->
+                        <div id="quickFilterPanel" class="mb-3 border border-[var(--color-border)] rounded-lg overflow-hidden">
+                            <!-- Panel Header (Collapsible) -->
+                            <div id="quickFilterPanelHeader" class="flex items-center justify-between px-3 py-2 bg-slate-800 cursor-pointer hover:bg-slate-750">
+                                <div class="flex items-center gap-2">
+                                    <svg id="filterPanelIcon" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                    <span class="text-sm font-semibold">Quick Filters</span>
+                                    <span id="activeFilterCount" class="text-xs text-slate-400"></span>
+                                </div>
+                                <button id="clearAllFiltersBtn" class="text-xs bg-red-600 hover:bg-red-700 px-2 py-1 rounded-md transition-colors">
+                                    Clear All
+                                </button>
+                            </div>
+
+                            <!-- Panel Content (Collapsible) -->
+                            <div id="quickFilterPanelContent" class="transition-all">
+                                <!-- Category Tabs -->
+                                <div class="flex gap-1 border-b border-[var(--color-border)] px-3 pt-2 bg-slate-800/50">
+                                    <button class="filter-tab active" data-category="cardType">Type</button>
+                                    <button class="filter-tab" data-category="attribute">Attribute</button>
+                                    <button class="filter-tab" data-category="race">Race</button>
+                                    <button class="filter-tab" data-category="level">Level</button>
+                                    <button class="filter-tab" data-category="stats">ATK/DEF</button>
+                                </div>
+
+                                <!-- Filter Chips Container (scrollable) -->
+                                <div id="filterChipsContainer" class="p-3 max-h-40 overflow-y-auto scrollbar-thin">
+                                    <!-- Dynamic chips inserted here by FilterManager -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Active Filters Display -->
+                        <div id="activeFiltersBar" class="hidden flex gap-2 items-center mb-2 pb-2 border-b border-[var(--color-border)]">
+                            <span class="text-xs text-slate-400 whitespace-nowrap">Active:</span>
+                            <div id="activeFiltersContainer" class="flex gap-1.5 overflow-x-auto flex-1 scrollbar-thin">
+                                <!-- Active filter chips inserted here -->
+                            </div>
+                        </div>
+
                         <!-- Card Database List -->
                         <div id="cardDbList" class="overflow-y-auto overflow-x-hidden pr-2 flex-1 min-h-0"></div>
                     </div>
@@ -30207,7 +31216,7 @@
                         <div id="deckGridContainer" class="flex-grow flex gap-4 mt-2 min-h-[50vh]">
                             <div id="mainDeckSection" class="bg-black/20 p-3 rounded-lg overflow-y-auto"
                                 style="min-width: 300px; flex-grow: 1; flex-shrink: 1;">
-                                <h3 class="font-semibold text-center mb-2">Main Deck</h3>
+                                <h3 id="mainDeckHeader" class="font-semibold text-center mb-2 min-h-[2.5rem] flex items-center justify-center">Main Deck</h3>
                                 <div id="mainDeckList" class="deck-grid"></div>
                             </div>
                             <div id="mainSideResizeHandle"
@@ -30215,7 +31224,7 @@
                                 title="Drag to resize main and side deck"></div>
                             <div id="sideDeckSection" class="bg-black/20 p-3 rounded-lg overflow-y-auto"
                                 style="width: 280px; min-width: 200px; flex-grow: 0; flex-shrink: 1;">
-                                <h3 class="font-semibold text-center mb-2">Side Deck</h3>
+                                <h3 id="sideDeckHeader" class="font-semibold text-center mb-2 min-h-[2.5rem] flex items-center justify-center">Side Deck</h3>
                                 <div id="sideDeckList" class="side-deck-grid"></div>
                             </div>
                             <div id="sideExtraResizeHandle"
@@ -30223,7 +31232,7 @@
                                 title="Drag to resize side and extra deck"></div>
                             <div id="extraDeckSection" class="bg-black/20 p-3 rounded-lg overflow-y-auto"
                                 style="width: 280px; min-width: 200px; flex-grow: 0; flex-shrink: 1;">
-                                <h3 class="font-semibold text-center mb-2">Extra Deck</h3>
+                                <h3 id="extraDeckHeader" class="font-semibold text-center mb-2 min-h-[2.5rem] flex items-center justify-center">Extra Deck</h3>
                                 <div id="extraDeckList" class="side-deck-grid"></div>
                             </div>
                         </div>
