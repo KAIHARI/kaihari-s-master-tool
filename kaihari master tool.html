@@ -1294,7 +1294,9 @@
                     const saved = localStorage.getItem('quickFilterPanelState');
                     if (saved) {
                         const state = JSON.parse(saved);
-                        isPanelExpanded = state.expanded !== undefined ? state.expanded : true;
+                        // Default to collapsed on portrait (<1024px), expanded on desktop
+                        const isPortrait = window.innerWidth < 1024;
+                        isPanelExpanded = state.expanded !== undefined ? state.expanded : !isPortrait;
                         activeFilters = state.filters || activeFilters;
                     }
 
@@ -1305,10 +1307,20 @@
                         if (!isPanelExpanded) {
                             content.classList.add('collapsed');
                             icon.classList.add('rotated');
+                            // Force collapse with inline styles
+                            content.style.maxHeight = '0';
+                            content.style.minHeight = '0';
+                            content.style.height = '0';
+                            content.style.overflow = 'hidden';
                         } else {
                             // Ensure panel is expanded by default
                             content.classList.remove('collapsed');
                             icon.classList.remove('rotated');
+                            // Clear inline styles for expansion
+                            content.style.removeProperty('max-height');
+                            content.style.removeProperty('min-height');
+                            content.style.removeProperty('height');
+                            content.style.removeProperty('overflow');
                         }
                         console.log('[FilterManager] Panel state loaded, expanded:', isPanelExpanded);
                     } else {
@@ -1630,6 +1642,13 @@
                 },
 
                 clearAllFilters() {
+                    // Prevent duplicate calls
+                    const now = Date.now();
+                    if (this._lastClearTime && (now - this._lastClearTime) < 500) {
+                        return;
+                    }
+                    this._lastClearTime = now;
+
                     activeFilters.cardType = [];
                     activeFilters.attribute = [];
                     activeFilters.race = [];
@@ -1669,14 +1688,41 @@
                     const content = document.getElementById('quickFilterPanelContent');
                     const icon = document.getElementById('filterPanelIcon');
 
+                    console.log('[FilterManager] togglePanel() called');
+                    console.log('[FilterManager] content element:', content);
+                    console.log('[FilterManager] icon element:', icon);
+                    console.log('[FilterManager] current state (isPanelExpanded):', isPanelExpanded);
+
+                    if (!content) {
+                        console.error('[FilterManager] quickFilterPanelContent not found!');
+                        return;
+                    }
+                    if (!icon) {
+                        console.error('[FilterManager] filterPanelIcon not found!');
+                        return;
+                    }
+
                     isPanelExpanded = !isPanelExpanded;
+                    console.log('[FilterManager] new state (isPanelExpanded):', isPanelExpanded);
 
                     if (isPanelExpanded) {
                         content.classList.remove('collapsed');
                         icon.classList.remove('rotated');
+                        // Clear any inline styles that might be preventing expansion
+                        content.style.removeProperty('max-height');
+                        content.style.removeProperty('min-height');
+                        content.style.removeProperty('height');
+                        content.style.removeProperty('overflow');
+                        console.log('[FilterManager] Panel EXPANDED');
                     } else {
                         content.classList.add('collapsed');
                         icon.classList.add('rotated');
+                        // Force collapse with inline styles as backup (in case CSS doesn't work)
+                        content.style.maxHeight = '0';
+                        content.style.minHeight = '0';
+                        content.style.height = '0';
+                        content.style.overflow = 'hidden';
+                        console.log('[FilterManager] Panel COLLAPSED');
                     }
 
                     this.savePanelState();
@@ -1708,14 +1754,21 @@
                 },
 
                 attachEventListeners() {
-                    // Panel collapse
-                    document.getElementById('quickFilterPanelHeader')?.addEventListener('click', (e) => {
-                        if (e.target.id !== 'clearAllFiltersBtn' && !e.target.closest('#clearAllFiltersBtn')) {
-                            this.togglePanel();
-                        }
-                    });
+                    // Panel collapse - use cached UI element or fallback to DOM query
+                    const header = UI.quickFilterPanelHeader || document.getElementById('quickFilterPanelHeader');
+                    if (header) {
+                        header.addEventListener('click', (e) => {
+                            console.log('[FilterManager] Header clicked, target:', e.target.id, e.target.className);
+                            if (e.target.id !== 'clearAllFiltersBtn' && !e.target.closest('#clearAllFiltersBtn')) {
+                                console.log('[FilterManager] Calling togglePanel()');
+                                this.togglePanel();
+                            }
+                        });
+                    } else {
+                        console.error('[FilterManager] quickFilterPanelHeader not found - event listener not attached!');
+                    }
 
-                    // Category tabs
+                    // Category tabs - dynamically rendered, so querySelector is appropriate
                     document.querySelectorAll('.filter-tab').forEach(tab => {
                         tab.addEventListener('click', (e) => {
                             document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
@@ -1725,11 +1778,16 @@
                         });
                     });
 
-                    // Clear all button
-                    document.getElementById('clearAllFiltersBtn')?.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        this.clearAllFilters();
-                    });
+                    // Clear all button - use cached UI element or fallback to DOM query
+                    const clearBtn = UI.clearAllFiltersBtn || document.getElementById('clearAllFiltersBtn');
+                    if (clearBtn) {
+                        clearBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            this.clearAllFilters();
+                        });
+                    } else {
+                        console.warn('[FilterManager] clearAllFiltersBtn not found');
+                    }
                 }
             };
         })();
@@ -2903,58 +2961,60 @@
                 if (!isVertical) {
                     const parentHeight = UI.deckBuilderContainer.offsetHeight;
                     UI.cardDatabaseSection.style.height = `${parentHeight}px`;
+                    UI.cardDatabaseSection.style.overflow = 'hidden'; // Prevent overflow
 
-                    // Also ensure the inner scrollable element (cardDbList) has explicit height
-                    // Calculate available height by subtracting the height of non-scrollable content
-                    // (header, search bar, controls) from the parent height
+                    // Use flexbox for desktop mode instead of explicit height calculation
+                    // This allows quickFilterPanel to take its natural height and cardDbList to fill remaining space
                     if (UI.cardDbList) {
-                        // Get all sibling elements before cardDbList to calculate their total height
-                        const siblings = Array.from(UI.cardDatabaseSection.children);
-                        console.log(`[setCardDatabaseHeight] Total siblings: ${siblings.length}`);
-                        const cardDbListIndex = siblings.indexOf(UI.cardDbList);
-                        let fixedHeight = 0;
-
-                        for (let i = 0; i < cardDbListIndex; i++) {
-                            const sibling = siblings[i];
-                            if (sibling instanceof HTMLElement) {
-                                // Skip quick filter panel from height calculation (it has flexible height)
-                                if (sibling.id === 'quickFilterPanel') {
-                                    console.log(`[setCardDatabaseHeight] Skipping quickFilterPanel (offsetHeight: ${sibling.offsetHeight}px)`);
-                                    continue;
-                                }
-                                // Include outerHeight to account for margins, borders, padding
-                                fixedHeight += sibling.offsetHeight;
-                                const styles = window.getComputedStyle(sibling);
-                                fixedHeight += parseFloat(styles.marginTop) || 0;
-                                fixedHeight += parseFloat(styles.marginBottom) || 0;
-                            }
-                        }
-
-                        // Also account for padding on the parent container
-                        const parentStyles = window.getComputedStyle(UI.cardDatabaseSection);
-                        const paddingTop = parseFloat(parentStyles.paddingTop) || 0;
-                        const paddingBottom = parseFloat(parentStyles.paddingBottom) || 0;
-                        const verticalPadding = paddingTop + paddingBottom;
-
-                        // Set explicit height on cardDbList to enable scrolling
-                        const availableHeight = parentHeight - fixedHeight - verticalPadding;
-                        console.log(`[setCardDatabaseHeight] parent: ${parentHeight}px, fixed: ${fixedHeight}px, padding: ${verticalPadding}px, available: ${availableHeight}px`);
-                        // Disable flex grow/shrink so the explicit height takes effect
-                        UI.cardDbList.style.flex = '0 0 auto';
-                        UI.cardDbList.style.minHeight = '0';  // Override .card-db-grid min-height: min-content
-                        UI.cardDbList.style.height = `${availableHeight}px`;
-                        console.log(`[setCardDatabaseHeight] Set cardDbList height: ${availableHeight}px (parent: ${parentHeight}px, fixed: ${fixedHeight}px, padding: ${verticalPadding}px)`);
+                        UI.cardDbList.style.flex = '1 1 auto';  // Grow to fill remaining space
+                        UI.cardDbList.style.minHeight = '0';    // Allow shrinking below content
+                        UI.cardDbList.style.height = '';        // Remove explicit height - let flexbox handle it
+                        UI.cardDbList.style.overflowY = 'auto'; // Enable scrolling
                     }
+
+                    // Ensure quickFilterPanel doesn't grow - takes natural height only
+                    const quickFilterPanel = document.getElementById('quickFilterPanel');
+                    if (quickFilterPanel) {
+                        quickFilterPanel.style.flex = '0 0 auto';  // Natural height only, don't grow or shrink
+                        quickFilterPanel.style.minHeight = '0';    // Firefox fix: allow flex child to shrink
+                    }
+
+                    // Ensure activeFiltersBar (when visible) doesn't grow
+                    const activeFiltersBar = document.getElementById('activeFiltersBar');
+                    if (activeFiltersBar) {
+                        activeFiltersBar.style.flex = '0 0 auto';
+                        activeFiltersBar.style.minHeight = '0';    // Firefox fix: allow flex child to shrink
+                    }
+
+                    console.log(`[setCardDatabaseHeight] Desktop mode: Using flexbox layout (parent: ${parentHeight}px)`);
                 } else {
                     // In vertical mode, use flex-basis instead of explicit height
                     // This allows the vertical resize to work properly
                     UI.cardDatabaseSection.style.height = '';
+                    UI.cardDatabaseSection.style.overflow = '';
                     if (UI.cardDbList) {
                         // Reset both flex and height to restore flex behavior
                         UI.cardDbList.style.flex = '';
                         UI.cardDbList.style.minHeight = '';
                         UI.cardDbList.style.height = '';
+                        UI.cardDbList.style.overflowY = '';
                     }
+
+                    // Reset quickFilterPanel flex in portrait mode
+                    const quickFilterPanel = document.getElementById('quickFilterPanel');
+                    if (quickFilterPanel) {
+                        quickFilterPanel.style.flex = '';
+                        quickFilterPanel.style.minHeight = '';
+                    }
+
+                    // Reset activeFiltersBar flex in portrait mode
+                    const activeFiltersBar = document.getElementById('activeFiltersBar');
+                    if (activeFiltersBar) {
+                        activeFiltersBar.style.flex = '';
+                        activeFiltersBar.style.minHeight = '';
+                    }
+
+                    console.log(`[setCardDatabaseHeight] Portrait mode: Using natural flex layout`);
                 }
             }
         }
@@ -24145,7 +24205,9 @@
         })();
 
         // Initialize the application
-        main();
+        // Note: DOMContentLoaded listener is already registered at line 2907
+        // The main() call was removed from here because it was running before DOM was ready
+        // causing quickFilterPanelHeader event listener to fail to attach
     </script>
     <style>
         :root {
@@ -24862,9 +24924,9 @@
 
             #cardDatabaseSection {
                 width: 100% !important;
-                height: 50vh;
+                height: auto;
                 min-height: 50vh;
-                max-height: 50vh;
+                max-height: none;
             }
 
             /* Ensure card list fills available space in portrait mode */
@@ -27906,18 +27968,34 @@
             user-select: none;
         }
 
-        #quickFilterPanelContent.collapsed {
-            max-height: 0;
-            overflow: hidden;
-            padding-top: 0;
-            padding-bottom: 0;
-        }
-
         #quickFilterPanelContent {
             max-height: 500px;
-            min-height: 120px;  /* Changed from 100px to 120px for better visibility */
-            height: auto !important;  /* Force auto height to prevent collapse */
+            min-height: 120px;
+            height: auto;
             transition: max-height 0.3s ease;
+        }
+
+        #quickFilterPanelContent.collapsed {
+            max-height: 0 !important;
+            min-height: 0 !important;
+            height: 0 !important;
+            overflow: hidden !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
+
+        /* Portrait mode adjustment for quick filter panel */
+        @media (max-width: 1024px) {
+            #quickFilterPanelContent {
+                max-height: 40vh;
+                overflow-y: auto;
+            }
+
+            #cardDatabaseSection {
+                height: auto;
+                min-height: 60vh;
+                max-height: none;
+            }
         }
 
         #filterPanelIcon {
