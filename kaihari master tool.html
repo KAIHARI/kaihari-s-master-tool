@@ -15,6 +15,7 @@
     <title>kaihari's master tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="swiss-prismatic-theme.css" rel="stylesheet">
     <!-- PDF Generation Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -2223,6 +2224,11 @@
                     return;
                 }
 
+                // If already attached, clean up first (defensive re-attachment)
+                if (activeInstances.has(element)) {
+                    cleanup(element);
+                }
+
                 // Store instance data
                 const instance = {
                     onPress: options.onPress,
@@ -2252,6 +2258,7 @@
             return {
                 attach,
                 cancel,
+                cleanup,
                 LONG_PRESS_DURATION
             };
         })();
@@ -2887,6 +2894,10 @@
             sandboxCloseBtn: null, sandboxUndoBtn: null, sandboxRedoBtn: null,
             sandboxLoadDeckBtn: null, sandboxClearBtn: null,
             sandboxView2dBtn: null, sandboxView3dBtn: null,
+            sandboxAttackBtn: null, sandboxDrawBtn: null, sandboxLPBtn: null,
+            quickActionsPanel: null, quickActionsClose: null,
+            drawCardBtn: null, modifyLPBtn: null, addCounterBtn: null, removeCounterBtn: null,
+            coinFlipBtn: null, dieRollBtn: null, createTokenBtn: null,
 
             // Modals & Overlays
             loadingOverlay: null, messageModal: null, messageModalText: null, messageModalClose: null,
@@ -3096,6 +3107,22 @@
             modal._escapeHandler = escapeHandler;
         }
 
+        // ============================================================================
+        // MODULE: DeckProfile
+        // Lines: 3104-3400
+        // Purpose: Slideshow mode for revealing deck cards with animations
+        // Key Methods: start(), exit(), nextGroup(), previousGroup()
+        // Features: Autoplay, visual controls, touch support, preloading, memory-safe
+        // ============================================================================
+
+        // DeckProfile module removed - to be reimplemented
+        const DeckProfile = {
+            init() { console.log('DeckProfile: init called (not implemented)'); },
+            start() { console.log('DeckProfile: start called (not implemented)'); },
+            exit() { console.log('DeckProfile: exit called (not implemented)'); },
+            isActive: () => false
+        };
+
         async function main() {
             // 1. Show loading screen immediately
             const loadingOverlay = document.getElementById('loadingOverlay');
@@ -3126,6 +3153,9 @@
 
             // 2.1. Initialize FilterManager module
             FilterManager.init();
+
+            // 2.2. Initialize DeckProfile module - DISABLED, TO BE REIMPLEMENTED
+            // DeckProfile.init();
 
             // 2.05. Fix card database scrollbar - wait for panel to render properly
             requestAnimationFrame(() => {
@@ -3497,7 +3527,7 @@
             const extraColumns = localStorage.getItem('extraDeckCardsPerRow') || '3';
 
             // For db, load both desktop and portrait values
-            const dbColumnsDesktop = localStorage.getItem('dbDeckCardsPerRow') || '5';
+            const dbColumnsDesktop = localStorage.getItem('dbDeckCardsPerRow') || '4';
             const dbColumnsPortrait = localStorage.getItem('dbDeckCardsPerRowPortrait') || '8';
 
             // Set the appropriate value based on current mode
@@ -3524,7 +3554,7 @@
                 localStorage.setItem('extraDeckCardsPerRow', '3');
             }
             if (!localStorage.getItem('dbDeckCardsPerRow')) {
-                localStorage.setItem('dbDeckCardsPerRow', '3');
+                localStorage.setItem('dbDeckCardsPerRow', '4');
             }
             // Initialize portrait value if not set
             // Clear the problematic '10' default if it exists, and use '8' instead
@@ -3638,7 +3668,7 @@
         // Function to update database columns based on current orientation
         // This can be called from multiple places (init, resize, before render)
         function updateDatabaseColumns() {
-            const dbColumnsDesktop = localStorage.getItem('dbDeckCardsPerRow') || '5';
+            const dbColumnsDesktop = localStorage.getItem('dbDeckCardsPerRow') || '4';
             const dbColumnsPortrait = localStorage.getItem('dbDeckCardsPerRowPortrait') || '8';
             const isPortrait = window.innerWidth < 1024;
             const dbColumns = isPortrait ? dbColumnsPortrait : dbColumnsDesktop;
@@ -3742,7 +3772,7 @@
                     return parseInt(saved);
                 }
                 // Return mode-specific default (matches loadLocalData initialization)
-                return isPortrait ? 8 : 5;
+                return isPortrait ? 8 : 4;
             }
 
             // For other decks, get saved cards per row, or calculate from current scale
@@ -4054,8 +4084,8 @@
             const defaultMainCardsPerRow = 10;
             const defaultSideCardsPerRow = 3;
             const defaultExtraCardsPerRow = 3;
-            const defaultDbCardsPerRow = 3; // Desktop default (narrow panel)
-            const defaultDbCardsPerRowPortrait = 5; // Portrait default (full width)
+            const defaultDbCardsPerRow = 4; // Desktop default (narrow panel)
+            const defaultDbCardsPerRowPortrait = 8; // Portrait default (full width)
 
             // Save cards per row settings
             localStorage.setItem('mainDeckCardsPerRow', defaultMainCardsPerRow);
@@ -4339,6 +4369,7 @@
             return new Promise((resolve) => {
                 const gridContainer = UI.deckGridContainer;
                 const extraVisible = UI.extraDeckSection?.offsetParent !== null;
+                const sideVisible = UI.sideDeckSection?.offsetParent !== null;
                 const availableWidth = getAvailableFlexWidth(gridContainer);
 
                 // Get grid gap for height calculations
@@ -4346,9 +4377,13 @@
                 const gridGap = mainGrid ? parseFloat(getComputedStyle(mainGrid).columnGap) || 0 : 0;
 
                 // Calculate initial ratios using square root of card count as starting point
-                const totalSqrt = Math.sqrt(mainCardCount) + Math.sqrt(sideCardCount) + (extraVisible ? Math.sqrt(extraCardCount) : 0);
+                // Only include visible sections in the calculation
+                let totalSqrt = Math.sqrt(mainCardCount);
+                if (sideVisible) totalSqrt += Math.sqrt(sideCardCount);
+                if (extraVisible) totalSqrt += Math.sqrt(extraCardCount);
+
                 let mainRatio = Math.sqrt(mainCardCount) / totalSqrt;
-                let sideRatio = Math.sqrt(sideCardCount) / totalSqrt;
+                let sideRatio = sideVisible ? Math.sqrt(sideCardCount) / totalSqrt : 0;
                 let extraRatio = extraVisible ? Math.sqrt(extraCardCount) / totalSqrt : 0;
 
                 console.log(`[Iterative Align Total] Starting alignment with initial ratios:`,
@@ -4404,11 +4439,18 @@
                         const sideH = sideGrid.offsetHeight;
                         const extraH = extraVisible && extraGrid ? extraGrid.offsetHeight : mainH;
 
-                        const avgHeight = (mainH + sideH + (extraVisible ? extraH : sideH)) / (extraVisible ? 3 : 2);
+                        // Calculate average height based only on visible sections
+                        const mainVisible = UI.mainDeckSection?.offsetParent !== null;
+                        let heightSum = 0;
+                        let visibleCount = 0;
+                        if (mainVisible) { heightSum += mainH; visibleCount++; }
+                        if (sideVisible) { heightSum += sideH; visibleCount++; }
+                        if (extraVisible) { heightSum += extraH; visibleCount++; }
+                        const avgHeight = heightSum / visibleCount;
 
                         const maxDiff = Math.max(
-                            Math.abs(mainH - avgHeight),
-                            Math.abs(sideH - avgHeight),
+                            mainVisible ? Math.abs(mainH - avgHeight) : 0,
+                            sideVisible ? Math.abs(sideH - avgHeight) : 0,
                             extraVisible ? Math.abs(extraH - avgHeight) : 0
                         );
 
@@ -4446,11 +4488,17 @@
                             extraRatio = extraRatio * (1 + adjustFactor * (targetHeight - extraActual) / extraActual);
                         }
 
-                        // Normalize to sum to 1
-                        const total = mainRatio + sideRatio + extraRatio;
-                        mainRatio /= total;
-                        sideRatio /= total;
-                        extraRatio /= total;
+                        // Normalize to sum to 1 for visible sections only
+                        let totalVisibleRatio = 0;
+                        if (mainVisible) totalVisibleRatio += mainRatio;
+                        if (sideVisible) totalVisibleRatio += sideRatio;
+                        if (extraVisible) totalVisibleRatio += extraRatio;
+
+                        if (totalVisibleRatio > 0) {
+                            if (mainVisible) mainRatio /= totalVisibleRatio;
+                            if (sideVisible) sideRatio /= totalVisibleRatio;
+                            if (extraVisible) extraRatio /= totalVisibleRatio;
+                        }
 
                         iteration++;
                         applyAndMeasure();
@@ -4783,7 +4831,8 @@
                 }
             }
 
-            UI.resizeHandle.addEventListener('mousedown', (e) => {
+            // Pointer event handler for resize (works for mouse, touch, and pen)
+            function handlePointerDown(e) {
                 isResizing = true;
                 isVertical = checkOrientation();
                 startX = e.clientX;
@@ -4799,10 +4848,11 @@
 
                 document.body.style.userSelect = 'none';
                 e.preventDefault();
-            });
+                // Capture pointer to ensure we receive pointerup even if pointer leaves handle
+                (e.target).setPointerCapture(e.pointerId);
+            }
 
-            let resizeRaf = null;
-            document.addEventListener('mousemove', (e) => {
+            function handlePointerMove(e) {
                 if (!isResizing) return;
                 if (resizeRaf) return; // throttle to one layout update per frame
                 resizeRaf = requestAnimationFrame(() => {
@@ -4828,43 +4878,54 @@
                         // Don't clear height - maintain scrolling capability
                     }
                 });
-            });
+            }
 
-            document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    document.body.style.cursor = '';
-                    document.body.style.userSelect = '';
+            function handlePointerUp(e) {
+                if (!isResizing) return;
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
 
-                    // Capture current deck section proportions BEFORE saving layout
-                    const currentMainWidth = UI.mainDeckSection ? UI.mainDeckSection.offsetWidth : 0;
-                    const currentSideWidth = UI.sideDeckSection ? UI.sideDeckSection.offsetWidth : 0;
-                    const currentExtraWidth = UI.extraDeckSection ? UI.extraDeckSection.offsetWidth : 0;
-                    const totalDeckWidth = currentMainWidth + currentSideWidth + currentExtraWidth;
-
-                    // Calculate ratios (0-1) for each section
-                    const mainRatio = totalDeckWidth > 0 ? currentMainWidth / totalDeckWidth : 0.5;
-                    const sideRatio = totalDeckWidth > 0 ? currentSideWidth / totalDeckWidth : 0.25;
-                    const extraRatio = totalDeckWidth > 0 ? currentExtraWidth / totalDeckWidth : 0.25;
-
-                    // Auto-adjust DB card size when DB section is resized
-                    const newDbWidth = UI.cardDatabaseSection.offsetWidth;
-                    if (newDbWidth > 0) {
-                        calculateAndApplyScale('db', newDbWidth);
-                    }
-
-                    savePanelConfiguration();
-
-                    // Resize deck sections proportionally to fit new available space
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            applyDeckSectionProportions(mainRatio, sideRatio, extraRatio);
-                            // Fix: Update card database height after deck resize
-                            setCardDatabaseHeight();
-                        });
-                    });
+                // Release pointer capture
+                if (e.target && e.target.releasePointerCapture) {
+                    e.target.releasePointerCapture(e.pointerId);
                 }
-            });
+
+                // Capture current deck section proportions BEFORE saving layout
+                const currentMainWidth = UI.mainDeckSection ? UI.mainDeckSection.offsetWidth : 0;
+                const currentSideWidth = UI.sideDeckSection ? UI.sideDeckSection.offsetWidth : 0;
+                const currentExtraWidth = UI.extraDeckSection ? UI.extraDeckSection.offsetWidth : 0;
+                const totalDeckWidth = currentMainWidth + currentSideWidth + currentExtraWidth;
+
+                // Calculate ratios (0-1) for each section
+                const mainRatio = totalDeckWidth > 0 ? currentMainWidth / totalDeckWidth : 0.5;
+                const sideRatio = totalDeckWidth > 0 ? currentSideWidth / totalDeckWidth : 0.25;
+                const extraRatio = totalDeckWidth > 0 ? currentExtraWidth / totalDeckWidth : 0.25;
+
+                // Auto-adjust DB card size when DB section is resized
+                const newDbWidth = UI.cardDatabaseSection.offsetWidth;
+                if (newDbWidth > 0) {
+                    calculateAndApplyScale('db', newDbWidth);
+                }
+
+                savePanelConfiguration();
+
+                // Resize deck sections proportionally to fit new available space
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        applyDeckSectionProportions(mainRatio, sideRatio, extraRatio);
+                        // Fix: Update card database height after deck resize
+                        setCardDatabaseHeight();
+                    });
+                });
+            }
+
+            let resizeRaf = null;
+
+            // Use Pointer Events for unified mouse/touch/pen support
+            UI.resizeHandle.addEventListener('pointerdown', handlePointerDown);
+            document.addEventListener('pointermove', handlePointerMove);
+            document.addEventListener('pointerup', handlePointerUp);
 
             // Prevent text selection while dragging
             UI.resizeHandle.addEventListener('selectstart', (e) => {
@@ -6739,9 +6800,12 @@
             let sideRatio = 0.5;
             let extraRatio = 0.5;
             let mainRatio = 0.5;
+            let activePointerId = null;
 
-            handle.addEventListener('mousedown', (e) => {
+            // Pointer event handler for deck resize (works for mouse, touch, and pen)
+            function handlePointerDown(e) {
                 isResizing = true;
+                activePointerId = e.pointerId;
                 startX = e.clientX;
                 startLeftWidth = leftSection.offsetWidth;
                 startRightWidth = rightSection.offsetWidth;
@@ -6770,11 +6834,15 @@
                 document.body.style.cursor = 'col-resize';
                 document.body.style.userSelect = 'none';
                 e.preventDefault();
-            });
+                // Capture pointer to ensure we receive pointerup even if pointer leaves handle
+                handle.setPointerCapture(e.pointerId);
+            }
 
             let deckResizeRaf = null;
-            document.addEventListener('mousemove', (e) => {
-                if (!isResizing) return;
+
+            function handlePointerMove(e) {
+                // Only process if this is the active pointer
+                if (!isResizing || e.pointerId !== activePointerId) return;
                 if (deckResizeRaf) return;
                 deckResizeRaf = requestAnimationFrame(() => {
                     deckResizeRaf = null;
@@ -6874,50 +6942,64 @@
                         });
                     }
                 });
-            });
+            }
 
-            document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    document.body.style.cursor = '';
-                    document.body.style.userSelect = '';
+            function handlePointerUp(e) {
+                // Only process if this is the active pointer
+                if (!isResizing || (activePointerId !== null && e.pointerId !== activePointerId)) return;
 
-                    // Manual resize complete - keep the exact pixel widths the user dragged to
-                    const newMainWidth = parseFloat(UI.mainDeckSection.style.width) || UI.mainDeckSection.offsetWidth;
-                    const newSideWidth = parseFloat(UI.sideDeckSection.style.width) || UI.sideDeckSection.offsetWidth;
-                    const newExtraWidth = parseFloat(UI.extraDeckSection.style.width) || UI.extraDeckSection.offsetWidth;
+                isResizing = false;
+                activePointerId = null;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
 
-                    // Keep explicit pixel widths and disable flex for precise control
-                    // This prevents the sections from jumping to different sizes after resize
-                    if (UI.mainDeckSection) {
-                        UI.mainDeckSection.style.width = `${newMainWidth}px`;
-                        UI.mainDeckSection.style.minWidth = `${newMainWidth}px`;
-                        UI.mainDeckSection.style.maxWidth = `${newMainWidth}px`;
-                        UI.mainDeckSection.style.flexGrow = '0';
-                        UI.mainDeckSection.style.flexShrink = '0';
-                    }
-                    if (UI.sideDeckSection) {
-                        UI.sideDeckSection.style.width = `${newSideWidth}px`;
-                        UI.sideDeckSection.style.minWidth = `${newSideWidth}px`;
-                        UI.sideDeckSection.style.maxWidth = `${newSideWidth}px`;
-                        UI.sideDeckSection.style.flexGrow = '0';
-                        UI.sideDeckSection.style.flexShrink = '0';
-                    }
-                    if (UI.extraDeckSection) {
-                        UI.extraDeckSection.style.width = `${newExtraWidth}px`;
-                        UI.extraDeckSection.style.minWidth = `${newExtraWidth}px`;
-                        UI.extraDeckSection.style.maxWidth = `${newExtraWidth}px`;
-                        UI.extraDeckSection.style.flexGrow = '0';
-                        UI.extraDeckSection.style.flexShrink = '0';
-                    }
-
-                    // Auto-adjust card scales for manual resize
-                    autoAdjustCardScalesForManualResize(newMainWidth, newSideWidth, newExtraWidth, startLeftWidth, startRightWidth, handleType);
-
-                    // Save the new configuration
-                    saveDeckResizeConfiguration();
+                // Release pointer capture
+                if (handle.releasePointerCapture) {
+                    handle.releasePointerCapture(e.pointerId);
                 }
-            });
+
+                // Manual resize complete - keep the exact pixel widths the user dragged to
+                const newMainWidth = parseFloat(UI.mainDeckSection.style.width) || UI.mainDeckSection.offsetWidth;
+                const newSideWidth = parseFloat(UI.sideDeckSection.style.width) || UI.sideDeckSection.offsetWidth;
+                const newExtraWidth = parseFloat(UI.extraDeckSection.style.width) || UI.extraDeckSection.offsetWidth;
+
+                // Keep explicit pixel widths and disable flex for precise control
+                // This prevents the sections from jumping to different sizes after resize
+                if (UI.mainDeckSection) {
+                    UI.mainDeckSection.style.width = `${newMainWidth}px`;
+                    UI.mainDeckSection.style.minWidth = `${newMainWidth}px`;
+                    UI.mainDeckSection.style.maxWidth = `${newMainWidth}px`;
+                    UI.mainDeckSection.style.flexGrow = '0';
+                    UI.mainDeckSection.style.flexShrink = '0';
+                }
+                if (UI.sideDeckSection) {
+                    UI.sideDeckSection.style.width = `${newSideWidth}px`;
+                    UI.sideDeckSection.style.minWidth = `${newSideWidth}px`;
+                    UI.sideDeckSection.style.maxWidth = `${newSideWidth}px`;
+                    UI.sideDeckSection.style.flexGrow = '0';
+                    UI.sideDeckSection.style.flexShrink = '0';
+                }
+                if (UI.extraDeckSection) {
+                    UI.extraDeckSection.style.width = `${newExtraWidth}px`;
+                    UI.extraDeckSection.style.minWidth = `${newExtraWidth}px`;
+                    UI.extraDeckSection.style.maxWidth = `${newExtraWidth}px`;
+                    UI.extraDeckSection.style.flexGrow = '0';
+                    UI.extraDeckSection.style.flexShrink = '0';
+                }
+
+                // Auto-adjust card scales for manual resize
+                autoAdjustCardScalesForManualResize(newMainWidth, newSideWidth, newExtraWidth, startLeftWidth, startRightWidth, handleType);
+
+                // Save the new configuration
+                saveDeckResizeConfiguration();
+            }
+
+            // Use Pointer Events for unified mouse/touch/pen support
+            handle.addEventListener('pointerdown', handlePointerDown);
+            handle.addEventListener('pointermove', handlePointerMove);
+            handle.addEventListener('pointerup', handlePointerUp);
+            // Also handle pointercancel in case touch is cancelled
+            handle.addEventListener('pointercancel', handlePointerUp);
 
             // Prevent text selection while dragging
             handle.addEventListener('selectstart', (e) => {
@@ -7338,11 +7420,34 @@
                 showView('sidingBuilderView');
             });
 
+            // Deck Profile navigation button - DISABLED, TO BE REIMPLEMENTED
+            // UI.navDeckProfile?.addEventListener('click', () => {
+            //     DeckProfile.start();
+            // });
+
+            // Deck Profile visual navigation controls - DISABLED, TO BE REIMPLEMENTED
+            // document.getElementById('deckProfilePrevBtn')?.addEventListener('click', () => {
+            //     DeckProfile.previousGroup();
+            // });
+            // document.getElementById('deckProfileNextBtn')?.addEventListener('click', () => {
+            //     DeckProfile.nextGroup();
+            // });
+            // document.getElementById('deckProfileAutoplayBtn')?.addEventListener('click', () => {
+            //     DeckProfile.toggleAutoplay();
+            // });
+            // document.getElementById('deckProfileExitBtn')?.addEventListener('click', () => {
+            //     DeckProfile.exit();
+            // });
+
             // Function to initialize sandbox UI elements (in case they weren't found during initial UI init)
             function initSandboxUI() {
                 const sandboxIds = [
                     'sandboxBoard', 'sandboxCloseBtn', 'sandboxUndoBtn', 'sandboxRedoBtn',
                     'sandboxLoadDeckBtn', 'sandboxClearBtn', 'sandboxView2dBtn', 'sandboxView3dBtn',
+                    'sandboxAttackBtn', 'sandboxDrawBtn', 'sandboxLPBtn',
+                    'quickActionsPanel', 'quickActionsClose',
+                    'drawCardBtn', 'modifyLPBtn', 'addCounterBtn', 'removeCounterBtn',
+                    'coinFlipBtn', 'dieRollBtn', 'createTokenBtn',
                     'sandboxLayoutBtn', 'layoutAdjustPanel', 'layoutPanelClose',
                     'fieldSizeSlider', 'fieldOffsetSlider', 'fieldGapSlider',
                     'handOppSlider', 'handPlayerSlider', 'layoutExportBtn', 'layoutResetBtn',
@@ -7379,6 +7484,12 @@
                             if (typeof BoardStateManager !== 'undefined') {
                                 BoardStateManager.loadDeck('player');
                                 BoardStateManager.loadDeck('opponent');
+                                if (typeof LifePointManager !== 'undefined') {
+                                    LifePointManager.reset();
+                                }
+                                if (typeof TurnManager !== 'undefined') {
+                                    TurnManager.reset();
+                                }
                                 if (typeof BoardRenderer !== 'undefined') {
                                     BoardRenderer.renderBoard();
                                 }
@@ -7392,6 +7503,12 @@
                         UI.sandboxClearBtn.addEventListener('click', () => {
                             if (typeof BoardStateManager !== 'undefined') {
                                 BoardStateManager.clearBoard();
+                                if (typeof LifePointManager !== 'undefined') {
+                                    LifePointManager.reset();
+                                }
+                                if (typeof TurnManager !== 'undefined') {
+                                    TurnManager.reset();
+                                }
                                 if (typeof BoardRenderer !== 'undefined') {
                                     BoardRenderer.renderBoard();
                                 }
@@ -7431,6 +7548,24 @@
                             }
                         }, { once: false });
                         UI.sandboxLayoutBtn._hasListener = true;
+                    }
+
+                    // Attack Mode Button
+                    if (UI.sandboxAttackBtn && !UI.sandboxAttackBtn._hasListener) {
+                        UI.sandboxAttackBtn.addEventListener('click', () => {
+                            if (typeof AttackManager !== 'undefined') {
+                                const currentState = AttackManager.getState();
+                                if (currentState.attackMode) {
+                                    AttackManager.exitAttackMode();
+                                    UI.sandboxAttackBtn.classList.remove('active');
+                                } else {
+                                    if (AttackManager.enterAttackMode()) {
+                                        UI.sandboxAttackBtn.classList.add('active');
+                                    }
+                                }
+                            }
+                        }, { once: false });
+                        UI.sandboxAttackBtn._hasListener = true;
                     }
 
                     if (UI.layoutPanelClose && !UI.layoutPanelClose._hasListener) {
@@ -7490,6 +7625,92 @@
                             document.documentElement.style.setProperty('--hand-player-mult', value);
                         }, { once: false });
                         UI.handPlayerSlider._hasListener = true;
+                    }
+
+                    // Quick Actions Buttons
+                    if (UI.sandboxDrawBtn && !UI.sandboxDrawBtn._hasListener) {
+                        UI.sandboxDrawBtn.addEventListener('click', () => {
+                            if (typeof BoardStateManager !== 'undefined') {
+                                const currentPlayer = TurnManager.getCurrentPlayer();
+                                BoardStateManager.drawCard(currentPlayer, 1);
+                                BoardRenderer.updateZone('hand', currentPlayer);
+                                BoardRenderer.updateZone('deck', currentPlayer);
+                                NotificationManager.info(`${currentPlayer === 'player' ? 'You' : 'Opponent'} drew a card`);
+                            }
+                        }, { once: false });
+                        UI.sandboxDrawBtn._hasListener = true;
+                    }
+
+                    if (UI.sandboxLPBtn && !UI.sandboxLPBtn._hasListener) {
+                        UI.sandboxLPBtn.addEventListener('click', () => {
+                            toggleQuickActionsPanel();
+                        }, { once: false });
+                        UI.sandboxLPBtn._hasListener = true;
+                    }
+
+                    if (UI.quickActionsClose && !UI.quickActionsClose._hasListener) {
+                        UI.quickActionsClose.addEventListener('click', () => {
+                            UI.quickActionsPanel.classList.remove('visible');
+                        }, { once: false });
+                        UI.quickActionsClose._hasListener = true;
+                    }
+
+                    if (UI.drawCardBtn && !UI.drawCardBtn._hasListener) {
+                        UI.drawCardBtn.addEventListener('click', () => {
+                            if (typeof BoardStateManager !== 'undefined') {
+                                const currentPlayer = TurnManager.getCurrentPlayer();
+                                BoardStateManager.drawCard(currentPlayer, 1);
+                                BoardRenderer.updateZone('hand', currentPlayer);
+                                BoardRenderer.updateZone('deck', currentPlayer);
+                                UI.quickActionsPanel.classList.remove('visible');
+                                NotificationManager.info(`${currentPlayer === 'player' ? 'You' : 'Opponent'} drew a card`);
+                            }
+                        }, { once: false });
+                        UI.drawCardBtn._hasListener = true;
+                    }
+
+                    if (UI.modifyLPBtn && !UI.modifyLPBtn._hasListener) {
+                        UI.modifyLPBtn.addEventListener('click', () => {
+                            promptLPModification();
+                        }, { once: false });
+                        UI.modifyLPBtn._hasListener = true;
+                    }
+
+                    if (UI.addCounterBtn && !UI.addCounterBtn._hasListener) {
+                        UI.addCounterBtn.addEventListener('click', () => {
+                            promptCounterModification(true);
+                        }, { once: false });
+                        UI.addCounterBtn._hasListener = true;
+                    }
+
+                    if (UI.removeCounterBtn && !UI.removeCounterBtn._hasListener) {
+                        UI.removeCounterBtn.addEventListener('click', () => {
+                            promptCounterModification(false);
+                        }, { once: false });
+                        UI.removeCounterBtn._hasListener = true;
+                    }
+
+                    if (UI.coinFlipBtn && !UI.coinFlipBtn._hasListener) {
+                        UI.coinFlipBtn.addEventListener('click', () => {
+                            const result = Math.random() < 0.5 ? 'Heads' : 'Tails';
+                            NotificationManager.info(`Coin Flip: ${result}`, '50/50 chance');
+                        }, { once: false });
+                        UI.coinFlipBtn._hasListener = true;
+                    }
+
+                    if (UI.dieRollBtn && !UI.dieRollBtn._hasListener) {
+                        UI.dieRollBtn.addEventListener('click', () => {
+                            const result = Math.floor(Math.random() * 6) + 1;
+                            NotificationManager.info(`Die Roll: ${result}`, '1-6 range');
+                        }, { once: false });
+                        UI.dieRollBtn._hasListener = true;
+                    }
+
+                    if (UI.createTokenBtn && !UI.createTokenBtn._hasListener) {
+                        UI.createTokenBtn.addEventListener('click', () => {
+                            promptTokenCreation();
+                        }, { once: false });
+                        UI.createTokenBtn._hasListener = true;
                     }
 
                     // Export Settings Button
@@ -9725,7 +9946,7 @@
                 exitSelectionMode();
             }
 
-            ['deckBuilderView', 'shootoutView', 'shootoutSidingView', 'shootoutSimulatorView', 'shootoutReportView', 'sidingBuilderView', 'sandboxBoard'].forEach(id => {
+            ['deckBuilderView', 'shootoutView', 'shootoutSidingView', 'shootoutSimulatorView', 'shootoutReportView', 'sidingBuilderView', 'sandboxBoard', 'deckProfileView'].forEach(id => {
                 const view = document.getElementById(id);
                 if (view) view.classList.add('hidden');
             });
@@ -9735,6 +9956,7 @@
             UI.navDeckBuilder.classList.toggle('bg-[var(--color-primary)]', viewId === 'deckBuilderView');
             UI.navSiding.classList.toggle('bg-[var(--color-primary)]', viewId === 'sidingBuilderView');
             UI.navShootout.classList.toggle('bg-[var(--color-primary)]', ['shootoutView', 'shootoutSidingView', 'shootoutSimulatorView', 'shootoutReportView'].includes(viewId)); // MODIFIED
+            // UI.navDeckProfile?.classList.toggle('bg-[var(--color-primary)]', viewId === 'deckProfileView'); // DISABLED
 
         }
 
@@ -16458,6 +16680,13 @@
                 return;
             }
 
+            // Clean up any existing card elements before clearing
+            const existingCards = element.querySelectorAll('.deck-card-glass');
+            existingCards.forEach(cardEl => {
+                // Cancel any active long-press operations
+                LongPressManager.cancel(cardEl);
+            });
+
             element.innerHTML = ''; // Clear before rendering
             cardIds.forEach((cardId, index) => {
                 const card = cardDatabase.find(c => c.id === cardId);
@@ -22885,6 +23114,15 @@
                 currentPhase = 'draw';
                 turnHistory.push({ action: 'turn', turn, player: currentPlayer });
                 updateDisplay();
+
+                // Reset attack state for new turn
+                if (typeof AttackManager !== 'undefined') {
+                    AttackManager.resetTurn();
+                }
+                // Update attack button state
+                if (typeof UI !== 'undefined' && UI.sandboxAttackBtn) {
+                    UI.sandboxAttackBtn.classList.remove('active');
+                }
             }
 
             function reset() {
@@ -22948,6 +23186,282 @@
                 reset,
                 init,
                 phases
+            };
+        })();
+
+        // ============================================================================
+        // MODULE: LifePointManager
+        // ============================================================================
+        // Lines: 23058-23150
+        // Purpose: Track and manage life points for both players
+        // Key Methods: modifyLP(), getLP(), reset(), updateDisplay()
+        // ============================================================================
+
+        const LifePointManager = (function() {
+            'use strict';
+
+            // Default LP for both players
+            const DEFAULT_LP = 8000;
+
+            // LP state
+            let lifePoints = {
+                player: DEFAULT_LP,
+                opponent: DEFAULT_LP
+            };
+
+            // History for undo/redo
+            let lpHistory = [];
+
+            // LP change event callbacks
+            let changeListeners = [];
+
+            /**
+             * Modify life points for a player
+             * @param {string} player - 'player' or 'opponent'
+             * @param {number} amount - Amount to change (positive = gain, negative = damage)
+             * @param {string} reason - Description of the change
+             * @param {boolean} recordForUndo - Whether to record in history (default true)
+             * @returns {number} New LP value
+             */
+            function modifyLP(player, amount, reason = '', recordForUndo = true) {
+                const oldLP = lifePoints[player];
+                const newLP = Math.max(0, oldLP + amount);
+                const actualChange = newLP - oldLP;
+
+                if (actualChange === 0) return oldLP;
+
+                if (recordForUndo) {
+                    lpHistory.push({
+                        player,
+                        amount: actualChange,
+                        oldLP,
+                        newLP,
+                        reason,
+                        timestamp: Date.now()
+                    });
+                }
+
+                lifePoints[player] = newLP;
+
+                // Notify listeners
+                changeListeners.forEach(listener => {
+                    listener({
+                        player,
+                        oldLP,
+                        newLP,
+                        change: actualChange,
+                        reason
+                    });
+                });
+
+                updateDisplay();
+
+                // Log significant LP changes
+                if (Math.abs(actualChange) >= 100) {
+                    Logger.info('LifePointManager: LP modified', {
+                        player,
+                        change: actualChange,
+                        newLP,
+                        reason
+                    });
+                }
+
+                return newLP;
+            }
+
+            /**
+             * Deal damage to a player's life points
+             * @param {string} player - 'player' or 'opponent'
+             * @param {number} damage - Amount of damage to deal
+             * @param {string} reason - Description of the damage source
+             * @returns {number} New LP value
+             */
+            function damage(player, damageAmount, reason = 'Battle damage') {
+                return modifyLP(player, -Math.abs(damageAmount), reason, true);
+            }
+
+            /**
+             * Heal a player's life points
+             * @param {string} player - 'player' or 'opponent'
+             * @param {number} healAmount - Amount to heal
+             * @param {string} reason - Description of the heal source
+             * @returns {number} New LP value
+             */
+            function heal(player, healAmount, reason = 'Effect heal') {
+                return modifyLP(player, Math.abs(healAmount), reason, true);
+            }
+
+            /**
+             * Set life points to a specific value
+             * @param {string} player - 'player' or 'opponent'
+             * @param {number} value - New LP value
+             * @param {string} reason - Description
+             * @returns {number} New LP value
+             */
+            function setLP(player, value, reason = 'Set LP') {
+                const oldLP = lifePoints[player];
+                const newLP = Math.max(0, value);
+                const change = newLP - oldLP;
+
+                lpHistory.push({
+                    player,
+                    amount: change,
+                    oldLP,
+                    newLP,
+                    reason,
+                    timestamp: Date.now()
+                });
+
+                lifePoints[player] = newLP;
+
+                changeListeners.forEach(listener => {
+                    listener({
+                        player,
+                        oldLP,
+                        newLP,
+                        change,
+                        reason
+                    });
+                });
+
+                updateDisplay();
+
+                return newLP;
+            }
+
+            /**
+             * Get current life points for a player
+             * @param {string} player - 'player' or 'opponent'
+             * @returns {number} Current LP
+             */
+            function getLP(player) {
+                return lifePoints[player] || DEFAULT_LP;
+            }
+
+            /**
+             * Check if a player has lost (LP <= 0)
+             * @param {string} player - 'player' or 'opponent'
+             * @returns {boolean} True if player has lost
+             */
+            function hasLost(player) {
+                return lifePoints[player] <= 0;
+            }
+
+            /**
+             * Get both players' LP
+             * @returns {object} { player: number, opponent: number }
+             */
+            function getAllLP() {
+                return { ...lifePoints };
+            }
+
+            /**
+             * Reset LP to default values
+             * @param {number} startingLP - Optional custom starting LP
+             */
+            function reset(startingLP = DEFAULT_LP) {
+                lifePoints.player = startingLP;
+                lifePoints.opponent = startingLP;
+                lpHistory = [];
+                updateDisplay();
+                Logger.info('LifePointManager: LP reset', { startingLP });
+            }
+
+            /**
+             * Register a callback for LP changes
+             * @param {Function} callback - Function to call on LP change
+             */
+            function onChange(callback) {
+                changeListeners.push(callback);
+                return () => {
+                    const index = changeListeners.indexOf(callback);
+                    if (index > -1) changeListeners.splice(index, 1);
+                };
+            }
+
+            /**
+             * Update the LP display in the turn indicator
+             */
+            function updateDisplay() {
+                const playerLPEl = document.getElementById('playerLP');
+                const opponentLPEl = document.getElementById('opponentLP');
+
+                if (playerLPEl) {
+                    playerLPEl.textContent = lifePoints.player.toLocaleString();
+                    playerLPEl.className = 'lp-display' + (lifePoints.player <= 0 ? ' lp-zero' : '');
+                }
+                if (opponentLPEl) {
+                    opponentLPEl.textContent = lifePoints.opponent.toLocaleString();
+                    opponentLPEl.className = 'lp-display' + (lifePoints.opponent <= 0 ? ' lp-zero' : '');
+                }
+            }
+
+            /**
+             * Undo last LP change
+             * @returns {boolean} True if undo was successful
+             */
+            function undoLastChange() {
+                if (lpHistory.length === 0) return false;
+
+                const lastChange = lpHistory.pop();
+                lifePoints[lastChange.player] = lastChange.oldLP;
+                updateDisplay();
+                return true;
+            }
+
+            /**
+             * Get LP change history
+             * @returns {Array} Array of LP change records
+             */
+            function getHistory() {
+                return [...lpHistory];
+            }
+
+            /**
+             * Initialize the LP display
+             */
+            function init() {
+                // Check if LP display elements exist, create them if not
+                let playerLPEl = document.getElementById('playerLP');
+                let opponentLPEl = document.getElementById('opponentLP');
+
+                if (!playerLPEl || !opponentLPEl) {
+                    const turnIndicator = document.querySelector('.sandbox-turn-indicator');
+                    if (turnIndicator) {
+                        // Add LP displays to turn indicator
+                        const lpContainer = document.createElement('div');
+                        lpContainer.className = 'lp-container';
+                        lpContainer.innerHTML = `
+                            <div class="lp-display-wrapper">
+                                <span class="lp-label">OPP</span>
+                                <span id="opponentLP" class="lp-display">${lifePoints.opponent.toLocaleString()}</span>
+                            </div>
+                            <div class="lp-display-wrapper">
+                                <span class="lp-label">YOU</span>
+                                <span id="playerLP" class="lp-display">${lifePoints.player.toLocaleString()}</span>
+                            </div>
+                        `;
+                        turnIndicator.insertAdjacentElement('afterend', lpContainer);
+                    }
+                }
+
+                updateDisplay();
+            }
+
+            return {
+                modifyLP,
+                damage,
+                heal,
+                setLP,
+                getLP,
+                getAllLP,
+                hasLost,
+                reset,
+                onChange,
+                updateDisplay,
+                undoLastChange,
+                getHistory,
+                init
             };
         })();
 
@@ -23018,27 +23532,34 @@
             function handleDragMove(e) {
                 if (!activeDrag || !dragClone) return;
 
-                const now = performance.now();
-                const dt = now - (velocityHistory[velocityHistory.length - 1]?.time || now);
-                if (dt > 0) {
-                    const vx = (e.clientX - startPosition.x) / dt;
-                    const vy = (e.clientY - startPosition.y) / dt;
-                    velocityHistory.push({ x: vx, y: vy, time: now });
-                    if (velocityHistory.length > 10) velocityHistory.shift();
-                }
+                // Use requestAnimationFrame for performance
+                if (!activeDrag.rafId) {
+                    activeDrag.rafId = requestAnimationFrame(() => {
+                        const now = performance.now();
+                        const dt = now - (velocityHistory[velocityHistory.length - 1]?.time || now);
+                        if (dt > 0) {
+                            const vx = (e.clientX - startPosition.x) / dt;
+                            const vy = (e.clientY - startPosition.y) / dt;
+                            velocityHistory.push({ x: vx, y: vy, time: now });
+                            if (velocityHistory.length > 10) velocityHistory.shift();
+                        }
 
-                startPosition = { x: e.clientX, y: e.clientY };
-                dragClone.style.left = (e.clientX - 50) + 'px';
-                dragClone.style.top = (e.clientY - 72) + 'px';
+                        startPosition = { x: e.clientX, y: e.clientY };
+                        dragClone.style.left = (e.clientX - 50) + 'px';
+                        dragClone.style.top = (e.clientY - 72) + 'px';
 
-                // Highlight drop zones
-                document.querySelectorAll('.sandbox-zone').forEach(zone => {
-                    zone.classList.remove('drag-over');
-                });
-                const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
-                const zone = dropTarget?.closest('.sandbox-zone');
-                if (zone) {
-                    zone.classList.add('drag-over');
+                        // Highlight drop zones
+                        document.querySelectorAll('.sandbox-zone').forEach(zone => {
+                            zone.classList.remove('drag-over');
+                        });
+                        const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+                        const zone = dropTarget?.closest('.sandbox-zone');
+                        if (zone) {
+                            zone.classList.add('drag-over');
+                        }
+
+                        activeDrag.rafId = null;
+                    });
                 }
             }
 
@@ -23220,17 +23741,29 @@
                 document.querySelectorAll('.sandbox-zone').forEach(zone => {
                     zone.classList.remove('drag-over');
                 });
+
+                // Cancel pending RAF to prevent memory leaks
+                if (activeDrag && activeDrag.rafId) {
+                    cancelAnimationFrame(activeDrag.rafId);
+                    activeDrag.rafId = null;
+                }
+
                 activeDrag = null;
                 velocityHistory = [];
             }
 
             // Initialize drag for a card element
             function initCardDrag(cardElement) {
+                // Check if already initialized to prevent duplicate listeners
+                if (cardElement.dataset.dragInitialized === 'true') return;
+
                 cardElement.style.touchAction = 'none';
                 cardElement.addEventListener('pointerdown', handleDragStart);
                 cardElement.addEventListener('pointermove', handleDragMove);
                 cardElement.addEventListener('pointerup', handleDragEnd);
                 cardElement.addEventListener('pointercancel', handleDragCancel);
+
+                cardElement.dataset.dragInitialized = 'true';
             }
 
             // Initialize all cards on the board
@@ -23243,6 +23776,355 @@
             return {
                 initCardDrag,
                 initBoardDrag
+            };
+        })();
+
+        // ============================================================================
+        // MODULE: AttackManager
+        // ============================================================================
+        // Lines: 23640-23900
+        // Purpose: Handle monster attacks and battle damage calculation
+        // Key Methods: selectAttacker(), selectTarget(), executeAttack(), calculateDamage()
+        // Dependencies: LifePointManager, BoardStateManager, TurnManager
+        // ============================================================================
+
+        const AttackManager = (function() {
+            'use strict';
+
+            // Attack state
+            let selectedAttacker = null; // { card, zoneIndex, player }
+            let attackMode = false;
+            let attacksThisTurn = []; // Track which cards attacked this turn
+
+            // Visual elements
+            let attackArrow = null;
+            let targetHighlight = null;
+
+            /**
+             * Enter attack mode - player clicks monster to attack with
+             * @param {string} player - The player whose turn it is
+             */
+            function enterAttackMode(player = null) {
+                const currentPlayer = player || TurnManager.getCurrentPlayer();
+                const currentPhase = TurnManager.getPhase();
+
+                // Can only attack in battle phase
+                if (currentPhase !== 'battle') {
+                    NotificationManager.warning('Can only attack during Battle Phase');
+                    return false;
+                }
+
+                attackMode = true;
+                document.body.classList.add('attack-mode');
+
+                Logger.info('AttackManager: Attack mode entered', { player: currentPlayer });
+                return true;
+            }
+
+            /**
+             * Exit attack mode
+             */
+            function exitAttackMode() {
+                attackMode = false;
+                selectedAttacker = null;
+                document.body.classList.remove('attack-mode');
+                clearAttackVisuals();
+
+                Logger.info('AttackManager: Attack mode exited');
+            }
+
+            /**
+             * Select an attacker (clicked during attack mode)
+             * @param {Object} card - The card instance
+             * @param {number} zoneIndex - Zone index
+             * @param {string} player - 'player' or 'opponent'
+             */
+            function selectAttacker(card, zoneIndex, player) {
+                const currentPlayer = TurnManager.getCurrentPlayer();
+
+                // Can only attack with your own monsters
+                if (player !== currentPlayer) {
+                    NotificationManager.warning('Can only attack with your own monsters');
+                    return false;
+                }
+
+                // Check if card already attacked this turn
+                const cardId = card.id;
+                if (attacksThisTurn.includes(cardId)) {
+                    NotificationManager.info('This monster has already attacked this turn');
+                    return false;
+                }
+
+                // Check if monster is in attack position
+                if (card.position !== SandboxCardPosition.ATTACK_UPRIGHT) {
+                    NotificationManager.warning('Only monsters in Attack Position can attack');
+                    return false;
+                }
+
+                selectedAttacker = { card, zoneIndex, player };
+                showAttackArrow(zoneIndex, player);
+
+                // Now need to select target
+                NotificationManager.info('Select a target to attack');
+
+                return true;
+            }
+
+            /**
+             * Select a target and execute attack
+             * @param {Object} targetCard - Target card instance (null for direct attack)
+             * @param {number} targetZoneIndex - Target zone index
+             * @param {string} targetPlayer - Target player
+             */
+            function selectTarget(targetCard, targetZoneIndex, targetPlayer) {
+                if (!selectedAttacker) {
+                    NotificationManager.info('Select an attacker first');
+                    return false;
+                }
+
+                const attackerPlayer = selectedAttacker.player;
+
+                // Can't attack your own cards
+                if (targetPlayer === attackerPlayer && targetCard) {
+                    NotificationManager.warning('Cannot attack your own cards');
+                    return false;
+                }
+
+                // Check if direct attack is allowed
+                if (!targetCard) {
+                    // Direct attack - check if opponent has monsters
+                    const opponent = attackerPlayer === 'player' ? 'opponent' : 'player';
+                    const opponentState = BoardStateManager.getState()[opponent];
+                    const hasMonsters = opponentState.monsterZones.some(c => c !== null);
+
+                    if (hasMonsters) {
+                        NotificationManager.warning('Cannot attack directly while opponent controls monsters');
+                        return false;
+                    }
+
+                    // Execute direct attack
+                    executeAttack(selectedAttacker.card, null, attackerPlayer, opponent);
+                } else {
+                    // Execute monster attack
+                    executeAttack(selectedAttacker.card, targetCard, attackerPlayer, targetPlayer, targetZoneIndex);
+                }
+
+                // Clear selection and exit attack mode
+                attacksThisTurn.push(selectedAttacker.card.id);
+                exitAttackMode();
+                return true;
+            }
+
+            /**
+             * Execute an attack with damage calculation
+             * @param {Object} attackerCard - Attacking monster
+             * @param {Object} defenderCard - Defending monster (null for direct)
+             * @param {string} attackerPlayer - Attacking player
+             * @param {string} defenderPlayer - Defending player
+             * @param {number} defenderZoneIndex - Zone index of defender
+             */
+            function executeAttack(attackerCard, defenderCard, attackerPlayer, defenderPlayer, defenderZoneIndex = null) {
+                const attackerData = attackerCard.card;
+                const defenderData = defenderCard?.card;
+
+                const attackPower = attackerData.atk || 0;
+                let damage = 0;
+                let defenderDestroyed = false;
+                let attackerDestroyed = false;
+                let battleType = '';
+
+                if (!defenderCard) {
+                    // Direct attack
+                    battleType = 'direct';
+                    damage = attackPower;
+                    LifePointManager.damage(defenderPlayer, damage, `Direct attack from ${attackerData.name}`);
+
+                    NotificationManager.info(`${attackerData.name} attacks directly!`, `${damage} damage`);
+                } else {
+                    const defendPower = defenderData.def || 0;
+
+                    // Check defender position
+                    if (defenderCard.position === SandboxCardPosition.ATTACK_UPRIGHT) {
+                        // ATK vs ATK
+                        battleType = 'atk_vs_atk';
+                        if (attackPower > defendPower) {
+                            damage = attackPower - defendPower;
+                            defenderDestroyed = true;
+                            LifePointManager.damage(defenderPlayer, damage, `Battle: ${attackerData.name} vs ${defenderData.name}`);
+
+                            // Send to GY
+                            sendToGraveyard(defenderCard, defenderPlayer, defenderZoneIndex);
+                            NotificationManager.info(`${attackerData.name} destroys ${defenderData.name}!`, `${damage} damage`);
+                        } else if (attackPower < defendPower) {
+                            damage = defendPower - attackPower;
+                            attackerDestroyed = true;
+                            LifePointManager.damage(attackerPlayer, damage, `Battle: ${attackerData.name} vs ${defenderData.name}`);
+
+                            // Send attacker to GY
+                            const attackerZoneIndex = BoardStateManager.getState()[attackerPlayer].monsterZones.findIndex(c => c?.id === attackerCard.id);
+                            sendToGraveyard(attackerCard, attackerPlayer, attackerZoneIndex);
+                            NotificationManager.info(`${attackerData.name} is destroyed by ${defenderData.name}!`, `-${damage} LP`);
+                        } else {
+                            // Both destroyed (tie)
+                            defenderDestroyed = true;
+                            attackerDestroyed = true;
+
+                            sendToGraveyard(defenderCard, defenderPlayer, defenderZoneIndex);
+                            const attackerZoneIndex = BoardStateManager.getState()[attackerPlayer].monsterZones.findIndex(c => c?.id === attackerCard.id);
+                            sendToGraveyard(attackerCard, attackerPlayer, attackerZoneIndex);
+
+                            NotificationManager.info(`${attackerData.name} and ${defenderData.name} destroy each other!`);
+                        }
+                    } else {
+                        // ATK vs DEF
+                        battleType = 'atk_vs_def';
+                        if (attackPower > defendPower) {
+                            defenderDestroyed = true;
+                            sendToGraveyard(defenderCard, defenderPlayer, defenderZoneIndex);
+                            NotificationManager.info(`${attackerData.name} destroys ${defenderData.name}!`, 'No damage (DEF position)');
+                        } else {
+                            // Reflect damage to attacker
+                            damage = defendPower - attackPower;
+                            attackerDestroyed = (damage >= attackPower); // Piercing-like check
+                            if (!attackerDestroyed) {
+                                LifePointManager.damage(attackerPlayer, damage, `Reflect: ${attackerData.name} vs ${defenderData.name}`);
+                                NotificationManager.info(`${defenderData.name} reflects ${damage} damage!`, `Penetrating damage`);
+                            } else {
+                                const attackerZoneIndex = BoardStateManager.getState()[attackerPlayer].monsterZones.findIndex(c => c?.id === attackerCard.id);
+                                sendToGraveyard(attackerCard, attackerPlayer, attackerZoneIndex);
+                                NotificationManager.info(`${attackerData.name} crashes into ${defenderData.name}!`, `Destroyed`);
+                            }
+                        }
+                    }
+                }
+
+                // Log the attack
+                Logger.info('AttackManager: Attack executed', {
+                    attacker: attackerData.name,
+                    defender: defenderData?.name || 'Direct',
+                    battleType,
+                    damage,
+                    attackerDestroyed,
+                    defenderDestroyed
+                });
+
+                // Check for game over
+                checkWinCondition();
+            }
+
+            /**
+             * Send a card to graveyard
+             * @param {Object} card - Card instance
+             * @param {string} player - Player who owns the card
+             * @param {number} fromZoneIndex - Source zone index
+             */
+            function sendToGraveyard(card, player, fromZoneIndex) {
+                const state = BoardStateManager.getState()[player];
+
+                // Remove from monster zone
+                state.monsterZones[fromZoneIndex] = null;
+
+                // Add to graveyard
+                state.graveyard.push(card);
+
+                // Update display
+                BoardRenderer.updateZone(SandboxZoneType.MONSTER, player);
+                BoardRenderer.updateZone(SandboxZoneType.GRAVEYARD, player);
+            }
+
+            /**
+             * Check if either player has lost
+             */
+            function checkWinCondition() {
+                const playerLP = LifePointManager.getLP('player');
+                const opponentLP = LifePointManager.getLP('opponent');
+
+                if (playerLP <= 0) {
+                    setTimeout(() => {
+                        NotificationManager.error('YOU LOSE!', 'Your life points reached 0');
+                    }, 500);
+                } else if (opponentLP <= 0) {
+                    setTimeout(() => {
+                        NotificationManager.success('YOU WIN!', 'Opponent life points reached 0');
+                    }, 500);
+                }
+            }
+
+            /**
+             * Show attack arrow from attacker
+             * @param {number} zoneIndex - Zone index of attacker
+             * @param {string} player - Player who owns attacker
+             */
+            function showAttackArrow(zoneIndex, player) {
+                clearAttackVisuals();
+
+                const zone = document.querySelector(
+                    `.sandbox-zone[data-zone-type="monster"][data-zone-index="${zoneIndex}"][data-player="${player}"]`
+                );
+
+                if (!zone) return;
+
+                // Create attack indicator
+                const indicator = document.createElement('div');
+                indicator.className = 'attack-indicator';
+                indicator.innerHTML = '<span class="attack-icon">⚔</span>';
+                zone.appendChild(indicator);
+
+                attackArrow = indicator;
+            }
+
+            /**
+             * Clear attack visual elements
+             */
+            function clearAttackVisuals() {
+                if (attackArrow) {
+                    attackArrow.remove();
+                    attackArrow = null;
+                }
+                document.querySelectorAll('.attack-target-highlight').forEach(el => {
+                    el.classList.remove('attack-target-highlight');
+                });
+            }
+
+            /**
+             * Reset attack state (call on turn change)
+             */
+            function resetTurn() {
+                attacksThisTurn = [];
+                exitAttackMode();
+            }
+
+            /**
+             * Check if a card can attack
+             * @param {Object} card - Card instance
+             * @returns {boolean}
+             */
+            function canAttack(card) {
+                return card.position === SandboxCardPosition.ATTACK_UPRIGHT &&
+                       !attacksThisTurn.includes(card.id);
+            }
+
+            /**
+             * Get current attack state
+             * @returns {Object} { attackMode, selectedAttacker, attacksThisTurn }
+             */
+            function getState() {
+                return {
+                    attackMode,
+                    selectedAttacker,
+                    attacksThisTurn: [...attacksThisTurn]
+                };
+            }
+
+            return {
+                enterAttackMode,
+                exitAttackMode,
+                selectAttacker,
+                selectTarget,
+                executeAttack,
+                resetTurn,
+                canAttack,
+                getState
             };
         })();
 
@@ -23276,6 +24158,11 @@
                 ZoneViewManager.init();
                 ContextMenuManager.init();
                 CardDetailPanel.init();
+
+                // Initialize LifePointManager
+                if (typeof LifePointManager !== 'undefined') {
+                    LifePointManager.init();
+                }
 
                 // Initialize deck search on double-click
                 document.querySelectorAll('.sandbox-zone[data-zone-type="deck"]').forEach(zone => {
@@ -23416,6 +24303,29 @@
 
                 // Initialize drag handlers for this card
                 DragDropCoordinator.initCardDrag(el);
+
+                // Add attack click handler for monster zones
+                if (zoneType === 'monster') {
+                    el.addEventListener('click', (e) => {
+                        // Check if AttackManager exists and we're in attack mode
+                        if (typeof AttackManager !== 'undefined' && document.body.classList.contains('attack-mode')) {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            const currentPlayer = TurnManager.getCurrentPlayer();
+
+                            // If clicking own monster, select as attacker
+                            if (player === currentPlayer) {
+                                const zoneIndex = parseInt(el.parentElement.dataset.zoneIndex);
+                                AttackManager.selectAttacker(card, zoneIndex, player);
+                            } else {
+                                // Clicking opponent monster, select as target
+                                const zoneIndex = parseInt(el.parentElement.dataset.zoneIndex);
+                                AttackManager.selectTarget(card, zoneIndex, player);
+                            }
+                        }
+                    });
+                }
 
                 return el;
             }
@@ -23884,32 +24794,72 @@
                 const result = BoardStateManager.findCard(instanceId, player);
                 if (!result || result.card.position === newPosition) return;
 
-                result.card.position = newPosition;
-                BoardRenderer.updateZone(result.zoneType, player);
+                // Use command for undo support
+                const command = SandboxCommandFactory.createChangePositionCommand({
+                    instanceId,
+                    player,
+                    fromPosition: result.card.position,
+                    toPosition: newPosition
+                });
+                UndoManager.execute(command);
             }
 
             function flipCard(instanceId, player) {
                 const result = BoardStateManager.findCard(instanceId, player);
                 if (!result) return;
 
-                result.card.faceUp = !result.card.faceUp;
-                BoardRenderer.updateZone(result.zoneType, player);
+                // Use command for undo support
+                const command = SandboxCommandFactory.createFlipCardCommand({
+                    instanceId,
+                    player,
+                    fromFaceUp: result.card.faceUp,
+                    toFaceUp: !result.card.faceUp
+                });
+                UndoManager.execute(command);
             }
 
             function addCounter(instanceId, player) {
                 const result = BoardStateManager.findCard(instanceId, player);
                 if (!result) return;
 
-                result.card.counters = (result.card.counters || 0) + 1;
-                BoardRenderer.updateZone(result.zoneType, player);
+                const oldCounters = result.card.counters || 0;
+                result.card.counters = oldCounters + 1;
+
+                // Create a simple counter change command
+                const command = Command.create({
+                    description: 'Add counter',
+                    execute: () => {
+                        result.card.counters = oldCounters + 1;
+                        BoardRenderer.updateZone(result.zoneType, player);
+                    },
+                    undo: () => {
+                        result.card.counters = oldCounters;
+                        BoardRenderer.updateZone(result.zoneType, player);
+                    }
+                });
+                UndoManager.execute(command);
             }
 
             function removeCounter(instanceId, player) {
                 const result = BoardStateManager.findCard(instanceId, player);
                 if (!result || !result.card.counters || result.card.counters <= 0) return;
 
-                result.card.counters = Math.max(0, result.card.counters - 1);
-                BoardRenderer.updateZone(result.zoneType, player);
+                const oldCounters = result.card.counters;
+                const newCounters = Math.max(0, oldCounters - 1);
+
+                // Create a simple counter change command
+                const command = Command.create({
+                    description: 'Remove counter',
+                    execute: () => {
+                        result.card.counters = newCounters;
+                        BoardRenderer.updateZone(result.zoneType, player);
+                    },
+                    undo: () => {
+                        result.card.counters = oldCounters;
+                        BoardRenderer.updateZone(result.zoneType, player);
+                    }
+                });
+                UndoManager.execute(command);
             }
 
             function moveToZone(instanceId, player, targetZone) {
@@ -23973,6 +24923,121 @@
 
             return { init };
         })();
+
+        // ============================================================================
+        // QUICK ACTIONS HELPER FUNCTIONS
+        // ============================================================================
+
+        function toggleQuickActionsPanel() {
+            if (UI.quickActionsPanel) {
+                UI.quickActionsPanel.classList.toggle('visible');
+            }
+        }
+
+        function promptLPModification() {
+            const currentPlayer = TurnManager.getCurrentPlayer();
+            const currentLP = LifePointManager.getLP(currentPlayer);
+
+            const amount = prompt(`Enter LP change for ${currentPlayer}:\nCurrent LP: ${currentLP}\n\nUse positive number to heal, negative to damage.`, '0');
+
+            if (amount === null) return;
+
+            const parsedAmount = parseInt(amount);
+            if (isNaN(parsedAmount)) {
+                NotificationManager.error('Invalid LP amount', 'Please enter a valid number');
+                return;
+            }
+
+            if (parsedAmount > 0) {
+                LifePointManager.heal(currentPlayer, parsedAmount, 'Manual LP adjustment');
+                NotificationManager.success(`${currentPlayer} gained ${parsedAmount} LP`);
+            } else {
+                LifePointManager.damage(currentPlayer, Math.abs(parsedAmount), 'Manual LP damage');
+                NotificationManager.warning(`${currentPlayer} took ${Math.abs(parsedAmount)} damage`);
+            }
+
+            UI.quickActionsPanel.classList.remove('visible');
+        }
+
+        function promptCounterModification(isAdding) {
+            // Find a selected card or prompt to select one
+            const selectedCard = document.querySelector('.sandbox-card:hover, .sandbox-card.attack-target-highlight');
+
+            if (!selectedCard) {
+                NotificationManager.info('Hover over a card first', 'Then click Add/Remove Counter');
+                return;
+            }
+
+            const instanceId = selectedCard.dataset.instanceId;
+            const player = selectedCard.dataset.player || 'player';
+            const result = BoardStateManager.findCard(instanceId, player);
+
+            if (!result) return;
+
+            const card = result.card;
+            const currentCounters = card.counters || 0;
+
+            if (isAdding) {
+                card.counters = currentCounters + 1;
+                NotificationManager.info(`Added counter to ${card.card?.name || 'card'}`, `Total: ${card.counters}`);
+            } else {
+                if (currentCounters <= 0) {
+                    NotificationManager.warning('This card has no counters', 'Cannot remove');
+                    return;
+                }
+                card.counters = currentCounters - 1;
+                NotificationManager.info(`Removed counter from ${card.card?.name || 'card'}`, `Total: ${card.counters}`);
+            }
+
+            BoardRenderer.updateZone(result.zoneType, player);
+            UI.quickActionsPanel.classList.remove('visible');
+        }
+
+        function promptTokenCreation() {
+            const currentPlayer = TurnManager.getCurrentPlayer();
+            const state = BoardStateManager.getState()[currentPlayer];
+
+            // Find empty monster zone
+            const emptyIndex = state.monsterZones.findIndex(z => z === null);
+            if (emptyIndex < 0) {
+                NotificationManager.warning('No empty monster zones', 'Clear a zone first');
+                return;
+            }
+
+            const tokenName = prompt('Enter token name:', 'Token');
+            if (tokenName === null) return;
+
+            const tokenATK = prompt('Enter token ATK:', '0');
+            if (tokenATK === null) tokenATK = '0';
+
+            const tokenDEF = prompt('Enter token DEF:', '0');
+            if (tokenDEF === null) tokenDEF = '0';
+
+            const tokenCard = {
+                id: 'token_' + Date.now(),
+                cardId: 'TOKEN',
+                position: SandboxCardPosition.ATTACK_UPRIGHT,
+                faceUp: true,
+                player: currentPlayer,
+                card: {
+                    id: 'TOKEN',
+                    name: tokenName || 'Token',
+                    type: 'Effect Monster',
+                    attribute: 'DARK',
+                    level: 1,
+                    atk: parseInt(tokenATK) || 0,
+                    def: parseInt(tokenDEF) || 0,
+                    race: 'Fiend',
+                    imageUrl: 'https://placehold.co/100x145/4a5568/e2e8f0?text=🃏',
+                    desc: 'Token Monster'
+                }
+            };
+
+            state.monsterZones[emptyIndex] = tokenCard;
+            BoardRenderer.updateZone('monster', currentPlayer);
+            NotificationManager.success(`Created ${tokenCard.card.name}`, `ATK/${tokenCard.card.atk} DEF/${tokenCard.card.def}`);
+            UI.quickActionsPanel.classList.remove('visible');
+        }
 
         // ============================================================================
         // MODULE: CardDetailPanel
@@ -24228,7 +25293,7 @@
             --main-deck-columns: 10;
             --side-deck-columns: 3;
             --extra-deck-columns: 3;
-            --db-columns: 5;
+            --db-columns: 4;
             /* ============================================================================
              * UI TUNER VARIABLES - Hardcoded fine-tuned values
              * These can still be adjusted via the UITuner module (Ctrl+Shift+U)
@@ -24718,6 +25783,8 @@
             justify-content: center;
             background: linear-gradient(to right, transparent 0%, var(--color-border) 50%, transparent 100%);
             transition: background-color 0.2s ease;
+            /* Enable touch handling for resize */
+            touch-action: none;
         }
 
         #resizeHandle:hover {
@@ -24879,6 +25946,8 @@
             flex-shrink: 0;
             background: linear-gradient(to right, transparent 0%, var(--color-border) 50%, transparent 100%);
             transition: background-color 0.2s ease;
+            /* Enable touch handling for resize */
+            touch-action: none;
         }
 
         #mainSideResizeHandle:hover,
@@ -24910,11 +25979,35 @@
                 flex-direction: column;
             }
 
+            /* Remove flex gap in mobile mode to prevent gaps when sections are hidden */
+            #deckGridContainer {
+                gap: 0 !important;
+            }
+
+            /* Make all deck sections flexible in mobile mode to fill available space */
+            #mainDeckSection,
+            #sideDeckSection,
+            #extraDeckSection {
+                flex: 1 1 0;
+                min-width: 0;
+                margin-bottom: 0.5rem;
+            }
+
+            /* Remove margin from last visible section to avoid extra space */
+            #mainDeckSection:last-child,
+            #sideDeckSection:last-child,
+            #extraDeckSection:last-child {
+                margin-bottom: 0;
+            }
+
+
             #resizeHandle {
                 width: 100%;
                 height: 8px;
                 cursor: row-resize;
                 background: linear-gradient(to bottom, transparent 0%, var(--color-border) 50%, transparent 100%);
+                /* Enable touch handling for resize */
+                touch-action: none;
             }
 
             #resizeHandle::before {
@@ -26602,6 +27695,24 @@
             }
         }
 
+        /* ============================================================================
+           DECK PROFILE SLIDESHOW ANIMATIONS - REMOVED, TO BE REIMPLEMENTED
+           ============================================================================ */
+
+        /* @keyframes deckProfileRevealIn - REMOVED */
+        /* @keyframes completionPulse - REMOVED */
+        /* @keyframes deckProfileMoveToGrid - REMOVED */
+        /* @keyframes deckProfileFadeInGrid - REMOVED */
+        /* .deck-profile-reveal-card - REMOVED */
+        /* .deck-profile-grid-card - REMOVED */
+        /* .deck-profile-stage-bg - REMOVED */
+        /* @keyframes deckProfileStagePulse - REMOVED */
+        /* #deckProfileFinalGrid styles - REMOVED */
+        /* .deck-profile-progress-container - REMOVED */
+        /* .deck-profile-nav-btn - REMOVED */
+        /* .deck-profile-count-badge - REMOVED */
+        /* Reduced motion support - REMOVED */
+
         @keyframes tooltipPulse {
             0%, 100% {
                 box-shadow:
@@ -26860,6 +27971,75 @@
             border-color: rgba(239, 68, 68, 0.6);
         }
 
+        /* Quick Actions Panel */
+        #quickActionsPanel {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            width: 320px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            border-radius: 0 0 8px 8px;
+            padding: 12px;
+            z-index: 100;
+            display: none;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        #quickActionsPanel.visible {
+            display: block;
+        }
+
+        .quick-actions-title {
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .quick-actions-close {
+            color: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .quick-actions-close:hover {
+            color: white;
+        }
+
+        .quick-actions-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .quick-action-btn {
+            padding: 8px 12px;
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 4px;
+            color: white;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-align: left;
+        }
+
+        .quick-action-btn:hover {
+            background: rgba(59, 130, 246, 0.3);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .quick-action-btn:active {
+            transform: scale(0.98);
+        }
+
         /* Board Content */
         .sandbox-board-content {
             flex: 1;
@@ -26959,6 +28139,63 @@
         .sandbox-turn-indicator .turn-phase {
             color: rgba(255, 200, 100, 0.95);
             font-weight: 600;
+        }
+
+        /* LP Display Container */
+        .lp-display-container {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-top: 2px;
+            padding-top: 2px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .lp-display-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1px 4px;
+            border-radius: 2px;
+        }
+
+        .lp-display-row.opponent-lp {
+            background: rgba(239, 68, 68, 0.15);
+        }
+
+        .lp-display-row.player-lp {
+            background: rgba(34, 197, 94, 0.15);
+        }
+
+        .lp-display-row .lp-label {
+            font-size: 8px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            opacity: 0.7;
+        }
+
+        .lp-display-row .lp-value {
+            font-size: 11px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .lp-display-row.opponent-lp .lp-value {
+            color: #fca5a5;
+        }
+
+        .lp-display-row.player-lp .lp-value {
+            color: #86efac;
+        }
+
+        .lp-value.lp-zero {
+            color: #ef4444 !important;
+            animation: lp-flash 0.5s ease-in-out;
+        }
+
+        @keyframes lp-flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; background: rgba(239, 68, 68, 0.3); }
         }
 
         /* Hand Zone Labels - hidden */
@@ -27185,6 +28422,49 @@
 
         .sandbox-card[data-position="face_down_attack"] {
             transform: rotate(0deg);
+        }
+
+        /* Attack Mode Styles */
+        body.attack-mode .sandbox-zone.monster-zone {
+            cursor: crosshair;
+        }
+
+        body.attack-mode .sandbox-card[data-position="attack_upright"] {
+            cursor: pointer;
+        }
+
+        body.attack-mode .sandbox-card[data-position="attack_upright"]:hover {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+            transform: scale(1.05);
+        }
+
+        .attack-indicator {
+            position: absolute;
+            top: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            animation: attack-pulse 1s infinite;
+        }
+
+        .attack-icon {
+            font-size: 18px;
+            filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.8));
+        }
+
+        @keyframes attack-pulse {
+            0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; }
+            50% { transform: translateX(-50%) scale(1.2); opacity: 0.8; }
+        }
+
+        .attack-target-highlight {
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.8) !important;
+            animation: target-flash 0.5s infinite;
+        }
+
+        @keyframes target-flash {
+            0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.8); }
+            50% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.4); }
         }
 
         /* Hand Card Styling - smart sizing matching larger field zones */
@@ -27904,6 +29184,7 @@
             grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
             gap: 12px;
             align-content: start;
+            background: var(--color-surface-1, #1e293b);
         }
 
         .deck-search-result-card {
@@ -27986,15 +29267,23 @@
 
         /* Portrait mode adjustment for quick filter panel */
         @media (max-width: 1024px) {
+            #quickFilterPanel {
+                /* Allow quick filter to shrink but not overflow parent */
+                flex-shrink: 0;
+            }
+
             #quickFilterPanelContent {
-                max-height: 40vh;
+                max-height: 250px;
                 overflow-y: auto;
             }
 
             #cardDatabaseSection {
-                height: auto;
-                min-height: 60vh;
+                flex: 1;
+                min-height: auto;
                 max-height: none;
+                overflow-y: auto;
+                /* Allow card DB to shrink below viewport */
+                height: auto;
             }
         }
 
@@ -31024,11 +32313,9 @@
                     class="bg-amber-700 hover:bg-amber-600 text-white p-2 rounded-md transition-colors relative group"
                     title="Duel Simulator">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <!-- Hand holding cards -->
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11h10M7 8h10M7 14h6"/>
-                        <rect x="3" y="7" width="14" height="12" rx="1" stroke-width="2" stroke-opacity="0.3"/>
-                        <rect x="5" y="5" width="14" height="12" rx="1" stroke-width="2" stroke-opacity="0.6"/>
-                        <rect x="7" y="3" width="14" height="12" rx="1" stroke-width="2"/>
+                        <!-- Play button -->
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                     <!-- Tooltip label on hover -->
                     <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -31042,6 +32329,10 @@
                         class="px-4 py-2 rounded-md text-sm font-semibold transition-colors hover:bg-[var(--color-primary-hover)]">Siding</button>
                     <button id="navShootout"
                         class="px-4 py-2 rounded-md text-sm font-semibold transition-colors hover:bg-[var(--color-primary-hover)]">Shootout</button>
+                    <!-- Deck Profile button hidden - to be reimplemented
+                    <button id="navDeckProfile"
+                        class="hidden px-4 py-2 rounded-md text-sm font-semibold transition-colors hover:bg-[var(--color-primary-hover)]">Deck Profile</button>
+                    -->
                 </nav>
             </div>
         </header>
@@ -31810,8 +33101,21 @@
             </div>
 
             <!-- ========================================================================
+                 DECK PROFILE SLIDESHOW VIEW
+                 ============================================================================ -->
+            <!-- DECK PROFILE VIEW - REMOVED, TO BE REIMPLEMENTED -->
+            <div id="deckProfileView" class="hidden flex-1 flex flex-col overflow-hidden min-h-0">
+                <div class="flex items-center justify-center h-full">
+                    <div class="text-center text-gray-400">
+                        <p class="text-xl mb-2">Deck Profile</p>
+                        <p class="text-sm">This feature is being reimplemented.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================================================
                  DUEL SIMULATOR VIEW
-                 ======================================================================== -->
+                 ============================================================================ -->
             <div id="sandboxBoard" class="hidden view-2d">
                 <!-- Toolbar -->
                 <div class="sandbox-toolbar">
@@ -31825,9 +33129,27 @@
                     <div class="sandbox-toolbar-divider"></div>
                     <button id="sandboxNextPhaseBtn" class="sandbox-toolbar-btn">Next Phase</button>
                     <button id="sandboxEndTurnBtn" class="sandbox-toolbar-btn">End Turn</button>
+                    <button id="sandboxAttackBtn" class="sandbox-toolbar-btn" title="Enter Attack Mode">⚔ Attack</button>
+                    <button id="sandboxDrawBtn" class="sandbox-toolbar-btn" title="Draw Card">🎴 Draw</button>
+                    <button id="sandboxLPBtn" class="sandbox-toolbar-btn" title="Adjust Life Points">❤️ LP</button>
                     <div class="sandbox-toolbar-divider"></div>
                     <!-- Temporary Layout Adjustment Tool -->
                     <button id="sandboxLayoutBtn" class="sandbox-toolbar-btn" title="Adjust Layout">🔧 Layout</button>
+
+                    <!-- Quick Actions Panel -->
+                    <div id="quickActionsPanel">
+                        <div class="quick-actions-title">Quick Actions</div>
+                        <button id="quickActionsClose" class="quick-actions-close">&times;</button>
+                        <div class="quick-actions-grid">
+                            <button id="drawCardBtn" class="quick-action-btn">🎴 Draw Card</button>
+                            <button id="modifyLPBtn" class="quick-action-btn">❤️ Modify LP</button>
+                            <button id="addCounterBtn" class="quick-action-btn">➕ Add Counter</button>
+                            <button id="removeCounterBtn" class="quick-action-btn">➖ Remove Counter</button>
+                            <button id="coinFlipBtn" class="quick-action-btn">🪙 Coin Flip</button>
+                            <button id="dieRollBtn" class="quick-action-btn">🎲 Die Roll</button>
+                            <button id="createTokenBtn" class="quick-action-btn">🃏 Create Token</button>
+                        </div>
+                    </div>
 
                     <!-- Layout Adjustment Panel -->
                     <div id="layoutAdjustPanel">
@@ -31943,6 +33265,17 @@
                                 <span id="turnPhase" class="turn-phase">DRAW</span>
                                 <span>|</span>
                                 <span id="turnCount" class="turn-count">Turn 1</span>
+                                <!-- LP Display -->
+                                <div class="lp-display-container">
+                                    <div class="lp-display-row opponent-lp">
+                                        <span class="lp-label">OPP</span>
+                                        <span id="opponentLP" class="lp-value">8000</span>
+                                    </div>
+                                    <div class="lp-display-row player-lp">
+                                        <span class="lp-label">YOU</span>
+                                        <span id="playerLP" class="lp-value">8000</span>
+                                    </div>
+                                </div>
                             </div>
                             <div class="sandbox-zone extra-monster-zone" data-zone-type="extra_monster" data-extra-position="right"></div>
                             <div class="extra-monster-placeholder"></div>
