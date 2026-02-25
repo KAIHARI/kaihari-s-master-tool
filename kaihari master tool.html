@@ -2623,6 +2623,408 @@
             };
         })();
         // ============================================================================
+        // MODULE: TouchDragManager
+        // Lines: 2625-2850
+        // Purpose: Touch drag-and-drop support for deck cards on touchscreen devices
+        // Key Methods: init(), attachTouchListeners(), handleTouchStart/Move/End()
+        // ============================================================================
+        const TouchDragManager = (function() {
+            'use strict';
+
+            // Touch drag state (now using Pointer Events for pen/stylus support)
+            let activePointer = null;
+            let dragElement = null;
+            let touchOffsetX = 0;
+            let touchOffsetY = 0;
+            let sourceCardId = null;
+            let sourceElement = null;
+            let sourceSection = null;
+            let hasMoved = false;
+            const MOVEMENT_THRESHOLD = 10; // px - must move this much to be considered a drag
+
+            // Track long-press for conflict prevention
+            let longPressTimer = null;
+            const LONG_PRESS_DELAY = 200; // ms - wait before cancelling long-press to detect drag intent
+
+            function init() {
+                // Attach listeners immediately - UI elements should already be initialized
+                attachTouchListeners();
+            }
+
+            function attachTouchListeners() {
+                const sections = [
+                    UI.mainDeckList,
+                    UI.sideDeckList,
+                    UI.extraDeckList
+                ];
+
+                let attachedCount = 0;
+                sections.forEach(section => {
+                    if (section) {
+                        // Use Pointer Events for unified mouse/touch/pen handling
+                        section.addEventListener('pointerdown', handlePointerDown, { passive: false });
+                        section.addEventListener('pointermove', handlePointerMove, { passive: false });
+                        section.addEventListener('pointerup', handlePointerUp, { passive: false });
+                        section.addEventListener('pointercancel', handlePointerCancel, { passive: false });
+                        attachedCount++;
+                    }
+                });
+
+                if (attachedCount > 0) {
+                    Logger.info('TouchDragManager initialized (Pointer Events)', { attachedCount });
+                } else {
+                    Logger.warn('TouchDragManager: No deck sections found');
+                }
+            }
+
+            function handlePointerDown(e) {
+                // Ignore mouse events - let native HTML5 drag-and-drop handle those
+                if (e.pointerType === 'mouse') {
+                    return;
+                }
+
+                // Deck cards use data-id on the card element, or data-card-id on the image
+                let card = e.target.closest('.deck-card-glass');
+                if (!card || !card.dataset.id) return;
+
+                // Get card and section info
+                sourceCardId = card.dataset.id;
+
+                // Determine which section this card belongs to by checking parent IDs
+                const parentList = card.closest('#mainDeckList, #sideDeckList, #extraDeckList');
+                if (!parentList) return;
+
+                if (parentList.id === 'mainDeckList') {
+                    sourceSection = 'main';
+                } else if (parentList.id === 'sideDeckList') {
+                    sourceSection = 'side';
+                } else if (parentList.id === 'extraDeckList') {
+                    sourceSection = 'extra';
+                } else {
+                    return;
+                }
+
+                // Capture the pointer so we continue receiving events even outside the element
+                e.target.setPointerCapture(e.pointerId);
+
+                activePointer = e;
+                sourceElement = card;
+                hasMoved = false;
+
+                // Store initial position for movement detection
+                const rect = card.getBoundingClientRect();
+                touchOffsetX = e.clientX - rect.left;
+                touchOffsetY = e.clientY - rect.top;
+
+                // Set a flag for potential long-press cancellation
+                // Don't prevent default yet - let long-press have a chance
+                longPressTimer = setTimeout(() => {
+                    // If still holding without moving much, let long-press win
+                    if (!hasMoved) {
+                        activePointer = null;
+                        sourceElement = null;
+                    }
+                }, LONG_PRESS_DELAY);
+            }
+
+            function handlePointerMove(e) {
+                if (!activePointer || !sourceElement) return;
+
+                const deltaX = Math.abs(e.clientX - activePointer.clientX);
+                const deltaY = Math.abs(e.clientY - activePointer.clientY);
+
+                // Check if movement exceeds threshold (drag intent detected)
+                if (!hasMoved && (deltaX > MOVEMENT_THRESHOLD || deltaY > MOVEMENT_THRESHOLD)) {
+                    hasMoved = true;
+
+                    // Cancel long-press timer
+                    if (longPressTimer) {
+                        clearTimeout(longPressTimer);
+                        longPressTimer = null;
+                    }
+
+                    // Prevent default and start drag
+                    e.preventDefault();
+
+                    // Cancel any long-press on this element
+                    const card = sourceElement;
+                    if (card.classList.contains('long-press-active')) {
+                        card.classList.remove('long-press-active');
+                    }
+
+                    // Create visual drag element
+                    createDragElement(card);
+
+                    // Add dragging state to source
+                    card.classList.add('touch-dragging');
+                    card.style.opacity = '0.3';
+
+                    // Set up placeholder for visual feedback
+                    if (!placeholder) {
+                        placeholder = document.createElement('div');
+                        placeholder.className = 'placeholder';
+                        placeholder.innerHTML = card.innerHTML;
+
+                        // Insert placeholder before the source element
+                        if (card.parentNode) {
+                            card.parentNode.insertBefore(placeholder, card);
+                        }
+                    }
+
+                    // Hide the source element
+                    card.style.display = 'none';
+                }
+
+                if (hasMoved) {
+                    e.preventDefault();
+                    moveDragElement(e.clientX, e.clientY);
+                    updateDropTarget(e.clientX, e.clientY);
+                }
+            }
+
+            function handlePointerUp(e) {
+                // Clear long-press timer
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+
+                if (!activePointer || !sourceElement) {
+                    cleanup();
+                    return;
+                }
+
+                // Release pointer capture
+                if (e.target.hasPointerCapture(e.pointerId)) {
+                    e.target.releasePointerCapture(e.pointerId);
+                }
+
+                // If didn't move enough, let long-press handle it
+                if (!hasMoved) {
+                    activePointer = null;
+                    sourceElement = null;
+                    return;
+                }
+
+                e.preventDefault();
+
+                const dropTarget = findDropTarget(e.clientX, e.clientY);
+
+                if (dropTarget) {
+                    executeDrop(dropTarget, e.clientX, e.clientY);
+                }
+
+                cleanup();
+            }
+
+            function handlePointerCancel(e) {
+                // Release pointer capture if we still have it
+                if (e.target.hasPointerCapture(e.pointerId)) {
+                    e.target.releasePointerCapture(e.pointerId);
+                }
+                cleanup();
+            }
+
+            function createDragElement(sourceCard) {
+                // Clone card for visual feedback
+                dragElement = sourceCard.cloneNode(true);
+                dragElement.classList.add('touch-drag-ghost');
+
+                // Apply drag ghost styles
+                dragElement.style.cssText = `
+                    position: fixed;
+                    pointer-events: none;
+                    z-index: 9999;
+                    opacity: 0.85;
+                    transform: scale(1.05);
+                    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+                    transition: transform 0.1s ease;
+                `;
+
+                // Set initial position (activePointer is now a PointerEvent)
+                dragElement.style.left = (activePointer.clientX - touchOffsetX) + 'px';
+                dragElement.style.top = (activePointer.clientY - touchOffsetY) + 'px';
+
+                document.body.appendChild(dragElement);
+            }
+
+            function moveDragElement(x, y) {
+                if (dragElement) {
+                    dragElement.style.left = (x - touchOffsetX) + 'px';
+                    dragElement.style.top = (y - touchOffsetY) + 'px';
+                }
+            }
+
+            function findDropTarget(x, y) {
+                // Find deck list element at touch position
+                const element = document.elementFromPoint(x, y);
+
+                // Check if we're over a deck list container or one of its children
+                if (element) {
+                    // Check if directly over a deck list
+                    if (element.id && (element.id === 'mainDeckList' ||
+                        element.id === 'sideDeckList' ||
+                        element.id === 'extraDeckList')) {
+                        return element;
+                    }
+
+                    // Check if over a card within a deck list (deck cards have data-id)
+                    const cardElement = element.closest('[data-id]');
+                    if (cardElement) {
+                        // Find the parent deck list by ID (deck-grid or side-deck-grid)
+                        const parentList = cardElement.closest('#mainDeckList, #sideDeckList, #extraDeckList');
+                        return parentList;
+                    }
+                }
+
+                return null;
+            }
+
+            function updateDropTarget(x, y) {
+                // Remove existing highlights
+                document.querySelectorAll('.touch-drop-highlight').forEach(el => {
+                    el.classList.remove('touch-drop-highlight');
+                });
+
+                const target = findDropTarget(x, y);
+                if (target) {
+                    target.classList.add('touch-drop-highlight');
+
+                    // Update placeholder position if we have one
+                    if (placeholder && target) {
+                        const afterElement = getDragAfterElement(target, x, y);
+                        if (afterElement == null) {
+                            target.appendChild(placeholder);
+                        } else {
+                            target.insertBefore(placeholder, afterElement);
+                        }
+                    }
+                }
+            }
+
+            function executeDrop(targetContainer, x, y) {
+                if (!sourceElement || !sourceCardId) return;
+
+                const toPart = targetContainer.id.replace('DeckList', '').toLowerCase();
+                const fromPart = sourceSection;
+
+                // Save old order for undo
+                const oldOrder = {
+                    main: [...currentDeck.main],
+                    side: [...currentDeck.side],
+                    extra: [...currentDeck.extra]
+                };
+
+                // If dropping in same container, just reorder
+                if (targetContainer === sourceElement.parentNode) {
+                    // Use placeholder position for insertion
+                    if (placeholder && placeholder.parentNode) {
+                        placeholder.parentNode.insertBefore(sourceElement, placeholder);
+                    }
+                } else {
+                    // Moving to different container - insert at placeholder position
+                    if (placeholder && placeholder.parentNode) {
+                        placeholder.parentNode.insertBefore(sourceElement, placeholder);
+                    }
+                }
+
+                // Clean up placeholder
+                if (placeholder && placeholder.parentNode) {
+                    placeholder.parentNode.removeChild(placeholder);
+                }
+                placeholder = null;
+
+                // Show the card again
+                sourceElement.style.display = '';
+                sourceElement.style.opacity = '';
+
+                // Update the data array from DOM
+                updateDeckOrder();
+
+                // Create undoable command
+                const card = cardDatabase.find(c => c.id === sourceCardId);
+                const cardName = card ? card.name : 'Unknown card';
+                const newOrder = {
+                    main: [...currentDeck.main],
+                    side: [...currentDeck.side],
+                    extra: [...currentDeck.extra]
+                };
+
+                const command = Command.create({
+                    description: fromPart !== toPart ?
+                        `Move ${cardName} from ${fromPart} to ${toPart}` :
+                        `Reorder ${fromPart} deck`,
+                    execute: () => {
+                        currentDeck.main = [...newOrder.main];
+                        currentDeck.side = [...newOrder.side];
+                        currentDeck.extra = [...newOrder.extra];
+                        markDeckDirty();
+                        renderCurrentDeck();
+                    },
+                    undo: () => {
+                        currentDeck.main = [...oldOrder.main];
+                        currentDeck.side = [...oldOrder.side];
+                        currentDeck.extra = [...oldOrder.extra];
+                        markDeckDirty();
+                        renderCurrentDeck();
+                    }
+                });
+
+                UndoManager.execute(command);
+
+                // Visual feedback
+                if (fromPart !== toPart) {
+                    NotificationManager.success(`Moved ${cardName} to ${toPart} deck`, '', 800);
+                }
+            }
+
+            function cleanup() {
+                // Remove drag ghost
+                if (dragElement && dragElement.parentNode) {
+                    dragElement.parentNode.removeChild(dragElement);
+                }
+                dragElement = null;
+
+                // Remove placeholder
+                if (placeholder && placeholder.parentNode) {
+                    placeholder.parentNode.removeChild(placeholder);
+                }
+                placeholder = null;
+
+                // Remove highlights
+                document.querySelectorAll('.touch-drop-highlight').forEach(el => {
+                    el.classList.remove('touch-drop-highlight');
+                });
+
+                // Restore source element visibility
+                if (sourceElement) {
+                    sourceElement.classList.remove('touch-dragging');
+                    sourceElement.style.display = '';
+                    sourceElement.style.opacity = '';
+                }
+
+                // Reset state
+                activePointer = null;
+                sourceCardId = null;
+                sourceElement = null;
+                sourceSection = null;
+                hasMoved = false;
+                touchOffsetX = 0;
+                touchOffsetY = 0;
+
+                // Clear long-press timer
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+            }
+
+            return {
+                init,
+                cleanup
+            };
+        })();
+        // ============================================================================
         //     MODULE: UITuner
         //     Lines: 1367-1550
         //     Purpose: Temporary UI fine-tuning module for visual adjustments
@@ -2639,7 +3041,7 @@
                 gridPaddingTop: 31,      // Top padding to clear section headers
                 gridMargin: -11,         // Negative margin for grid
                 sectionPadding: 0,       // Padding on deck sections
-                resizeHandleWidth: 8,    // Width of resize handles (w-2 = 8px)
+                resizeHandleWidth: 0,    // Width of resize handles (0px by default, expand on hover)
                 cardBorderWidth: 1,      // Border around cards
                 cardBorderRadius: 3,     // Card corner radius
                 selectedBorderWidth: 3,  // Selected card highlight border
@@ -2984,6 +3386,7 @@
         let currentDeckSource = 'unsaved'; // 'offline' | 'unsaved'
         let currentDeckMeta = { name: null, sync: null }; // Additional metadata about the loaded deck
         let isDeckDirty = false;
+        let deckSectionsManuallySized = false; // Track if user manually resized deck sections (vs default equal-height alignment)
         let activeEditingPattern = null; // { patternId: string, section: 'goingFirst.in' | 'goingFirst.out' | 'goingSecond.in' | 'goingSecond.out' }
         let currentSidingSelectionType = null; // 'out' or 'in' - tracks whether we're selecting for OUT or IN
 
@@ -4571,6 +4974,9 @@
             // 5.1. Initialize UI Tuner module (temporary fine-tuning panel)
             UITuner.init();
 
+            // 5.2. Initialize Touch Drag Manager for touch screen drag-and-drop support
+            TouchDragManager.init();
+
             // 4.5. Run one-time cleanup to fix any existing issues
             performOneTimeCleanup();
 
@@ -5431,8 +5837,8 @@
             // Check available space and adjust if necessary to prevent overflow
             if (UI.deckGridContainer) {
                 const containerWidth = UI.deckGridContainer.offsetWidth;
-                const resizeHandleWidth = 16; // Approximate width of resize handles (2 * 8px)
-                const gap = 32; // Gap between sections (4 * 8px)
+                const resizeHandleWidth = 0; // Handles are 0px by default (expand on hover)
+                const gap = 4; // gap-1 = 4px between sections
                 const availableWidth = containerWidth - resizeHandleWidth - gap;
 
                 // Calculate total desired width
@@ -6288,17 +6694,6 @@
                     e.target.releasePointerCapture(e.pointerId);
                 }
 
-                // Capture current deck section proportions BEFORE saving layout
-                const currentMainWidth = UI.mainDeckSection ? UI.mainDeckSection.offsetWidth : 0;
-                const currentSideWidth = UI.sideDeckSection ? UI.sideDeckSection.offsetWidth : 0;
-                const currentExtraWidth = UI.extraDeckSection ? UI.extraDeckSection.offsetWidth : 0;
-                const totalDeckWidth = currentMainWidth + currentSideWidth + currentExtraWidth;
-
-                // Calculate ratios (0-1) for each section
-                const mainRatio = totalDeckWidth > 0 ? currentMainWidth / totalDeckWidth : 0.5;
-                const sideRatio = totalDeckWidth > 0 ? currentSideWidth / totalDeckWidth : 0.25;
-                const extraRatio = totalDeckWidth > 0 ? currentExtraWidth / totalDeckWidth : 0.25;
-
                 // Auto-adjust DB card size when DB section is resized
                 const newDbWidth = UI.cardDatabaseSection.offsetWidth;
                 if (newDbWidth > 0) {
@@ -6307,13 +6702,10 @@
 
                 savePanelConfiguration();
 
-                // Resize deck sections proportionally to fit new available space
+                // After database resize, let deck sections maintain their current state
+                // (whether flex-based alignment or manually sized proportions)
                 requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        applyDeckSectionProportions(mainRatio, sideRatio, extraRatio);
-                        // Fix: Update card database height after deck resize
-                        setCardDatabaseHeight();
-                    });
+                    setCardDatabaseHeight();
                 });
             }
 
@@ -6369,6 +6761,9 @@
         // --- EXTRA DECK TOGGLE FUNCTIONALITY ---
         function toggleExtraDeck() {
             if (!UI.extraDeckSection || !UI.toggleExtraDeckBtn) return;
+
+            // Reset manual sizing flag when toggling - default back to equal-height alignment
+            deckSectionsManuallySized = false;
 
             if (extraDeckVisible) {
                 // Currently visible - about to hide, so SAVE current flex-grow ratios
@@ -6613,6 +7008,9 @@
         function toggleSideDeck() {
             if (!UI.sideDeckSection || !UI.toggleSideDeckBtn) return;
 
+            // Reset manual sizing flag when toggling - default back to equal-height alignment
+            deckSectionsManuallySized = false;
+
             if (sideDeckVisible) {
                 // Currently visible - about to hide, so SAVE current flex-grow ratios
                 // Use getComputedStyle to get actual applied flex-grow values (handles '0' correctly)
@@ -6803,6 +7201,9 @@
         function toggleDatabase() {
             if (!UI.cardDatabaseSection || !UI.toggleDatabaseBtn) return;
 
+            // Reset manual sizing flag when toggling database - default back to equal-height alignment
+            deckSectionsManuallySized = false;
+
             databaseVisible = !databaseVisible;
 
             if (databaseVisible) {
@@ -6963,18 +7364,18 @@
              * Calculates the actual available width for flex content in deckGridContainer.
              *
              * The container structure is:
-             *   [section] [gap-4] [handle w-2] [gap-4] [section] [gap-4] [handle w-2] [gap-4] [section]
+             *   [section] [gap-1] [handle] [gap-1] [section] [gap-1] [handle] [gap-1] [section]
              *
              * Where:
-             *   - gap-4 = 16px (CSS flex gap between each flex child)
-             *   - w-2 = 8px (resize handle width)
+             *   - gap-1 = 4px (CSS flex gap between sections)
+             *   - handle = 0px default, expands to 3px on hover
              *
              * Total overhead = (numFlexChildren - 1) * gap + (numResizeHandles) * handleWidth
              *
              * For 3 sections with 2 handles:
-             *   - 5 flex children → 4 gaps × 16px = 64px
-             *   - 2 handles × 8px = 16px
-             *   - Total overhead: 80px
+             *   - 5 flex children → 4 gaps × 4px = 16px
+             *   - 2 handles × 0px = 0px
+             *   - Total overhead: 16px
              */
             if (!container) {
                 console.warn('[getAvailableFlexWidth] No container provided');
@@ -6983,7 +7384,7 @@
 
             // Read the actual CSS gap value from computed styles (more accurate than hardcoded)
             const computedGap = getComputedStyle(container).gap;
-            const gap = parseFloat(computedGap) || 16; // Default to gap-4 (16px)
+            const gap = parseFloat(computedGap) || 4; // Default to gap-1 (4px)
 
             // Count visible flex children (sections and resize handles)
             const visibleChildren = Array.from(container.children).filter(
@@ -6998,7 +7399,7 @@
             const resizeHandles = visibleChildren.filter(
                 el => el.id && el.id.includes('ResizeHandle')
             );
-            const handleWidth = 8; // w-2 class = 8px
+            const handleWidth = 0; // Handles are 0px by default (expand on hover)
             const totalHandleWidth = resizeHandles.length * handleWidth;
 
             const availableWidth = container.clientWidth - totalGapWidth - totalHandleWidth;
@@ -7110,8 +7511,8 @@
             }
 
             // Account for resize handles and gaps
-            const resizeHandleWidth = 8; // Each handle is 8px (w-2)
-            const gap = 16; // gap-4 = 16px between sections
+            const resizeHandleWidth = 0; // Handles are 0px by default (expand on hover)
+            const gap = 4; // gap-1 = 4px between sections
             const padding = 24; // Total padding from sections (p-3 on each)
             const availableWidth = containerWidth - (resizeHandleWidth * 2) - (gap * 2) - padding;
 
@@ -8359,6 +8760,9 @@
                 const newMainWidth = parseFloat(UI.mainDeckSection.style.width) || UI.mainDeckSection.offsetWidth;
                 const newSideWidth = parseFloat(UI.sideDeckSection.style.width) || UI.sideDeckSection.offsetWidth;
                 const newExtraWidth = parseFloat(UI.extraDeckSection.style.width) || UI.extraDeckSection.offsetWidth;
+
+                // Mark that user has manually sized deck sections (remember this preference)
+                deckSectionsManuallySized = true;
 
                 // Keep explicit pixel widths and disable flex for precise control
                 // This prevents the sections from jumping to different sizes after resize
@@ -27096,7 +27500,7 @@
             --tuner-grid-padding-top: 31px;
             --tuner-grid-margin: -11px;
             --tuner-section-padding: 0px;
-            --tuner-resize-handle-width: 8px;
+            --tuner-resize-handle-width: 0px;
             --tuner-card-border-width: 1px;
             --tuner-card-border-radius: 3px;
             --tuner-selected-border-width: 3px;
@@ -27574,6 +27978,43 @@
             box-shadow: inset 0 0 20px rgba(96, 165, 250, 0.2);
         }
 
+        /* Touch Drag & Drop Styles */
+        .touch-drop-highlight {
+            ring: 2px;
+            ring-color: #60a5fa;
+            background-color: rgba(30, 58, 138, 0.2);
+            transition: background-color 0.15s ease;
+        }
+
+        .touch-drag-ghost {
+            position: fixed !important;
+            pointer-events: none !important;
+            z-index: 9999 !important;
+            opacity: 0.85 !important;
+            transform: scale(1.05) !important;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4) !important;
+            transition: transform 0.1s ease !important;
+        }
+
+        .touch-dragging {
+            opacity: 0.3 !important;
+        }
+
+        /* Deck list containers - prevent scrolling during pointer drag */
+        #mainDeckList, #sideDeckList, #extraDeckList {
+            touch-action: none;
+        }
+
+        /* But allow scrolling on the section containers */
+        #mainDeckSection, #sideDeckSection, #extraDeckSection {
+            touch-action: auto;
+        }
+
+        /* Deck cards inherit from parent containers */
+        .deck-card-glass {
+            /* touch-action inherited from parent list */
+        }
+
         details>summary {
             list-style: none;
         }
@@ -27582,35 +28023,31 @@
             display: none;
         }
 
-        /* Resize handle styles */
+        /* Resize handle styles - invisible by default, visible on hover */
         #resizeHandle {
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(to right, transparent 0%, var(--color-border) 50%, transparent 100%);
-            transition: background-color 0.2s ease;
+            width: 0;
+            background: transparent;
+            transition: width 0.2s ease, background-color 0.2s ease;
             /* Enable touch handling for resize */
             touch-action: none;
         }
 
-        #resizeHandle:hover {
-            background: linear-gradient(to right, transparent 0%, var(--color-primary) 50%, transparent 100%);
-        }
-
-        #resizeHandle::before {
+        /* Invisible hit area for easier cursor targeting */
+        #resizeHandle::after {
             content: '';
             position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            width: 2px;
-            height: 20px;
-            background: var(--color-text-muted);
-            border-radius: 1px;
+            left: -4px;
+            right: -4px;
+            top: 0;
+            bottom: 0;
         }
 
-        #resizeHandle:hover::before {
+        #resizeHandle:hover {
+            width: 3px;
             background: var(--color-primary);
         }
 
@@ -27742,41 +28179,35 @@
             transform: scale(0.95);
         }
 
-        /* Deck resize handle styles */
+        /* Deck resize handle styles - invisible by default, visible on hover */
         #mainSideResizeHandle,
         #sideExtraResizeHandle {
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: var(--tuner-resize-handle-width, 8px);
+            width: 0;
             flex-shrink: 0;
-            background: linear-gradient(to right, transparent 0%, var(--color-border) 50%, transparent 100%);
-            transition: background-color 0.2s ease;
+            background: transparent;
+            transition: width 0.2s ease, background-color 0.2s ease;
             /* Enable touch handling for resize */
             touch-action: none;
         }
 
-        #mainSideResizeHandle:hover,
-        #sideExtraResizeHandle:hover {
-            background: linear-gradient(to right, transparent 0%, var(--color-primary) 50%, transparent 100%);
-        }
-
-        #mainSideResizeHandle::before,
-        #sideExtraResizeHandle::before {
+        /* Invisible hit area for easier cursor targeting */
+        #mainSideResizeHandle::after,
+        #sideExtraResizeHandle::after {
             content: '';
             position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            width: 2px;
-            height: 20px;
-            background: var(--color-text-muted);
-            border-radius: 1px;
+            left: -4px;
+            right: -4px;
+            top: 0;
+            bottom: 0;
         }
 
-        #mainSideResizeHandle:hover::before,
-        #sideExtraResizeHandle:hover::before {
+        #mainSideResizeHandle:hover,
+        #sideExtraResizeHandle:hover {
+            width: 3px;
             background: var(--color-primary);
         }
 
@@ -27810,16 +28241,17 @@
 
             #resizeHandle {
                 width: 100%;
-                height: 8px;
+                height: 0;
                 cursor: row-resize;
-                background: linear-gradient(to bottom, transparent 0%, var(--color-border) 50%, transparent 100%);
+                background: transparent;
                 /* Enable touch handling for resize */
                 touch-action: none;
+                transition: height 0.2s ease, background-color 0.2s ease;
             }
 
-            #resizeHandle::before {
-                width: 20px;
-                height: 2px;
+            #resizeHandle:hover {
+                height: 3px;
+                background: var(--color-primary);
             }
 
             #cardDatabaseSection {
@@ -34078,7 +34510,7 @@
                         Duel Simulator
                     </span>
                 </button>
-                <nav class="flex gap-2 p-1 bg-[var(--color-surface-1)] rounded-lg">
+                <nav class="flex gap-2 p-1">
                     <button id="navDeckBuilder"
                         class="px-4 py-2 rounded-md text-sm font-semibold transition-colors hover:bg-[var(--color-primary-hover)]">Deckbuilder</button>
                     <button id="navSiding"
@@ -34095,9 +34527,9 @@
 
         <main class="flex-1 flex flex-col overflow-hidden min-h-0">
             <div id="deckBuilderView" class="flex-1 flex flex-col overflow-hidden min-h-0">
-                <div id="deckBuilderContainer" class="flex gap-6 h-full">
+                <div id="deckBuilderContainer" class="flex gap-1 h-full">
                     <div id="cardDatabaseSection"
-                        class="bg-[var(--color-surface-1)] p-4 rounded-lg flex flex-col min-w-0 flex-shrink-0 h-full"
+                        class="p-4 rounded-lg flex flex-col min-w-0 flex-shrink-0 h-full"
                         style="width: 322px;">
                         <h2 class="text-xl font-semibold mb-3">Card Database</h2>
                         <div class="flex flex-wrap items-center gap-1.5 mb-2">
@@ -34248,10 +34680,10 @@
                         <div id="cardDbList" class="overflow-y-auto overflow-x-hidden pr-2 flex-1 min-h-0"></div>
                     </div>
                     <div id="resizeHandle"
-                        class="w-2 bg-slate-600 hover:bg-slate-500 cursor-col-resize flex-shrink-0 transition-colors"
+                        class="w-0 bg-transparent hover:bg-[var(--color-primary)] cursor-col-resize flex-shrink-0"
                         title="Drag to resize panels"></div>
                     <div id="deckBuilderSection"
-                        class="bg-[var(--color-surface-1)] p-4 rounded-lg flex flex-col min-w-0 flex-grow">
+                        class="p-4 rounded-lg flex flex-col min-w-0 flex-grow">
                         <div class="flex flex-wrap items-center justify-between mb-1 gap-x-4 gap-y-2">
                             <h2 class="text-xl font-semibold">Deck Builder</h2>
                             <div class="flex items-center gap-4">
@@ -34346,24 +34778,24 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="deckGridContainer" class="flex-grow flex gap-4 mt-2 min-h-[50vh]">
-                            <div id="mainDeckSection" class="bg-black/20 p-3 rounded-lg overflow-y-auto"
+                        <div id="deckGridContainer" class="flex-grow flex gap-1 mt-2 min-h-[50vh]">
+                            <div id="mainDeckSection" class="p-3 rounded-lg overflow-y-auto"
                                 style="min-width: 300px; flex-grow: 1; flex-shrink: 1;">
                                 <h3 id="mainDeckHeader" class="font-semibold text-center mb-2 min-h-[2.5rem] flex items-center justify-center">Main Deck</h3>
                                 <div id="mainDeckList" class="deck-grid"></div>
                             </div>
                             <div id="mainSideResizeHandle"
-                                class="w-2 bg-slate-600 hover:bg-slate-500 cursor-col-resize flex-shrink-0 transition-colors"
+                                class="w-0 bg-transparent hover:bg-[var(--color-primary)] cursor-col-resize flex-shrink-0"
                                 title="Drag to resize main and side deck"></div>
-                            <div id="sideDeckSection" class="bg-black/20 p-3 rounded-lg overflow-y-auto"
+                            <div id="sideDeckSection" class="p-3 rounded-lg overflow-y-auto"
                                 style="width: 280px; min-width: 200px; flex-grow: 0; flex-shrink: 1;">
                                 <h3 id="sideDeckHeader" class="font-semibold text-center mb-2 min-h-[2.5rem] flex items-center justify-center">Side Deck</h3>
                                 <div id="sideDeckList" class="side-deck-grid"></div>
                             </div>
                             <div id="sideExtraResizeHandle"
-                                class="w-2 bg-slate-600 hover:bg-slate-500 cursor-col-resize flex-shrink-0 transition-colors"
+                                class="w-0 bg-transparent hover:bg-[var(--color-primary)] cursor-col-resize flex-shrink-0"
                                 title="Drag to resize side and extra deck"></div>
-                            <div id="extraDeckSection" class="bg-black/20 p-3 rounded-lg overflow-y-auto"
+                            <div id="extraDeckSection" class="p-3 rounded-lg overflow-y-auto"
                                 style="width: 280px; min-width: 200px; flex-grow: 0; flex-shrink: 1;">
                                 <h3 id="extraDeckHeader" class="font-semibold text-center mb-2 min-h-[2.5rem] flex items-center justify-center">Extra Deck</h3>
                                 <div id="extraDeckList" class="side-deck-grid"></div>
