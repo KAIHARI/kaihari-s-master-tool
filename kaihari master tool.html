@@ -13,16 +13,376 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>kaihari's master tool</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link href="swiss-prismatic-theme.css" rel="stylesheet">
+
+    <!-- LOCAL OFFLINE MODE: Resources from offline/ folder -->
+    <!-- Fallback to CDN if offline folder not available -->
+    <script id="tailwind-script" src="offline/tailwind.js" onerror="this.src='https://cdn.tailwindcss.com'"></script>
+
+    <!-- Local Fonts -->
+    <style id="local-fonts">
+        @font-face {
+            font-family: 'Inter';
+            src: url('offline/inter-400.woff2') format('woff2');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            src: url('offline/inter-500.woff2') format('woff2');
+            font-weight: 500;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            src: url('offline/inter-600.woff2') format('woff2');
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            src: url('offline/inter-700.woff2') format('woff2');
+            font-weight: 700;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            src: url('offline/jetbrains-mono-400.woff2') format('woff2');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            src: url('offline/jetbrains-mono-700.woff2') format('woff2');
+            font-weight: 700;
+            font-style: normal;
+            font-display: swap;
+        }
+        /* Fallback to Google Fonts if local fonts fail */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+    </style>
+
+    <!-- Theme CSS -->
+    <link href="swiss-prismatic-theme.css" rel="stylesheet" onerror="this.href='offline/swiss-prismatic-theme.css'">
+
     <!-- PDF Generation Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script id="jspdf-script" src="offline/jspdf.umd.min.js" onerror="this.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'"></script>
+    <script id="html2canvas-script" src="offline/html2canvas.min.js" onerror="this.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'"></script>
+
     <!-- Three.js for Prism Button -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script id="threejs-script" src="offline/three.min.js" onerror="this.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'"></script>
     <!-- GLTFLoader for loading GLB models -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script id="gltf-loader-script" src="offline/gltf-loader.js" onerror="this.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js'"></script>
+
+    <!-- OFFLINE FALLBACK STYLES -->
+    <style id="offline-fallback-styles">
+        /* These styles provide basic layout when Tailwind fails to load */
+        .offline-mode #offline-fallback-styles {
+            display: block !important;
+        }
+
+        /* System font stack for offline use */
+        body:not(.fonts-loaded) {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif,
+                         "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
+        }
+        body:not(.fonts-loaded) code, body:not(.fonts-loaded) pre,
+        body:not(.fonts-loaded) [class*="mono"], body:not(.fonts-loaded) [class*="Mono"] {
+            font-family: "SF Mono", "Monaco", "Inconsolata", "Fira Mono", "Droid Sans Mono", "Source Code Pro",
+                         "Courier New", monospace !important;
+        }
+
+        /* Critical layout when Tailwind fails */
+        .tailwind-fallback .flex { display: flex !important; }
+        .tailwind-fallback .flex-1 { flex: 1 1 0% !important; }
+        .tailwind-fallback .flex-col { flex-direction: column !important; }
+        .tailwind-fallback .flex-row { flex-direction: row !important; }
+        .tailwind-fallback .hidden { display: none !important; }
+        .tailwind-fallback .grid { display: grid !important; }
+        .tailwind-fallback .items-center { align-items: center !important; }
+        .tailwind-fallback .justify-center { justify-content: center !important; }
+        .tailwind-fallback .justify-between { justify-content: space-between !important; }
+        .tailwind-fallback .gap-2 { gap: 0.5rem !important; }
+        .tailwind-fallback .gap-4 { gap: 1rem !important; }
+        .tailwind-fallback .p-2 { padding: 0.5rem !important; }
+        .tailwind-fallback .p-4 { padding: 1rem !important; }
+        .tailwind-fallback .p-6 { padding: 1.5rem !important; }
+        .tailwind-fallback .px-2 { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+        .tailwind-fallback .px-4 { padding-left: 1rem !important; padding-right: 1rem !important; }
+        .tailwind-fallback .py-2 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+        .tailwind-fallback .py-3 { padding-top: 0.75rem !important; padding-bottom: 0.75rem !important; }
+        .tailwind-fallback .m-2 { margin: 0.5rem !important; }
+        .tailwind-fallback .m-4 { margin: 1rem !important; }
+        .tailwind-fallback .mb-2 { margin-bottom: 0.5rem !important; }
+        .tailwind-fallback .mb-4 { margin-bottom: 1rem !important; }
+        .tailwind-fallback .mr-2 { margin-right: 0.5rem !important; }
+        .tailwind-fallback .ml-2 { margin-left: 0.5rem !important; }
+        .tailwind-fallback .mt-2 { margin-top: 0.5rem !important; }
+        .tailwind-fallback .mt-4 { margin-top: 1rem !important; }
+        .tailwind-fallback .w-full { width: 100% !important; }
+        .tailwind-fallback .h-full { height: 100% !important; }
+        .tailwind-fallback .h-screen { height: 100vh !important; }
+        .tailwind-fallback .min-h-screen { min-height: 100vh !important; }
+        .tailwind-fallback .text-sm { font-size: 0.875rem !important; }
+        .tailwind-fallback .text-base { font-size: 1rem !important; }
+        .tailwind-fallback .text-lg { font-size: 1.125rem !important; }
+        .tailwind-fallback .text-xl { font-size: 1.25rem !important; }
+        .tailwind-fallback .text-2xl { font-size: 1.5rem !important; }
+        .tailwind-fallback .font-bold { font-weight: 700 !important; }
+        .tailwind-fallback .font-semibold { font-weight: 600 !important; }
+        .tailwind-fallback .font-medium { font-weight: 500 !important; }
+        .tailwind-fallback .text-center { text-align: center !important; }
+        .tailwind-fallback .rounded { border-radius: 0.25rem !important; }
+        .tailwind-fallback .rounded-md { border-radius: 0.375rem !important; }
+        .tailwind-fallback .rounded-lg { border-radius: 0.5rem !important; }
+        .tailwind-fallback .rounded-full { border-radius: 9999px !important; }
+        .tailwind-fallback .border { border-width: 1px !important; border-style: solid !important; }
+        .tailwind-fallback .border-2 { border-width: 2px !important; border-style: solid !important; }
+        .tailwind-fallback .border-gray-200 { border-color: #e5e7eb !important; }
+        .tailwind-fallback .border-gray-300 { border-color: #d1d5db !important; }
+        .tailwind-fallback .bg-white { background-color: #ffffff !important; }
+        .tailwind-fallback .bg-gray-100 { background-color: #f3f4f6 !important; }
+        .tailwind-fallback .bg-gray-200 { background-color: #e5e7eb !important; }
+        .tailwind-fallback .bg-gray-800 { background-color: #1f2937 !important; }
+        .tailwind-fallback .bg-gray-900 { background-color: #111827 !important; }
+        .tailwind-fallback .text-gray-600 { color: #4b5563 !important; }
+        .tailwind-fallback .text-gray-700 { color: #374151 !important; }
+        .tailwind-fallback .text-gray-800 { color: #1f2937 !important; }
+        .tailwind-fallback .text-gray-900 { color: #111827 !important; }
+        .tailwind-fallback .text-white { color: #ffffff !important; }
+        .tailwind-fallback .cursor-pointer { cursor: pointer !important; }
+        .tailwind-fallback .cursor-grab { cursor: grab !important; }
+        .tailwind-fallback .overflow-hidden { overflow: hidden !important; }
+        .tailwind-fallback .overflow-auto { overflow: auto !important; }
+        .tailwind-fallback .overflow-y-auto { overflow-y: auto !important; }
+        .tailwind-fallback .relative { position: relative !important; }
+        .tailwind-fallback .absolute { position: absolute !important; }
+        .tailwind-fallback .fixed { position: fixed !important; }
+        .tailwind-fallback .inset-0 { top: 0 !important; right: 0 !important; bottom: 0 !important; left: 0 !important; }
+        .tailwind-fallback .top-0 { top: 0 !important; }
+        .tailwind-fallback .left-0 { left: 0 !important; }
+        .tailwind-fallback .right-0 { right: 0 !important; }
+        .tailwind-fallback .bottom-0 { bottom: 0 !important; }
+        .tailwind-fallback .z-10 { z-index: 10 !important; }
+        .tailwind-fallback .z-20 { z-index: 20 !important; }
+        .tailwind-fallback .z-50 { z-index: 50 !important; }
+        .tailwind-fallback .shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important; }
+        .tailwind-fallback .shadow-lg { box-shadow: 0 10px 15px rgba(0,0,0,0.1) !important; }
+        .tailwind-fallback .inline-block { display: inline-block !important; }
+        .tailwind-fallback .block { display: block !important; }
+        .tailwind-fallback .pointer-events-none { pointer-events: none !important; }
+        .tailwind-fallback .pointer-events-auto { pointer-events: auto !important; }
+        .tailwind-fallback .select-none { user-select: none !important; }
+        .tailwind-fallback .transition { transition: all 0.15s ease-in-out !important; }
+        .tailwind-fallback .hover\\:bg-gray-100:hover { background-color: #f3f4f6 !important; }
+        .tailwind-fallback .hover\\:bg-gray-200:hover { background-color: #e5e7eb !important; }
+        .tailwind-fallback .hover\\:bg-blue-500:hover { background-color: #3b82f6 !important; }
+        .tailwind-fallback .hover\\:text-blue-600:hover { color: #2563eb !important; }
+        .tailwind-fallback .focus\\:outline-none:focus { outline: none !important; }
+        .tailwind-fallback .focus\\:ring-2:focus { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5) !important; }
+
+        /* Loading spinner for offline package download */
+        #offline-download-spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 0.5rem;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Offline status badges */
+        .status-online {
+            background-color: #16a34a !important;
+        }
+        .status-offline {
+            background-color: #dc2626 !important;
+        }
+
+        /* Make sure critical UI elements have basic visibility */
+        .tailwind-fallback button,
+        .tailwind-fallback .button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            border: 1px solid #d1d5db;
+            background: #ffffff;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .tailwind-fallback button:hover,
+        .tailwind-fallback .button:hover {
+            background: #f3f4f6;
+        }
+        .tailwind-fallback input[type="text"],
+        .tailwind-fallback input[type="search"],
+        .tailwind-fallback input[type="number"] {
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            background: #ffffff;
+        }
+
+        /* Critical overflow fixes for offline/fallback mode */
+        .tailwind-fallback #cardDatabaseSection,
+        .tailwind-fallback #cardDbList,
+        .tailwind-fallback #mainDeckSection,
+        .tailwind-fallback #sideDeckSection,
+        .tailwind-fallback #extraDeckSection,
+        .tailwind-fallback .overflow-y-auto,
+        .tailwind-fallback [class*="overflow-y"] {
+            overflow-y: auto !important;
+            max-height: 100% !important;
+        }
+
+        /* Allow vertical scrolling in main containers */
+        .tailwind-fallback main,
+        .tailwind-fallback #deckBuilderView {
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            min-height: 100vh !important;
+        }
+
+        /* Flex containers should allow shrinking */
+        .tailwind-fallback .flex-1 {
+            flex: 1 1 auto !important;
+            /* Removed min-height: 0 - let content dictate minimum height */
+        }
+        .tailwind-fallback [class*="flex"] {
+            min-width: 0 !important;
+        }
+
+        /* Only apply min-height: 0 to scrollable deck sections */
+        .tailwind-fallback #cardDbList,
+        .tailwind-fallback #mainDeckList,
+        .tailwind-fallback #sideDeckList,
+        .tailwind-fallback #extraDeckList {
+            min-height: 0 !important;
+        }
+
+        /* Consolidated body rule with proper height and overflow */
+        .tailwind-fallback body {
+            height: 100vh !important;
+            overflow: hidden !important;
+            min-height: 100vh !important;
+            background-color: var(--color-bg, #0f172a) !important;
+            color: var(--color-text, #f1f5f9) !important;
+        }
+        .tailwind-fallback main {
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        .tailwind-fallback #deckBuilderView {
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        .tailwind-fallback #deckBuilderContainer {
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: row !important;
+            overflow: hidden !important;
+        }
+
+        /* Ensure card database and deck sections have proper height */
+        .tailwind-fallback #cardDatabaseSection,
+        .tailwind-fallback #deckBuilderSection {
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        /* Header fixes */
+        .tailwind-fallback header {
+            flex-shrink: 0 !important;
+            padding: 1rem !important;
+            background-color: var(--color-surface-1, #1e293b) !important;
+            border-bottom: 1px solid var(--color-border, #334155) !important;
+        }
+        .tailwind-fallback button {
+            padding: 0.5rem 1rem !important;
+            border-radius: 0.375rem !important;
+            background-color: var(--color-primary, #6366f1) !important;
+            color: white !important;
+            border: none !important;
+            cursor: pointer !important;
+        }
+        .tailwind-fallback button:hover {
+            background-color: var(--color-primary-hover, #4f46e5) !important;
+        }
+
+        /* Import YDK button specific fix */
+        .tailwind-fallback #importDeckInput {
+            display: inline-block !important;
+        }
+        .tailwind-fallback label[for="importDeckInput"] {
+            display: inline-block !important;
+            padding: 0.5rem 1rem !important;
+            background-color: #16a34a !important;
+            color: white !important;
+            border-radius: 0.375rem !important;
+            cursor: pointer !important;
+        }
+
+        /* Input fixes */
+        .tailwind-fallback input[type="text"],
+        .tailwind-fallback input[type="search"] {
+            background-color: var(--color-surface-2, #334155) !important;
+            color: var(--color-text, #f1f5f9) !important;
+            border: 1px solid var(--color-border, #334155) !important;
+            padding: 0.5rem !important;
+            border-radius: 0.375rem !important;
+        }
+
+        /* Theme CSS variables fallback (used when swiss-prismatic-theme.css fails to load) */
+        :root {
+            --color-primary: #6366f1;
+            --color-primary-hover: #4f46e5;
+            --color-bg: #0f172a;
+            --color-bg-secondary: #1e293b;
+            --color-surface: #1e293b;
+            --color-surface-1: #1e293b;
+            --color-surface-2: #334155;
+            --color-border: #334155;
+            --color-text: #f1f5f9;
+            --color-text-muted: #94a3b8;
+        }
+
+        /* Critical: Ensure hidden class works properly */
+        .hidden {
+            display: none !important;
+        }
+
+        /* But don't hide elements when hidden class is REMOVED - make show work */
+        #loadingOverlay:not(.hidden),
+        #messageModal:not(.hidden),
+        #confirmModal:not(.hidden),
+        #searchResultsModal:not(.hidden),
+        #searchDeckModal:not(.hidden),
+        #imagePackDownloadModal:not(.hidden),
+        #newUserModal:not(.hidden),
+        #storageManagementModal:not(.hidden),
+        #reportPreviewModal:not(.hidden),
+        #easterEggModal:not(.hidden),
+        #advancedSearchModal:not(.hidden),
+        #cardPreviewModal:not(.hidden),
+        #cardSelectModal:not(.hidden),
+        #deckStatisticsModal:not(.hidden),
+        #banlistModal:not(.hidden),
+        #sidingPatternModal:not(.hidden) {
+            display: flex !important;
+        }
+    </style>
     <script type="module">
         // ============================================================================
         //     SECTION: JAVASCRIPT MODULES
@@ -2869,9 +3229,9 @@
             alignByCardSizeBtn: null, alignByTotalSizeBtn: null,
 
             // YDK Folder Management
-            ydkFolderStatus: null, ydkDeckSelector: null, setDefaultDeckBtn: null, quickReselectBtn: null,
-            ydkFileInput: null, syncFolderBtn: null, manageFilesBtn: null,
-            storageManagementModal: null, storageManagementModalClose: null, ydkFilesList: null, clearAllYDKFilesBtn: null, syncYDKFolderBtn: null,
+            quickReselectBtn: null,
+            ydkFileInput: null, syncFolderBtn: null,
+            storageManagementModal: null, storageManagementModalClose: null,
 
             // Easter Egg Modal
             easterEggModal: null, easterEggModalClose: null, easterEggSearchInput: null, addEasterEggCardBtn: null, easterEggSearchResults: null,
@@ -3123,10 +3483,1033 @@
             isActive: () => false
         };
 
+        // ============================================================================
+        // MODULE: ImagePackManager
+        // ============================================================================
+        // Purpose: Offline card image pack download to folder and folder-based loading
+        // Key Methods: init(), downloadDeckCards(), getImageUrl(), showDownloadModal()
+        // Features: File System Access API, offline mode, folder handle persistence
+        // ============================================================================
+
+        const ImagePackManager = (function() {
+            'use strict';
+
+            // Private variables
+            let imageDB = null;
+            let isDownloading = false;
+            let downloadController = null;
+            let additionalCardPool = new Set(); // Additional cards from YDKX files
+            let imageFolderHandle = null; // Folder handle for offline card art
+            let offlineMode = false; // Offline mode state
+            let folderFileHandles = new Map(); // Cache of file handles in the folder
+
+            // Database and storage keys
+            const DB_NAME = 'YGOCardImages';
+            const DB_VERSION = 1;
+            const STORE_NAME = 'cardImages';
+            const METADATA_KEY = 'metadata';
+            const FOLDER_HANDLE_KEY = 'offlineCardArtFolderHandle';
+            const OFFLINE_MODE_KEY = 'offlineModeEnabled';
+
+            // CORS proxies for image fetching
+            const CORS_PROXIES = [
+                'https://api.allorigins.win/raw?url=',
+                'https://api.codetabs.com/v1/proxy?quest='
+            ];
+
+            // Modal HTML template
+            const modalHTML = `
+            <div id="imagePackDownloadModal" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 hidden">
+                <div class="bg-[var(--color-surface-1)] rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-semibold text-white">Offline Card Art Manager</h3>
+                        <button id="closeImagePackModal" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
+                    </div>
+
+                    <!-- Offline Mode Toggle & Folder Selection -->
+                    <div class="p-4 bg-slate-800 rounded-lg mb-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <h4 class="text-lg font-semibold text-white flex items-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"></path>
+                                    </svg>
+                                    Offline Folder
+                                </h4>
+                                <p class="text-sm text-slate-400" id="offlineFolderStatus">No folder selected</p>
+                            </div>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <span class="text-sm text-slate-300">Offline Mode</span>
+                                <div class="relative">
+                                    <input type="checkbox" id="offlineModeToggle" class="sr-only">
+                                    <div class="w-11 h-6 bg-slate-600 rounded-full shadow-inner transition-colors toggle-bg"></div>
+                                    <div class="dot absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform"></div>
+                                </div>
+                            </label>
+                        </div>
+                        <button id="selectOfflineFolderBtn" class="w-full text-sm bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md transition-colors flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                            </svg>
+                            Select Offline Card Art Folder
+                        </button>
+                        <p class="text-xs text-slate-500 mt-2">Images will be saved to: <span id="selectedFolderName" class="text-blue-400">None selected</span></p>
+                    </div>
+
+                    <!-- Download Options -->
+                    <div class="space-y-4">
+                        <!-- Current Deck Info -->
+                        <div class="p-4 bg-slate-800 rounded-lg">
+                            <h4 class="text-lg font-semibold text-white mb-2">Current Deck Cards</h4>
+                            <p class="text-sm text-slate-300 mb-3">Download images for cards currently in your deck.</p>
+                            <div class="grid grid-cols-3 gap-4 text-center text-sm">
+                                <div>
+                                    <div class="text-2xl font-bold text-blue-400" id="mainDeckCardCount">0</div>
+                                    <div class="text-slate-400">Main Deck</div>
+                                </div>
+                                <div>
+                                    <div class="text-2xl font-bold text-green-400" id="sideDeckCardCount">0</div>
+                                    <div class="text-slate-400">Side Deck</div>
+                                </div>
+                                <div>
+                                    <div class="text-2xl font-bold text-purple-400" id="extraDeckCardCount">0</div>
+                                    <div class="text-slate-400">Extra Deck</div>
+                                </div>
+                            </div>
+                            <div class="mt-3 text-center">
+                                <div class="text-lg font-semibold text-white">Total: <span id="totalDeckCardCount">0</span> cards</div>
+                                <div class="text-sm text-slate-400">Already in folder: <span id="alreadyCachedCount">0</span></div>
+                            </div>
+                        </div>
+
+                        <!-- YDKX Card Pool -->
+                        <div id="ydkxCardPoolSection" class="p-4 bg-slate-800 rounded-lg hidden">
+                            <div class="flex items-center justify-between mb-2">
+                                <h4 class="text-lg font-semibold text-white">YDKX Card Pool</h4>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="includeCardPool" class="rounded" checked>
+                                    <span class="text-sm text-slate-300">Include in download</span>
+                                </label>
+                            </div>
+                            <p class="text-sm text-slate-300 mb-2">Your loaded YDKX files contain <span id="cardPoolCount">0</span> additional cards in their card pools.</p>
+                        </div>
+
+                        <!-- Add More YDK Files - Always Visible -->
+                        <div class="p-4 bg-slate-800 rounded-lg">
+                            <h4 class="text-lg font-semibold text-white mb-2">Add More Cards from Files</h4>
+                            <p class="text-sm text-slate-300 mb-3">Add YDK or YDKX files to include their cards in the download.</p>
+                            <button id="addMoreYdkFilesBtn" class="text-sm bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md transition-colors">
+                                + Choose YDK/YDKX Files to Add
+                            </button>
+                            <input type="file" id="additionalYdkInput" class="hidden" accept=".ydk,.ydkx" multiple>
+                        </div>
+
+                        <!-- Additional Files Summary (shown when files are added) -->
+                        <div id="additionalFilesSection" class="p-4 bg-slate-800 rounded-lg hidden">
+                            <h4 class="text-lg font-semibold text-white mb-2">Added Files</h4>
+                            <div class="flex gap-2 mb-2">
+                                <button id="clearAdditionalFilesBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md transition-colors">
+                                    Clear All
+                                </button>
+                            </div>
+                            <div id="additionalFilesList" class="text-sm text-slate-300 space-y-1 max-h-32 overflow-y-auto">
+                                <!-- File list will be populated here -->
+                            </div>
+                            <div class="mt-2 text-sm">
+                                <span class="text-slate-400">Additional cards from files: </span>
+                                <span id="additionalCardsCount" class="text-blue-400 font-semibold">0</span>
+                            </div>
+                        </div>
+
+                        <!-- Download Summary -->
+                        <div class="p-4 bg-slate-800 rounded-lg">
+                            <h4 class="text-lg font-semibold text-white mb-2">Download Summary</h4>
+                            <div class="grid grid-cols-2 gap-4 text-center text-sm">
+                                <div>
+                                    <div class="text-2xl font-bold text-yellow-400" id="toDownloadCount">0</div>
+                                    <div class="text-slate-400">To Download</div>
+                                </div>
+                                <div>
+                                    <div class="text-2xl font-bold text-emerald-400" id="totalToCacheCount">0</div>
+                                    <div class="text-slate-400">Total After Download</div>
+                                </div>
+                            </div>
+                            <div class="mt-3 text-sm text-slate-400">
+                                Estimated download size: <span id="estimatedSize">~0 MB</span>
+                            </div>
+                        </div>
+
+                        <!-- Progress Section -->
+                        <div id="downloadProgressSection" class="hidden">
+                            <div class="p-4 bg-slate-800 rounded-lg">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-sm text-white">Downloading images...</span>
+                                    <span id="downloadProgressText" class="text-sm text-slate-400">0 / 0</span>
+                                </div>
+                                <div class="w-full bg-slate-700 rounded-full h-3 mb-2">
+                                    <div id="downloadProgressBar" class="bg-blue-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span id="downloadSpeed" class="text-xs text-slate-400">-- KB/s</span>
+                                    <button id="cancelDownloadBtn" class="text-xs bg-red-600 hover:bg-red-700 px-3 py-1 rounded-md">Cancel</button>
+                                </div>
+                                <div id="downloadErrorLog" class="mt-2 text-xs text-red-400 max-h-20 overflow-y-auto hidden">
+                                    <!-- Errors will be logged here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex gap-3">
+                            <button id="startDownloadBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-md transition-colors">
+                                Start Download
+                            </button>
+                            <button id="closeImagePackModalBtn" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-4 rounded-md transition-colors">
+                                Close
+                            </button>
+                        </div>
+
+                        <!-- Offline Status -->
+                        <div class="text-center text-sm text-slate-400">
+                            <span>Images in folder: <span id="totalCachedImages" class="text-blue-400 font-semibold">0</span></span>
+                            <span class="mx-2">|</span>
+                            <button id="rescanFolderBtn" class="text-green-400 hover:text-green-300 underline">Rescan Folder</button>
+                            <span class="mx-2">|</span>
+                            <button id="clearCachedImagesBtn" class="text-red-400 hover:text-red-300 underline">Clear IndexedDB Cache</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            `;
+
+            // IndexedDB initialization
+            async function initDatabase() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        imageDB = request.result;
+                        resolve(imageDB);
+                    };
+
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+                        if (!db.objectStoreNames.contains(STORE_NAME)) {
+                            const store = db.createObjectStore(STORE_NAME, { keyPath: 'cardId' });
+                            store.createIndex('cardId', 'cardId', { unique: true });
+                        }
+                    };
+                });
+            }
+
+            // Get all cached image card IDs (from folder or IndexedDB fallback)
+            async function getCachedImageIds() {
+                // If we have a folder handle, scan it for image files
+                if (imageFolderHandle) {
+                    try {
+                        const ids = [];
+                        for await (const [name, handle] of imageFolderHandle.entries()) {
+                            if (handle.kind === 'file' && name.match(/^(\d+)\.(jpg|jpeg|png)$/i)) {
+                                const cardId = name.replace(/\.(jpg|jpeg|png)$/i, '');
+                                ids.push(cardId);
+                                folderFileHandles.set(cardId, handle);
+                            }
+                        }
+                        return ids;
+                    } catch (e) {
+                        console.warn('Error scanning folder:', e);
+                    }
+                }
+
+                // Fall back to IndexedDB
+                if (!imageDB) await initDatabase();
+
+                return new Promise((resolve, reject) => {
+                    const transaction = imageDB.transaction([STORE_NAME], 'readonly');
+                    const store = transaction.objectStore(STORE_NAME);
+                    const request = store.getAllKeys();
+
+                    request.onsuccess = () => {
+                        // The keys are card IDs (stored as strings from the API)
+                        resolve(request.result || []);
+                    };
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            // Get offline mode state
+            function isOfflineMode() {
+                return offlineMode;
+            }
+
+            // Set offline mode
+            function setOfflineMode(enabled) {
+                offlineMode = enabled;
+                localStorage.setItem(OFFLINE_MODE_KEY, enabled ? 'true' : 'false');
+            }
+
+            // Get folder handle
+            function getFolderHandle() {
+                return imageFolderHandle;
+            }
+
+            // Save folder handle to localStorage (serialize what we can)
+            async function saveFolderHandle() {
+                // File handles cannot be serialized, but we can save the folder name
+                // The handle will need to be re-selected on page reload
+                if (imageFolderHandle) {
+                    try {
+                        // Try to request permission to persist the handle
+                        if (imageFolderHandle.requestPermission) {
+                            const permission = await imageFolderHandle.requestPermission({ mode: 'readwrite' });
+                            if (permission !== 'granted') {
+                                console.warn('Permission not granted for folder');
+                            }
+                        }
+                    } catch (e) {
+                        console.log('Could not request folder permission:', e);
+                    }
+                }
+            }
+
+            // Load and restore folder handle (user must re-select)
+            async function restoreFolderHandle() {
+                const saved = localStorage.getItem(FOLDER_HANDLE_KEY);
+                if (saved) {
+                    try {
+                        // We can't restore the handle directly, but we can show the saved folder name
+                        document.getElementById('selectedFolderName').textContent = saved;
+                        document.getElementById('offlineFolderStatus').textContent = 'Folder access expired - please reselect';
+                    } catch (e) {
+                        console.warn('Could not restore folder handle:', e);
+                    }
+                }
+            }
+
+            // Select offline card art folder
+            async function selectOfflineFolder() {
+                try {
+                    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                    imageFolderHandle = handle;
+                    folderFileHandles.clear();
+
+                    // Save folder name
+                    localStorage.setItem(FOLDER_HANDLE_KEY, handle.name);
+                    document.getElementById('selectedFolderName').textContent = handle.name;
+                    document.getElementById('offlineFolderStatus').textContent = 'Folder connected';
+
+                    // Save handle for this session
+                    await saveFolderHandle();
+
+                    // Scan folder for existing images
+                    await scanFolder();
+
+                    NotificationManager.success(`Folder "${handle.name}" connected`);
+                } catch (e) {
+                    if (e.name !== 'AbortError') {
+                        console.error('Error selecting folder:', e);
+                        NotificationManager.error('Could not select folder: ' + e.message);
+                    }
+                }
+            }
+
+            // Scan folder for existing card images
+            async function scanFolder() {
+                if (!imageFolderHandle) return;
+
+                folderFileHandles.clear();
+                const ids = await getCachedImageIds();
+                document.getElementById('totalCachedImages').textContent = ids.length;
+
+                // Update modal UI
+                await updateModalUI();
+
+                return ids.length;
+            }
+
+            // Download image to folder
+            async function downloadImageToFolder(cardId, imageUrl) {
+                if (!imageFolderHandle) {
+                    throw new Error('No folder selected');
+                }
+
+                try {
+                    let blob = null;
+
+                    // Try direct fetch first (might work if same origin or CORS enabled)
+                    try {
+                        const response = await fetch(imageUrl);
+                        if (response.ok) {
+                            blob = await response.blob();
+                        }
+                    } catch (e) {
+                        // Fall through to proxy attempts
+                    }
+
+                    // If direct fetch failed, try CORS proxies
+                    if (!blob) {
+                        for (const proxy of CORS_PROXIES) {
+                            try {
+                                const proxyUrl = proxy + encodeURIComponent(imageUrl);
+                                const controller = new AbortController();
+                                const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+                                const response = await fetch(proxyUrl, { signal: controller.signal });
+                                clearTimeout(timeoutId);
+
+                                if (response.ok) {
+                                    blob = await response.blob();
+                                    break;
+                                }
+                            } catch (e) {
+                                console.log(`Proxy ${proxy} failed:`, e.message);
+                                continue;
+                            }
+                        }
+                    }
+
+                    if (!blob) {
+                        throw new Error('All image fetch attempts failed');
+                    }
+
+                    // Create file in folder (use cardId.jpg as filename)
+                    const fileName = `${cardId}.jpg`;
+                    const fileHandle = await imageFolderHandle.getFileHandle(fileName, { create: true });
+                    const writable = await fileHandle.createWritable();
+
+                    await writable.write(blob);
+                    await writable.close();
+
+                    // Cache the handle for quick access
+                    folderFileHandles.set(cardId, fileHandle);
+
+                    return true;
+                } catch (e) {
+                    console.warn(`Failed to download ${cardId}:`, e);
+                    throw e;
+                }
+            }
+
+            // Get image from folder as blob URL
+            async function getImageFromFolder(cardId) {
+                if (!imageFolderHandle) return null;
+
+                try {
+                    let fileHandle = folderFileHandles.get(cardId);
+
+                    if (!fileHandle) {
+                        // Try to find the file in the folder
+                        const fileName = `${cardId}.jpg`;
+                        try {
+                            fileHandle = await imageFolderHandle.getFileHandle(fileName);
+                            folderFileHandles.set(cardId, fileHandle);
+                        } catch (e) {
+                            // File doesn't exist
+                            return null;
+                        }
+                    }
+
+                    const file = await fileHandle.getFile();
+                    return URL.createObjectURL(file);
+                } catch (e) {
+                    console.warn(`Error getting image ${cardId} from folder:`, e);
+                    return null;
+                }
+            }
+
+            // Get cached image data URL for a card (tries folder first, then IndexedDB)
+            async function getCachedImage(cardId) {
+                // If offline mode or folder is available, try folder first
+                if (offlineMode || imageFolderHandle) {
+                    const folderUrl = await getImageFromFolder(cardId);
+                    if (folderUrl) {
+                        return folderUrl;
+                    }
+                }
+
+                // Fall back to IndexedDB
+                if (!imageDB) await initDatabase();
+
+                return new Promise((resolve, reject) => {
+                    const transaction = imageDB.transaction([STORE_NAME], 'readonly');
+                    const store = transaction.objectStore(STORE_NAME);
+                    const request = store.get(cardId.toString());
+
+                    request.onsuccess = () => {
+                        if (request.result && request.result.dataUrl) {
+                            resolve(request.result.dataUrl);
+                        } else {
+                            resolve(null);
+                        }
+                    };
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            // Save image to IndexedDB
+            async function saveImage(cardId, dataUrl) {
+                if (!imageDB) await initDatabase();
+
+                return new Promise((resolve, reject) => {
+                    const transaction = imageDB.transaction([STORE_NAME], 'readwrite');
+                    const store = transaction.objectStore(STORE_NAME);
+
+                    const record = {
+                        cardId: cardId.toString(),
+                        dataUrl: dataUrl,
+                        timestamp: Date.now()
+                    };
+
+                    const request = store.put(record);
+
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            // Delete all cached images
+            async function clearCache() {
+                if (!imageDB) await initDatabase();
+
+                return new Promise((resolve, reject) => {
+                    const transaction = imageDB.transaction([STORE_NAME], 'readwrite');
+                    const store = transaction.objectStore(STORE_NAME);
+                    const request = store.clear();
+
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            // Fetch image from URL with CORS proxy
+            async function fetchImage(imageUrl) {
+                // Try direct fetch first (might work if same origin or CORS enabled)
+                try {
+                    const response = await fetch(imageUrl);
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        return blobToDataUrl(blob);
+                    }
+                } catch (e) {
+                    // Fall through to proxy attempts
+                }
+
+                // Try CORS proxies
+                for (const proxy of CORS_PROXIES) {
+                    try {
+                        const proxyUrl = proxy + encodeURIComponent(imageUrl);
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+                        const response = await fetch(proxyUrl, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            return blobToDataUrl(blob);
+                        }
+                    } catch (e) {
+                        console.log(`Proxy ${proxy} failed:`, e.message);
+                        continue;
+                    }
+                }
+
+                throw new Error('All image fetch attempts failed');
+            }
+
+            // Convert blob to data URL
+            function blobToDataUrl(blob) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = () => reject(new Error('FileReader error'));
+                    reader.readAsDataURL(blob);
+                });
+            }
+
+            // Get unique card IDs from current deck
+            function getDeckCardIds() {
+                const uniqueIds = new Set();
+                if (currentDeck) {
+                    [...currentDeck.main, ...currentDeck.side, ...currentDeck.extra].forEach(id => uniqueIds.add(id));
+                }
+                return Array.from(uniqueIds);
+            }
+
+            // Get card IDs from YDKX card pools
+            function getCardPoolIds() {
+                const poolIds = new Set();
+
+                // Add from additional card pool set
+                additionalCardPool.forEach(id => poolIds.add(id));
+
+                // Also check loaded YDK files for card pools
+                if (typeof ydkFiles !== 'undefined' && ydkFiles.length > 0) {
+                    ydkFiles.forEach(file => {
+                        if (file.cardPool && Array.isArray(file.cardPool)) {
+                            file.cardPool.forEach(card => {
+                                if (card && card.id) poolIds.add(card.id.toString());
+                            });
+                        }
+                    });
+                }
+
+                return Array.from(poolIds);
+            }
+
+            // Download images for given card IDs with progress callback
+            async function downloadCardImages(cardIds, onProgress) {
+                // Check if we have a folder selected
+                if (!imageFolderHandle) {
+                    NotificationManager.error('Please select a folder first');
+                    throw new Error('No folder selected');
+                }
+
+                // Get existing images in folder
+                const cachedIds = await getCachedImageIds();
+                const toDownload = cardIds.filter(id => !cachedIds.includes(id.toString()));
+
+                if (toDownload.length === 0) {
+                    if (onProgress) onProgress({ downloaded: cardIds.length, total: cardIds.length, complete: true });
+                    return { downloaded: 0, alreadyCached: cardIds.length, errors: [] };
+                }
+
+                downloadController = { cancelled: false };
+                const errors = [];
+                let downloaded = 0;
+
+                // Process in batches to avoid overwhelming the browser
+                const BATCH_SIZE = 5;
+                const startTime = Date.now();
+
+                for (let i = 0; i < toDownload.length; i += BATCH_SIZE) {
+                    if (downloadController.cancelled) {
+                        break;
+                    }
+
+                    const batch = toDownload.slice(i, i + BATCH_SIZE);
+
+                    await Promise.all(batch.map(async (cardId) => {
+                        if (downloadController.cancelled) return;
+
+                        try {
+                            // Find card in database to get image URL
+                            let imageUrl = null;
+                            const card = originalCardDatabase.find(c => c.id === cardId);
+                            if (card && card.card_images && card.card_images[0]) {
+                                imageUrl = card.card_images[0].image_url;
+                            } else if (card && card.imageUrl) {
+                                imageUrl = card.imageUrl;
+                            } else {
+                                // Fallback to YGOProDeck CDN
+                                imageUrl = `cardart/${cardId}.jpg`;
+                            }
+
+                            if (imageUrl) {
+                                // Download directly to folder
+                                await downloadImageToFolder(cardId, imageUrl);
+                                downloaded++;
+                            }
+                        } catch (error) {
+                            errors.push({ cardId, error: error.message });
+                            console.warn(`Failed to download image for ${cardId}:`, error);
+                        }
+
+                        if (onProgress) {
+                            onProgress({
+                                downloaded: downloaded + cachedIds.length,
+                                total: cardIds.length,
+                                batchProgress: (batch.indexOf(cardId) + 1) / batch.length
+                            });
+                        }
+                    }));
+
+                    // Small delay between batches to be nice to the server
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                return {
+                    downloaded,
+                    alreadyCached: cachedIds.length,
+                    errors
+                };
+            }
+
+            // Update modal UI with current counts
+            async function updateModalUI() {
+                const deckCardIds = getDeckCardIds();
+                const uniqueDeckIds = [...new Set(deckCardIds)];
+                const cardPoolIds = getCardPoolIds();
+
+                // Count deck cards by section
+                if (currentDeck) {
+                    const mainUnique = [...new Set(currentDeck.main)].length;
+                    const sideUnique = [...new Set(currentDeck.side)].length;
+                    const extraUnique = [...new Set(currentDeck.extra)].length;
+
+                    document.getElementById('mainDeckCardCount').textContent = mainUnique;
+                    document.getElementById('sideDeckCardCount').textContent = sideUnique;
+                    document.getElementById('extraDeckCardCount').textContent = extraUnique;
+                }
+
+                document.getElementById('totalDeckCardCount').textContent = uniqueDeckIds.length;
+
+                // Check cached status (from folder or IndexedDB)
+                const cachedIds = await getCachedImageIds();
+                const alreadyCached = uniqueDeckIds.filter(id => cachedIds.includes(id.toString())).length;
+                document.getElementById('alreadyCachedCount').textContent = alreadyCached;
+
+                // Update card pool section
+                if (cardPoolIds.length > 0) {
+                    document.getElementById('ydkxCardPoolSection').classList.remove('hidden');
+                    document.getElementById('cardPoolCount').textContent = cardPoolIds.length;
+                } else {
+                    document.getElementById('ydkxCardPoolSection').classList.add('hidden');
+                }
+
+                // Calculate totals based on selection
+                calculateDownloadTotals(uniqueDeckIds, cardPoolIds, cachedIds);
+
+                // Update total cached count
+                document.getElementById('totalCachedImages').textContent = cachedIds.length;
+
+                // Update folder status UI
+                const folderNameEl = document.getElementById('selectedFolderName');
+                const folderStatusEl = document.getElementById('offlineFolderStatus');
+                const offlineToggle = document.getElementById('offlineModeToggle');
+
+                if (imageFolderHandle) {
+                    folderNameEl.textContent = imageFolderHandle.name;
+                    folderStatusEl.textContent = offlineMode ? 'Folder connected - Offline mode ON' : 'Folder connected';
+                } else {
+                    folderNameEl.textContent = 'None selected';
+                    folderStatusEl.textContent = 'No folder selected';
+                }
+
+                // Update toggle state
+                if (offlineToggle) {
+                    offlineToggle.checked = offlineMode;
+                }
+            }
+
+            // Calculate download totals
+            function calculateDownloadTotals(deckIds, poolIds, cachedIds) {
+                const includePool = document.getElementById('includeCardPool')?.checked ?? false;
+                const additionalIds = Array.from(additionalCardPool);
+
+                const allIds = [...new Set([...deckIds, ...(includePool ? poolIds : []), ...additionalIds])];
+                const toDownload = allIds.filter(id => !cachedIds.includes(id.toString()));
+
+                document.getElementById('toDownloadCount').textContent = toDownload.length;
+                document.getElementById('totalToCacheCount').textContent = allIds.length;
+
+                // Estimate size (roughly 30KB per image)
+                const estimatedMB = Math.round((toDownload.length * 30) / 1024);
+                document.getElementById('estimatedSize').textContent = `~${estimatedMB} MB`;
+            }
+
+            // Show download modal
+            async function showDownloadModal() {
+                if (!document.getElementById('imagePackDownloadModal')) {
+                    // Inject modal HTML if not exists
+                    const div = document.createElement('div');
+                    div.innerHTML = modalHTML.trim();
+                    document.body.appendChild(div.firstElementChild);
+                    setupModalEventListeners();
+                }
+
+                // Restore offline mode state from localStorage
+                offlineMode = localStorage.getItem(OFFLINE_MODE_KEY) === 'true';
+
+                additionalCardPool.clear();
+                document.getElementById('additionalFilesSection').classList.add('hidden');
+                document.getElementById('additionalFilesList').innerHTML = '';
+                document.getElementById('additionalCardsCount').textContent = '0';
+                document.getElementById('downloadProgressSection').classList.add('hidden');
+                document.getElementById('startDownloadBtn').disabled = false;
+                document.getElementById('startDownloadBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+                document.getElementById('downloadErrorLog').classList.add('hidden');
+                document.getElementById('downloadErrorLog').innerHTML = '';
+
+                // Restore folder name from localStorage
+                await restoreFolderHandle();
+
+                await updateModalUI();
+                document.getElementById('imagePackDownloadModal').classList.remove('hidden');
+            }
+
+            // Setup modal event listeners
+            function setupModalEventListeners() {
+                const modal = document.getElementById('imagePackDownloadModal');
+
+                // Close buttons
+                document.getElementById('closeImagePackModal')?.addEventListener('click', hideDownloadModal);
+                document.getElementById('closeImagePackModalBtn')?.addEventListener('click', hideDownloadModal);
+
+                // Close on backdrop click
+                modal?.addEventListener('click', (e) => {
+                    if (e.target === modal) hideDownloadModal();
+                });
+
+                // Select offline folder button
+                document.getElementById('selectOfflineFolderBtn')?.addEventListener('click', async () => {
+                    await selectOfflineFolder();
+                });
+
+                // Offline mode toggle
+                document.getElementById('offlineModeToggle')?.addEventListener('change', async (e) => {
+                    setOfflineMode(e.target.checked);
+                    await updateModalUI();
+
+                    // Refresh all card displays to use new mode
+                    if (typeof renderCurrentDeck === 'function') {
+                        renderCurrentDeck();
+                    }
+                    if (typeof renderCardDatabase === 'function') {
+                        renderCardDatabase();
+                    }
+
+                    const modeText = offlineMode ? 'enabled' : 'disabled';
+                    NotificationManager.info(`Offline mode ${modeText}`);
+                });
+
+                // Rescan folder button
+                document.getElementById('rescanFolderBtn')?.addEventListener('click', async () => {
+                    if (!imageFolderHandle) {
+                        NotificationManager.warning('Please select a folder first');
+                        return;
+                    }
+                    await scanFolder();
+                    NotificationManager.success('Folder rescanned');
+                });
+
+                // Include card pool checkbox
+                document.getElementById('includeCardPool')?.addEventListener('change', async () => {
+                    const deckIds = getDeckCardIds();
+                    const poolIds = getCardPoolIds();
+                    const cachedIds = await getCachedImageIds();
+                    calculateDownloadTotals(deckIds, poolIds, cachedIds);
+                });
+
+                // Add more YDK files button - directly triggers file input
+                document.getElementById('addMoreYdkFilesBtn')?.addEventListener('click', () => {
+                    document.getElementById('additionalYdkInput').click();
+                });
+
+                // Additional YDK file input
+                document.getElementById('additionalYdkInput')?.addEventListener('change', async (e) => {
+                    const files = e.target.files;
+                    if (!files || files.length === 0) return;
+
+                    // Show the additional files summary section
+                    const summarySection = document.getElementById('additionalFilesSection');
+                    summarySection.classList.remove('hidden');
+
+                    const fileList = document.getElementById('additionalFilesList');
+                    fileList.innerHTML = '';
+
+                    for (const file of files) {
+                        const content = await file.text();
+                        const cardIds = parseYDKFile(content);
+                        cardIds.forEach(id => additionalCardPool.add(id));
+
+                        const fileItem = document.createElement('div');
+                        fileItem.className = 'flex items-center justify-between bg-slate-700 px-2 py-1 rounded';
+                        fileItem.innerHTML = `
+                            <span>${file.name}</span>
+                            <span class="text-xs text-slate-400">${cardIds.length} cards</span>
+                        `;
+                        fileList.appendChild(fileItem);
+                    }
+
+                    document.getElementById('additionalCardsCount').textContent = additionalCardPool.size;
+
+                    // Recalculate totals
+                    const deckIds = getDeckCardIds();
+                    const poolIds = getCardPoolIds();
+                    const cachedIds = await getCachedImageIds();
+                    calculateDownloadTotals(deckIds, poolIds, cachedIds);
+                });
+
+                // Clear additional files
+                document.getElementById('clearAdditionalFilesBtn')?.addEventListener('click', () => {
+                    additionalCardPool.clear();
+                    document.getElementById('additionalFilesList').innerHTML = '';
+                    document.getElementById('additionalFilesSection').classList.add('hidden');
+                    document.getElementById('additionalCardsCount').textContent = '0';
+
+                    // Recalculate
+                    updateModalUI();
+                });
+
+                // Start download button
+                document.getElementById('startDownloadBtn')?.addEventListener('click', startDownload);
+
+                // Cancel download button
+                document.getElementById('cancelDownloadBtn')?.addEventListener('click', () => {
+                    if (downloadController) {
+                        downloadController.cancelled = true;
+                    }
+                });
+
+                // Clear cache button
+                document.getElementById('clearCachedImagesBtn')?.addEventListener('click', async () => {
+                    if (confirm('Are you sure you want to clear all cached card images?')) {
+                        await clearCache();
+                        document.getElementById('totalCachedImages').textContent = '0';
+                        await updateModalUI();
+                        NotificationManager.info('Image cache cleared');
+                    }
+                });
+            }
+
+            // Parse YDK file content to extract card IDs
+            function parseYDKFile(content) {
+                const ids = [];
+                const lines = content.split('\n');
+                let inSection = false;
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('#')) {
+                        inSection = trimmed === '#main' || trimmed === '#extra' || trimmed === '!side';
+                        continue;
+                    }
+                    if (inSection && /^\d+$/.test(trimmed)) {
+                        ids.push(trimmed);
+                    }
+                }
+
+                return ids;
+            }
+
+            // Start the download process
+            async function startDownload() {
+                // Check if folder is selected
+                if (!imageFolderHandle) {
+                    NotificationManager.error('Please select an offline card art folder first');
+                    return;
+                }
+
+                const deckIds = getDeckCardIds();
+                const poolIds = getCardPoolIds();
+                const includePool = document.getElementById('includeCardPool')?.checked ?? false;
+
+                const allIds = [...new Set([...deckIds, ...(includePool ? poolIds : []), ...Array.from(additionalCardPool)])];
+
+                if (allIds.length === 0) {
+                    NotificationManager.warning('No cards to download');
+                    return;
+                }
+
+                // Show progress section
+                document.getElementById('downloadProgressSection').classList.remove('hidden');
+                document.getElementById('startDownloadBtn').disabled = true;
+                document.getElementById('startDownloadBtn').classList.add('opacity-50', 'cursor-not-allowed');
+                document.getElementById('downloadErrorLog').classList.add('hidden');
+                document.getElementById('downloadErrorLog').innerHTML = '';
+
+                const progressBar = document.getElementById('downloadProgressBar');
+                const progressText = document.getElementById('downloadProgressText');
+                const speedText = document.getElementById('downloadSpeed');
+
+                const startTime = Date.now();
+
+                try {
+                    await downloadCardImages(allIds, ({ downloaded, total, batchProgress }) => {
+                        const percent = Math.round((downloaded / total) * 100);
+                        progressBar.style.width = `${percent}%`;
+                        progressText.textContent = `${downloaded} / ${total}`;
+
+                        // Calculate speed
+                        const elapsed = (Date.now() - startTime) / 1000;
+                        if (elapsed > 0) {
+                            const kB = downloaded * 30; // rough estimate
+                            const speed = Math.round(kB / elapsed);
+                            speedText.textContent = `~${speed} KB/s`;
+                        }
+                    });
+
+                    // Download complete
+                    await updateModalUI();
+                    NotificationManager.success('Image download complete!');
+                } catch (error) {
+                    console.error('Download error:', error);
+                    NotificationManager.error('Download failed: ' + error.message);
+                } finally {
+                    document.getElementById('startDownloadBtn').disabled = false;
+                    document.getElementById('startDownloadBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            }
+
+            // Hide download modal
+            function hideDownloadModal() {
+                const modal = document.getElementById('imagePackDownloadModal');
+                if (modal) {
+                    modal.classList.add('hidden');
+                }
+                if (downloadController) {
+                    downloadController.cancelled = true;
+                }
+            }
+
+            // Get image URL for a card (cached or fallback to online)
+            async function getImageUrl(cardId, fallbackUrl) {
+                try {
+                    const cached = await getCachedImage(cardId);
+                    if (cached) return cached;
+                } catch (e) {
+                    console.warn('Error checking cached image:', e);
+                }
+                return fallbackUrl;
+            }
+
+            // Check if card image is cached
+            async function isImageCached(cardId) {
+                const cached = await getCachedImage(cardId);
+                return cached !== null;
+            }
+
+            // Initialize module
+            async function init() {
+                try {
+                    await initDatabase();
+
+                    // Restore offline mode state from localStorage
+                    offlineMode = localStorage.getItem(OFFLINE_MODE_KEY) === 'true';
+
+                    console.log('ImagePackManager: Database initialized, offline mode:', offlineMode);
+                } catch (error) {
+                    console.error('ImagePackManager: Failed to initialize database', error);
+                }
+            }
+
+            return {
+                init,
+                showDownloadModal,
+                hideDownloadModal,
+                getImageUrl,
+                isImageCached,
+                getCachedImage,
+                downloadCardImages,
+                getDeckCardIds,
+                clearCache,
+                getCachedImageIds,
+                isOfflineMode,
+                setOfflineMode,
+                getFolderHandle,
+                selectOfflineFolder,
+                scanFolder
+            };
+        })();
+
         async function main() {
             // 1. Show loading screen immediately
             const loadingOverlay = document.getElementById('loadingOverlay');
             if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+
+            try {
 
             // 1.5. Initialize ThemeManager
             ThemeManager.init();
@@ -3176,6 +4559,9 @@
             // 3.5. Initialize storage manager module
             await StorageManager.init();
 
+            // 3.6. Initialize image pack manager for offline images
+            await ImagePackManager.init();
+
             // 4. Initialize the resize handle for the deck builder
             initializeResizeHandle();
 
@@ -3193,7 +4579,9 @@
 
             // 6. Show the default view and hide the loading screen.
             showView('deckBuilderView');
-            UI.loadingOverlay.classList.add('hidden');
+            if (UI.loadingOverlay) {
+                UI.loadingOverlay.classList.add('hidden');
+            }
 
             // 6.5. Load card database in offline mode
             loadCardDatabase();
@@ -3301,6 +4689,15 @@
                     syncHeaderWrapping();
                 });
             }, 100);
+            } catch (error) {
+                console.error('Error during initialization:', error);
+                // Ensure loading overlay is hidden even on error
+                if (loadingOverlay) {
+                    loadingOverlay.classList.add('hidden');
+                }
+                // Show error message to user
+                document.body.innerHTML += '<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#ef4444;color:white;padding:2rem;border-radius:0.5rem;text-align:center;z-index:9999;"><h2>Initialization Error</h2><p>' + error.message + '</p><p>Check the browser console for details.</p></div>';
+            }
         }
 
         function performOneTimeCleanup() {
@@ -6397,7 +7794,7 @@
                         imageUrl = card.imageUrl;
                     } else {
                         // Fallback to YGOProDeck CDN
-                        imageUrl = `https://images.ygoprodeck.com/images/cards_small/${cardId}.jpg`;
+                        imageUrl = `cardart/${cardId}.jpg`;
                     }
 
                     if (imageUrl) {
@@ -8046,11 +9443,6 @@
                 });
             });
 
-            // YDK File Management - Now handled by StorageManager module
-            if (UI.manageFilesBtn) UI.manageFilesBtn.addEventListener('click', StorageManager.openModal);
-            if (UI.ydkDeckSelector) UI.ydkDeckSelector.addEventListener('change', e => StorageManager.loadYDKDeck(parseInt(e.target.value)));
-            if (UI.setDefaultDeckBtn) UI.setDefaultDeckBtn.addEventListener('click', StorageManager.setDefaultYDKDeck);
-
             // Storage Management Modal - Now handled by StorageManager module
             // Event listeners for storage modal are setup in storage-manager.js
 
@@ -8087,6 +9479,15 @@
             if (UI.cancelEasterEggModalBtn) UI.cancelEasterEggModalBtn.addEventListener('click', closeEasterEggModal);
             if (UI.saveEasterEggPoolBtn) UI.saveEasterEggPoolBtn.addEventListener('click', saveEasterEggPool);
             if (UI.resetEasterEggPoolBtn) UI.resetEasterEggPoolBtn.addEventListener('click', resetEasterEggPool);
+
+            // Image Pack Download Button
+            const downloadImagesBtn = document.getElementById('downloadImagesBtn');
+            if (downloadImagesBtn) {
+                downloadImagesBtn.addEventListener('click', () => {
+                    ImagePackManager.showDownloadModal();
+                });
+            }
+
             // Easter Egg Clear All button - use direct element selection
             const clearEasterEggPoolBtn = document.getElementById('clearEasterEggPoolBtn');
             if (clearEasterEggPoolBtn) {
@@ -9953,9 +11354,16 @@
             const activeView = document.getElementById(viewId);
             if (activeView) activeView.classList.remove('hidden');
 
-            UI.navDeckBuilder.classList.toggle('bg-[var(--color-primary)]', viewId === 'deckBuilderView');
-            UI.navSiding.classList.toggle('bg-[var(--color-primary)]', viewId === 'sidingBuilderView');
-            UI.navShootout.classList.toggle('bg-[var(--color-primary)]', ['shootoutView', 'shootoutSidingView', 'shootoutSimulatorView', 'shootoutReportView'].includes(viewId)); // MODIFIED
+            // Add null checks for nav elements to prevent errors
+            if (UI.navDeckBuilder) {
+                UI.navDeckBuilder.classList.toggle('bg-[var(--color-primary)]', viewId === 'deckBuilderView');
+            }
+            if (UI.navSiding) {
+                UI.navSiding.classList.toggle('bg-[var(--color-primary)]', viewId === 'sidingBuilderView');
+            }
+            if (UI.navShootout) {
+                UI.navShootout.classList.toggle('bg-[var(--color-primary)]', ['shootoutView', 'shootoutSidingView', 'shootoutSimulatorView', 'shootoutReportView'].includes(viewId));
+            }
             // UI.navDeckProfile?.classList.toggle('bg-[var(--color-primary)]', viewId === 'deckProfileView'); // DISABLED
 
         }
@@ -10023,6 +11431,62 @@
         //     UPDATES: When modifying card search or database behavior
         // ============================================================================
 
+        // --- HELPER: Get local card image URL ---
+        // Returns the local file path for a card's image if available
+        function getLocalCardImageUrl(cardId) {
+            return `cardart/${cardId}.jpg`;
+        }
+
+        // --- HELPER: Handle image load error with fallback ---
+        // Global function that can be called by onerror handlers
+        // Tries online URL if local image fails, then placeholder
+        window.handleCardImageError = function(imgElement, cardId, fallbackOnlineUrl) {
+            // Prevent infinite error loop
+            if (imgElement.dataset.errorHandled === 'true') {
+                return;
+            }
+            imgElement.dataset.errorHandled = 'true';
+
+            // Try online URL if provided and not already attempted
+            if (fallbackOnlineUrl && !imgElement.dataset.triedOnline) {
+                imgElement.dataset.triedOnline = 'true';
+                imgElement.src = fallbackOnlineUrl;
+                return;
+            }
+
+            // Final fallback to placeholder
+            const width = imgElement.width || 100;
+            const height = imgElement.height || 145;
+            imgElement.src = `https://placehold.co/${width}x${height}/2d3748/e2e8f0?text=${cardId || '?'}`;
+        };
+
+        // --- HELPER: Normalize card object with imageUrl properties ---
+        // Ensures cards have both imageUrl and imageUrlSmall properties
+        function normalizeCardImageUrls(card) {
+            // If already normalized, return as-is
+            if (card.imageUrl && card._onlineImageUrl) {
+                return card;
+            }
+
+            // Try to get imageUrl from card_images array (API format)
+            let onlineUrl = null;
+            let onlineSmallUrl = null;
+            if (card.card_images && card.card_images[0]) {
+                onlineUrl = card.card_images[0].image_url;
+                onlineSmallUrl = card.card_images[0].image_url_small;
+            }
+
+            // Create normalized card with imageUrl pointing to local file
+            return {
+                ...card,
+                imageUrl: getLocalCardImageUrl(card.id),
+                imageUrlSmall: getLocalCardImageUrl(card.id),
+                // Keep original online URLs for fallback/reference
+                _onlineImageUrl: onlineUrl,
+                _onlineImageUrlSmall: onlineSmallUrl
+            };
+        }
+
         // --- CARD DATABASE LOGIC ---
         async function loadCardDatabase() {
             if (isDatabaseLoaded) {
@@ -10039,14 +11503,15 @@
                 const savedCards = JSON.parse(localStorage.getItem('offlineCardDatabase') || '[]');
                 console.log(`loadCardDatabase: Found ${savedCards.length} cards in localStorage`);
 
-                // Deduplicate cards by ID
+                // Deduplicate cards by ID and normalize image URLs
                 const uniqueCards = [];
                 const seenIds = new Set();
                 let dupCount = 0;
                 for (const card of savedCards) {
                     if (!seenIds.has(card.id)) {
                         seenIds.add(card.id);
-                        uniqueCards.push(card);
+                        // Normalize card to ensure imageUrl property exists
+                        uniqueCards.push(normalizeCardImageUrls(card));
                     } else {
                         dupCount++;
                     }
@@ -11113,12 +12578,21 @@
 
                     cardEl.innerHTML = `
                         <div class="flex items-center gap-3 overflow-hidden">
-                            <img src="${card.imageUrl}" class="w-10 h-auto rounded-md flex-shrink-0" onerror="this.onerror=null;this.src='https://placehold.co/40x58/2d3748/e2e8f0?text=?';">
+                            <img src="${card.imageUrl}" class="w-10 h-auto rounded-md flex-shrink-0" data-card-id="${card.id}" ${card._onlineImageUrl ? `data-online-url="${card._onlineImageUrl}"` : ''}>
                             <span class="text-sm font-medium">${card.name}</span>
                         </div>
                         <button class="${buttonClass}">
                             ${isSelected ? 'Selected' : 'Select'}
                         </button>`;
+
+                    // Set up error handler for siding picker image
+                    const imgElement = cardEl.querySelector('img');
+                    if (imgElement) {
+                        imgElement.onerror = function() {
+                            const onlineUrl = this.dataset.onlineUrl || '';
+                            handleCardImageError(this, card.id, onlineUrl);
+                        };
+                    }
 
                     // Add click listener for toggle selection
                     cardEl.addEventListener('click', () => {
@@ -11175,6 +12649,9 @@
                 return;
             }
 
+            // Check if we're editing thumbnails (the 3 main cards for the pattern)
+            const isEditingThumbnails = activeEditingPattern.section === 'thumbnails';
+
             // Use the card select modal
             const modal = document.getElementById('cardSelectModal');
             const searchInput = document.getElementById('cardSelectInput');
@@ -11186,24 +12663,37 @@
                 searchInput.value = '';
                 searchInput.focus();
 
-                // Update modal title based on whether we're selecting for OUT or IN
-                const isOutSelection = activeEditingPattern.type === 'out';
-                currentSidingSelectionType = activeEditingPattern.type; // Store for search input
-                const deckName = currentDeckMeta?.name || 'Current Deck';
-
                 if (modalTitle) {
-                    if (isOutSelection) {
-                        const showExtraDeck = sideDeckHasExtraDeckMonsters();
-                        modalTitle.textContent = showExtraDeck
-                            ? `Select Card to SIDE-OUT (from ${deckName})`
-                            : `Select Card to SIDE-OUT (from Main Deck)`;
+                    if (isEditingThumbnails) {
+                        // Get the pattern to use the opponent deck name
+                        const pattern = currentDeck.sidingPatterns[activeEditingPattern.patternId];
+                        const opponentDeckName = pattern?.associatedYdk || pattern?.ydkDeckName || 'Opponent Deck';
+                        modalTitle.textContent = `Select 3 Main Cards (from ${opponentDeckName})`;
                     } else {
-                        modalTitle.textContent = `Select Card to SIDE-IN (from Side Deck)`;
+                        // Update modal title based on whether we're selecting for OUT or IN
+                        const isOutSelection = activeEditingPattern.type === 'out';
+                        currentSidingSelectionType = activeEditingPattern.type; // Store for search input
+                        const deckName = currentDeckMeta?.name || 'Current Deck';
+
+                        if (isOutSelection) {
+                            const showExtraDeck = sideDeckHasExtraDeckMonsters();
+                            modalTitle.textContent = showExtraDeck
+                                ? `Select Card to SIDE-OUT (from ${deckName})`
+                                : `Select Card to SIDE-OUT (from Main Deck)`;
+                        } else {
+                            modalTitle.textContent = `Select Card to SIDE-IN (from Side Deck)`;
+                        }
                     }
                 }
 
                 // Populate with cards from the appropriate deck
-                populateCardSelectResults('', isOutSelection);
+                // For thumbnails, we pass a special flag to show all deck cards
+                if (isEditingThumbnails) {
+                    populateThumbnailCardSelectResults('');
+                } else {
+                    const isOutSelection = activeEditingPattern.type === 'out';
+                    populateCardSelectResults('', isOutSelection);
+                }
             } else {
                 // Fallback to old modal
                 renderSearchResultsModal(null, true);
@@ -11371,7 +12861,7 @@
                         <img src="${card.imageUrl}"
                             class="card-image"
                             loading="lazy"
-                            onerror="this.src='https://images.ygoprodeck.com/images/cards_small/${cardId}.jpg'"
+                            onerror="this.src='cardart/${cardId}.jpg'; if(this.naturalWidth===0) this.src='https://images.ygoprodeck.com/images/cards_small/${cardId}.jpg'"
                             alt="${card.name}">
                         <div class="selection-indicator">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -11380,6 +12870,106 @@
                         </div>
                         <div class="card-name">${card.name}</div>
                         ${selectedCount > 1 ? `<span class="copy-badge">${copyIndex + 1}/${selectedCount}</span>` : ''}
+                    </div>
+                `;
+            });
+
+            selectResults.innerHTML = html;
+        }
+
+        /**
+         * Populate card select results for thumbnail selection
+         * Shows all cards from the opponent's deck (sourceDeckIds) for choosing 3 main cards
+         */
+        async function populateThumbnailCardSelectResults(query) {
+            const selectResults = document.getElementById('cardSelectResults');
+            if (!selectResults) return;
+
+            selectResults.innerHTML = '<div class="col-span-full text-center text-gray-500 py-4">Loading...</div>';
+
+            // Validate active editing pattern
+            if (!activeEditingPattern || activeEditingPattern.section !== 'thumbnails') {
+                selectResults.innerHTML = '<div class="col-span-full text-center text-red-500 py-4">Error: Not in thumbnail edit mode</div>';
+                return;
+            }
+
+            const { patternId } = activeEditingPattern;
+            const pattern = currentDeck.sidingPatterns[patternId];
+            if (!pattern) {
+                selectResults.innerHTML = '<div class="col-span-full text-center text-red-500 py-4">Error: Pattern not found</div>';
+                return;
+            }
+
+            // Get all unique cards from the opponent's deck (sourceDeckIds)
+            // This is the YDK file that this siding pattern is for
+            const allDeckCardIds = pattern.sourceDeckIds || [];
+
+            // Get currently selected thumbnails
+            const selectedThumbnails = pattern.thumbnails || [];
+
+            // Reset container to use card-select-grid class
+            selectResults.className = 'card-select-grid';
+            selectResults.style = '';
+
+            // Update counter to show selected count out of 3
+            const counterEl = document.getElementById('cardSelectSelectedCount');
+            const neededEl = document.getElementById('cardSelectNeededCount');
+            if (counterEl) counterEl.textContent = `${selectedThumbnails.filter(t => t).length}/3`;
+            if (neededEl) neededEl.textContent = 'Select up to 3 cards';
+
+            // Build HTML for cards
+            let html = '';
+
+            if (allDeckCardIds.length === 0) {
+                const emptyMessage = query ? 'No matching cards found' : 'No cards in this deck. Upload a YDK file first.';
+                selectResults.innerHTML = `<div class="col-span-full text-center text-slate-500 py-8">${emptyMessage}</div>`;
+                return;
+            }
+
+            // Get unique card IDs
+            const uniqueCardIds = [...new Set(allDeckCardIds)];
+
+            uniqueCardIds.forEach(cardId => {
+                // Look up card in both originalCardDatabase and cardDatabase
+                let card = originalCardDatabase.find(c => c.id === cardId) ||
+                          cardDatabase.find(c => c.id === cardId);
+
+                // If card not found in database, create a minimal entry
+                if (!card) {
+                    card = {
+                        id: cardId,
+                        name: `Card ID: ${cardId}`,
+                        imageUrl: `cardart/${cardId}.jpg`
+                    };
+                }
+
+                // Apply search filter
+                if (query && !card.name.toLowerCase().includes(query.toLowerCase())) {
+                    return;
+                }
+
+                // Check if this card is currently selected as a thumbnail
+                const isSelected = selectedThumbnails.includes(cardId);
+                // Get the position (1-3) if selected
+                const position = selectedThumbnails.indexOf(cardId) + 1;
+
+                html += `
+                    <div class="card-selection-card ${isSelected ? 'selected' : ''}"
+                        data-card-id="${cardId}"
+                        data-selected="${isSelected}"
+                        title="${card.name}${isSelected ? ` (Selected #${position})` : ''}\nClick to ${isSelected ? 'remove' : 'add'}">
+                        <img src="${card.imageUrl}"
+                            class="card-image"
+                            loading="lazy"
+                            onerror="this.src='cardart/${cardId}.jpg'; if(this.naturalWidth===0) this.src='https://images.ygoprodeck.com/images/cards_small/${cardId}.jpg'"
+                            alt="${card.name}">
+                        ${isSelected ? `<div class="position-badge">${position}</div>` : ''}
+                        <div class="selection-indicator">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                        </div>
+                        <div class="card-name">${card.name}</div>
                     </div>
                 `;
             });
@@ -11438,12 +13028,49 @@
         function handleCardClick(cardEl) {
             if (!activeEditingPattern) return;
 
-            const { patternId, section, type } = activeEditingPattern;
+            const { patternId, section, type, index } = activeEditingPattern;
             const pattern = currentDeck.sidingPatterns[patternId];
             if (!pattern) return;
 
             if (section === 'thumbnails') {
-                // Thumbnails use different logic - not handled here
+                // Handle thumbnail selection - toggle on/off, max 3 cards
+                const cardId = cardEl.dataset.cardId;
+                if (!pattern.thumbnails) pattern.thumbnails = [];
+
+                const currentSelection = pattern.thumbnails.filter(t => t);
+                const isSelected = currentSelection.includes(cardId);
+
+                if (isSelected) {
+                    // Remove from selection
+                    pattern.thumbnails = pattern.thumbnails.map(t => t === cardId ? null : t);
+                } else {
+                    // Add to selection if less than 3
+                    if (currentSelection.length >= 3) {
+                        showMessage('You can only select up to 3 main cards.');
+                        return;
+                    }
+                    // Find first empty slot or add to end
+                    let placed = false;
+                    for (let i = 0; i < 3; i++) {
+                        if (!pattern.thumbnails[i]) {
+                            pattern.thumbnails[i] = cardId;
+                            placed = true;
+                            break;
+                        }
+                    }
+                    if (!placed) {
+                        pattern.thumbnails.push(cardId);
+                    }
+                }
+
+                markDeckDirty();
+
+                // Re-render the card list to show updated selection state
+                const searchInput = document.getElementById('cardSelectInput');
+                populateThumbnailCardSelectResults(searchInput?.value || '');
+
+                // Update the matchup card to show updated thumbnails without closing modal
+                renderMatchupCard(patternId, pattern);
                 return;
             }
 
@@ -11584,7 +13211,7 @@
                     if (card) {
                         slot.style.backgroundImage = `url('${card.imageUrl}')`;
                     } else {
-                        slot.style.backgroundImage = `url('https://images.ygoprodeck.com/images/cards_small/${slotCardId}.jpg')`;
+                        slot.style.backgroundImage = `url('cardart/${slotCardId}.jpg')`;
                     }
                     slot.title = card?.name || '';
 
@@ -11643,8 +13270,13 @@
             cardSelectInput.addEventListener('input', (e) => {
                 clearTimeout(searchDebounce);
                 searchDebounce = setTimeout(() => {
-                    const isOutSelection = currentSidingSelectionType !== 'in';
-                    populateCardSelectResults(e.target.value, isOutSelection);
+                    // Check if we're editing thumbnails
+                    if (activeEditingPattern && activeEditingPattern.section === 'thumbnails') {
+                        populateThumbnailCardSelectResults(e.target.value);
+                    } else {
+                        const isOutSelection = currentSidingSelectionType !== 'in';
+                        populateCardSelectResults(e.target.value, isOutSelection);
+                    }
                 }, 300);
             });
         }
@@ -11889,8 +13521,10 @@
                         const uniqueMainCardIds = [...new Set(importedDeck.main)];
                         const thumbnails = uniqueMainCardIds.slice(0, 3);
 
-                        // Combine main and side deck IDs for source deck reference
-                        const sourceDeckIds = [...new Set([...importedDeck.main, ...importedDeck.side])];
+                        // Combine main, side, and extra deck IDs for source deck reference
+                        // Extra deck is included for thumbnail selection
+                        const sourceDeckIds = [...new Set([...importedDeck.main, ...importedDeck.side, ...importedDeck.extra])];
+                        const extraDeckIds = [...new Set(importedDeck.extra)];
 
                         // Fetch and add missing cards from opponent's deck to the database
                         // This ensures card images are available when the card is rendered
@@ -11903,6 +13537,7 @@
                         if (pattern) {
                             pattern.thumbnails = thumbnails;
                             pattern.sourceDeckIds = sourceDeckIds; // Store opponent's deck card IDs
+                            pattern.extraDeckIds = extraDeckIds; // Store extra deck separately
                             markDeckDirty();
                             // Re-render the matchup card
                             renderMatchupCard(patternId, pattern);
@@ -12355,7 +13990,7 @@
                         if (card && card.imageUrl) {
                             imageUrl = card.imageUrl;
                         } else {
-                            imageUrl = `https://images.ygoprodeck.com/images/cards_small/${cardId}.jpg`;
+                            imageUrl = `cardart/${cardId}.jpg`;
                         }
 
                         if (imageUrl) {
@@ -12461,11 +14096,27 @@
                 showTooltip(`'${cardData.name}' is already in the database.`);
                 return;
             }
+            // Store full card data (including card_images for online fallback)
             const newCard = {
                 id: cardData.id.toString(),
                 name: cardData.name,
                 type: cardData.type,
-                imageUrl: cardData.card_images[0].image_url
+                card_images: cardData.card_images || [],
+                desc: cardData.desc,
+                race: cardData.race,
+                attribute: cardData.attribute,
+                level: cardData.level,
+                rank: cardData.rank,
+                linkval: cardData.linkval,
+                linkmarkers: cardData.linkmarkers,
+                scale: cardData.scale,
+                atk: cardData.atk,
+                def: cardData.def,
+                archetype: cardData.archetype,
+                banlist_info: cardData.banlist_info,
+                // Use local image path as primary
+                imageUrl: getLocalCardImageUrl(cardData.id.toString()),
+                imageUrlSmall: getLocalCardImageUrl(cardData.id.toString())
             };
 
             // Add to local database immediately (check for duplicates first)
@@ -15558,9 +17209,12 @@
 
             if (newCards.length === 0) return;
 
+            // Normalize image URLs to use local paths
+            const normalizedCards = newCards.map(card => normalizeCardImageUrls(card));
+
             // Filter out cards that already exist in the ORIGINAL database (check for duplicates)
             // Must check against originalCardDatabase, not cardDatabase (which might be filtered)
-            const cardsToAdd = newCards.filter(newCard => !originalCardDatabase.some(existingCard => existingCard.id === newCard.id));
+            const cardsToAdd = normalizedCards.filter(newCard => !originalCardDatabase.some(existingCard => existingCard.id === newCard.id));
 
             if (cardsToAdd.length === 0) {
                 console.log('[DEBUG] All cards already exist in database, skipping add');
@@ -15846,7 +17500,7 @@
 
                 cardEl.innerHTML = `
                     <div class="flex items-center gap-2 overflow-hidden flex-grow min-w-0">
-                        <img src="${imgUrl}" class="w-10 h-auto rounded-md flex-shrink-0" onerror="this.onerror=null;this.src='https://placehold.co/40x58/2d3748/e2e8f0?text=?';">
+                        <img src="${imgUrl}" class="w-10 h-auto rounded-md flex-shrink-0" data-card-id="${card.id}" ${card._onlineImageUrl ? `data-online-url="${card._onlineImageUrl}"` : ''}>
                         <div class="min-w-0 flex-grow">
                             <div class="flex items-center gap-1.5 flex-wrap">
                                 <span class="text-sm font-medium truncate">${card.name}</span>
@@ -15861,6 +17515,15 @@
                         ${buttonsHtml}
                     </div>
                 `;
+
+                // Set up error handler for list item image
+                const imgElement = cardEl.querySelector('img');
+                if (imgElement) {
+                    imgElement.onerror = function() {
+                        const onlineUrl = this.dataset.onlineUrl || '';
+                        handleCardImageError(this, card.id, onlineUrl);
+                    };
+                }
 
                 // Add event listeners
                 if (!editMode) {
@@ -15919,7 +17582,8 @@
                         <img src="${imgUrl}"
                              class="w-full h-full object-cover"
                              title="${card.name}"
-                             onerror="this.onerror=null;this.src='https://placehold.co/80x112/2d3748/e2e8f0?text=?';">
+                             data-card-id="${card.id}"
+                             ${card._onlineImageUrl ? `data-online-url="${card._onlineImageUrl}"` : ''}>
                         ${statsOverlay}
                     </div>
                 `;
@@ -15936,7 +17600,8 @@
                             <img src="${imgUrl}"
                                  class="w-full h-full object-cover"
                                  title="${card.name}"
-                                 onerror="this.onerror=null;this.src='https://placehold.co/80x112/2d3748/e2e8f0?text=?';">
+                                 data-card-id="${card.id}"
+                                 ${card._onlineImageUrl ? `data-online-url="${card._onlineImageUrl}"` : ''}>
                         </div>
                     `;
                     if (isSelected) {
@@ -15945,6 +17610,15 @@
                 }
 
                 cardEl.innerHTML = content;
+
+                // Set up offline image support and error handling
+                const imgElement = cardEl.querySelector('img');
+                if (imgElement) {
+                    imgElement.onerror = function() {
+                        const onlineUrl = this.dataset.onlineUrl || '';
+                        handleCardImageError(this, card.id, onlineUrl);
+                    };
+                }
 
                 if (editMode) {
                     const checkbox = cardEl.querySelector('input[type="checkbox"]');
@@ -16104,6 +17778,18 @@
                     </div>`;
                 UI.cardDbList.appendChild(cardEl);
 
+                // Set up offline image support for list view
+                const imgElement = cardEl.querySelector('img');
+                if (imgElement && imgUrl) {
+                    ImagePackManager.getCachedImage(card.id).then(cachedUrl => {
+                        if (cachedUrl && imgElement) {
+                            imgElement.src = cachedUrl;
+                        }
+                    }).catch(() => {
+                        // Ignore errors, fall back to online URL
+                    });
+                }
+
                 // Add event listeners for list items (only in normal mode)
                 if (!editMode) {
                     // Click to show preview modal (not on the action buttons)
@@ -16159,6 +17845,15 @@
             UI.previewCardImage.onerror = function() {
                 this.src = 'https://placehold.co/400x560/2d3748/e2e8f0?text=No+Image';
             };
+
+            // Try to load cached image asynchronously
+            ImagePackManager.getCachedImage(card.id).then(cachedUrl => {
+                if (cachedUrl && UI.previewCardImage) {
+                    UI.previewCardImage.src = cachedUrl;
+                }
+            }).catch(() => {
+                // Ignore errors, fall back to online URL
+            });
 
             // Card name
             UI.previewCardName.textContent = card.name || '';
@@ -16358,6 +18053,30 @@
             return 'rarity-common';
         }
 
+        // Helper function to set up an image element with offline cache support
+        async function setupCardImageElement(imgElement, cardId, fallbackUrl, cardName) {
+            // Set initial src to fallback
+            imgElement.src = fallbackUrl;
+            imgElement.setAttribute('data-card-id', cardId);
+
+            // Try to get cached image asynchronously
+            try {
+                const cachedUrl = await ImagePackManager.getCachedImage(cardId);
+                if (cachedUrl) {
+                    imgElement.src = cachedUrl;
+                }
+            } catch (e) {
+                // Fall through to online URL
+            }
+
+            // Fallback on error
+            imgElement.onerror = function() {
+                if (this.src !== 'https://placehold.co/80x112/2d3748/e2e8f0?text=') {
+                    this.src = 'https://placehold.co/80x112/2d3748/e2e8f0?text=?';
+                }
+            };
+        }
+
         async function renderCardDatabaseGrid(resetPagination = true) {
             // Ensure CSS variable is current before rendering (fixes stacking issues on startup/orientation change)
             if (window.updateDatabaseColumns) {
@@ -16416,7 +18135,8 @@
                         <img src="${imgUrl}"
                              class="w-full h-full object-cover"
                              title="${card.name}"
-                             onerror="this.onerror=null;this.src='https://placehold.co/80x112/2d3748/e2e8f0?text=?';">
+                             data-card-id="${card.id}"
+                             ${card._onlineImageUrl ? `data-online-url="${card._onlineImageUrl}"` : ''}>
                         ${statsOverlay}
                     </div>
                 `;
@@ -16433,7 +18153,8 @@
                             <img src="${imgUrl}"
                                  class="w-full h-full object-cover"
                                  title="${card.name}"
-                                 onerror="this.onerror=null;this.src='https://placehold.co/80x112/2d3748/e2e8f0?text=?';">
+                                 data-card-id="${card.id}"
+                                 ${card._onlineImageUrl ? `data-online-url="${card._onlineImageUrl}"` : ''}>
                         </div>
                     `;
                     if (isSelected) {
@@ -16442,6 +18163,16 @@
                 }
 
                 cardEl.innerHTML = content;
+
+                // Set up offline image support and error handling
+                const imgElement = cardEl.querySelector('img');
+                if (imgElement) {
+                    // Add error handler for fallback to online URL
+                    imgElement.onerror = function() {
+                        const onlineUrl = this.dataset.onlineUrl || '';
+                        handleCardImageError(this, card.id, onlineUrl);
+                    };
+                }
 
                 // Add event listeners based on mode
                 if (editMode) {
@@ -16706,9 +18437,22 @@
 
                 cardEl.innerHTML = `
                     <div class="card-inner overflow-hidden">
-                        <img src="${card.imageUrl}" draggable="false" class="w-full h-full object-cover" title="${card.name}" onerror="this.onerror=null;this.src='https://placehold.co/100x140/2d3748/e2e8f0?text=?';">
+                        <img src="${card.imageUrl}" draggable="false" class="w-full h-full object-cover" title="${card.name}" data-card-id="${cardId}">
                     </div>
                 `;
+
+                // Set up offline image support for deck cards
+                const imgElement = cardEl.querySelector('img');
+                if (imgElement) {
+                    // Store online fallback URL as dataset
+                    if (card._onlineImageUrl) {
+                        imgElement.dataset.onlineUrl = card._onlineImageUrl;
+                    }
+                    // Add error handler
+                    imgElement.onerror = function() {
+                        handleCardImageError(this, cardId, this.dataset.onlineUrl || '');
+                    };
+                }
 
                 // Add 3D tilt effect with proximity sensing
                 cardEl.addEventListener('mousemove', (e) => {
@@ -16894,7 +18638,7 @@
 
             // Create main card container matching prototype design
             const cardContainer = document.createElement('div');
-            cardContainer.className = 'matchup-card rounded-xl overflow-hidden shadow-2xl border border-[var(--color-border)] bg-[var(--color-surface-1) animate-fade-in flex flex-col h-full';
+            cardContainer.className = 'matchup-card rounded-xl overflow-hidden shadow-2xl border border-[var(--color-border)] bg-[var(--color-surface-1)] animate-fade-in flex flex-col h-full';
             cardContainer.dataset.patternId = patternId;
 
             // Header section matching prototype
@@ -16982,7 +18726,7 @@
                         thumbEl.title = card.name;
                     } else {
                         // Fallback to YGOProDeck CDN
-                        thumbEl.style.backgroundImage = `url('https://images.ygoprodeck.com/images/cards_small/${thumbId}.jpg')`;
+                        thumbEl.style.backgroundImage = `url('cardart/${thumbId}.jpg')`;
                         thumbEl.style.backgroundSize = 'cover';
                     }
                 } else {
@@ -16991,7 +18735,8 @@
                 }
                 
                 thumbEl.addEventListener('click', () => {
-                    activeEditingPattern = { patternId: patternId, section: 'thumbnails', index: i };
+                    // When clicking any thumbnail, open the selector for all 3 (not just the clicked one)
+                    activeEditingPattern = { patternId: patternId, section: 'thumbnails', index: null };
                     openCardPickerForSiding();
                 });
                 thumbnailsContainer.appendChild(thumbEl);
@@ -17099,7 +18844,7 @@
                             slot.style.backgroundImage = `url('${card.imageUrl}')`;
                         } else {
                             // Fallback to YGOProDeck CDN
-                            slot.style.backgroundImage = `url('https://images.ygoprodeck.com/images/cards_small/${cardId}.jpg')`;
+                            slot.style.backgroundImage = `url('cardart/${cardId}.jpg')`;
                         }
                         slot.title = card?.name || '';
                         
@@ -17129,7 +18874,7 @@
 
             // Going First section
             const goingFirstContainer = document.createElement('div');
-            goingFirstContainer.className = 'bg-[var(--color-surface-1) p-3 relative group/row';
+            goingFirstContainer.className = 'bg-[var(--color-surface-1)] p-3 relative group/row';
             
             const greenBar = document.createElement('div');
             greenBar.className = 'absolute left-0 top-0 bottom-0 w-1 bg-green-500 opacity-50';
@@ -17175,7 +18920,7 @@
 
             // Going Second section
             const goingSecondContainer = document.createElement('div');
-            goingSecondContainer.className = 'bg-[var(--color-surface-1) p-3 relative group/row';
+            goingSecondContainer.className = 'bg-[var(--color-surface-1)] p-3 relative group/row';
             
             const purpleBar = document.createElement('div');
             purpleBar.className = 'absolute left-0 top-0 bottom-0 w-1 bg-purple-500 opacity-50';
@@ -17366,7 +19111,7 @@
             addNewCard.dataset.addNewMatchup = 'true';
 
             const iconContainer = document.createElement('div');
-            iconContainer.className = 'p-6 rounded-full bg-[var(--color-surface-1) mb-4 group-hover:scale-110 transition-transform shadow-lg border border-[var(--color-border)]';
+            iconContainer.className = 'p-6 rounded-full bg-[var(--color-surface-1)] mb-4 group-hover:scale-110 transition-transform shadow-lg border border-[var(--color-border)]';
             iconContainer.innerHTML = `
                 <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -17474,8 +19219,8 @@
                     // Extract deck name from filename (remove .ydk or .ydkx extension)
                     const deckName = file.name.replace(/\.(ydk|ydkx)$/i, '');
 
-                    // Combine main and side deck IDs for source deck reference
-                    const sourceDeckIds = [...new Set([...importedDeck.main, ...importedDeck.side])];
+                    // Combine main, side, and extra deck IDs for source deck reference
+                    const sourceDeckIds = [...new Set([...importedDeck.main, ...importedDeck.side, ...importedDeck.extra])];
 
                     // Fetch and add missing cards from opponent's deck to the database
                     // This ensures card images are available when the card is rendered
@@ -20524,7 +22269,7 @@
                 }
 
                 const card = document.createElement('img');
-                card.src = `https://images.ygoprodeck.com/images/cards_small/${selectedCard.id}.jpg`;
+                card.src = `cardart/${selectedCard.id}.jpg`;
                 card.classList.add('chibi-trap');
                 itemContainer.appendChild(card);
 
@@ -21128,7 +22873,7 @@
             `;
 
             // Use card image if available, otherwise show name
-            const imgUrl = `https://images.ygoprodeck.com/images/cards_small/${card.id}.jpg`;
+            const imgUrl = `cardart/${card.id}.jpg`;
             cardEl.style.backgroundImage = `url(${imgUrl})`;
             cardEl.style.backgroundSize = 'cover';
             cardEl.style.backgroundPosition = 'center';
@@ -21547,7 +23292,7 @@
                 cardEl.className = 'flex items-center justify-between bg-slate-700 p-2 rounded-lg';
                 cardEl.innerHTML = `
                     <div class="flex items-center gap-2">
-                        <img src="https://images.ygoprodeck.com/images/cards_small/${card.id}.jpg" 
+                        <img src="cardart/${card.id}.jpg" 
                              alt="${card.name}" class="w-8 h-8 object-cover rounded">
                         <span class="text-sm">${card.name}</span>
                     </div>
@@ -21586,7 +23331,7 @@
             } else {
                 UI.easterEggSearchResults.innerHTML = results.map(card => `
                     <div class="p-2 hover:bg-slate-700 cursor-pointer flex items-center gap-2 autocomplete-item" data-card-id="${card.id}">
-                        <img src="https://images.ygoprodeck.com/images/cards_small/${card.id}.jpg" 
+                        <img src="cardart/${card.id}.jpg" 
                              alt="${card.name}" class="w-6 h-6 object-cover rounded">
                         <span class="text-sm">${card.name}</span>
                     </div>
@@ -21886,6 +23631,11 @@
                     if (missingCardIds.length > 0) {
                         showMessage(`Fetching data for ${missingCardIds.length} new opponent card(s)...`);
                         for (const id of missingCardIds) {
+                            // Use local cardart folder as primary image source for offline mode
+                            const localImageUrl = `cardart/${id}.jpg`;
+                            let cardAdded = false;
+
+                            // Try to fetch from API for card metadata (name, type), but keep local image
                             try {
                                 const response = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${id}`);
                                 const data = await response.json();
@@ -21895,17 +23645,25 @@
                                         id: cardData.id.toString(),
                                         name: cardData.name,
                                         type: cardData.type,
-                                        imageUrl: cardData.card_images[0].image_url
+                                        // Use local image path, with online URL as fallback for onerror handler
+                                        imageUrl: localImageUrl,
+                                        _onlineImageUrl: cardData.card_images[0].image_url
                                     });
-                                } else {
-                                    if (!this.cardCache.some(c => String(c.id) === String(id))) {
-                                        this.cardCache.push({ id, name: `Unknown ID: ${id}`, imageUrl: `https://placehold.co/100x140/2d3748/e2e8f0?text=${id}` });
-                                    }
+                                    cardAdded = true;
                                 }
                             } catch (e) {
-                                console.warn(`Could not fetch opponent card ID ${id}`, e);
+                                console.warn(`Could not fetch opponent card ID ${id} from API, using local image only`, e);
+                            }
+
+                            // If API fetch failed or returned no data, create minimal card entry with local image
+                            if (!cardAdded) {
                                 if (!this.cardCache.some(c => String(c.id) === String(id))) {
-                                    this.cardCache.push({ id, name: `Unknown ID: ${id}`, imageUrl: `https://placehold.co/100x140/2d3748/e2e8f0?text=${id}` });
+                                    this.cardCache.push({
+                                        id,
+                                        name: `Unknown ID: ${id}`,
+                                        type: 'unknown',
+                                        imageUrl: localImageUrl
+                                    });
                                 }
                             }
                         }
@@ -22007,8 +23765,12 @@
                     el.dataset.count = count;
                     el.dataset.type = typeCategory;
                     el.title = `${card?.name} (${count} available)\nLeft-click: Select one copy\nRight-click: Clear all copies`;
+
+                    // Use local image path with online fallback
+                    const localImageUrl = `cardart/${cardId}.jpg`;
+                    const onlineUrl = card?._onlineImageUrl || `cardart/${cardId}.jpg`;
                     el.innerHTML = `
-                        <img src="${card?.imageUrl}" class="w-full h-full object-cover pointer-events-none" alt="${card?.name}" onerror="this.onerror=null;this.src='https://placehold.co/100x140/2d3748/e2e8f0?text=?';">
+                        <img src="${card?.imageUrl || localImageUrl}" class="w-full h-full object-cover pointer-events-none" alt="${card?.name}" data-online-url="${onlineUrl}" onerror="handleCardImageError(this, '${cardId}', '${onlineUrl}')">
                         <span class="siding-available-badge">${count}</span>
                         <span class="siding-count-badge">0</span>
                     `;
@@ -22287,10 +24049,13 @@
                         e.dataTransfer.effectAllowed = 'move';
                     });
 
-                    const imageUrl = card?.imageUrl || 'https://placehold.co/120x175/2d3748/e2e8f0?text=?';
+                    // Use local image path with online fallback
+                    const localImageUrl = `cardart/${cardId}.jpg`;
+                    const imageUrl = card?.imageUrl || localImageUrl;
+                    const onlineUrl = card?._onlineImageUrl || `cardart/${cardId}.jpg`;
                     const cardName = card?.name || `ID: ${cardId}`;
                     el.innerHTML = `
-                        <img src="${imageUrl}" class="w-full rounded-lg shadow-lg" title="${cardName}" onerror="this.onerror=null;this.src='https://placehold.co/120x175/2d3748/e2e8f0?text=?';">
+                        <img src="${imageUrl}" class="w-full rounded-lg shadow-lg" title="${cardName}" data-online-url="${onlineUrl}" onerror="handleCardImageError(this, '${cardId}', '${onlineUrl}')">
                      `;
 
                     return el;
@@ -22330,7 +24095,9 @@
                 const simpleCardMapper = (id) => {
                     const card = this.getCardFromCache(id);
                     if (!card) return `<div class="w-full aspect-[2.5/3.5] rounded-lg shadow-lg bg-slate-700 flex items-center p-4 text-xs text-center p-1">Unknown ID: ${id}</div>`;
-                    return `<img src="${card.imageUrl}" class="w-full rounded-lg shadow-lg" title="${card.name}" onerror="this.onerror=null;this.src='https://placehold.co/120x175/2d3748/e2e8f0?text=?';">`;
+                    const localImageUrl = `cardart/${id}.jpg`;
+                    const onlineUrl = card._onlineImageUrl || `cardart/${id}.jpg`;
+                    return `<img src="${card.imageUrl}" class="w-full rounded-lg shadow-lg" title="${card.name}" data-online-url="${onlineUrl}" onerror="handleCardImageError(this, '${id}', '${onlineUrl}')">`;
                 }
 
                 const userFullDeckEl = document.getElementById('userFullDeck');
@@ -24283,12 +26050,25 @@
 
                 // Card content
                 if (card.faceUp && card.card) {
+                    const imgUrl = card.card.imageUrl || '';
                     el.innerHTML = `
-                        <img src="${card.card.imageUrl || ''}"
+                        <img src="${imgUrl}"
                              alt="${card.card.name}"
                              class="sandbox-card-image"
                              onerror="this.src='https://placehold.co/100x145/4a5568/e2e8f0?text=?'">
                     `;
+
+                    // Try to load cached image asynchronously
+                    const imgElement = el.querySelector('img');
+                    if (imgElement && imgUrl && card.card.id) {
+                        ImagePackManager.getCachedImage(card.card.id).then(cachedUrl => {
+                            if (cachedUrl && imgElement) {
+                                imgElement.src = cachedUrl;
+                            }
+                        }).catch(() => {
+                            // Ignore errors
+                        });
+                    }
                 } else {
                     el.innerHTML = `<div class="sandbox-card-back"></div>`;
                 }
@@ -24340,12 +26120,25 @@
                     el.setAttribute('data-position', card.position);
                     el.setAttribute('data-face-up', card.faceUp.toString());
                     if (card.faceUp && card.card) {
+                        const imgUrl = card.card.imageUrl || '';
                         el.innerHTML = `
-                            <img src="${card.card.imageUrl || ''}"
+                            <img src="${imgUrl}"
                                  alt="${card.card.name}"
                                  class="sandbox-card-image"
                                  onerror="this.src='https://placehold.co/100x145/4a5568/e2e8f0?text=?'">
                         `;
+
+                        // Try to load cached image asynchronously
+                        const imgElement = el.querySelector('img');
+                        if (imgElement && imgUrl && card.card.id) {
+                            ImagePackManager.getCachedImage(card.card.id).then(cachedUrl => {
+                                if (cachedUrl && imgElement) {
+                                    imgElement.src = cachedUrl;
+                                }
+                            }).catch(() => {
+                                // Ignore errors
+                            });
+                        }
                     } else {
                         el.innerHTML = `<div class="sandbox-card-back"></div>`;
                     }
@@ -25366,6 +27159,20 @@
         #cardDbList:hover {
             scrollbar-width: thin; /* Show on hover in Firefox */
             scrollbar-color: rgba(139, 92, 246, 0.4) transparent;
+        }
+
+        /* Toggle switch for offline mode */
+        .toggle-bg {
+            transition: background-color 0.3s ease;
+        }
+        input:checked ~ .toggle-bg {
+            background-color: #2563eb;
+        }
+        .dot {
+            transition: transform 0.3s ease;
+        }
+        input:checked ~ .dot {
+            transform: translateX(100%);
         }
 
         .card-grid {
@@ -26489,6 +28296,26 @@
         .card-selection-card.selected .copy-badge {
             background: rgba(34, 197, 94, 0.9);
             color: white;
+        }
+
+        /* Position badge for thumbnail selection (1, 2, 3) */
+        .card-selection-card .position-badge {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            pointer-events: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            border: 2px solid white;
         }
 
         /* Chibi Animation Styles */
@@ -29470,14 +31297,10 @@
                 <!-- Storage Overview -->
                 <div class="mb-6 p-4 bg-slate-800 rounded-lg">
                     <h4 class="text-lg font-semibold text-white mb-3">Storage Overview</h4>
-                    <div id="storageOverview" class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div id="storageOverview" class="grid grid-cols-3 gap-4 text-sm">
                         <div class="text-center">
                             <div class="text-2xl font-bold text-blue-400" id="totalDecksCount">0</div>
                             <div class="text-slate-400">Saved Decks</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-green-400" id="totalYDKFilesCount">0</div>
-                            <div class="text-slate-400">YDK Files</div>
                         </div>
                         <div class="text-center">
                             <div class="text-2xl font-bold text-purple-400" id="totalCardsCount">0</div>
@@ -29498,8 +31321,6 @@
                         data-tab="card-database">Card Database</button>
                     <button class="storage-tab-btn px-4 py-2 text-sm font-medium text-slate-400 hover:text-white"
                         data-tab="decks">Deck Management</button>
-                    <button class="storage-tab-btn px-4 py-2 text-sm font-medium text-slate-400 hover:text-white"
-                        data-tab="ydk-files">YDK Files</button>
                     <button class="storage-tab-btn px-4 py-2 text-sm font-medium text-slate-400 hover:text-white"
                         data-tab="diagnostics">Diagnostics</button>
                 </div>
@@ -29716,42 +31537,6 @@
 
                             <div id="decksList" class="space-y-2 max-h-96 overflow-y-auto">
                                 <!-- Decks will be listed here -->
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- YDK Files Tab -->
-                    <div id="ydk-files-tab" class="storage-tab-content hidden">
-                        <div class="space-y-4">
-                            <div class="flex justify-between items-center">
-                                <h4 class="text-lg font-semibold text-white">YDK File Management</h4>
-                                <div class="flex gap-2">
-                                    <button id="exportAllYDKFilesBtn"
-                                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-md text-sm">Export
-                                        All</button>
-                                    <label for="importYDKFilesInput"
-                                        class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-md text-sm cursor-pointer">Import
-                                        Files</label>
-                                    <input type="file" id="importYDKFilesInput" class="hidden" accept=".ydk,.ydkx" multiple>
-                                    <button id="syncYDKFolderBtn"
-                                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-md text-sm">Sync
-                                        Folder</button>
-                                    <button id="clearAllYDKFilesBtn"
-                                        class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-md text-sm">Clear
-                                        All</button>
-                                </div>
-                            </div>
-
-                            <div class="flex items-center gap-2 mb-4">
-                                <input type="checkbox" id="selectAllYDKFiles" class="rounded">
-                                <label for="selectAllYDKFiles" class="text-sm text-slate-300">Select All</label>
-                                <button id="bulkDeleteYDKFilesBtn"
-                                    class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-xs ml-4"
-                                    disabled>Delete Selected</button>
-                            </div>
-
-                            <div id="ydkFilesList" class="space-y-2 max-h-96 overflow-y-auto">
-                                <!-- YDK files will be listed here -->
                             </div>
                         </div>
                     </div>
@@ -30081,12 +31866,39 @@
     async function saveOfflineDeckToDB(deck) {
         if (!ydkDB) await initYDKDatabase();
 
+        // Validate deck data
+        if (!deck || !deck.name) {
+            throw new Error('Deck data must include a name.');
+        }
+
+        // Helper function to generate unique ID
+        const generateId = () => {
+            if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                return crypto.randomUUID();
+            }
+            return `deck-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        };
+
+        const now = new Date().toISOString();
+        const record = {
+            id: deck.id || generateId(),
+            name: deck.name,
+            main: Array.isArray(deck.main) ? [...deck.main] : [],
+            side: Array.isArray(deck.side) ? [...deck.side] : [],
+            extra: Array.isArray(deck.extra) ? [...deck.extra] : [],
+            sidingPatterns: deck.sidingPatterns || {},
+            cardPool: Array.isArray(deck.cardPool) ? [...deck.cardPool] : [],
+            createdAt: deck.createdAt || now,
+            updatedAt: now,
+            sync: deck.sync ? { ...deck.sync } : null
+        };
+
         return new Promise((resolve, reject) => {
             const transaction = ydkDB.transaction(['offlineDecks'], 'readwrite');
             const store = transaction.objectStore('offlineDecks');
-            const request = store.put(deck);
+            const request = store.put(record);
 
-            request.onsuccess = () => resolve(request.result);
+            request.onsuccess = () => resolve(record);
             request.onerror = () => reject(request.error);
         });
     }
@@ -30581,7 +32393,6 @@
         updateVisualUISettings();
         updateCardDatabaseInfo();
         updateDecksList();
-        updateYDKFilesList();
         updateDiagnostics();
 
         modal.classList.remove('hidden');
@@ -30589,7 +32400,6 @@
 
     function updateStorageOverview() {
         const totalDecks = typeof offlineDecks !== 'undefined' ? offlineDecks.length : 0;
-        const totalYDKFiles = typeof ydkFiles !== 'undefined' ? ydkFiles.length : 0;
         const totalCards = typeof cardDatabase !== 'undefined' ? cardDatabase.length : 0;
 
         // Calculate storage usage (approximate)
@@ -30603,19 +32413,16 @@
             }
             // Estimate IndexedDB usage (rough approximation)
             storageUsage += totalDecks * 1000; // ~1KB per deck
-            storageUsage += totalYDKFiles * 500; // ~500B per YDK file
             storageUsage += totalCards * 200; // ~200B per card
         } catch (e) {
             console.warn('Could not calculate storage usage:', e);
         }
 
         const totalDecksCount = document.getElementById('totalDecksCount');
-        const totalYDKFilesCount = document.getElementById('totalYDKFilesCount');
         const totalCardsCount = document.getElementById('totalCardsCount');
         const storageUsageEl = document.getElementById('storageUsage');
 
         if (totalDecksCount) totalDecksCount.textContent = totalDecks;
-        if (totalYDKFilesCount) totalYDKFilesCount.textContent = totalYDKFiles;
         if (totalCardsCount) totalCardsCount.textContent = totalCards;
         if (storageUsageEl) storageUsageEl.textContent = formatBytes(storageUsage);
     }
@@ -30832,14 +32639,6 @@
             categories.push({
                 name: 'Offline Decks',
                 size: offlineDecks.length * 1000,
-                type: 'IndexedDB'
-            });
-        }
-
-        if (typeof ydkFiles !== 'undefined') {
-            categories.push({
-                name: 'YDK Files',
-                size: ydkFiles.reduce((sum, file) => sum + file.content.length, 0),
                 type: 'IndexedDB'
             });
         }
@@ -31524,47 +33323,6 @@
             });
         }
 
-        // YDK file management buttons
-        const exportAllYDKFilesBtn = document.getElementById('exportAllYDKFilesBtn');
-        const clearAllYDKFilesBtn = document.getElementById('clearAllYDKFilesBtn');
-        const bulkDeleteYDKFilesBtn = document.getElementById('bulkDeleteYDKFilesBtn');
-        const selectAllYDKFiles = document.getElementById('selectAllYDKFiles');
-        const syncYDKFolderBtn = document.getElementById('syncYDKFolderBtn');
-        const importYDKFilesInput = document.getElementById('importYDKFilesInput');
-
-        if (exportAllYDKFilesBtn) {
-            exportAllYDKFilesBtn.addEventListener('click', exportAllYDKFiles);
-        }
-
-        if (clearAllYDKFilesBtn) {
-            clearAllYDKFilesBtn.addEventListener('click', handleClearAllYDKFiles);
-        }
-
-        if (bulkDeleteYDKFilesBtn) {
-            bulkDeleteYDKFilesBtn.addEventListener('click', bulkDeleteYDKFiles);
-        }
-
-        if (selectAllYDKFiles) {
-            selectAllYDKFiles.addEventListener('change', (e) => {
-                document.querySelectorAll('.ydk-checkbox').forEach(checkbox => {
-                    checkbox.checked = e.target.checked;
-                });
-                updateBulkDeleteYDKButton();
-            });
-        }
-
-        if (syncYDKFolderBtn) {
-            syncYDKFolderBtn.addEventListener('click', () => {
-                if (typeof importYDKFolder === 'function') {
-                    importYDKFolder();
-                }
-            });
-        }
-
-        if (importYDKFilesInput) {
-            importYDKFilesInput.addEventListener('change', importSingleYDKFile);
-        }
-
         // Diagnostics buttons
         const refreshDiagnosticsBtn = document.getElementById('refreshDiagnosticsBtn');
         const performCleanupBtn = document.getElementById('performCleanupBtn');
@@ -31618,9 +33376,7 @@
         importSingleYDKFile,
         selectYDKFolder,
         setDefaultYDKDeck,
-        autoLoadYDKOnStartup,
-        updateYDKFolderStatus,
-        updateYDKDeckSelector
+        autoLoadYDKOnStartup
     };
     })();
 
@@ -31648,7 +33404,7 @@
         </div>
     </div>
     <div id="searchResultsModal" class="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-4 hidden">
-        <div class="bg-[var(--color-surface-1) rounded-lg shadow-xl p-6 w-full max-w-md mx-4 flex flex-col">
+        <div class="bg-[var(--color-surface-1)] rounded-lg shadow-xl p-6 w-full max-w-md mx-4 flex flex-col">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-xl font-semibold text-white">Card Search Results</h3><button id="searchResultsClose"
                     class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
@@ -31658,7 +33414,7 @@
     </div>
 
     <div id="searchDeckModal" class="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-4 hidden">
-        <div class="bg-[var(--color-surface-1) rounded-lg shadow-xl p-6 w-full max-w-md mx-4 flex flex-col">
+        <div class="bg-[var(--color-surface-1)] rounded-lg shadow-xl p-6 w-full max-w-md mx-4 flex flex-col">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-xl font-semibold text-white">Search Your Deck</h3>
                 <button id="searchDeckModalClose"
@@ -31939,7 +33695,7 @@
         <div class="w-full h-full flex">
             <!-- Filter Sidebar -->
             <div
-                class="w-80 bg-[var(--color-surface-1) p-6 overflow-y-auto border-r border-[var(--color-border)] flex-shrink-0">
+                class="w-80 bg-[var(--color-surface-1)] p-6 overflow-y-auto border-r border-[var(--color-border)] flex-shrink-0">
                 <h3 class="text-2xl font-bold text-white mb-6">Filters</h3>
 
                 <!-- Text Search -->
@@ -32179,7 +33935,7 @@
 
             <!-- Card Info Panel -->
             <div id="advSearchCardInfoPanel"
-                class="w-96 bg-[var(--color-surface-1) p-6 overflow-y-auto border-l border-[var(--color-border)] flex-shrink-0">
+                class="w-96 bg-[var(--color-surface-1)] p-6 overflow-y-auto border-l border-[var(--color-border)] flex-shrink-0">
                 <h3 class="text-2xl font-bold text-white mb-6">Card Info</h3>
                 <div id="advSearchCardInfoContent" class="h-full">
                     <p class="text-center text-slate-400 mt-20">Hover over a card to see details</p>
@@ -32322,7 +34078,7 @@
                         Duel Simulator
                     </span>
                 </button>
-                <nav class="flex gap-2 p-1 bg-[var(--color-surface-1) rounded-lg">
+                <nav class="flex gap-2 p-1 bg-[var(--color-surface-1)] rounded-lg">
                     <button id="navDeckBuilder"
                         class="px-4 py-2 rounded-md text-sm font-semibold transition-colors hover:bg-[var(--color-primary-hover)]">Deckbuilder</button>
                     <button id="navSiding"
@@ -32341,7 +34097,7 @@
             <div id="deckBuilderView" class="flex-1 flex flex-col overflow-hidden min-h-0">
                 <div id="deckBuilderContainer" class="flex gap-6 h-full">
                     <div id="cardDatabaseSection"
-                        class="bg-[var(--color-surface-1) p-4 rounded-lg flex flex-col min-w-0 flex-shrink-0 h-full"
+                        class="bg-[var(--color-surface-1)] p-4 rounded-lg flex flex-col min-w-0 flex-shrink-0 h-full"
                         style="width: 322px;">
                         <h2 class="text-xl font-semibold mb-3">Card Database</h2>
                         <div class="flex flex-wrap items-center gap-1.5 mb-2">
@@ -32409,6 +34165,14 @@
                                         d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253">
                                     </path>
                                 </svg></button>
+                            <button id="downloadImagesBtn"
+                                class="text-xs bg-emerald-600 hover:bg-emerald-700 px-2 py-1.5 rounded-md transition-colors font-medium border border-[var(--color-border)] flex items-center gap-1"
+                                title="Manage offline card art folder"><svg class="w-3 h-3" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4">
+                                    </path>
+                                </svg><span class="text-xs">Offline</span></button>
                             <!-- Result Count -->
                             <span id="dbResultCount" class="text-xs text-slate-400 ml-auto">0 cards</span>
                         </div>
@@ -32487,7 +34251,7 @@
                         class="w-2 bg-slate-600 hover:bg-slate-500 cursor-col-resize flex-shrink-0 transition-colors"
                         title="Drag to resize panels"></div>
                     <div id="deckBuilderSection"
-                        class="bg-[var(--color-surface-1) p-4 rounded-lg flex flex-col min-w-0 flex-grow">
+                        class="bg-[var(--color-surface-1)] p-4 rounded-lg flex flex-col min-w-0 flex-grow">
                         <div class="flex flex-wrap items-center justify-between mb-1 gap-x-4 gap-y-2">
                             <h2 class="text-xl font-semibold">Deck Builder</h2>
                             <div class="flex items-center gap-4">
@@ -32606,7 +34370,7 @@
                             </div>
                         </div>
                         <div class="mt-4 grid md:grid-cols-2 gap-4">
-                            <div class="bg-[var(--color-surface-1) p-3 rounded-lg"><label for="deckNameInput"
+                            <div class="bg-[var(--color-surface-1)] p-3 rounded-lg"><label for="deckNameInput"
                                     class="block text-sm font-medium mb-1">Deck Name</label>
                                 <div class="flex gap-2"><input type="text" id="deckNameInput"
                                         class="flex-grow bg-slate-700 border border-[var(--color-border)] rounded-md px-3 py-2 focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
@@ -32614,7 +34378,7 @@
                                         class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-md">Save</button>
                                 </div>
                             </div>
-                            <div class="bg-[var(--color-surface-1) p-3 rounded-lg"><label for="deckSelector"
+                            <div class="bg-[var(--color-surface-1)] p-3 rounded-lg"><label for="deckSelector"
                                     class="block text-sm font-medium mb-1">Saved Decks</label>
                                 <div class="flex gap-2"><select id="deckSelector"
                                         class="flex-grow bg-slate-700 border border-[var(--color-border)] rounded-md px-3 py-2 focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"></select><button
@@ -32624,7 +34388,7 @@
                                         class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-md">Del</button>
                                 </div>
                             </div>
-                            <div class="bg-[var(--color-surface-1) p-3 rounded-lg md:col-span-2">
+                            <div class="bg-[var(--color-surface-1)] p-3 rounded-lg md:col-span-2">
                                 <div class="flex items-center gap-2 mb-1">
                                     <label class="text-sm font-medium">File Management</label>
                                     <div class="relative group">
@@ -32660,40 +34424,6 @@
                                     </div>
                                 </div>
                                 <div class="space-y-4">
-                                    <!-- Import Section -->
-                                    <div>
-                                        <label class="block text-xs font-medium text-gray-300 mb-2">Import Deck
-                                            Files</label>
-                                        <div class="flex gap-2 flex-wrap">
-                                            <button id="manageFilesBtn"
-                                                class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-3 rounded-md"
-                                                title="Manage stored YDK files">Manage Files</button>
-                                        </div>
-                                        <p class="text-xs text-gray-500 mt-2">
-                                            💡 Use the <span class="text-green-400">Import YDK</span> button in the header to import .ydk/.ydkx files
-                                        </p>
-                                    </div>
-
-                                    <!-- File Status and Management -->
-                                    <div>
-                                        <div id="ydkFolderStatus" class="text-gray-400 text-sm mb-2">No YDK files stored
-                                        </div>
-                                        <div class="text-xs text-gray-500 mb-3">
-                                            💡 Tip: Import your .ydk files once and they'll be stored for instant access
-                                        </div>
-                                        <div class="flex gap-2">
-                                            <select id="ydkDeckSelector"
-                                                class="flex-grow bg-slate-700 border border-[var(--color-border)] rounded-md px-3 py-2 focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
-                                                disabled>
-                                                <option value="">Import YDK files first</option>
-                                            </select>
-                                            <button id="setDefaultDeckBtn"
-                                                class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-md"
-                                                title="Set the selected deck as default for auto-loading" disabled>Set
-                                                Default</button>
-                                        </div>
-                                    </div>
-
                                     <!-- Export Section -->
                                     <div>
                                         <label class="block text-xs font-medium text-gray-300 mb-2">Export Current
@@ -32717,6 +34447,7 @@
                                                 YDKe</button>
                                         </div>
                                     </div>
+
                                 </div>
                             </div>
                         </div>
@@ -32726,7 +34457,7 @@
 
             <!-- NEW: SHOOTOUT MODE VIEWS -->
             <div id="shootoutView" class="hidden">
-                <div class="max-w-6xl mx-auto bg-[var(--color-surface-1) p-6 rounded-lg">
+                <div class="max-w-6xl mx-auto bg-[var(--color-surface-1)] p-6 rounded-lg">
                     <h2 class="text-2xl font-bold mb-4">Shootout Mode Setup</h2>
                     <div class="space-y-4">
                         <div><label for="shootoutUserDeckSelector" class="block text-sm font-medium mb-1">1. Select Your
@@ -32774,7 +34505,7 @@
             </div>
 
             <div id="shootoutSidingView" class="hidden">
-                <div class="bg-[var(--color-surface-1) p-6 rounded-lg">
+                <div class="bg-[var(--color-surface-1)] p-6 rounded-lg">
                     <h2 id="shootoutSidingViewTitle" class="text-2xl font-bold mb-4 text-center">Siding Phase</h2>
                     <p class="text-center text-xs text-slate-500 mb-4">
                         <span class="text-slate-400">Left-click</span> to select • <span class="text-slate-400">Right-click</span> to clear all
@@ -32883,7 +34614,7 @@
                 <!-- Hands Grid Below -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start mt-4">
                     <!-- User Side -->
-                    <div class="bg-[var(--color-surface-1)/50 p-4 rounded-lg">
+                    <div class="bg-[var(--color-surface-1)]/50 p-4 rounded-lg">
                         <div class="flex justify-between items-center mb-3">
                             <h3 class="text-xl font-semibold text-center">Your Hand</h3>
                             <p id="shootoutSimUserDeckCount" class="text-sm font-mono"></p>
@@ -32921,7 +34652,7 @@
                         </div>
                     </div>
                     <!-- Opponent Side -->
-                    <div class="bg-[var(--color-surface-1)/50 p-4 rounded-lg">
+                    <div class="bg-[var(--color-surface-1)]/50 p-4 rounded-lg">
                         <div class="flex justify-between items-center mb-3">
                             <h3 class="text-xl font-semibold text-center">Opponent's Hand</h3>
                             <p id="shootoutSimOpponentDeckCount" class="text-sm font-mono"></p>
@@ -32964,7 +34695,7 @@
             <div id="sidingBuilderView" class="hidden">
                 <div class="flex flex-col h-full">
                     <!-- Top Navigation Bar -->
-                    <nav class="bg-[var(--color-surface-1) border-b border-[var(--color-border)] p-4 flex justify-between items-center shadow-lg z-20">
+                    <nav class="bg-[var(--color-surface-1)] border-b border-[var(--color-border)] p-4 flex justify-between items-center shadow-lg z-20">
                         <div class="flex items-center gap-3">
                             <h1 class="text-2xl font-bold text-white tracking-tight">Siding Pattern Builder</h1>
                             <span class="px-2 py-0.5 rounded text-xs bg-blue-900 text-blue-200 border border-blue-700">BETA</span>
@@ -33048,7 +34779,7 @@
 
             <!-- Card Select Modal for Siding Builder -->
             <div id="cardSelectModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center">
-                <div class="bg-[var(--color-surface-1) w-full sm:max-w-4xl sm:rounded-xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[85vh] overflow-hidden rounded-t-xl">
+                <div class="bg-[var(--color-surface-1)] w-full sm:max-w-4xl sm:rounded-xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[85vh] overflow-hidden rounded-t-xl">
                     <div class="p-3 sm:p-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-[var(--color-surface-2)]">
                         <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
                             <h3 id="cardSelectModalTitle" class="text-base sm:text-lg font-bold text-white">Select Card to Side-In</h3>
@@ -33077,7 +34808,7 @@
             </div>
 
             <div id="shootoutReportView" class="hidden">
-                <div class="max-w-3xl mx-auto bg-[var(--color-surface-1) p-6 rounded-lg">
+                <div class="max-w-3xl mx-auto bg-[var(--color-surface-1)] p-6 rounded-lg">
                     <div id="shootoutReportContent" class="text-center"></div>
                     <div class="mt-6 border-t border-slate-700 pt-6 space-y-3 text-center">
                         <button id="shootoutReportAnalyzeBtn"
