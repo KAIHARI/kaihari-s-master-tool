@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +52,7 @@ import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.components.CardDetailSheet
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.update.UpdateState
 
 /**
  * The deck builder, laid out for a landscape tablet.
@@ -63,6 +65,7 @@ import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 @Composable
 fun DeckBuilderScreen(
     state: DeckBuilderState,
+    updateState: UpdateState,
     onOpenLibrary: () -> Unit,
 ) {
     val snackbarHost = remember { SnackbarHostState() }
@@ -78,12 +81,18 @@ fun DeckBuilderScreen(
         state.consumeToast()
     }
 
+    LaunchedEffect(updateState.message) {
+        val text = updateState.message ?: return@LaunchedEffect
+        snackbarHost.showSnackbar(text, withDismissAction = true)
+        updateState.consumeMessage()
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            DeckBuilderTopBar(state, onOpenLibrary)
+            DeckBuilderTopBar(state, updateState, onOpenLibrary)
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
             Row(Modifier.fillMaxSize()) {
@@ -124,7 +133,11 @@ fun DeckBuilderScreen(
 }
 
 @Composable
-private fun DeckBuilderTopBar(state: DeckBuilderState, onOpenLibrary: () -> Unit) {
+private fun DeckBuilderTopBar(
+    state: DeckBuilderState,
+    updateState: UpdateState,
+    onOpenLibrary: () -> Unit,
+) {
     val validation = state.validation
 
     Row(
@@ -186,6 +199,18 @@ private fun DeckBuilderTopBar(state: DeckBuilderState, onOpenLibrary: () -> Unit
             Icon(Icons.Filled.Save, contentDescription = "Save deck")
         }
         TextButton(onClick = onOpenLibrary) { Text("Library") }
+
+        // Version doubles as the update control: tapping it checks GitHub.
+        TextButton(
+            onClick = { updateState.check(userInitiated = true) },
+            enabled = !updateState.isChecking,
+        ) {
+            Icon(Icons.Filled.SystemUpdate, contentDescription = null)
+            Text(
+                if (updateState.isChecking) "  Checking…" else "  v${updateState.currentVersionName}",
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
     }
 }
 

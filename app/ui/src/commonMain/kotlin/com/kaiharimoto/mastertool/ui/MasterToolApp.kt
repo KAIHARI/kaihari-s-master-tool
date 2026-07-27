@@ -18,6 +18,8 @@ import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderScreen
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
 import com.kaiharimoto.mastertool.ui.library.DeckLibraryScreen
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
+import com.kaiharimoto.mastertool.ui.update.UpdateDialog
+import com.kaiharimoto.mastertool.ui.update.UpdateState
 
 /**
  * Which screen is showing.
@@ -34,11 +36,14 @@ private sealed interface Screen {
 fun MasterToolApp(deps: AppDependencies) {
     val scope = rememberCoroutineScope()
     val builderState = remember { DeckBuilderState(deps, scope) }
+    val updateState = remember { UpdateState(deps.updateChecker, deps.updater, scope) }
     var screen by remember { mutableStateOf<Screen>(Screen.DeckBuilder) }
 
     DisposableEffect(Unit) {
         configureImageLoader()
         builderState.start()
+        // Silent on launch: it only interrupts if there is something to install.
+        updateState.check(userInitiated = false)
         onDispose { }
     }
 
@@ -46,6 +51,7 @@ fun MasterToolApp(deps: AppDependencies) {
         when (screen) {
             Screen.DeckBuilder -> DeckBuilderScreen(
                 state = builderState,
+                updateState = updateState,
                 onOpenLibrary = { screen = Screen.Library },
             )
 
@@ -56,6 +62,19 @@ fun MasterToolApp(deps: AppDependencies) {
                     screen = Screen.DeckBuilder
                 },
                 onBack = { screen = Screen.DeckBuilder },
+            )
+        }
+
+        updateState.pendingUpdate?.let { release ->
+            UpdateDialog(
+                release = release,
+                currentVersionName = updateState.currentVersionName,
+                manualOnly = updateState.pendingUpdateIsManual,
+                isDownloading = updateState.isDownloading,
+                progress = updateState.downloadProgress,
+                onInstall = updateState::install,
+                onOpenInBrowser = updateState::openInBrowser,
+                onDismiss = updateState::dismiss,
             )
         }
     }

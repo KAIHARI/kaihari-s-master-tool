@@ -56,6 +56,8 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
             cardRepository = app.cardRepository,
             deckRepository = app.deckRepository,
             fileAccess = this,
+            updateChecker = app.updateChecker,
+            updater = AndroidAppUpdater(this, app.httpClient),
             newDeckId = { UUID.randomUUID().toString() },
             now = System::currentTimeMillis,
         )

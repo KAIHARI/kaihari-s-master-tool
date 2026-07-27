@@ -11,6 +11,8 @@ import com.kaiharimoto.mastertool.core.data.DatabaseFactory
 import com.kaiharimoto.mastertool.core.data.DeckRepository
 import com.kaiharimoto.mastertool.core.remote.HttpClientFactory
 import com.kaiharimoto.mastertool.core.remote.YgoProDeckApi
+import com.kaiharimoto.mastertool.core.update.GitHubReleaseApi
+import com.kaiharimoto.mastertool.core.update.UpdateChecker
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.MasterToolApp
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +39,7 @@ fun main() = application {
 }
 
 private fun buildDependencies(): AppDependencies {
+    val updater = DesktopAppUpdater()
     val database = DatabaseFactory.create(
         JvmDatabaseDriverFactory(File(dataDirectory(), DatabaseFactory.DATABASE_NAME).absolutePath)
     )
@@ -55,6 +58,11 @@ private fun buildDependencies(): AppDependencies {
             ioDispatcher = Dispatchers.IO,
         ),
         fileAccess = DesktopDeckFileAccess(),
+        updateChecker = UpdateChecker(
+            api = GitHubReleaseApi(HttpClientFactory.create()),
+            currentVersionName = updater.currentVersionName,
+        ),
+        updater = updater,
         newDeckId = { UUID.randomUUID().toString() },
         now = System::currentTimeMillis,
     )

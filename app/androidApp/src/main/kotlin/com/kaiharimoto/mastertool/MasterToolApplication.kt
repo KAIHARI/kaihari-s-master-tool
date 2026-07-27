@@ -6,6 +6,9 @@ import com.kaiharimoto.mastertool.core.data.DatabaseFactory
 import com.kaiharimoto.mastertool.core.data.DeckRepository
 import com.kaiharimoto.mastertool.core.remote.HttpClientFactory
 import com.kaiharimoto.mastertool.core.remote.YgoProDeckApi
+import com.kaiharimoto.mastertool.core.update.GitHubReleaseApi
+import com.kaiharimoto.mastertool.core.update.UpdateChecker
+import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 
 /**
@@ -16,21 +19,27 @@ import kotlinx.coroutines.Dispatchers
  */
 class MasterToolApplication : Application() {
 
+    lateinit var httpClient: HttpClient
+        private set
+
     lateinit var cardRepository: CardRepository
         private set
 
     lateinit var deckRepository: DeckRepository
         private set
 
+    lateinit var updateChecker: UpdateChecker
+        private set
+
     override fun onCreate() {
         super.onCreate()
 
         val database = DatabaseFactory.create(AndroidDatabaseDriverFactory(this))
-        val api = YgoProDeckApi(HttpClientFactory.create())
+        httpClient = HttpClientFactory.create()
 
         cardRepository = CardRepository(
             database = database,
-            api = api,
+            api = YgoProDeckApi(httpClient),
             clock = System::currentTimeMillis,
             ioDispatcher = Dispatchers.IO,
         )
@@ -38,6 +47,10 @@ class MasterToolApplication : Application() {
             database = database,
             clock = System::currentTimeMillis,
             ioDispatcher = Dispatchers.IO,
+        )
+        updateChecker = UpdateChecker(
+            api = GitHubReleaseApi(httpClient),
+            currentVersionName = appVersionName(),
         )
     }
 }

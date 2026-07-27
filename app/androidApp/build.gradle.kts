@@ -5,6 +5,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Overridden by the release workflow from the pushed tag; the defaults in
+// gradle.properties are what a local build produces.
+val appVersionName: String = providers.gradleProperty("mastertool.versionName").get()
+val appVersionCode: Int = providers.gradleProperty("mastertool.versionCode").get().toInt()
+
 android {
     namespace = "com.kaiharimoto.mastertool"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -13,8 +18,20 @@ android {
         applicationId = "com.kaiharimoto.mastertool"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
+    }
+
+    signingConfigs {
+        create("release") {
+            // Intentionally not a secret — see androidApp/keystore/README.md.
+            // A stable signature is what makes the in-app updater possible at
+            // all: Android rejects an update signed with a different key.
+            storeFile = file(providers.gradleProperty("mastertool.storeFile").get())
+            storePassword = providers.gradleProperty("mastertool.storePassword").get()
+            keyAlias = providers.gradleProperty("mastertool.keyAlias").get()
+            keyPassword = providers.gradleProperty("mastertool.keyPassword").get()
+        }
     }
 
     buildTypes {
@@ -23,6 +40,12 @@ android {
             // SQLDelight plus kotlinx-serialization are not worth debugging for
             // a build nobody ships through a store.
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
+            // Same key as release, so a debug build installed on the tablet can
+            // still be replaced by a downloaded release without uninstalling.
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

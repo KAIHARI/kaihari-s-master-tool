@@ -2,6 +2,8 @@ package com.kaiharimoto.mastertool.ui
 
 import com.kaiharimoto.mastertool.core.data.CardRepository
 import com.kaiharimoto.mastertool.core.data.DeckRepository
+import com.kaiharimoto.mastertool.core.update.UpdateChecker
+import com.kaiharimoto.mastertool.ui.update.AppUpdater
 
 /** A deck file chosen by the user, as returned by the platform picker. */
 data class ImportedFile(val name: String, val content: String)
@@ -34,6 +36,8 @@ class AppDependencies(
     val cardRepository: CardRepository,
     val deckRepository: DeckRepository,
     val fileAccess: DeckFileAccess,
+    val updateChecker: UpdateChecker,
+    val updater: AppUpdater,
     val newDeckId: () -> String,
     val now: () -> Long,
 )

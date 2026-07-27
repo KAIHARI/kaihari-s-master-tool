@@ -26,9 +26,15 @@ kotlin {
     }
 }
 
+val appVersionName: String = providers.gradleProperty("mastertool.versionName").get()
+
 compose.desktop {
     application {
         mainClass = "com.kaiharimoto.mastertool.desktop.MainKt"
+
+        // Keeps the version in one place: the app reads it back at runtime
+        // instead of carrying a second hardcoded copy.
+        jvmArgs += "-Dmastertool.version=$appVersionName"
 
         nativeDistributions {
             // .dmg for macOS, .msi for Windows, .deb so a Linux box can run it too.
@@ -36,7 +42,7 @@ compose.desktop {
             // Installer tooling rejects apostrophes and spaces, so the packaged
             // identifier differs from the name shown inside the app.
             packageName = "KaiMasterTool"
-            packageVersion = "1.0.0"
+            packageVersion = appVersionName
             description = "Yu-Gi-Oh! deck building and tournament preparation"
             vendor = "kaiharimoto"
         }

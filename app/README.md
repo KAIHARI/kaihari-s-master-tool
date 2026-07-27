@@ -41,11 +41,38 @@ Force it either way with `-Pmastertool.android=true|false`.
 
 iOS targets are off unless building on a Mac; enable with `-Pmastertool.ios=true`.
 
-### CI
+### CI and releases
 
-`.github/workflows/build-app.yml` builds the APK on every push and uploads it as
-a run artifact — that is the intended way to get a build onto the tablet without
-a local Android toolchain.
+`.github/workflows/build-app.yml` builds a debug APK on every push and uploads
+it as a run artifact.
+
+`.github/workflows/release.yml` publishes a signed release. Trigger it by
+pushing a `v*` tag, or from the Actions tab with a version number:
+
+```bash
+git tag v1.0.1 && git push origin v1.0.1
+```
+
+It derives `versionCode` from the commit count (monotonic, reproducible),
+verifies the APK carries the committed signing certificate, and attaches
+`kai-master-tool-<version>.apk` to the GitHub release.
+
+## Updating from GitHub
+
+The Android app checks this repository's latest release on launch and whenever
+you tap the version in the top bar. If a newer version has an APK attached, it
+downloads it and hands it to Android's package installer.
+
+- The first update asks you to allow the app to install unknown apps. That is a
+  one-time per-app Android setting.
+- Pre-releases are ignored by stable builds, so a test release cannot push
+  itself onto a normal install.
+- An unparseable or older tag never counts as an update.
+- The desktop build does not self-update; it opens the release page instead.
+
+This only works because every build is signed with the same **deliberately
+public** keystore — Android rejects an update whose signature changed. See
+`androidApp/keystore/README.md` for what that key does and does not protect.
 
 ## Design decisions worth knowing
 
