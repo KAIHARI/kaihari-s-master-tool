@@ -102,8 +102,10 @@ why the app uses plain remembered state holders instead of ViewModels.
 
 ## Status
 
-Shipping in v1: deck builder with search and filters, deck library, YDK/YDKX
-import, export and share.
+Shipping in v1: deck builder with search and filters, per-section copy steppers
+and moves, deck statistics with opening-hand odds, a deck-check panel that jumps
+to the card an issue names, a TCG/OCG toggle, deck library, YDK/YDKX import,
+export and share.
 
 Not yet built: siding patterns, shootout mode, the sandbox board simulator,
-PDF export, drag-and-drop between deck sections.
+PDF export, drag-and-drop between deck sections, keyboard shortcuts.
