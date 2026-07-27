@@ -1,0 +1,135 @@
+package com.kaiharimoto.mastertool.core.data
+
+import com.kaiharimoto.mastertool.core.db.MasterToolDatabase
+import com.kaiharimoto.mastertool.core.model.Card
+import com.kaiharimoto.mastertool.core.remote.YgoProDeckApi
+import com.kaiharimoto.mastertool.core.search.CardIndex
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
+
+/** Outcome of a card pool refresh. */
+sealed interface SyncResult {
+    data class Updated(val cardCount: Int) : SyncResult
+
+    /** The cached pool was recent enough that nothing was fetched. */
+    data class UpToDate(val cardCount: Int) : SyncResult
+
+    /**
+     * The refresh failed. [cachedCardCount] says whether the app is still
+     * usable, which is the difference between a warning and a blocking error.
+     */
+    data class Failed(val message: String, val cachedCardCount: Int) : SyncResult
+}
+
+data class CardPoolStatus(
+    val cardCount: Int,
+    val lastSyncEpochMs: Long?,
+) {
+    val isEmpty: Boolean get() = cardCount == 0
+}
+
+/**
+ * Owns the local mirror of the card pool.
+ *
+ * The pool is fetched once and then read from SQLite, so the app works with no
+ * signal. Search runs against an in-memory [CardIndex] rebuilt only when the
+ * underlying rows change — scanning 13,000 cards per keystroke is fine in
+ * memory and hopeless as a SQL query.
+ */
+class CardRepository(
+    private val database: MasterToolDatabase,
+    private val api: YgoProDeckApi,
+    private val clock: () -> Long,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
+) {
+
+    private val _index = MutableStateFlow(CardIndex.EMPTY)
+    val index: StateFlow<CardIndex> = _index.asStateFlow()
+
+    /** Loads the cached pool into memory. Safe to call on every app start. */
+    suspend fun loadFromCache(): CardIndex = withContext(ioDispatcher) {
+        val cards = database.cardQueries.selectAll().executeAsList().map(CardMapper::toDomain)
+        CardIndex.build(cards).also { _index.value = it }
+    }
+
+    suspend fun status(): CardPoolStatus = withContext(ioDispatcher) {
+        val state = database.cardQueries.selectSyncState().executeAsOneOrNull()
+        CardPoolStatus(
+            cardCount = database.cardQueries.countAll().executeAsOne().toInt(),
+            lastSyncEpochMs = state?.lastSyncEpochMs,
+        )
+    }
+
+    /**
+     * Refreshes the pool from the network.
+     *
+     * A failure is reported rather than thrown, and never clears the cache: an
+     * outdated pool beats no pool when you are standing at a tournament table.
+     */
+    suspend fun sync(force: Boolean = false, maxAgeMs: Long = DEFAULT_MAX_AGE_MS): SyncResult {
+        val current = status()
+
+        if (!force && !current.isEmpty) {
+            val age = current.lastSyncEpochMs?.let { clock() - it }
+            if (age != null && age < maxAgeMs) {
+                return SyncResult.UpToDate(current.cardCount)
+            }
+        }
+
+        val fetched = api.fetchAllCards()
+        val cards = fetched.getOrElse { error ->
+            return SyncResult.Failed(
+                error.message ?: "Could not reach the card database.",
+                current.cardCount,
+            )
+        }
+
+        if (cards.isEmpty()) {
+            // Never let an empty response wipe a working local pool.
+            return SyncResult.Failed("The card database returned no cards.", current.cardCount)
+        }
+
+        withContext(ioDispatcher) { replaceAll(cards) }
+        loadFromCache()
+        return SyncResult.Updated(cards.size)
+    }
+
+    private fun replaceAll(cards: List<Card>) {
+        database.transaction {
+            database.cardQueries.deleteAll()
+            cards.forEach { card ->
+                database.cardQueries.insert(
+                    id = card.id.value.toLong(),
+                    name = card.name,
+                    type = card.type,
+                    frameType = card.frameType,
+                    description = card.description,
+                    race = card.race,
+                    attribute = card.attribute.name,
+                    atk = card.atk?.toLong(),
+                    def = card.def?.toLong(),
+                    level = card.level?.toLong(),
+                    linkValue = card.linkValue?.toLong(),
+                    linkMarkers = CardMapper.joinStrings(card.linkMarkers),
+                    pendulumScale = card.pendulumScale?.toLong(),
+                    archetype = card.archetype,
+                    imageUrl = card.imageUrl,
+                    imageUrlSmall = card.imageUrlSmall,
+                    tcgBanStatus = card.tcgBanStatus.name,
+                    ocgBanStatus = card.ocgBanStatus.name,
+                    alternateIds = CardMapper.joinIds(card.alternateIds),
+                )
+            }
+            database.cardQueries.upsertSyncState(clock(), cards.size.toLong())
+        }
+    }
+
+    companion object {
+        /** Banlists move monthly; a week keeps the pool fresh without nagging. */
+        const val DEFAULT_MAX_AGE_MS: Long = 7L * 24 * 60 * 60 * 1000
+    }
+}

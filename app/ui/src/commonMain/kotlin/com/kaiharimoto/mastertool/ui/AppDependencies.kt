@@ -1,0 +1,39 @@
+package com.kaiharimoto.mastertool.ui
+
+import com.kaiharimoto.mastertool.core.data.CardRepository
+import com.kaiharimoto.mastertool.core.data.DeckRepository
+
+/** A deck file chosen by the user, as returned by the platform picker. */
+data class ImportedFile(val name: String, val content: String)
+
+/**
+ * Platform file access.
+ *
+ * An interface rather than expect/actual so `:ui` stays free of platform source
+ * sets: Android supplies an implementation backed by the Storage Access
+ * Framework, desktop one backed by a file dialog.
+ */
+interface DeckFileAccess {
+    /** Opens a picker. Returns null when the user cancels. */
+    suspend fun importDeck(): ImportedFile?
+
+    /** Writes [content] out, letting the user choose where. */
+    suspend fun exportDeck(suggestedName: String, content: String): Boolean
+
+    /** Hands the file to the platform share sheet, where one exists. */
+    suspend fun shareDeck(suggestedName: String, content: String)
+}
+
+/**
+ * Everything the UI needs, assembled by each platform's entry point.
+ *
+ * Hand-rolled rather than reached for via a DI framework: the graph is four
+ * objects deep and an explicit constructor is easier to follow than annotations.
+ */
+class AppDependencies(
+    val cardRepository: CardRepository,
+    val deckRepository: DeckRepository,
+    val fileAccess: DeckFileAccess,
+    val newDeckId: () -> String,
+    val now: () -> Long,
+)
