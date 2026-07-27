@@ -1,0 +1,37 @@
+-- Saved decks. Card lists are stored as comma-separated passcodes rather than a
+-- join table: order within a section is meaningful and must round trip exactly,
+-- and a decklist is at most 90 short integers, so there is nothing to gain from
+-- normalising it.
+
+CREATE TABLE deckEntity (
+    id                TEXT    NOT NULL PRIMARY KEY,
+    name              TEXT    NOT NULL,
+    main              TEXT    NOT NULL DEFAULT '',
+    extra             TEXT    NOT NULL DEFAULT '',
+    side              TEXT    NOT NULL DEFAULT '',
+    notes             TEXT    NOT NULL DEFAULT '',
+    -- Verbatim `#ydkx-extended` payload, preserved so desktop-authored siding
+    -- patterns survive an edit made on the tablet.
+    extendedJson      TEXT,
+    createdAtEpochMs  INTEGER NOT NULL,
+    updatedAtEpochMs  INTEGER NOT NULL
+);
+
+CREATE INDEX deckEntity_updatedAt ON deckEntity(updatedAtEpochMs);
+
+selectAll:
+SELECT * FROM deckEntity ORDER BY updatedAtEpochMs DESC;
+
+selectById:
+SELECT * FROM deckEntity WHERE id = ?;
+
+upsert:
+INSERT OR REPLACE INTO deckEntity(
+    id, name, main, extra, side, notes, extendedJson, createdAtEpochMs, updatedAtEpochMs
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM deckEntity WHERE id = ?;
+
+rename:
+UPDATE deckEntity SET name = ?, updatedAtEpochMs = ? WHERE id = ?;
