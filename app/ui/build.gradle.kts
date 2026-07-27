@@ -25,6 +25,8 @@ kotlin {
             implementation(compose.components.resources)
 
             implementation(libs.kotlinx.coroutines.core)
+            // Used directly: the YDKX payload is carried through the UI untouched.
+            implementation(libs.kotlinx.serialization.json)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
         }
