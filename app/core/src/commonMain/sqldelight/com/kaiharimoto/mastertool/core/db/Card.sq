@@ -1,0 +1,58 @@
+-- Local mirror of the card pool. Fetched once on first launch and refreshed on
+-- demand; the app is fully usable offline afterwards, which is the point at a
+-- venue with no signal.
+
+CREATE TABLE cardEntity (
+    id              INTEGER NOT NULL PRIMARY KEY,
+    name            TEXT    NOT NULL,
+    type            TEXT    NOT NULL,
+    frameType       TEXT    NOT NULL,
+    description     TEXT    NOT NULL DEFAULT '',
+    race            TEXT,
+    attribute       TEXT    NOT NULL DEFAULT 'UNKNOWN',
+    atk             INTEGER,
+    def             INTEGER,
+    level           INTEGER,
+    linkValue       INTEGER,
+    linkMarkers     TEXT    NOT NULL DEFAULT '',
+    pendulumScale   INTEGER,
+    archetype       TEXT,
+    imageUrl        TEXT,
+    imageUrlSmall   TEXT,
+    tcgBanStatus    TEXT    NOT NULL DEFAULT 'UNLIMITED',
+    ocgBanStatus    TEXT    NOT NULL DEFAULT 'UNLIMITED',
+    alternateIds    TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX cardEntity_name ON cardEntity(name);
+CREATE INDEX cardEntity_archetype ON cardEntity(archetype);
+
+-- Single-row bookkeeping for the card pool sync.
+CREATE TABLE cardSyncState (
+    id              INTEGER NOT NULL PRIMARY KEY,
+    lastSyncEpochMs INTEGER NOT NULL,
+    cardCount       INTEGER NOT NULL
+);
+
+selectAll:
+SELECT * FROM cardEntity;
+
+countAll:
+SELECT count(*) FROM cardEntity;
+
+insert:
+INSERT OR REPLACE INTO cardEntity(
+    id, name, type, frameType, description, race, attribute, atk, def, level,
+    linkValue, linkMarkers, pendulumScale, archetype, imageUrl, imageUrlSmall,
+    tcgBanStatus, ocgBanStatus, alternateIds
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteAll:
+DELETE FROM cardEntity;
+
+selectSyncState:
+SELECT * FROM cardSyncState WHERE id = 1;
+
+upsertSyncState:
+INSERT OR REPLACE INTO cardSyncState(id, lastSyncEpochMs, cardCount)
+VALUES (1, ?, ?);

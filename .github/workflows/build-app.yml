@@ -1,0 +1,97 @@
+name: Build kai's master tool
+
+# The Android SDK, the Android Gradle Plugin and every androidx artifact are
+# served only from Google's Maven. CI is where those are reachable, so this is
+# what turns the sources in app/ into an installable APK.
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    paths:
+      - 'app/**'
+      - '.github/workflows/build-app.yml'
+  pull_request:
+    paths:
+      - 'app/**'
+  workflow_dispatch:
+
+concurrency:
+  group: build-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-tests:
+    name: Core tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Android is switched off here so the domain layer is exercised on its own:
+      # if this job fails, the problem is in the rules, not in the UI or the SDK.
+      - name: Run :core tests
+        working-directory: app
+        run: ./gradlew :core:jvmTest -Pmastertool.android=false --stacktrace
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-report
+          path: app/core/build/reports/tests/jvmTest
+          if-no-files-found: ignore
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        working-directory: app
+        run: ./gradlew :androidApp:assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kai-master-tool-debug-apk
+          path: app/androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  desktop:
+    name: Desktop build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Compiles the shared Compose UI for the JVM target. A failure here that
+      # the Android job does not see means genuinely platform-specific code.
+      - name: Build desktop application
+        working-directory: app
+        run: ./gradlew :desktopApp:assemble --stacktrace
