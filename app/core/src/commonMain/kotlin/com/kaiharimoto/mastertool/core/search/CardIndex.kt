@@ -4,6 +4,25 @@ import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
 
 /**
+ * A page of search results, plus how many cards matched in total.
+ *
+ * The count is what lets the UI say "showing 150 of 3,214 matches" honestly.
+ * Without it the only number available is the size of the whole pool, which
+ * reads as though the other 12,850 cards had been rejected by the query rather
+ * than merely not drawn.
+ */
+data class SearchOutcome(
+    val cards: List<Card>,
+    val matchCount: Int,
+) {
+    val truncated: Boolean get() = matchCount > cards.size
+
+    companion object {
+        val EMPTY = SearchOutcome(emptyList(), 0)
+    }
+}
+
+/**
  * An immutable, queryable view over the whole card pool.
  *
  * Built once after the database loads and then only read, so it is safe to share
@@ -53,15 +72,19 @@ class CardIndex private constructor(
         query: String,
         filter: CardFilter = CardFilter.NONE,
         limit: Int = 120,
-    ): List<Card> {
+    ): SearchOutcome {
         val normalizedQuery = TextMatching.normalize(query)
         val tokens = normalizedQuery.split(' ').filter { it.isNotEmpty() }
 
         if (normalizedQuery.isEmpty()) {
-            return cards.asSequence()
-                .filter(filter::matches)
-                .take(limit)
-                .toList()
+            // No query to rank by, so rank by name. Browsing a filter has to show
+            // the same cards every time rather than whichever ones the API
+            // happened to return first.
+            val matches = cards.filter(filter::matches)
+            return SearchOutcome(
+                cards = matches.sortedBy { it.name }.take(limit),
+                matchCount = matches.size,
+            )
         }
 
         val hits = ArrayList<ScoredCard>(minOf(limit * 4, 512))
@@ -78,12 +101,13 @@ class CardIndex private constructor(
                 .thenBy { it.card.name }
         )
 
-        return hits.take(limit).map { it.card }
+        // Every match is already in `hits`, so the total costs nothing extra.
+        return SearchOutcome(cards = hits.take(limit).map { it.card }, matchCount = hits.size)
     }
 
     /** Short list for the autocomplete dropdown. */
     fun suggest(query: String, limit: Int = 8): List<Card> =
-        search(query, CardFilter.NONE, limit)
+        search(query, CardFilter.NONE, limit).cards
 
     private class ScoredCard(val card: Card, val score: Int)
 

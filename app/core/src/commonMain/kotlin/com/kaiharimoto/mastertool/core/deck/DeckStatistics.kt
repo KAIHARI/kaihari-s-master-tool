@@ -16,23 +16,29 @@ data class DeckStatistics(
     val byRace: Map<String, Int>,
     val byArchetype: Map<String, Int>,
     val unknownCards: Int,
+    /** Every card in the section, including ones the database could not resolve. */
+    val sectionSize: Int,
 ) {
     val total: Int get() = monsters + spells + traps
 
     /**
      * Probability of drawing at least one copy of a card with [copies] copies in
-     * a [total]-card deck, in an opening hand of [handSize].
+     * a [sectionSize]-card deck, in an opening hand of [handSize].
      *
-     * Hypergeometric, computed as 1 - P(no copies). Used for the opening-hand
-     * readout next to each card in the deck pane.
+     * Hypergeometric, computed as 1 - P(no copies).
+     *
+     * Deliberately divides by [sectionSize] rather than [total]: an unresolved
+     * passcode is still a card you shuffle, so counting only the cards the
+     * database recognises would quietly compute the odds for a smaller deck than
+     * the one being played.
      */
     fun openingHandOdds(copies: Int, handSize: Int = 5): Double {
-        if (copies <= 0 || total <= 0 || handSize <= 0) return 0.0
-        if (copies >= total || handSize >= total) return 1.0
+        if (copies <= 0 || sectionSize <= 0 || handSize <= 0) return 0.0
+        if (copies >= sectionSize || handSize >= sectionSize) return 1.0
 
         var pNone = 1.0
         for (i in 0 until handSize) {
-            pNone *= (total - copies - i).toDouble() / (total - i).toDouble()
+            pNone *= (sectionSize - copies - i).toDouble() / (sectionSize - i).toDouble()
             if (pNone <= 0.0) return 1.0
         }
         return 1.0 - pNone
@@ -87,6 +93,7 @@ data class DeckStatistics(
                 byArchetype = archetypes.entries.sortedByDescending { it.value }
                     .associate { it.key to it.value },
                 unknownCards = unknown,
+                sectionSize = deck[section].size,
             )
         }
     }

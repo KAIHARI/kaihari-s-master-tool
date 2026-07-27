@@ -60,6 +60,7 @@ enum class BanStatus(val maxCopies: Int) {
 }
 
 /** Which regional banlist to validate a deck against. */
+@Serializable
 enum class Format { TCG, OCG }
 
 @Serializable
