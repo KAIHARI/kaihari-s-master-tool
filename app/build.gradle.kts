@@ -1,15 +1,15 @@
-// Plugin *versions* are pinned in settings.gradle.kts pluginManagement, so the
-// ids here carry none. Declaring the Kotlin plugins once at the root puts a
-// single copy of the Kotlin Gradle Plugin on the build classpath — without this
-// Gradle warns that it was loaded separately in every subproject.
+// Intentionally declares no plugins.
 //
-// The Android and Compose plugins are deliberately absent: `apply false` still
-// resolves the artifact, and both are published only to Google's Maven, which
-// would make this script — and therefore :core — unbuildable wherever that
-// repository is unreachable.
-plugins {
-    id("org.jetbrains.kotlin.multiplatform") apply false
-    id("org.jetbrains.kotlin.android") apply false
-    id("org.jetbrains.kotlin.plugin.serialization") apply false
-    id("org.jetbrains.kotlin.plugin.compose") apply false
-}
+// Two things make this the right shape rather than the usual `apply false` list:
+//
+//  - `apply false` still resolves the artifact, and the Android and Compose
+//    plugins live only on Google's Maven. Naming them here would make this
+//    script — and therefore :core — unbuildable wherever that is unreachable.
+//  - Declaring `org.jetbrains.kotlin.android` here puts the Kotlin Gradle
+//    Plugin's Android diagnostics on the root project, where they fail with
+//    NoClassDefFoundError com/android/build/gradle/BaseExtension because AGP
+//    itself is not applied.
+//
+// Plugin versions are pinned once in settings.gradle.kts pluginManagement, and
+// every module requests them with a bare `id("...")`. Gradle warns that the
+// Kotlin plugin is loaded per-subproject; that warning is the accepted cost.
