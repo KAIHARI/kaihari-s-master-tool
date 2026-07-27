@@ -22,7 +22,6 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.materialIconsExtended)
             implementation(compose.ui)
-            implementation(compose.components.resources)
 
             implementation(libs.kotlinx.coroutines.core)
             // Used directly: the YDKX payload is carried through the UI untouched.
