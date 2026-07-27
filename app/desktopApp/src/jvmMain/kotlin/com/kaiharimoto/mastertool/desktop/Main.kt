@@ -9,7 +9,6 @@ import androidx.compose.ui.window.rememberWindowState
 import com.kaiharimoto.mastertool.core.data.CardRepository
 import com.kaiharimoto.mastertool.core.data.DatabaseFactory
 import com.kaiharimoto.mastertool.core.data.DeckRepository
-import com.kaiharimoto.mastertool.core.data.JvmDatabaseDriverFactory
 import com.kaiharimoto.mastertool.core.remote.HttpClientFactory
 import com.kaiharimoto.mastertool.core.remote.YgoProDeckApi
 import com.kaiharimoto.mastertool.ui.AppDependencies
