@@ -6,10 +6,10 @@ This file guides Claude Code (claude.ai/code) when working with this repository.
 
 **What this is:** A Yu-Gi-Oh! deck building and tournament preparation tool - a single-file HTML application (no backend, no build process).
 
-**How to run:** Open `kaihari master tool.html` in a browser. Refresh after edits (Ctrl+Shift+R).
+**How to run:** Open `kai master tool.html` in a browser. Refresh after edits (Ctrl+Shift+R).
 
 **Key files:**
-- `kaihari master tool.html` - The entire application (~33,000 lines)
+- `kai master tool.html` - The entire application (~33,000 lines)
 - `CLAUDE.md` - This file
 - `3dchibi.glb` - 3D model for animations
 - `*.ydkx` - Sample deck files
@@ -361,7 +361,7 @@ Modern browsers with:
 
 ## Development Workflow
 
-1. Edit `kaihari master tool.html` directly
+1. Edit `kai master tool.html` directly
 2. Hard refresh browser (Ctrl+Shift+R)
 3. Check console for errors (F12)
 4. For IndexedDB issues: DevTools > Application > IndexedDB > `ygo-evaluator-default`
