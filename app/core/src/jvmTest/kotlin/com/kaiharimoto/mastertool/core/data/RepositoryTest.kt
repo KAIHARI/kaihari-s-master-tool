@@ -23,8 +23,7 @@ import kotlin.test.assertTrue
 
 class RepositoryTest {
 
-    private fun database(): MasterToolDatabase =
-        DatabaseFactory.create(JvmDatabaseDriverFactory.inMemory())
+    private fun database(): MasterToolDatabase = testDatabase()
 
     private fun apiReturning(body: String, status: HttpStatusCode = HttpStatusCode.OK): YgoProDeckApi {
         val engine = MockEngine {

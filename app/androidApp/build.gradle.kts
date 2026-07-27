@@ -1,8 +1,8 @@
 plugins {
-    alias(libs.plugins.androidApplication)
-    alias(libs.plugins.kotlinAndroid)
-    alias(libs.plugins.composeCompiler)
-    alias(libs.plugins.composeMultiplatform)
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -32,6 +32,8 @@ android {
         targetCompatibility = java
     }
 
+    sourceSets["main"].java.srcDir("src/main/kotlin")
+
     packaging {
         resources.excludes += setOf(
             "META-INF/AL2.0",
@@ -55,7 +57,9 @@ dependencies {
     implementation(compose.ui)
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.core)
+    // Each application picks its own SQL driver and HTTP engine; :core ships none.
     implementation(libs.sqldelight.driver.android)
     implementation(libs.ktor.client.okhttp)
 }

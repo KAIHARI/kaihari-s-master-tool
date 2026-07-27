@@ -1,8 +1,6 @@
-plugins {
-    alias(libs.plugins.kotlinMultiplatform) apply false
-    alias(libs.plugins.kotlinSerialization) apply false
-    alias(libs.plugins.sqldelight) apply false
-}
-
-// Compose and Android plugins are resolved lazily by the modules that need them,
-// so this root script stays usable when Google's Maven is unreachable.
+// Intentionally empty.
+//
+// Declaring plugins here with `apply false` would put them on the build
+// classpath for every module, which makes Gradle reject any module that then
+// requests the same plugin with a version. Plugin versions are pinned in
+// settings.gradle.kts instead; modules request them with a bare `id("...")`.

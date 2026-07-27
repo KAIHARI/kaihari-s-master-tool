@@ -1,12 +1,8 @@
-import org.gradle.kotlin.dsl.withGroovyBuilder
-
 plugins {
-    alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.kotlinSerialization)
-    alias(libs.plugins.sqldelight)
+    id("org.jetbrains.kotlin.multiplatform")
+    id("org.jetbrains.kotlin.plugin.serialization")
+    id("app.cash.sqldelight")
 }
-
-val androidEnabled = gradle.extra["mastertool.androidEnabled"] as Boolean
 
 // iOS needs the Kotlin/Native toolchain (a large download) and is only useful on
 // a Mac, so it stays opt-in until there's an Xcode host to build it on.
@@ -14,32 +10,12 @@ val iosEnabled =
     providers.gradleProperty("mastertool.ios").orNull?.toBooleanStrictOrNull()
         ?: System.getProperty("os.name").startsWith("Mac")
 
-if (androidEnabled) {
-    // Applied dynamically rather than via the `plugins {}` block: declaring AGP
-    // there would force it onto the script classpath, and it is only published
-    // to Google's Maven. Configuring it through withGroovyBuilder keeps this
-    // file compiling when that repository is unreachable.
-    apply(plugin = "com.android.library")
-    extensions.findByName("android")?.withGroovyBuilder {
-        setProperty("namespace", "com.kaiharimoto.mastertool.core")
-        setProperty("compileSdk", libs.versions.compileSdk.get().toInt())
-        "defaultConfig" {
-            setProperty("minSdk", libs.versions.minSdk.get().toInt())
-        }
-        "compileOptions" {
-            val java = JavaVersion.toVersion(libs.versions.jdk.get())
-            setProperty("sourceCompatibility", java)
-            setProperty("targetCompatibility", java)
-        }
-    }
-}
-
 kotlin {
+    // Deliberately no androidTarget(). Nothing here touches an Android API, and
+    // Kotlin's jvm -> androidJvm compatibility rule lets the Android app consume
+    // this module's JVM variant directly. That keeps :core free of the Android
+    // Gradle Plugin, so the domain layer builds and tests anywhere.
     jvm()
-
-    if (androidEnabled) {
-        androidTarget()
-    }
 
     if (iosEnabled) {
         iosArm64()
@@ -66,8 +42,9 @@ kotlin {
             implementation(libs.ktor.client.mock)
         }
 
-        jvmMain.dependencies {
-            implementation(libs.ktor.client.okhttp)
+        // HTTP engines and SQL drivers are chosen by each application, not here,
+        // so a JDBC driver never ends up inside the APK.
+        jvmTest.dependencies {
             implementation(libs.sqldelight.driver.jvm)
         }
     }

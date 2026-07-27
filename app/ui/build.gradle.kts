@@ -1,36 +1,15 @@
-import org.gradle.kotlin.dsl.withGroovyBuilder
-
 plugins {
-    alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.composeMultiplatform)
-    alias(libs.plugins.composeCompiler)
-}
-
-val androidEnabled = gradle.extra["mastertool.androidEnabled"] as Boolean
-
-if (androidEnabled) {
-    // See :core for why AGP is applied dynamically rather than via `plugins {}`.
-    apply(plugin = "com.android.library")
-    extensions.findByName("android")?.withGroovyBuilder {
-        setProperty("namespace", "com.kaiharimoto.mastertool.ui")
-        setProperty("compileSdk", libs.versions.compileSdk.get().toInt())
-        "defaultConfig" {
-            setProperty("minSdk", libs.versions.minSdk.get().toInt())
-        }
-        "compileOptions" {
-            val java = JavaVersion.toVersion(libs.versions.jdk.get())
-            setProperty("sourceCompatibility", java)
-            setProperty("targetCompatibility", java)
-        }
-    }
+    id("org.jetbrains.kotlin.multiplatform")
+    id("com.android.library")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 kotlin {
+    // Compose UI has a genuinely different implementation per platform, so this
+    // module — unlike :core — really does need an Android variant.
+    androidTarget()
     jvm("desktop")
-
-    if (androidEnabled) {
-        androidTarget()
-    }
 
     jvmToolchain(libs.versions.jdk.get().toInt())
 
@@ -49,5 +28,20 @@ kotlin {
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
         }
+    }
+}
+
+android {
+    namespace = "com.kaiharimoto.mastertool.ui"
+    compileSdk = libs.versions.compileSdk.get().toInt()
+
+    defaultConfig {
+        minSdk = libs.versions.minSdk.get().toInt()
+    }
+
+    compileOptions {
+        val java = JavaVersion.toVersion(libs.versions.jdk.get())
+        sourceCompatibility = java
+        targetCompatibility = java
     }
 }

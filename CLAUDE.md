@@ -4,12 +4,22 @@ This file guides Claude Code (claude.ai/code) when working with this repository.
 
 ## Quick Start
 
-**What this is:** A Yu-Gi-Oh! deck building and tournament preparation tool - a single-file HTML application (no backend, no build process).
+**What this is:** kai's master tool — a Yu-Gi-Oh! deck building and tournament preparation tool.
 
-**How to run:** Open `kai master tool.html` in a browser. Refresh after edits (Ctrl+Shift+R).
+This repository holds **two** implementations:
+
+| | Location | Status |
+|---|---|---|
+| **Legacy web tool** | `kai master tool.html` | Feature-complete, maintenance only |
+| **Cross-platform app** | `app/` | In progress — the intended future |
+
+**Legacy web tool:** open `kai master tool.html` in a browser, hard-refresh after edits (Ctrl+Shift+R). Everything from "Project Overview" onwards in this file describes that version.
+
+**Cross-platform app:** Kotlin Multiplatform + Compose Multiplatform, targeting Android (landscape tablets), desktop (macOS/Windows/Linux) and iOS from one codebase. See `app/README.md` for its architecture and build instructions.
 
 **Key files:**
-- `kai master tool.html` - The entire application (~33,000 lines)
+- `app/` - The Kotlin Multiplatform rebuild
+- `kai master tool.html` - The legacy single-file application (~36,000 lines)
 - `CLAUDE.md` - This file
 - `3dchibi.glb` - 3D model for animations
 - `*.ydkx` - Sample deck files
@@ -147,7 +157,7 @@ const UI = { /* DOM element references */ };
 
 ## Data Structures
 
-### Card Object (from masterduelmeta.com API)
+### Card Object (from the YGOPRODeck API)
 
 ```javascript
 {
@@ -404,7 +414,7 @@ Logger.export();
 ## Important Notes
 
 - The app is intentionally single-file for portability
-- Card data fetched from masterduelmeta.com on load
+- Card data fetched from `db.ygoprodeck.com/api/v7` on load
 - All user data persists locally (IndexedDB + localStorage)
 - No server, no authentication, fully client-side
 - Line numbers are approximate; search by function/module name

@@ -1,12 +1,9 @@
 [versions]
-kotlin = "2.4.10"
-composeMultiplatform = "1.11.1"
-agp = "8.13.0"
 coroutines = "1.11.0"
 serialization = "1.11.0"
 datetime = "0.7.1"
 ktor = "3.5.1"
-sqldelight = "2.3.2"
+sqldelight = "2.3.2"  # keep in sync with the plugin version in settings.gradle.kts
 coil = "3.5.0"
 androidxActivity = "1.10.1"
 androidxCore = "1.15.0"
@@ -45,13 +42,3 @@ coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.re
 
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
-
-[plugins]
-kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
-kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
-kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
-sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
-androidApplication = { id = "com.android.application", version.ref = "agp" }
-androidLibrary = { id = "com.android.library", version.ref = "agp" }

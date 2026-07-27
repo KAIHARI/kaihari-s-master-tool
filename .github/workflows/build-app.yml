@@ -39,7 +39,7 @@ jobs:
       # if this job fails, the problem is in the rules, not in the UI or the SDK.
       - name: Run :core tests
         working-directory: app
-        run: ./gradlew :core:jvmTest -Pmastertool.android=false -Pmastertool.compose=false --stacktrace
+        run: ./gradlew :core:jvmTest -Pmastertool.android=false --stacktrace
 
       - name: Upload test report
         if: always()

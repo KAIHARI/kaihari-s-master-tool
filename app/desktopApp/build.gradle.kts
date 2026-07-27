@@ -1,9 +1,9 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
-    alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.composeMultiplatform)
-    alias(libs.plugins.composeCompiler)
+    id("org.jetbrains.kotlin.multiplatform")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 kotlin {
@@ -19,6 +19,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             // Compose Desktop dispatches onto the AWT event thread.
             implementation(libs.kotlinx.coroutines.swing)
+            // Each application picks its own SQL driver and HTTP engine.
             implementation(libs.sqldelight.driver.jvm)
             implementation(libs.ktor.client.okhttp)
         }
