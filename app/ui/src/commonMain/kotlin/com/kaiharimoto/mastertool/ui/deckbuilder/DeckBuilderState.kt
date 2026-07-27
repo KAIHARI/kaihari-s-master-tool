@@ -233,7 +233,12 @@ class DeckBuilderState(
         deckName = previousName
     }
 
-    fun setFormat(value: Format) {
+    /**
+     * Named for consistency with the other change handlers — and because
+     * `setFormat` would collide on the JVM with the setter that `var format`
+     * already generates.
+     */
+    fun onFormatChange(value: Format) {
         format = value
         runSearch(immediate = true)
     }
