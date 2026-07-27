@@ -4,6 +4,8 @@ import com.kaiharimoto.mastertool.core.data.CardRepository
 import com.kaiharimoto.mastertool.core.data.DeckRepository
 import com.kaiharimoto.mastertool.core.update.UpdateChecker
 import com.kaiharimoto.mastertool.ui.update.AppUpdater
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 
 /** A deck file chosen by the user, as returned by the platform picker. */
 data class ImportedFile(val name: String, val content: String)
@@ -40,4 +42,13 @@ class AppDependencies(
     val updater: AppUpdater,
     val newDeckId: () -> String,
     val now: () -> Long,
+    /**
+     * Where CPU-bound work runs.
+     *
+     * Searching scores every card in the pool, which is far too much to do on
+     * the frame thread — and the scope the UI hands to its state holders is the
+     * composition's, so anything launched there lands on the main dispatcher
+     * unless it says otherwise.
+     */
+    val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 )

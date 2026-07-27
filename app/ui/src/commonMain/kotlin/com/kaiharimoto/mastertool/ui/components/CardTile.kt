@@ -46,6 +46,7 @@ fun CardTile(
     format: Format = Format.TCG,
     copies: Int = 0,
     dimmed: Boolean = false,
+    highlighted: Boolean = false,
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = {},
     overlay: @Composable BoxScope.() -> Unit = {},
@@ -58,28 +59,36 @@ fun CardTile(
             .aspectRatio(CARD_ASPECT_RATIO)
             .clip(shape)
             .background(MasterToolPalette.SlateRaised)
-            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+            .border(
+                width = if (highlighted) 2.dp else 1.dp,
+                color = if (highlighted) {
+                    MasterToolPalette.GoldBright
+                } else {
+                    MaterialTheme.colorScheme.outline
+                },
+                shape = shape,
+            )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
+        // Drawn beneath the artwork rather than only when both URLs are absent:
+        // a card whose image fails to load — the offline case this app is built
+        // for — otherwise renders as a blank rectangle with nothing to read.
+        Text(
+            text = card.name,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.Center).padding(4.dp),
+        )
+
         AsyncImage(
             model = card.imageUrlSmall ?: card.imageUrl,
             contentDescription = card.name,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
         )
-
-        // Shown until the artwork arrives, and permanently for cards that have none.
-        if (card.imageUrlSmall == null && card.imageUrl == null) {
-            Text(
-                text = card.name,
-                style = MaterialTheme.typography.labelSmall,
-                textAlign = TextAlign.Center,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.Center).padding(4.dp),
-            )
-        }
 
         if (dimmed) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))

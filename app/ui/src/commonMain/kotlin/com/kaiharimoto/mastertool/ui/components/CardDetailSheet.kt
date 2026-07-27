@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -13,7 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -26,30 +27,42 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.kaiharimoto.mastertool.core.deck.DeckEditor
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardCategory
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
+import com.kaiharimoto.mastertool.core.search.CardFilter
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
 /**
  * Full card inspector.
  *
  * Replaces the desktop tool's hover preview, which has no touch equivalent. It
- * doubles as the place to move a card between sections, so that action does not
- * need a drag gesture to be reachable.
+ * is also where a card's copy counts are set outright — a stepper per section
+ * says what the deck holds and changes it in one move, where an "add" and a
+ * "remove one" button could only nudge it and could not show it.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CardDetailSheet(
     card: Card,
     format: Format,
-    copiesInDeck: Int,
+    copiesBySection: Map<DeckSection, Int>,
+    mainDeckSize: Int,
+    openingHandOdds: (copies: Int, handSize: Int) -> Double,
     onDismiss: () -> Unit,
-    onAddTo: (DeckSection) -> Unit,
-    onRemoveFrom: (DeckSection) -> Unit,
+    onSetCount: (DeckSection, Int) -> Unit,
+    onMove: (from: DeckSection, to: DeckSection) -> Unit,
+    onBrowse: (CardFilter) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val home = card.requiredSection()
+    val copiesHome = copiesBySection[home] ?: 0
+    val copiesSide = copiesBySection[DeckSection.SIDE] ?: 0
+    val totalCopies = copiesHome + copiesSide
+    val limit = DeckEditor.copyLimit(card, format)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
@@ -89,33 +102,91 @@ fun CardDetailSheet(
                         }
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        card.race?.let { AssistChip(onClick = {}, label = { Text(it) }) }
-                        AssistChip(onClick = {}, label = { Text(card.attribute.name) })
+                    // Tapping a facet browses the pool by it. These used to be
+                    // chips with an empty onClick, which read as interactive and
+                    // were not.
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        card.race?.let { race ->
+                            AssistChip(
+                                onClick = { onBrowse(CardFilter(races = setOf(race))) },
+                                label = { Text(race) },
+                            )
+                        }
+                        AssistChip(
+                            onClick = { onBrowse(CardFilter(attributes = setOf(card.attribute))) },
+                            label = { Text(card.attribute.name) },
+                        )
+                        card.archetype?.let { archetype ->
+                            AssistChip(
+                                onClick = { onBrowse(CardFilter(archetypes = setOf(archetype))) },
+                                label = { Text(archetype) },
+                            )
+                        }
                     }
 
                     Text(
                         "${format.name}: ${card.banStatus(format).name.lowercase()
-                            .replace('_', ' ')}  •  $copiesInDeck in deck",
+                            .replace('_', ' ')}  •  $totalCopies of $limit in deck",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+
+                    // The reason a card is worth a third copy, stated rather than
+                    // left to be felt.
+                    if (copiesHome > 0 && home == DeckSection.MAIN && mainDeckSize > 0) {
+                        Text(
+                            "Opening hand: ${percent(openingHandOdds(copiesHome, 5))} going first, " +
+                                "${percent(openingHandOdds(copiesHome, 6))} going second " +
+                                "(in $mainDeckSize cards)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MasterToolPalette.Gold,
+                        )
+                    }
+                }
+            }
+
+            Text("Copies", style = MaterialTheme.typography.labelLarge)
+
+            CopiesStepper(
+                label = "${home.displayName} Deck",
+                count = copiesHome,
+                max = limit,
+                accent = home.accent(),
+                onChange = { onSetCount(home, it) },
+            )
+
+            CopiesStepper(
+                label = "Side Deck",
+                count = copiesSide,
+                max = limit,
+                accent = MasterToolPalette.SideAccent,
+                onChange = { onSetCount(DeckSection.SIDE, it) },
+            )
+
+            if (copiesHome > 0 || copiesSide > 0) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (copiesHome > 0) {
+                        OutlinedButton(onClick = { onMove(home, DeckSection.SIDE) }) {
+                            Text("Move one to Side")
+                        }
+                    }
+                    if (copiesSide > 0) {
+                        OutlinedButton(onClick = { onMove(DeckSection.SIDE, home) }) {
+                            Text("Move one to ${home.displayName}")
+                        }
+                    }
                 }
             }
 
             Text(card.description, style = MaterialTheme.typography.bodyMedium)
-
-            Text("Add to", style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                val target = card.requiredSection()
-                Button(onClick = { onAddTo(target) }) {
-                    Text("Add to ${target.displayName}")
-                }
-                OutlinedButton(onClick = { onAddTo(DeckSection.SIDE) }) { Text("Add to Side") }
-                OutlinedButton(onClick = { onRemoveFrom(target) }) { Text("Remove one") }
-            }
         }
     }
+}
+
+internal fun DeckSection.accent() = when (this) {
+    DeckSection.MAIN -> MasterToolPalette.MainAccent
+    DeckSection.EXTRA -> MasterToolPalette.ExtraAccent
+    DeckSection.SIDE -> MasterToolPalette.SideAccent
 }
 
 @Composable
