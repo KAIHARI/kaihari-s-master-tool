@@ -303,6 +303,12 @@ private fun applyDrop(state: DeckBuilderState, session: DragSession, landed: Dro
             state.removeAt(session.card, from, session.index)
         }
 
+        // A group being carried moves as one, and only within its own section.
+        // Checked before the single-card paths so the card actually under the
+        // finger does not get moved on its own out of a selection of five.
+        state.dragCarriesSelection(target, session.index) &&
+            session.section == target -> state.moveSelectionTo(target, landed.index)
+
         session.section == null -> state.addCardAt(session.card, target, landed.index)
 
         else -> state.moveCardTo(

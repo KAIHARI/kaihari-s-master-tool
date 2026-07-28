@@ -314,6 +314,7 @@ private fun DeckSectionPane(
                             insertionMarker = false,
                             siblings = ids,
                             position = stack.firstIndex,
+                            columns = fit.columns,
                         )
                     }
                 } else {
@@ -339,6 +340,7 @@ private fun DeckSectionPane(
                             insertionMarker = hover?.accepted == true && hover.index == position,
                             siblings = ids,
                             position = position,
+                            columns = fit.columns,
                             // Sorting a section, or dropping a card into the middle
                             // of one, now slides the cards that moved instead of
                             // redrawing the pane somewhere else.
@@ -378,10 +380,17 @@ private fun DeckCard(
     insertionMarker: Boolean,
     siblings: List<CardId>,
     position: Int,
+    columns: Int,
     modifier: Modifier = Modifier,
 ) {
     val card: Card? = state.index.byId(id)
     var menuOpen by remember { mutableStateOf(false) }
+
+    val accent = section.accent()
+    val selected = state.selection.contains(section, position)
+    // Only the pane holding the selection is in selection mode; the other two
+    // carry on behaving normally.
+    val selecting = state.selection.section == section && !state.selection.isEmpty
 
     if (card == null) {
         UnknownCardTile(id)
@@ -395,8 +404,26 @@ private fun DeckCard(
                 format = state.format,
                 copies = copies,
                 highlighted = highlighted,
-                onClick = { state.removeOne(card, section) },
+                onClick = {
+                    // In selection mode a tap is about the group, not the deck.
+                    // Removing a card out from under a selection being built is
+                    // the one thing a stray tap must not be able to do.
+                    if (selecting) {
+                        state.toggleSelected(section, position)
+                    } else {
+                        state.removeOne(card, section)
+                    }
+                },
             ) {
+                if (selected) {
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .background(accent.copy(alpha = 0.22f))
+                            .border(2.dp, accent),
+                    )
+                }
+
                 // A bar down the leading edge of the card the drop would land
                 // before, in the colour of the section it would land in -- which
                 // is the same colour that pane is bound in.
@@ -429,6 +456,35 @@ private fun DeckCard(
         }
 
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            // Selection is entered from here rather than from a modifier key, so
+            // it exists at all on a tablet with no keyboard.
+            if (!selecting) {
+                DropdownMenuItem(
+                    text = { Text("Select") },
+                    onClick = { menuOpen = false; state.select(section, position) },
+                )
+            } else {
+                DropdownMenuItem(
+                    text = { Text("Select through here") },
+                    onClick = { menuOpen = false; state.selectThrough(section, position) },
+                )
+                DropdownMenuItem(
+                    // The other honest meaning of "between these two" in a grid,
+                    // and the one a reading-order run cannot express.
+                    text = { Text("Select block to here") },
+                    onClick = {
+                        menuOpen = false
+                        state.selectBlockThrough(section, position, columns)
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Done selecting") },
+                    onClick = { menuOpen = false; state.clearSelection() },
+                )
+            }
+
+            HorizontalDivider()
+
             DropdownMenuItem(
                 text = { Text("Inspect") },
                 onClick = {
@@ -499,6 +555,20 @@ private fun SectionHeader(
         )
 
         Box(Modifier.weight(1f))
+
+        // Says the pane is in selection mode, says how many, and gets out of it.
+        // Without this the only way to discover you are still selecting is that
+        // tapping a card stops removing it.
+        val selection = state.selection
+        if (selection.section == section && !selection.isEmpty) {
+            TextButton(onClick = { state.clearSelection() }) {
+                Text(
+                    "${selection.size} selected ✕",
+                    style = tacticalStyle(),
+                    color = accent,
+                )
+            }
+        }
 
         if (!preferences.collapsed) {
             // Sized to fit by default. The steppers always work and always start

@@ -8,6 +8,8 @@ import com.kaiharimoto.mastertool.core.data.SyncResult
 import com.kaiharimoto.mastertool.core.deck.DeckEdit
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
 import com.kaiharimoto.mastertool.core.deck.DeckSorter
+import com.kaiharimoto.mastertool.core.deck.Selection
+import com.kaiharimoto.mastertool.core.deck.Selections
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
 import com.kaiharimoto.mastertool.core.deck.DeckValidation
 import com.kaiharimoto.mastertool.core.deck.DeckValidator
@@ -72,7 +74,33 @@ class DeckBuilderState(
     var matchCount by mutableStateOf(0)
         private set
 
-    var deck by mutableStateOf(Deck.EMPTY)
+    private var currentDeck by mutableStateOf(Deck.EMPTY)
+
+    /**
+     * The decklist.
+     *
+     * Assigning it clears any selection, because a selection is a set of
+     * positions into this list and every edit moves them. Enforced here rather
+     * than at the eight places that write a deck: one of them forgetting would
+     * leave a selection quietly pointing at different cards than the ones
+     * highlighted, and the next thing done to it moves real cards.
+     */
+    var deck: Deck
+        get() = currentDeck
+        private set(value) {
+            if (value == currentDeck) return
+            currentDeck = value
+            selection = Selection.EMPTY
+        }
+
+    /**
+     * Which cards are picked up, if any.
+     *
+     * Empty almost always. A non-empty selection puts the pane holding it into
+     * selection mode, where tapping a card adds or removes it from the group
+     * rather than removing a copy from the deck.
+     */
+    var selection by mutableStateOf(Selection.EMPTY)
         private set
 
     var deckName by mutableStateOf("Untitled Deck")
@@ -256,6 +284,61 @@ class DeckBuilderState(
             results = outcome.cards
             matchCount = outcome.matchCount
         }
+    }
+
+    // ---- selection ---------------------------------------------------------
+    //
+    // Reached from the long-press menu rather than from a modifier key, so the
+    // whole feature works on a tablet with no keyboard. Once a selection exists,
+    // the pane holding it is in selection mode and a plain tap toggles.
+
+    /** Starts a selection, or moves it to a different card. */
+    fun select(section: DeckSection, index: Int) {
+        selection = Selections.only(section, index)
+    }
+
+    fun toggleSelected(section: DeckSection, index: Int) {
+        selection = Selections.toggle(selection, section, index)
+    }
+
+    /** Everything from the last card touched to this one, in reading order. */
+    fun selectThrough(section: DeckSection, index: Int) {
+        selection = Selections.extendTo(selection, section, index)
+    }
+
+    /** The rectangle between the last card touched and this one. */
+    fun selectBlockThrough(section: DeckSection, index: Int, columns: Int) {
+        selection = Selections.extendBlockTo(selection, section, index, columns, deck[section].size)
+    }
+
+    fun clearSelection() {
+        selection = Selection.EMPTY
+    }
+
+    /** Whether a drag starting on this card should carry the whole group. */
+    fun dragCarriesSelection(section: DeckSection, index: Int): Boolean =
+        selection.size > 1 && selection.contains(section, index)
+
+    /**
+     * Moves everything selected so it lands before [insertBefore].
+     *
+     * Only within one section: a selection cannot span two, and a group arriving
+     * in a different section would need the copy limit and the section rules
+     * checked per card, which is the stepper's job and not a drag's.
+     */
+    fun moveSelectionTo(section: DeckSection, insertBefore: Int) {
+        val moving = selection.takeIf { it.section == section }?.ordered() ?: return
+        if (moving.isEmpty()) return
+
+        val result = DeckEditor.reorderManyTo(deck, section, moving, insertBefore)
+        if (result !is DeckEdit.Applied || result.deck == deck) return
+
+        val token = pushUndo(deck)
+        deck = result.deck
+        showToast(
+            "Moved ${moving.size} cards.",
+            undo = { undoIfCurrent(token) },
+        )
     }
 
     // ---- editing -----------------------------------------------------------
