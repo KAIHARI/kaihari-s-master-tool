@@ -269,8 +269,13 @@ private fun DeckSectionPane(
             val competesWithScroll = !fit.fits
 
             // Written after composition rather than during it — the header sits
-            // above this and only needs the number on the next pass.
-            SideEffect { effectiveColumns = fit.columns }
+            // above this and only needs the number on the next pass. The layout
+            // state is told too, so a resize can pin the grid at what is on
+            // screen rather than at whatever was last stored.
+            SideEffect {
+                effectiveColumns = fit.columns
+                layout.noteDisplayedColumns(section, fit.columns)
+            }
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(fit.columns),

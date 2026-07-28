@@ -28,6 +28,21 @@ data class SectionPreferences(
         columns = columns.coerceIn(MIN_COLUMNS, MAX_COLUMNS),
     )
 
+    /**
+     * Pins the grid at the width it is currently showing.
+     *
+     * Called when a pane is resized. With [autoFit] left on, dragging a divider
+     * re-picks the column count, so the cards stay one size and the grid reflows
+     * around them — which is the one thing that never happens to cards on a table.
+     * Pinning first means a resize does what pulling a stack towards you does:
+     * the same cards, bigger.
+     *
+     * Already-manual sections are left alone, so this is safe to call on every
+     * frame of a drag rather than only on the first.
+     */
+    fun frozenAt(displayedColumns: Int): SectionPreferences =
+        if (!autoFit) this else copy(columns = displayedColumns, autoFit = false)
+
     companion object {
         const val MIN_WEIGHT = 0.25f
         const val MAX_WEIGHT = 8f

@@ -4,6 +4,7 @@ import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 
@@ -91,6 +92,26 @@ class UiPreferencesTest {
         // 0 is a real value here, meaning "size to fit", not an out-of-range one.
         assertEquals(0, UiPreferences.DEFAULT.copy(searchColumns = 0).sanitised().searchColumns)
         assertEquals(0, UiPreferences.DEFAULT.copy(searchColumns = -4).sanitised().searchColumns)
+    }
+
+    // Resizing a pane pins its grid, so the cards grow instead of the grid
+    // reflowing around them.
+
+    @Test
+    fun freezingTakesTheWidthCurrentlyOnScreen() {
+        val pinned = SectionPreferences(weight = 2f, columns = 10, autoFit = true).frozenAt(13)
+
+        assertEquals(13, pinned.columns)
+        assertFalse(pinned.autoFit)
+    }
+
+    @Test
+    fun freezingLeavesAHandSizedSectionAlone() {
+        // Safe to call on every frame of a resize drag: once pinned, later frames
+        // must not overwrite the count with whatever is on screen mid-drag.
+        val manual = SectionPreferences(weight = 2f, columns = 7, autoFit = false)
+
+        assertEquals(manual, manual.frozenAt(13))
     }
 
     @Test

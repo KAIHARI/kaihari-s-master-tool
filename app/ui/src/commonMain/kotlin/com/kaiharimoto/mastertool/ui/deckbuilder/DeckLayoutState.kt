@@ -34,6 +34,16 @@ class DeckLayoutState(
     /** Width of the whole builder in pixels, for the search / deck split. */
     var builderWidthPx by mutableStateOf(0f)
 
+    /**
+     * What each pane's grid actually settled on, which is not always what is
+     * stored: an auto-fitting section computes its width from the space it was
+     * given, and only the composable that laid it out knows the answer.
+     *
+     * Deliberately not snapshot state and never persisted. Nothing composes off
+     * it — it is only read at the moment a resize pins a section.
+     */
+    private val displayedColumns = mutableMapOf<DeckSection, Int>()
+
     private var saveJob: Job? = null
 
     fun start(onLoaded: (UiPreferences) -> Unit = {}) {
@@ -84,6 +94,11 @@ class DeckLayoutState(
         updateSection(section) { it.copy(columns = columns, autoFit = false) }
     }
 
+    /** Told by each pane what its grid settled on, once per layout pass. */
+    fun noteDisplayedColumns(section: DeckSection, columns: Int) {
+        displayedColumns[section] = columns
+    }
+
     fun setAutoFit(section: DeckSection, autoFit: Boolean) {
         updateSection(section) { it.copy(autoFit = autoFit) }
     }
@@ -99,10 +114,18 @@ class DeckLayoutState(
      * total stays put and the pane on the far side of the drag does not move —
      * which is what makes a three-pane resize feel like moving one boundary
      * instead of rescaling the whole column.
+     *
+     * Both panes are pinned at the width they are showing before anything moves,
+     * so the drag makes their cards larger or smaller rather than re-flowing the
+     * grid around cards that stay one size. Dragging a divider is itself the
+     * decision to size by hand, the same way reaching for the density stepper is.
      */
     fun resizePanes(above: DeckSection, below: DeckSection, deltaPx: Float) {
         val height = deckColumnHeightPx
         if (height <= 0f) return
+
+        pin(above)
+        pin(below)
 
         val visibleWeight = DeckSection.entries
             .filterNot { preferences[it].collapsed }
@@ -128,6 +151,17 @@ class DeckLayoutState(
             it.with(above, top.copy(weight = newTop))
                 .with(below, bottom.copy(weight = newBottom))
         }
+    }
+
+    /**
+     * Pins one pane at the width it is showing, if it was still sizing itself.
+     *
+     * A no-op once the section is manual, so calling it on every frame of a drag
+     * cannot overwrite the pinned count with a mid-drag one.
+     */
+    private fun pin(section: DeckSection) {
+        val displayed = displayedColumns[section] ?: return
+        updateSection(section) { it.frozenAt(displayed) }
     }
 
     fun resizeSearchPane(deltaPx: Float) {
