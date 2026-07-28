@@ -19,6 +19,15 @@ data class MatchupRecord(
 ) {
     val total: Int get() = goingFirst.total + goingSecond.total
 
+    /**
+     * Both sides of the die roll as one rate.
+     *
+     * Only ever the answer to a question that is not about the die roll — how
+     * one version of a list compares to another, say. Anything choosing a side
+     * has to read the halves.
+     */
+    val brickRate: Double? get() = (goingFirst + goingSecond).brickRate
+
     fun judged(wentFirst: Boolean, playable: Boolean): MatchupRecord =
         if (wentFirst) {
             copy(goingFirst = goingFirst.judged(playable))
@@ -47,6 +56,9 @@ data class MatchupRecord(
             else -> null
         }
     }
+
+    operator fun plus(other: MatchupRecord): MatchupRecord =
+        MatchupRecord(goingFirst + other.goingFirst, goingSecond + other.goingSecond)
 
     companion object {
         /**

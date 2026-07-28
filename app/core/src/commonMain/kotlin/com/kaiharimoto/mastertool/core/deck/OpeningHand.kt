@@ -29,6 +29,10 @@ data class HandTally(val playable: Int = 0, val bricks: Int = 0) {
 
     fun judged(playable: Boolean): HandTally =
         if (playable) copy(playable = this.playable + 1) else copy(bricks = this.bricks + 1)
+
+    /** Two tallies of the same thing, for reading a split record as one number. */
+    operator fun plus(other: HandTally): HandTally =
+        HandTally(playable + other.playable, bricks + other.bricks)
 }
 
 /**
