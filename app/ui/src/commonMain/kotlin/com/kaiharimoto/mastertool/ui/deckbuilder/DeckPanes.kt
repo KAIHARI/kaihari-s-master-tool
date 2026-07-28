@@ -1,5 +1,8 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.Orientation
@@ -51,9 +54,11 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
+import com.kaiharimoto.mastertool.core.deck.DeckKeys
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.layout.GridFit
 import com.kaiharimoto.mastertool.core.layout.GridFitter
@@ -312,8 +317,16 @@ private fun DeckSectionPane(
                         )
                     }
                 } else {
-                    // Indexed keys because a deck legitimately holds duplicates.
-                    items(ids.size, key = { "${section.name}-$it-${ids[it].value}" }) { position ->
+                    // Keyed by which copy, not by where it sits. A positional key
+                    // changes for every tile after an insertion, so the grid would
+                    // see the whole tail replaced rather than moved, and nothing
+                    // could animate.
+                    val copies = DeckKeys.occurrences(ids)
+
+                    items(
+                        ids.size,
+                        key = { "${section.name}-${ids[it].value}-${copies[it]}" },
+                    ) { position ->
                         DeckCard(
                             state = state,
                             drag = drag,
@@ -326,6 +339,16 @@ private fun DeckSectionPane(
                             insertionMarker = hover?.accepted == true && hover.index == position,
                             siblings = ids,
                             position = position,
+                            // Sorting a section, or dropping a card into the middle
+                            // of one, now slides the cards that moved instead of
+                            // redrawing the pane somewhere else.
+                            modifier = Modifier.animateItem(
+                                placementSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                    visibilityThreshold = IntOffset.VisibilityThreshold,
+                                ),
+                            ),
                         )
                     }
                 }
@@ -355,6 +378,7 @@ private fun DeckCard(
     insertionMarker: Boolean,
     siblings: List<CardId>,
     position: Int,
+    modifier: Modifier = Modifier,
 ) {
     val card: Card? = state.index.byId(id)
     var menuOpen by remember { mutableStateOf(false) }
@@ -387,7 +411,7 @@ private fun DeckCard(
         }
     }
 
-    Box {
+    Box(modifier) {
         if (drag == null) {
             tile()
         } else {

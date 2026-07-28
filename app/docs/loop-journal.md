@@ -82,3 +82,58 @@ handler, and a sign error would put the reflection under the cursor instead of
 across from it. Tilt had to be renormalised on the way over: the original scaled
 it by raw pixel offsets, so a 280dp preview would have tilted four times as far
 as a 68px deck tile.
+
+Touch has no hover, so a moving light — the same function walked by a virtual
+pointer — carries the effect where there is nothing to follow. Deck tiles are
+deliberately excluded: forty animating layers to show an effect too small to read.
+
+## 3. Drag
+
+Edge autoscroll, which was the last gap `README.md` admitted to, on a squared
+ramp so entering the band while aiming at the last row does not drag the pane out
+from under you. It is driven by a frame clock rather than by pointer movement,
+because holding a card still against an edge is the gesture.
+
+The long press now shows a filling ring. It was four hundred milliseconds of no
+feedback at all, which is indistinguishable from a press that is not working.
+
+Still open: multi-select and carrying several cards at once.
+
+## 4. Type
+
+Instrument Sans, JetBrains Mono, Tektur — all OFL, all bundled. The original's
+stylesheet asked for `'Helvetica Neue Haas Grotesk'` and never loaded it, so
+every install fell back to Inter, which this project's own guidelines rule out
+by name. Six candidates were set in real deck-builder chrome and compared before
+picking; Instrument Sans won on being tight, which matters when card names run to
+"Original Sinful Spoils — Snake-Eye" and a Main pane is thirteen columns wide.
+
+**Stale comment found:** `Theme.kt` said a font would mean taking back the
+Compose resources dependency. That dependency had already come back for the chibi.
+
+## 5. Surfaces
+
+Four themes, each a Material scheme *plus a mat* — cloth colour, two thread
+colours, and lighting. That second half is why the original's Classic theme never
+became the table it was reaching for: it was six hex values and no surface.
+
+Daylight inverts the *lighting*, not the palette. Sheen up an order of magnitude,
+vignette nearly off, because a bright surface is lit from the room; a dark theme's
+numbers negated gives grey paper with a dirty rim.
+
+Semantic colours stay constants. A deck over sixty cards is wrong in every theme.
+
+## 7. Siding
+
+Both halves of the domain, ahead of any UI.
+
+The engine pairs out and in by position and writes the arriving card at the index
+the departing one occupied. Appending would have been shorter and would quietly
+destroy an arrangement its owner chose — which is the premise of everything else
+here. A plan that no longer fits still produces a deck and names what it could
+not do, because there is a clock running between rounds.
+
+The codec **merges** rather than re-encodes. The `#ydkx-extended` payload is not
+this app's document: the desktop tool also writes a background gradient, a
+category, tags, a last-used stamp and the opponent's full decklist there, and
+decoding to a data class and back would have deleted all of it.

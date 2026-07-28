@@ -6,6 +6,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -44,6 +49,25 @@ fun DragOverlay(controller: DragController, format: Format) {
                     scaleX = 1.08f
                     scaleY = 1.08f
                     rotationZ = 3f
+                }
+                // The shadow the lift casts. Scale and rotation alone read as a
+                // card that got bigger; a card is only off the table once
+                // something underneath it says so.
+                //
+                // A radial gradient rather than Modifier.blur, which is a no-op
+                // below Android 12 and this app's minimum is 26 -- the softness
+                // has to be in the paint, not in a filter that may not run.
+                .drawBehind {
+                    val spread = size.width * 0.18f
+                    drawOval(
+                        brush = Brush.radialGradient(
+                            0f to Color.Black.copy(alpha = 0.45f),
+                            0.55f to Color.Black.copy(alpha = 0.22f),
+                            1f to Color.Transparent,
+                        ),
+                        topLeft = Offset(-spread / 2f, size.height * 0.06f),
+                        size = Size(size.width + spread, size.height + spread * 0.6f),
+                    )
                 }
                 .alpha(0.92f),
         ) {

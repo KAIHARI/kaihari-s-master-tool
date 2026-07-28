@@ -105,6 +105,29 @@ what gets written back to `.ydk`, so a sort that only reordered the display woul
 leave the file disagreeing with the deck from then on. Being an edit also means
 undo puts it back.
 
+**Cards touch, and a resize zooms them.** The gutter is zero by default: a gap is
+what makes forty cards read as forty tiles in a piece of software rather than as
+one arrangement on a table. What keeps them legible at zero is the card's own
+printed edge. Dragging a pane divider pins that pane's column count first, so the
+cards change size and the grid does not rearrange around them — pulling a stack
+towards you makes it bigger, it does not re-deal it.
+
+**Siding writes an arriving card into the slot the departing one left.** Out and
+in are paired by position. Appending would be shorter and would quietly destroy
+an arrangement its owner chose, which is the thing this application is for.
+
+**The `#ydkx-extended` payload is merged, never re-encoded.** `SidingCodec` edits
+the keys it understands inside the object that was on disk. The desktop tool also
+writes a background gradient, a category, tags and the opponent's decklist in
+there; decoding a pattern into a data class and encoding it back would delete all
+of it, one level deeper than the promise above.
+
+**Anything that can be a number lives in `:core`.** Foil angles, autoscroll
+ramps, grid geometry, siding. `androidx` is served only from Google's Maven, so
+in a restricted environment `:core` is the only thing that compiles at all — and
+keeping the arithmetic there is what makes the Compose layer safe to write when
+CI is the only compiler that will ever see it. See `docs/loop-journal.md`.
+
 **Layout settings are one JSON document in the SQLite database.** No DataStore
 (Android-only, would need a separate desktop path) and no settings library.
 Storing them as a document rather than a column per setting means adding a
@@ -129,8 +152,15 @@ you can page through the results in, deck statistics with opening-hand odds, a
 deck-check panel that jumps to the card an issue names, a TCG/OCG toggle, deck
 library, YDK/YDKX import, export and share.
 
+Cards in a deck pane touch, on a mat, in one of four surfaces. They catch the
+light when you point at one. A pane scrolls while you hold a card over its edge,
+and a long press fills a ring so you can see it arriving.
+
 On desktop: keyboard shortcuts throughout (press `?` for the list, which is
 generated from the table that implements them) and a hover preview on any card.
 
-Not yet built: siding patterns, shootout mode, the sandbox board simulator,
-PDF export, and autoscrolling a pane while dragging over its edge.
+Siding is built and tested as a domain — patterns are read, applied and written
+back — but has no editor yet, so a pattern can only arrive in a file.
+
+Not yet built: the siding editor, shootout mode, the sandbox board simulator,
+PDF export, and selecting several cards to carry at once.
