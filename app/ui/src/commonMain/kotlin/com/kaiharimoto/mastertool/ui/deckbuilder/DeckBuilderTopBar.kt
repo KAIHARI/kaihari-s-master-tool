@@ -195,6 +195,27 @@ fun DeckBuilderTopBar(
                     onClick = { menuOpen = false; state.notesVisible = true },
                 )
                 DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("Shootout…")
+                            Text(
+                                if (state.opponentDeck.main.isEmpty()) {
+                                    "both openings, against a deck you load"
+                                } else {
+                                    "against ${state.opponentName}"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    onClick = {
+                        menuOpen = false
+                        if (state.opponentDeck.main.isNotEmpty()) state.dealShootout(state.youGoFirst)
+                        state.shootoutVisible = true
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text("See the whole deck") },
                     onClick = { menuOpen = false; state.showcaseVisible = true },
                 )

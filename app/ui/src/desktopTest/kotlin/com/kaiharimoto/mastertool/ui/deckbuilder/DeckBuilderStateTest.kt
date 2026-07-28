@@ -463,6 +463,72 @@ class DeckBuilderStateTest {
         assertTrue(state.dealSerial > before)
     }
 
+    // ---- the deck across the table -----------------------------------------
+
+    @Test
+    fun loadingAnOpponentLeavesYourOwnDeckAlone() = runTest {
+        // The one thing this feature must never do. Every other importer in the
+        // program replaces the open deck, and this one shares their file picker.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.addCard(TestPool.ash)
+        val mine = state.deck
+
+        state.loadOpponent()
+
+        assertEquals(mine, state.deck)
+        assertEquals(4, state.opponentDeck.main.size)
+        assertEquals("lab", state.opponentName)
+    }
+
+    @Test
+    fun bothSidesAreDealtAndTheyCannotBothGoFirst() = runTest {
+        // One of them going first means the other is going second; two five-card
+        // hands would be a matchup that cannot happen.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+
+        state.dealShootout(goingFirst = true)
+
+        assertEquals(5, state.yourOpening?.size)
+        assertEquals(true, state.yourOpening?.goingFirst)
+        assertEquals(false, state.theirOpening?.goingFirst)
+    }
+
+    @Test
+    fun theOtherSideOfTheChoiceIsTheOtherHandSize() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+
+        state.dealShootout(goingFirst = false)
+
+        assertEquals(6, state.yourOpening?.size)
+        assertEquals(false, state.youGoFirst)
+        assertEquals(true, state.theirOpening?.goingFirst)
+    }
+
+    @Test
+    fun dealingWithNoOpponentLoadedIsNotAnError() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+
+        state.dealShootout(goingFirst = true)
+
+        assertEquals(5, state.yourOpening?.size)
+        assertEquals(0, state.theirOpening?.size, "an empty deck deals nothing")
+    }
+
+    @Test
+    fun anOpponentLoadDealsSoThePanelIsNeverEmpty() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+
+        state.loadOpponent()
+
+        assertTrue((state.theirOpening?.size ?: 0) > 0)
+    }
+
     // ---- showing what happened ---------------------------------------------
 
     @Test
@@ -529,6 +595,7 @@ class DeckBuilderStateTest {
             Overlay.STATS -> statsVisible = true
             Overlay.SIDING -> sidingVisible = true
             Overlay.TEST_HAND -> testHandVisible = true
+            Overlay.SHOOTOUT -> shootoutVisible = true
             Overlay.NOTES -> notesVisible = true
             Overlay.ISSUES -> issuesVisible = true
         }

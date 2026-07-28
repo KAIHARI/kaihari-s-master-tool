@@ -760,6 +760,30 @@ Side deck — but that is a different thing with a different name, and inventing
 it under cover of "porting the templates" would be the wrong way to arrive at
 it.
 
+## 39. The first useful piece of a shootout
+
+Section 31 recorded what shootout mode is — a structured playtest run — and why
+starting it late in a loop was a bad idea. This is the piece of it that stands
+alone: load the deck you are testing against, and see both opening hands at
+once.
+
+The test-hand panel answers "does my list open". This answers the question that
+actually decides a match, which is "does my list open *against theirs*". Sitting
+them one above the other is most of the answer; you can see whether your
+interruption is the one their board cares about before a card is played.
+
+Two decisions worth writing down. The opponent's deck is kept entirely separate
+from the one being built, and nothing in the panel can edit either — every other
+importer in this program replaces the open deck, and this one shares their file
+picker, so there is a test whose whole job is to say your list survived loading
+theirs. And the choice offered is *who goes first*, not how many cards each side
+draws: one of them going first means the other is going second, and dealing two
+five-card hands would be a matchup that cannot happen.
+
+Still not built, and still recorded rather than half-done: the run structure —
+a set number of trials, siding for both sides between games, a report at the
+end.
+
 ---
 
 ## Where this stands
@@ -770,9 +794,10 @@ the environment this was written in.
 
 Still open, in the order they are worth doing:
 
-**Shootout mode.** A structured playtest run against an opponent's deck —
-trials, siding for both sides between games, a report. Composes almost
-everything already built, and section 31 records its shape.
+**The rest of shootout mode.** Both openings against a loaded opponent deck are
+built (section 39). What is missing is the run structure: a set number of
+trials, siding for both sides between games, undo of a whole trial, and a report
+at the end. Section 31 records its shape.
 
 **The sandbox board.** Where the best idea in the original lives: the gesture
 *is* the orientation — quick drop is attack, a horizontal flick is defense, a

@@ -71,6 +71,7 @@ enum class Overlay {
     STATS,
     SIDING,
     TEST_HAND,
+    SHOOTOUT,
     NOTES,
     ISSUES,
 }
@@ -227,6 +228,7 @@ class DeckBuilderState(
         Overlay.STATS -> statsVisible
         Overlay.SIDING -> sidingVisible
         Overlay.TEST_HAND -> testHandVisible
+        Overlay.SHOOTOUT -> shootoutVisible
         Overlay.NOTES -> notesVisible
         Overlay.ISSUES -> issuesVisible
     }
@@ -247,6 +249,7 @@ class DeckBuilderState(
             Overlay.STATS -> statsVisible = false
             Overlay.SIDING -> sidingVisible = false
             Overlay.TEST_HAND -> testHandVisible = false
+            Overlay.SHOOTOUT -> shootoutVisible = false
             Overlay.NOTES -> notesVisible = false
             Overlay.ISSUES -> issuesVisible = false
         }
@@ -293,6 +296,30 @@ class DeckBuilderState(
     var notesVisible by mutableStateOf(false)
 
     var testHandVisible by mutableStateOf(false)
+
+    var shootoutVisible by mutableStateOf(false)
+
+    /**
+     * The deck across the table.
+     *
+     * Loaded from a file and kept entirely separate from the one being built —
+     * the whole point is to look at both at once, and an opponent's list that
+     * could be edited by accident would be a very bad surprise.
+     */
+    var opponentDeck by mutableStateOf(Deck.EMPTY)
+        private set
+
+    var opponentName by mutableStateOf("")
+        private set
+
+    var yourOpening by mutableStateOf<OpeningHand?>(null)
+        private set
+
+    var theirOpening by mutableStateOf<OpeningHand?>(null)
+        private set
+
+    var youGoFirst by mutableStateOf(true)
+        private set
 
     /** The hand currently on the table, if one has been dealt. */
     var testHand by mutableStateOf<OpeningHand?>(null)
@@ -492,6 +519,32 @@ class DeckBuilderState(
     /** One more card, for a hand that hinges on the draw. */
     fun drawOneMore() {
         testHand = testHand?.let(HandSimulator::drawOne)
+    }
+
+    // ---- the deck across the table -----------------------------------------
+
+    /** Reads an opponent's `.ydk`, and deals immediately so the panel is never empty. */
+    fun loadOpponent() {
+        scope.launch {
+            val file = deps.fileAccess.importDeck() ?: return@launch
+            val parsed = YdkCodec.parse(file.content)
+            opponentDeck = parsed.document.deck
+            opponentName = file.name.substringBeforeLast('.').ifBlank { "Opponent" }
+            dealShootout(youGoFirst)
+        }
+    }
+
+    /**
+     * Deals both openings at once.
+     *
+     * The choice is who goes first, not how many cards each side draws — one of
+     * them going first means the other is going second, and dealing two
+     * five-card hands would be a matchup that cannot happen.
+     */
+    fun dealShootout(goingFirst: Boolean) {
+        youGoFirst = goingFirst
+        yourOpening = HandSimulator.deal(deck.main, goingFirst, Random.Default)
+        theirOpening = HandSimulator.deal(opponentDeck.main, !goingFirst, Random.Default)
     }
 
     fun resetHandTally() {

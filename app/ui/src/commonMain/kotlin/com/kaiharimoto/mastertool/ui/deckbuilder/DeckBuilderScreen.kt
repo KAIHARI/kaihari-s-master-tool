@@ -270,6 +270,10 @@ fun DeckBuilderScreen(
         DeckNotesPanel(state)
     }
 
+    if (state.shootoutVisible) {
+        ShootoutPanel(state)
+    }
+
     // Not a sheet. A sheet would leave the builder showing around the edges,
     // and the whole point is that there is nothing else on the screen.
     if (state.showcaseVisible) {
