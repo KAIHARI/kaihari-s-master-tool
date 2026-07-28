@@ -72,7 +72,7 @@ fun DeckBuilderTopBar(
         Text(
             "kai's master tool",
             style = MaterialTheme.typography.titleMedium.copy(fontFamily = displayFamily()),
-            color = MasterToolPalette.Accent,
+            color = MaterialTheme.colorScheme.primary,
         )
 
         OutlinedTextField(

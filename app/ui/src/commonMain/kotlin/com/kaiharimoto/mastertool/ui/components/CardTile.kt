@@ -79,13 +79,13 @@ fun CardTile(
             .aspectRatio(CARD_ASPECT_RATIO)
             .clip(shape)
             .foil(foil)
-            .background(MasterToolPalette.SurfaceRaised)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             // The card's own printed edge, not a UI outline. Deck panes lay cards
             // out touching, so this hairline is the only thing separating one from
             // the next — in the theme's outline colour they merged into a slab.
             .border(
                 width = if (highlighted) 2.dp else 1.dp,
-                color = if (highlighted) MasterToolPalette.AccentBright else CARD_EDGE,
+                color = if (highlighted) LocalMasterToolColors.current.accentBright else CARD_EDGE,
                 shape = shape,
             )
             .clickable(onClick = onClick),
@@ -167,7 +167,7 @@ private fun CopyBadge(copies: Int, modifier: Modifier = Modifier) {
         modifier = modifier
             .size(22.dp)
             .clip(RoundedCornerShape(4.dp))
-            .background(MasterToolPalette.Accent),
+            .background(MaterialTheme.colorScheme.primary),
         contentAlignment = Alignment.Center,
     ) {
         Text(

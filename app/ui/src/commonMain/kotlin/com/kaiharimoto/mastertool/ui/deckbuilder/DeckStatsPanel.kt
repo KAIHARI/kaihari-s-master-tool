@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.components.percent
+import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
 /**
@@ -84,7 +85,7 @@ fun DeckStatsPanel(
                 // Card-type colours, not section colours: these count what the
                 // cards are, and the two happened to look the same while meaning
                 // different things.
-                Tile("Cards", statistics.sectionSize.toString(), MasterToolPalette.Accent)
+                Tile("Cards", statistics.sectionSize.toString(), MaterialTheme.colorScheme.primary)
                 Tile("Monsters", statistics.monsters.toString(), MasterToolPalette.Monster)
                 Tile("Spells", statistics.spells.toString(), MasterToolPalette.Spell)
                 Tile("Traps", statistics.traps.toString(), MasterToolPalette.Trap)
@@ -162,13 +163,13 @@ private fun OpeningHandOdds(statistics: DeckStatistics) {
                 Text(
                     percent(statistics.openingHandOdds(copies, handSize = 5)),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MasterToolPalette.Accent,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
                     percent(statistics.openingHandOdds(copies, handSize = 6)),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MasterToolPalette.AccentBright,
+                    color = LocalMasterToolColors.current.accentBright,
                     modifier = Modifier.weight(1f),
                 )
             }

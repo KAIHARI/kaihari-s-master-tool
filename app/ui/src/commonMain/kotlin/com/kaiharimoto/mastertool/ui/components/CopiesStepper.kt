@@ -22,7 +22,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
 /**
  * A `−  n  +` control for the number of copies of a card in one section.
@@ -68,7 +67,7 @@ fun CopiesStepper(
             count.toString(),
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
-            color = if (count > 0) MasterToolPalette.Accent else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (count > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(24.dp),
         )
 

@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.input.Shortcut
 import com.kaiharimoto.mastertool.core.input.ShortcutScope
 import com.kaiharimoto.mastertool.core.input.ShortcutTable
-import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
 /**
  * The keyboard shortcuts, read straight off the table that implements them.
@@ -68,7 +67,7 @@ private fun Group(title: String, shortcuts: List<Shortcut>) {
     if (shortcuts.isEmpty()) return
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = MasterToolPalette.Accent)
+        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         shortcuts.forEach { shortcut ->
             Row(
                 modifier = Modifier.fillMaxWidth(),

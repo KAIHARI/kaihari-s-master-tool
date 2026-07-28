@@ -397,14 +397,16 @@ private fun DeckCard(
                 highlighted = highlighted,
                 onClick = { state.removeOne(card, section) },
             ) {
-                // A bar down the leading edge of the card the drop would land before.
+                // A bar down the leading edge of the card the drop would land
+                // before, in the colour of the section it would land in -- which
+                // is the same colour that pane is bound in.
                 if (insertionMarker) {
                     Box(
                         Modifier
                             .fillMaxHeight()
                             .width(3.dp)
                             .align(Alignment.CenterStart)
-                            .background(MasterToolPalette.AccentBright),
+                            .background(section.accent()),
                     )
                 }
             }
@@ -573,7 +575,7 @@ private fun UnknownCardTile(id: CardId) {
         Modifier
             .aspectRatio(CARD_ASPECT_RATIO)
             .clip(RoundedCornerShape(CARD_CORNER))
-            .background(MasterToolPalette.SurfaceRaised)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(4.dp),
         contentAlignment = Alignment.Center,
     ) {

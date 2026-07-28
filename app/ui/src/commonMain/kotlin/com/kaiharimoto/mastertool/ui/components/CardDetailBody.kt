@@ -32,7 +32,6 @@ import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.search.CardFilter
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
-import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
 /**
  * Everything about one card, and every way to change how many of it you run.
@@ -76,7 +75,7 @@ fun CardDetailBody(
                     .width(200.dp)
                     .height(292.dp)
                     .clip(RoundedCornerShape(CARD_CORNER))
-                    .background(MasterToolPalette.SurfaceRaised)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .foilSweep(),
             )
 
@@ -133,7 +132,7 @@ fun CardDetailBody(
                             "${percent(openingHandOdds(copiesHome, 6))} going second " +
                             "(in $mainDeckSize cards)",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MasterToolPalette.Accent,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }

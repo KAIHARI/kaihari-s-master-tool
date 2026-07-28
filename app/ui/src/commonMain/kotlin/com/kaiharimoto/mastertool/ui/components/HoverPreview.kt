@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,7 +29,6 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import coil3.compose.AsyncImage
 import com.kaiharimoto.mastertool.core.model.Card
-import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlinx.coroutines.delay
 
 /** Long enough that scanning a grid does not strobe, short enough to feel free. */
@@ -85,8 +85,8 @@ fun HoverPreview(card: Card, content: @Composable () -> Unit) {
                     Modifier
                         .padding(8.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MasterToolPalette.Surface)
-                        .border(1.dp, MasterToolPalette.Line, RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
                         .padding(6.dp),
                 ) {
                     AsyncImage(

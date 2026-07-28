@@ -40,7 +40,7 @@ import com.kaiharimoto.mastertool.core.egg.SpritePhysics
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.ui.art.Res
 import com.kaiharimoto.mastertool.ui.art.chibi
-import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -195,6 +195,8 @@ fun EasterEgg(
                 },
         )
 
+        val sparkColor = LocalMasterToolColors.current.accentBright
+
         Canvas(Modifier.fillMaxSize()) {
             // Reading the frame counter here is what schedules the next draw. The
             // sparks themselves are deliberately not snapshot state, so this is
@@ -202,7 +204,7 @@ fun EasterEgg(
             if (tick != Long.MIN_VALUE) {
                 sparks.forEach { spark ->
                 drawCircle(
-                    color = MasterToolPalette.AccentBright.copy(
+                    color = sparkColor.copy(
                         alpha = (1f - spark.age / SPARK_LIFETIME).coerceIn(0f, 1f),
                     ),
                         radius = spark.radius,
@@ -248,7 +250,7 @@ fun EasterEgg(
                 .align(Alignment.TopEnd)
                 .padding(16.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(MasterToolPalette.Surface.copy(alpha = 0.92f))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),

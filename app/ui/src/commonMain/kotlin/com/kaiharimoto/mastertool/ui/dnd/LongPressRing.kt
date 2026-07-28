@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
 private val RING_RADIUS = 18.dp
@@ -42,6 +43,8 @@ private val RING_WIDTH = 2.5.dp
 fun BoxScope.LongPressRing(pressAt: Offset?, durationMillis: Long) {
     val progress = remember { Animatable(0f) }
     val haptics = LocalHapticFeedback.current
+    // Read here rather than in the draw block, which is not a composable scope.
+    val accent = LocalMasterToolColors.current.accentBright
 
     LaunchedEffect(pressAt) {
         if (pressAt == null) {
@@ -80,7 +83,7 @@ fun BoxScope.LongPressRing(pressAt: Offset?, durationMillis: Long) {
         )
 
         drawArc(
-            color = MasterToolPalette.AccentBright,
+            color = accent,
             // From twelve o'clock, the only place a fill reads as time passing.
             startAngle = -90f,
             sweepAngle = 360f * swept,

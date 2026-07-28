@@ -140,7 +140,7 @@ private fun DeckCard(stored: StoredDeck, onOpen: () -> Unit, onDelete: () -> Uni
                 Text(
                     "Includes siding data",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MasterToolPalette.Accent,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
 

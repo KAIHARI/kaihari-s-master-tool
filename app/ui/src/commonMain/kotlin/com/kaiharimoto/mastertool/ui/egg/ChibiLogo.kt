@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,7 +20,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.ui.art.Res
 import com.kaiharimoto.mastertool.ui.art.chibi
-import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 
@@ -57,7 +57,7 @@ fun ChibiLogo(
         modifier
             .size(size)
             .clip(CircleShape)
-            .background(MasterToolPalette.SurfaceRaised)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable { taps++ },
     ) {
         Image(
