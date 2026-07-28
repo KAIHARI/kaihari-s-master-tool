@@ -751,7 +751,12 @@ class DeckBuilderState(
     // ---- editing -----------------------------------------------------------
 
     fun addCard(card: Card, section: DeckSection = card.requiredSection()) {
-        applyEdit(DeckEditor.add(deck, card, section, format), card)
+        // A card added to a pane that is already full lands out of sight, and
+        // the only sign it worked is a number in the header changing. Which is
+        // the same amount of feedback as nothing having happened.
+        if (applyEdit(DeckEditor.add(deck, card, section, format), card)) {
+            revealNewest(section, card.id)
+        }
     }
 
     /**
@@ -936,15 +941,19 @@ class DeckBuilderState(
 
     fun copiesIn(id: CardId, section: DeckSection): Int = deck[section].count { it == id }
 
-    private fun applyEdit(edit: DeckEdit, card: Card) {
+    /** Returns whether the deck actually changed, which not every caller cares about. */
+    private fun applyEdit(edit: DeckEdit, card: Card): Boolean {
         when (edit) {
             is DeckEdit.Applied -> {
-                if (edit.deck != deck) {
-                    pushUndo(deck)
-                    deck = edit.deck
-                }
+                if (edit.deck == deck) return false
+                pushUndo(deck)
+                deck = edit.deck
+                return true
             }
-            is DeckEdit.Rejected -> showToast(explain(edit.reason, card))
+            is DeckEdit.Rejected -> {
+                showToast(explain(edit.reason, card))
+                return false
+            }
         }
     }
 
@@ -1212,9 +1221,22 @@ class DeckBuilderState(
 
     /** Asks the owning pane to scroll [id] into view and flash it. */
     fun reveal(section: DeckSection, id: CardId) {
-        val position = deck[section].indexOfFirst { it == id }
+        revealAt(section, deck[section].indexOfFirst { it == id }, id, flash = true)
+    }
+
+    /**
+     * Shows the copy that was just added, which is the *last* one.
+     *
+     * Adding a third Ash Blossom and scrolling to the first is an answer to a
+     * question nobody asked.
+     */
+    private fun revealNewest(section: DeckSection, id: CardId) {
+        revealAt(section, deck[section].indexOfLast { it == id }, id, flash = false)
+    }
+
+    private fun revealAt(section: DeckSection, position: Int, id: CardId, flash: Boolean) {
         if (position < 0) return
-        revealRequest = RevealRequest(section, position, id, ++toastCounter)
+        revealRequest = RevealRequest(section, position, id, ++toastCounter, flash)
     }
 
     fun showToast(message: String, undo: (() -> Unit)? = null) {
@@ -1241,4 +1263,12 @@ data class RevealRequest(
     val position: Int,
     val cardId: CardId,
     val id: Long,
+    /**
+     * Whether the card should also be highlighted when it arrives.
+     *
+     * On for a card somebody went looking for — the deck check naming a
+     * problem — and off for one they just put there themselves, where the card
+     * appearing is the confirmation and a flash on every add would be a strobe.
+     */
+    val flash: Boolean = true,
 )

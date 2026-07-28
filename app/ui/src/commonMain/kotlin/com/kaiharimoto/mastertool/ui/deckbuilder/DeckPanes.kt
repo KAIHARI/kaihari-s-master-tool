@@ -224,10 +224,19 @@ private fun DeckSectionPane(
         val request = state.revealRequest ?: return@LaunchedEffect
         if (request.section != section) return@LaunchedEffect
 
-        gridState.animateScrollToItem(request.position)
-        flashed = request.cardId
-        delay(FLASH_MS)
-        flashed = null
+        // Only move the pane if the card is not already in front of you.
+        // Scrolling a card that was visible anyway to the top of the pane is a
+        // jump that answers no question.
+        val alreadyVisible = gridState.layoutInfo.visibleItemsInfo.any {
+            it.index == request.position
+        }
+        if (!alreadyVisible) gridState.animateScrollToItem(request.position)
+
+        if (request.flash) {
+            flashed = request.cardId
+            delay(FLASH_MS)
+            flashed = null
+        }
     }
 
     Column(

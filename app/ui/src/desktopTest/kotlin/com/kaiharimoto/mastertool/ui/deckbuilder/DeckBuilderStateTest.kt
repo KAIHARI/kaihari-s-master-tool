@@ -463,6 +463,53 @@ class DeckBuilderStateTest {
         assertTrue(state.dealSerial > before)
     }
 
+    // ---- showing what happened ---------------------------------------------
+
+    @Test
+    fun addingACardAsksForItToBeShown() = runTest {
+        val state = builderState()
+
+        state.addCard(TestPool.ash)
+
+        assertEquals(0, state.revealRequest?.position)
+        assertEquals(TestPool.ash.id, state.revealRequest?.cardId)
+        assertFalse(state.revealRequest?.flash ?: true, "an add is not a search result")
+    }
+
+    @Test
+    fun itIsTheCopyJustAddedThatIsShown() = runTest {
+        // Adding a third Ash Blossom and scrolling to the first is an answer to
+        // a question nobody asked.
+        val state = builderState()
+        repeat(3) { state.addCard(TestPool.ash) }
+
+        assertEquals(2, state.revealRequest?.position)
+    }
+
+    @Test
+    fun aRejectedAddShowsNothing() = runTest {
+        // The fourth copy is refused, and pointing at the third one as though
+        // something had happened would be a lie.
+        val state = builderState()
+        repeat(3) { state.addCard(TestPool.ash) }
+        state.addCard(TestPool.droll)
+        val before = state.revealRequest
+
+        state.addCard(TestPool.ash)
+
+        assertEquals(before?.id, state.revealRequest?.id)
+    }
+
+    @Test
+    fun theDeckCheckStillFlashesWhatItNames() = runTest {
+        val state = builderState()
+        state.addCard(TestPool.ash)
+
+        state.reveal(main, TestPool.ash.id)
+
+        assertTrue(state.revealRequest?.flash ?: false)
+    }
+
     // ---- what covers the builder -------------------------------------------
 
     /**
