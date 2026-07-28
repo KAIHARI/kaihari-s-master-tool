@@ -1,0 +1,87 @@
+package com.kaiharimoto.mastertool.core.board
+
+import com.kaiharimoto.mastertool.core.model.CardId
+import com.kaiharimoto.mastertool.core.model.Deck
+import kotlin.random.Random
+
+/**
+ * Everything on the table: what is on the board, what is in hand, what is left.
+ *
+ * One value rather than three, because every interesting operation moves a card
+ * between them and none of them is meaningful on its own. Playing a card is
+ * `hand → board`; drawing is `library → hand`; and a snapshot of all three is
+ * what undo has to restore, which is exactly what makes them one thing.
+ *
+ * Nothing here knows a rule of the game. It knows a card cannot be in two places
+ * at once and that a monster zone holds one monster; a sandbox that enforced
+ * summoning restrictions would be a sandbox nobody could use to check the thing
+ * they were actually unsure about.
+ */
+data class TableState(
+    val board: Board = Board.EMPTY,
+    val hand: List<CardId> = emptyList(),
+    /** Face-down, in order. The top of the deck is the last element. */
+    val library: List<CardId> = emptyList(),
+    val extra: List<CardId> = emptyList(),
+) {
+    val isEmpty: Boolean get() = board.isEmpty && hand.isEmpty()
+
+    /**
+     * Draws from the top, and stops when the deck runs out.
+     *
+     * Decking out is a real thing that happens and not an error — the sandbox
+     * says so by there being nothing left to draw rather than by refusing.
+     */
+    fun draw(count: Int = 1): TableState {
+        val taken = minOf(count, library.size)
+        if (taken == 0) return this
+        return copy(
+            hand = hand + library.takeLast(taken).reversed(),
+            library = library.dropLast(taken),
+        )
+    }
+
+    /**
+     * Puts a card from the hand into a zone, or returns null if it will not go.
+     *
+     * Null covers both ways that happens — an index that is not in the hand and
+     * a zone that is already full — because the caller does the same thing about
+     * either: nothing, and the card stays where it was.
+     */
+    fun play(handIndex: Int, zone: ZoneId, placement: Placement): TableState? {
+        val card = hand.getOrNull(handIndex) ?: return null
+        val placed = board.place(zone, PlacedCard(card, placement)) ?: return null
+        return copy(board = placed, hand = hand.withoutIndex(handIndex))
+    }
+
+    /** From the hand straight to a pile, for a discard or a banish cost. */
+    fun sendFromHand(handIndex: Int, zone: ZoneId): TableState? {
+        val card = hand.getOrNull(handIndex) ?: return null
+        val placed = board.place(zone, PlacedCard(card)) ?: return null
+        return copy(board = placed, hand = hand.withoutIndex(handIndex))
+    }
+
+    /** Back off the board and into the hand, for a bounce or a misplacement. */
+    fun toHand(zone: ZoneId): TableState? {
+        val card = board[zone].lastOrNull() ?: return null
+        return copy(board = board.lift(zone), hand = hand + card.id)
+    }
+
+    private fun List<CardId>.withoutIndex(index: Int): List<CardId> =
+        take(index) + drop(index + 1)
+
+    companion object {
+        const val OPENING_HAND = 5
+
+        /**
+         * Shuffles a decklist out onto the table and draws an opening hand.
+         *
+         * The Extra deck is kept aside rather than shuffled in, because it is
+         * not part of the deck you draw from and putting it there would be the
+         * one rule of the game a sandbox does have to know.
+         */
+        fun from(deck: Deck, random: Random, handSize: Int = OPENING_HAND): TableState =
+            TableState(library = deck.main.shuffled(random), extra = deck.extra)
+                .draw(handSize)
+    }
+}
