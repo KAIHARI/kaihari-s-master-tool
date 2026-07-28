@@ -125,6 +125,18 @@ class DeckLayoutState(
         update { it.copy(searchColumns = columns.coerceAtLeast(0)) }
     }
 
+    /**
+     * Remembers which deck was open, so the next run opens it again.
+     *
+     * Called on every save rather than only on close, because there is no
+     * reliable moment of closing on either platform — a tablet's process is
+     * reclaimed without ceremony, and that is exactly the case this exists for.
+     */
+    fun rememberOpenDeck(id: String?) {
+        if (preferences.lastDeckId == id) return
+        update { it.copy(lastDeckId = id) }
+    }
+
     /** Persisted like every other layout setting, and applied on the next frame. */
     fun setTheme(theme: ThemeChoice) {
         update { it.copy(theme = theme) }

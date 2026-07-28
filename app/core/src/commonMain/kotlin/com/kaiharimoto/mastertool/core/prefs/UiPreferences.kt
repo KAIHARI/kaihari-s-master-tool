@@ -100,6 +100,17 @@ data class UiPreferences(
      * default and needs no curating.
      */
     val easterEggPool: List<Int> = emptyList(),
+    /**
+     * The deck that was open when the program was last closed.
+     *
+     * Not a layout setting, and it lives here anyway: this document is what the
+     * app remembers about itself between runs, and adding a second one for a
+     * single nullable string would be a table for a sentence.
+     *
+     * Null means there was none, which is also what a deleted deck comes back
+     * as — reopening a deck that is no longer there simply does nothing.
+     */
+    val lastDeckId: String? = null,
 ) {
     operator fun get(section: DeckSection): SectionPreferences = when (section) {
         DeckSection.MAIN -> main

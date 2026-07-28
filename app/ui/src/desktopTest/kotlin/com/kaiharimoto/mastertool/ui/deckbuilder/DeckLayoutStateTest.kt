@@ -268,3 +268,57 @@ class DeckLayoutStateTest {
         assertEquals(0, layout.preferences.searchColumns, "and nothing below it")
     }
 }
+
+/**
+ * Which deck was open when the program was last closed.
+ *
+ * Lives in the preferences document rather than a table of its own, because it
+ * is one nullable string and a table for a sentence is a table too many.
+ */
+class LastDeckTest {
+
+    private fun TestScope.layoutState(): DeckLayoutState =
+        DeckLayoutState(
+            testDependencies().preferencesRepository,
+            CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+        )
+
+    @Test
+    fun nothingIsRememberedUntilADeckIsOpened() = runTest {
+        assertEquals(null, layoutState().preferences.lastDeckId)
+    }
+
+    @Test
+    fun theOpenDeckIsRemembered() = runTest {
+        val layout = layoutState()
+
+        layout.rememberOpenDeck("snake-eye")
+
+        assertEquals("snake-eye", layout.preferences.lastDeckId)
+    }
+
+    @Test
+    fun closingToANewDeckForgetsIt() = runTest {
+        // A new deck has no id, and reopening the previous one on the next run
+        // would be the program deciding what you meant to be working on.
+        val layout = layoutState()
+        layout.rememberOpenDeck("snake-eye")
+
+        layout.rememberOpenDeck(null)
+
+        assertEquals(null, layout.preferences.lastDeckId)
+    }
+
+    @Test
+    fun rememberingTheSameDeckAgainChangesNothing() = runTest {
+        // It is called on every change of the open deck, so the common case is
+        // being told what it already knows.
+        val layout = layoutState()
+        layout.rememberOpenDeck("snake-eye")
+        val before = layout.preferences
+
+        layout.rememberOpenDeck("snake-eye")
+
+        assertEquals(before, layout.preferences)
+    }
+}

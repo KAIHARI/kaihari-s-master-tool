@@ -2,6 +2,7 @@ package com.kaiharimoto.mastertool.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,11 +46,23 @@ fun MasterToolApp(deps: AppDependencies) {
         configureImageLoader(deps.httpClient)
         // The format is a layout preference on disk but belongs to the builder at
         // runtime, so it is handed over once the stored settings arrive.
-        layoutState.start { preferences -> builderState.onFormatChange(preferences.format) }
+        layoutState.start { preferences ->
+            builderState.onFormatChange(preferences.format)
+            // Pick up where the last run left off. A deck that has since been
+            // deleted simply does not load, which is the right amount of fuss.
+            preferences.lastDeckId?.let(builderState::load)
+        }
         builderState.start()
         // Silent on launch: it only interrupts if there is something to install.
         updateState.check(userInitiated = false)
         onDispose { }
+    }
+
+    // Written whenever the open deck changes rather than on the way out: there
+    // is no reliable moment of closing on a tablet, whose process is reclaimed
+    // without ceremony, and that is the case this exists for.
+    LaunchedEffect(builderState.deckId) {
+        layoutState.rememberOpenDeck(builderState.deckId)
     }
 
     // Read from stored settings, so the surface is whatever it was left as
