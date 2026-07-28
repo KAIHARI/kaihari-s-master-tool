@@ -31,6 +31,10 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
+            // `api`, not `implementation`: the shared client is a property of
+            // AppDependencies, so every platform module that assembles the graph
+            // has to be able to see the type.
+            api(libs.ktor.client.core)
         }
 
         // The state holders are plain classes over Compose's snapshot system,

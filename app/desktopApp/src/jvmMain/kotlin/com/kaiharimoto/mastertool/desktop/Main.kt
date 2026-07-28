@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.desktop
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -30,6 +31,14 @@ import java.util.UUID
 fun main() = application {
     val deps = remember { buildDependencies() }
 
+    // Closing the client on the way out is not about reclaiming memory from a
+    // process that is ending -- it is that Ktor's engine keeps non-daemon
+    // threads, and a window that has gone but a process that has not is the
+    // worst way for a desktop app to be wrong.
+    DisposableEffect(Unit) {
+        onDispose { deps.httpClient.close() }
+    }
+
     Window(
         onCloseRequest = ::exitApplication,
         title = "kai's master tool",
@@ -44,12 +53,12 @@ private fun buildDependencies(): AppDependencies {
     val database = DatabaseFactory.create(
         JvmDatabaseDriverFactory(File(dataDirectory(), DatabaseFactory.DATABASE_NAME).absolutePath)
     )
-    val api = YgoProDeckApi(HttpClientFactory.create())
+    val httpClient = HttpClientFactory.create()
 
     return AppDependencies(
         cardRepository = CardRepository(
             database = database,
-            api = api,
+            api = YgoProDeckApi(httpClient),
             clock = System::currentTimeMillis,
             ioDispatcher = Dispatchers.IO,
         ),
@@ -64,12 +73,13 @@ private fun buildDependencies(): AppDependencies {
         ),
         fileAccess = DesktopDeckFileAccess(),
         updateChecker = UpdateChecker(
-            api = GitHubReleaseApi(HttpClientFactory.create()),
+            api = GitHubReleaseApi(httpClient),
             currentVersionName = updater.currentVersionName,
         ),
         updater = updater,
         newDeckId = { UUID.randomUUID().toString() },
         now = System::currentTimeMillis,
+        httpClient = httpClient,
     )
 }
 

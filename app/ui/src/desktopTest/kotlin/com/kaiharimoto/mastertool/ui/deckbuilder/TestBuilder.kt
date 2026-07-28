@@ -63,6 +63,7 @@ internal fun testDependencies(
         updater = NoUpdater,
         newDeckId = { "test-deck" },
         now = { 0L },
+        httpClient = offline,
         computeDispatcher = Dispatchers.Unconfined,
     )
 }

@@ -5,6 +5,7 @@ import com.kaiharimoto.mastertool.core.data.DeckRepository
 import com.kaiharimoto.mastertool.core.data.PreferencesRepository
 import com.kaiharimoto.mastertool.core.update.UpdateChecker
 import com.kaiharimoto.mastertool.ui.update.AppUpdater
+import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 
@@ -44,6 +45,16 @@ class AppDependencies(
     val updater: AppUpdater,
     val newDeckId: () -> String,
     val now: () -> Long,
+    /**
+     * The one HTTP client in the process.
+     *
+     * There used to be three — card data, release checks and card art each built
+     * their own — which is three connection pools and three thread pools for a
+     * program that talks to two hosts, and none of them was ever closed. Ktor is
+     * built to be shared, so the graph carries one and everything reaching the
+     * network is handed it.
+     */
+    val httpClient: HttpClient,
     /**
      * Where CPU-bound work runs.
      *

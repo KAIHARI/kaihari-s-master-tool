@@ -61,6 +61,9 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
             updater = AndroidAppUpdater(this, app.httpClient),
             newDeckId = { UUID.randomUUID().toString() },
             now = System::currentTimeMillis,
+            // Owned by the Application, not this Activity: it outlives every
+            // recreation and there is only ever one of it.
+            httpClient = app.httpClient,
         )
 
         setContent { MasterToolApp(deps) }
