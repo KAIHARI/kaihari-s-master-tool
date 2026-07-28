@@ -39,6 +39,15 @@ object MasterToolPalette {
     val Line = Color(0xFF334155)
     val LineLight = Color(0xFF475569)
 
+    /**
+     * What a deck pane's cards lie on.
+     *
+     * Between [Background] and [Surface], and warmer than either: a mat has to
+     * read as a thing placed on the desk rather than as another panel of the
+     * same application.
+     */
+    val Mat = Color(0xFF16203A)
+
     val Text = Color(0xFFF1F5F9)
     val TextMuted = Color(0xFF94A3B8)
     val Ink = Color(0xFF0F172A)

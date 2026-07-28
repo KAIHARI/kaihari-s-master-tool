@@ -71,6 +71,7 @@ import com.kaiharimoto.mastertool.ui.dnd.DragSession
 import com.kaiharimoto.mastertool.ui.dnd.DragSource
 import com.kaiharimoto.mastertool.ui.dnd.DropHover
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.tableSurface
 import kotlinx.coroutines.delay
 
 /** How long a revealed card keeps its highlight before settling back. */
@@ -193,7 +194,10 @@ private fun DeckSectionPane(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            // A mat rather than a panel, bound in the section's own colour —
+            // which is what keeps the three panes apart now that the cards
+            // inside them touch and no background shows between.
+            .tableSurface(accent)
             .then(
                 // The whole pane lights up while a card is over it, in the
                 // section's own colour when the drop is legal and in red when it
