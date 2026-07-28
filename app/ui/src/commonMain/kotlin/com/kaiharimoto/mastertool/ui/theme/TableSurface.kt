@@ -84,6 +84,46 @@ fun Modifier.tableSurface(
 }
 
 /**
+ * The well the card pool sits in.
+ *
+ * Deliberately not the mat. The deck panes are a surface things are laid *on*;
+ * the pool is a box things are taken *out of*, and lighting is what says which
+ * — the mat catches light along its top edge, and this one is shadowed there
+ * instead, the way the inside of anything is. Same cloth, same grain, turned
+ * over.
+ *
+ * It has no binding, because there is nothing to tell it apart from: there is
+ * one pool, and the three panes it feeds are the things that needed naming.
+ */
+fun Modifier.wellSurface(
+    mat: MatColors,
+    corner: Dp = 6.dp,
+    weaveSpacing: Dp = 5.dp,
+): Modifier = drawWithCache {
+    val radius = CornerRadius(corner.toPx())
+    val spacing = weaveSpacing.toPx().coerceAtLeast(1f)
+
+    val downhill = diagonalPath(size, spacing, descending = true)
+    val uphill = diagonalPath(size, spacing, descending = false)
+
+    // Shadow at the top rather than sheen: the light is coming from outside the
+    // box and does not reach far into it.
+    val recess = Brush.verticalGradient(
+        0f to Color.Black.copy(alpha = 0.34f),
+        1f to Color.Transparent,
+        startY = 0f,
+        endY = maxOf(size.height * 0.30f, 1f),
+    )
+
+    onDrawBehind {
+        drawRoundRect(mat.base, cornerRadius = radius)
+        drawPath(downhill, mat.warp, style = Stroke(1f))
+        drawPath(uphill, mat.weft, style = Stroke(1f))
+        drawRoundRect(brush = recess, cornerRadius = radius)
+    }
+}
+
+/**
  * Parallel 45-degree lines covering [size].
  *
  * Offsets run from `-height` so the lines entering through the left edge are
