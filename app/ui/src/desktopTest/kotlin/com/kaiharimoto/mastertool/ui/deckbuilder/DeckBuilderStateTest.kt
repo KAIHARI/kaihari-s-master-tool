@@ -463,6 +463,68 @@ class DeckBuilderStateTest {
         assertTrue(state.dealSerial > before)
     }
 
+    // ---- what covers the builder -------------------------------------------
+
+    /**
+     * Opens one layer.
+     *
+     * Exhaustive over [Overlay], which the compiler enforces — so a new layer
+     * fails to compile here until somebody says how it opens, and this test
+     * cannot quietly stop covering all of them.
+     */
+    private fun DeckBuilderState.show(overlay: Overlay) {
+        when (overlay) {
+            Overlay.EGG -> eggVisible = true
+            Overlay.SHOWCASE -> showcaseVisible = true
+            Overlay.INSPECTOR -> inspect(listOf(TestPool.ash), 0)
+            Overlay.HELP -> helpVisible = true
+            Overlay.FILTERS -> filtersVisible = true
+            Overlay.STATS -> statsVisible = true
+            Overlay.SIDING -> sidingVisible = true
+            Overlay.TEST_HAND -> testHandVisible = true
+            Overlay.NOTES -> notesVisible = true
+            Overlay.ISSUES -> issuesVisible = true
+        }
+    }
+
+    @Test
+    fun everyLayerCoversTheBuilderAndEscapeClosesIt() = runTest {
+        // Two lists used to say this — what silences the shortcuts, and what
+        // Escape closes — and nothing made them agree. A layer missing from the
+        // first leaks keys through to the builder underneath; one missing from
+        // the second cannot be closed by Escape at all.
+        val state = builderState()
+
+        Overlay.entries.forEach { overlay ->
+            state.show(overlay)
+            assertTrue(state.isOpen(overlay), "$overlay did not open")
+            assertTrue(state.anyOverlayOpen, "$overlay does not count as covering the builder")
+
+            assertTrue(state.dismissTopOverlay(), "$overlay could not be dismissed")
+            assertFalse(state.isOpen(overlay), "$overlay stayed open")
+            assertFalse(state.anyOverlayOpen, "something else was left open by $overlay")
+        }
+    }
+
+    @Test
+    fun theTopmostLayerLeavesFirst() = runTest {
+        val state = builderState()
+        state.statsVisible = true
+        state.eggVisible = true
+
+        state.dismissTopOverlay()
+
+        assertFalse(state.eggVisible, "the egg covers everything, so it leaves first")
+        assertTrue(state.statsVisible)
+    }
+
+    @Test
+    fun dismissingNothingSaysSo() = runTest {
+        // The caller falls through to the selection and then the search box on
+        // a false, so a lie here would eat the Escape that should clear those.
+        assertFalse(builderState().dismissTopOverlay())
+    }
+
     // ---- saving ------------------------------------------------------------
 
     @Test

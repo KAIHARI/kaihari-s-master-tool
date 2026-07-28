@@ -50,6 +50,31 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 
+/**
+ * Everything that can cover the builder, topmost first.
+ *
+ * One declared order, rather than two hand-kept lists — "what suppresses the
+ * shortcuts" and "what Escape closes" — that nothing made agree. They had been
+ * edited separately twice, and a layer missing from the first is a layer whose
+ * keys leak through to the builder underneath, while one missing from the second
+ * is a layer Escape cannot close.
+ *
+ * The order is the order things stack: the egg covers everything, so it leaves
+ * first.
+ */
+enum class Overlay {
+    EGG,
+    SHOWCASE,
+    INSPECTOR,
+    HELP,
+    FILTERS,
+    STATS,
+    SIDING,
+    TEST_HAND,
+    NOTES,
+    ISSUES,
+}
+
 /** A transient message shown in the snackbar, optionally with an undo action. */
 data class Toast(
     val message: String,
@@ -184,6 +209,50 @@ class DeckBuilderState(
 
     fun onTextFieldFocusChanged(focused: Boolean) {
         focusedTextFields = (focusedTextFields + if (focused) 1 else -1).coerceAtLeast(0)
+    }
+
+    fun isOpen(overlay: Overlay): Boolean = when (overlay) {
+        Overlay.EGG -> eggVisible
+        Overlay.SHOWCASE -> showcaseVisible
+        Overlay.INSPECTOR -> inspection != null
+        Overlay.HELP -> helpVisible
+        Overlay.FILTERS -> filtersVisible
+        Overlay.STATS -> statsVisible
+        Overlay.SIDING -> sidingVisible
+        Overlay.TEST_HAND -> testHandVisible
+        Overlay.NOTES -> notesVisible
+        Overlay.ISSUES -> issuesVisible
+    }
+
+    /**
+     * Both of these are exhaustive `when`s over [Overlay], which since Kotlin
+     * 1.7 is enforced rather than merely warned about — so a new layer added to
+     * the enum will not compile until it says how it opens and closes. That is
+     * the point of the enum existing at all.
+     */
+    fun close(overlay: Overlay) {
+        when (overlay) {
+            Overlay.EGG -> eggVisible = false
+            Overlay.SHOWCASE -> showcaseVisible = false
+            Overlay.INSPECTOR -> inspection = null
+            Overlay.HELP -> helpVisible = false
+            Overlay.FILTERS -> filtersVisible = false
+            Overlay.STATS -> statsVisible = false
+            Overlay.SIDING -> sidingVisible = false
+            Overlay.TEST_HAND -> testHandVisible = false
+            Overlay.NOTES -> notesVisible = false
+            Overlay.ISSUES -> issuesVisible = false
+        }
+    }
+
+    /** Whether anything is covering the builder, which is what silences its keys. */
+    val anyOverlayOpen: Boolean get() = Overlay.entries.any(::isOpen)
+
+    /** Closes the topmost open layer. False when there was nothing to close. */
+    fun dismissTopOverlay(): Boolean {
+        val top = Overlay.entries.firstOrNull(::isOpen) ?: return false
+        close(top)
+        return true
     }
 
     /** Which section the statistics panel is reporting on. */

@@ -94,10 +94,7 @@ fun DeckBuilderScreen(
     val searchFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
-    val overlayOpen = state.inspection != null || state.filtersVisible ||
-        state.statsVisible || state.issuesVisible || state.helpVisible ||
-        state.eggVisible || state.sidingVisible || state.testHandVisible ||
-        state.showcaseVisible || state.notesVisible
+    val overlayOpen = state.anyOverlayOpen
 
     ShortcutHost(
         context = ShortcutContext(
@@ -344,17 +341,9 @@ private fun DeckBuilderState.carry(layout: DeckLayoutState, step: GridStep) {
  */
 private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
     when {
-        // Topmost first. The egg covers everything, so it leaves first too.
-        state.eggVisible -> state.eggVisible = false
-        state.showcaseVisible -> state.showcaseVisible = false
-        state.inspection != null -> state.inspection = null
-        state.helpVisible -> state.helpVisible = false
-        state.filtersVisible -> state.filtersVisible = false
-        state.statsVisible -> state.statsVisible = false
-        state.sidingVisible -> state.sidingVisible = false
-        state.testHandVisible -> state.testHandVisible = false
-        state.notesVisible -> state.notesVisible = false
-        state.issuesVisible -> state.issuesVisible = false
+        // The layers come first, in the order they stack, and that order is
+        // declared once beside the flags themselves rather than here.
+        state.dismissTopOverlay() -> Unit
         // Before the search box, and after every overlay: a selection is the
         // most recent thing you started, and putting cards down is what Escape
         // means while you are holding some.
