@@ -534,13 +534,30 @@ class DeckBuilderStateTest {
         val state = builderState(testDependencies(StubFileAccess(sidedFile)))
         TestPool.many(40).forEach { state.addCard(it) }
         state.loadOpponent()
+        state.dealShootout(goingFirst = true)
 
         state.judgeShootout(playable = false)
         state.judgeShootout(playable = true)
 
-        assertEquals(2, state.shootoutTally.total)
-        assertEquals(1, state.shootoutTally.bricks)
+        assertEquals(2, state.matchup.goingFirst.total)
+        assertEquals(1, state.matchup.goingFirst.bricks)
+        assertEquals(0, state.matchup.goingSecond.total, "the other side saw no hands")
         assertTrue(state.yourOpening != null, "judging deals the next hand")
+    }
+
+    @Test
+    fun aHandIsRecordedAgainstTheSideItWasDealtFor() = runTest {
+        // Not against whichever chip is selected when the verdict is given.
+        // Those are the same until somebody switches sides mid-judgement.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+
+        state.dealShootout(goingFirst = false)
+        state.judgeShootout(playable = false)
+
+        assertEquals(1, state.matchup.goingSecond.total)
+        assertEquals(0, state.matchup.goingFirst.total)
     }
 
     @Test
@@ -554,7 +571,7 @@ class DeckBuilderStateTest {
 
         state.loadOpponent()
 
-        assertEquals(0, state.shootoutTally.total)
+        assertEquals(0, state.matchup.total)
     }
 
     @Test
@@ -563,7 +580,7 @@ class DeckBuilderStateTest {
 
         state.judgeShootout(playable = true)
 
-        assertEquals(0, state.shootoutTally.total)
+        assertEquals(0, state.matchup.total)
     }
 
     // ---- showing what happened ---------------------------------------------

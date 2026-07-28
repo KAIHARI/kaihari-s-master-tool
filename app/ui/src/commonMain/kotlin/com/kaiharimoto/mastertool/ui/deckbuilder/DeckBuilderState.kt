@@ -12,6 +12,7 @@ import com.kaiharimoto.mastertool.core.deck.DeckTidy
 import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.deck.HandSimulator
 import com.kaiharimoto.mastertool.core.deck.HandTally
+import com.kaiharimoto.mastertool.core.deck.MatchupRecord
 import com.kaiharimoto.mastertool.core.deck.OpeningHand
 import com.kaiharimoto.mastertool.core.deck.Selection
 import com.kaiharimoto.mastertool.core.deck.Selections
@@ -322,13 +323,14 @@ class DeckBuilderState(
         private set
 
     /**
-     * How your openings have fared against *this* deck.
+     * How your openings have fared against *this* deck, each side of the die
+     * roll kept apart.
      *
      * Reset when the opponent changes, because a record against one list says
      * nothing about another and a tally that quietly carried over would be worse
      * than no tally at all.
      */
-    var shootoutTally by mutableStateOf(HandTally())
+    var matchup by mutableStateOf(MatchupRecord())
         private set
 
     /** The hand currently on the table, if one has been dealt. */
@@ -540,7 +542,7 @@ class DeckBuilderState(
             val parsed = YdkCodec.parse(file.content)
             opponentDeck = parsed.document.deck
             opponentName = file.name.substringBeforeLast('.').ifBlank { "Opponent" }
-            shootoutTally = HandTally()
+            matchup = MatchupRecord()
             dealShootout(youGoFirst)
         }
     }
@@ -566,13 +568,16 @@ class DeckBuilderState(
      * open" and "does this open against the thing everybody is playing".
      */
     fun judgeShootout(playable: Boolean) {
-        if (yourOpening == null) return
-        shootoutTally = shootoutTally.judged(playable)
+        // Recorded against the side that hand was actually dealt for, not
+        // whichever chip is selected now -- they are the same until somebody
+        // switches sides mid-judgement, and then they are not.
+        val wentFirst = yourOpening?.goingFirst ?: return
+        matchup = matchup.judged(wentFirst, playable)
         dealShootout(youGoFirst)
     }
 
-    fun resetShootoutTally() {
-        shootoutTally = HandTally()
+    fun resetMatchup() {
+        matchup = MatchupRecord()
     }
 
     fun resetHandTally() {

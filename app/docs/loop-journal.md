@@ -801,6 +801,30 @@ one panel and 25.0% in the other. That is the fourth time in this loop that a
 thing written twice had started to disagree, and every one of them was found by
 going to use it somewhere else.
 
+## 41. Which side of the die roll
+
+One tally across a whole run answers the wrong question. The decision a player
+actually makes at the start of a match is *whether to go first*, and against some
+decks the answer is the opposite of the usual one — a list that bricks going
+first and functions going second is exactly the list whose owner needs telling,
+because the default is to choose first without thinking.
+
+So the two are never mixed, and the record turns them into an answer rather than
+leaving two percentages side by side to be compared by eye. Doing three-quarters
+of that work and stopping is the thing worth avoiding.
+
+The interesting part is when it declines to answer. Two hands a side is not
+evidence, and a program that answers anyway will confidently recommend going
+second off a single unlucky opening — so it stays quiet until five each. A tie
+is also silence, because "it does not matter" is a real answer and dressing it as
+a preference would be inventing one. Five is not statistics; it is the point past
+which somebody would have formed an opinion anyway, and keeping quiet until then
+is the honest version of that.
+
+One detail found by writing the test: a verdict is recorded against the side the
+hand was actually *dealt* for, not whichever chip is selected when the verdict is
+given. Those are the same right up until somebody switches sides mid-judgement.
+
 ---
 
 ## Where this stands

@@ -17,7 +17,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.core.deck.HandTally
 import com.kaiharimoto.mastertool.core.deck.OpeningHand
+import com.kaiharimoto.mastertool.core.deck.Preference
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.HoverPreview
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
@@ -103,25 +105,75 @@ fun ShootoutPanel(state: DeckBuilderState) {
 
                 Box(Modifier.weight(1f))
 
-                val tally = state.shootoutTally
-                val rate = tally.brickRate
-                Text(
-                    if (rate == null) {
-                        "no hands judged"
-                    } else {
-                        "${tally.bricks} bricks in ${tally.total}  ·  ${percent(rate)}"
-                    },
-                    style = tacticalStyle(),
-                    color = when {
-                        rate == null -> MaterialTheme.colorScheme.onSurfaceVariant
-                        rate >= 0.25 -> MasterToolPalette.Danger
-                        rate >= 0.15 -> MasterToolPalette.Warning
-                        else -> MasterToolPalette.Success
-                    },
-                )
-                TextButton(onClick = { state.resetShootoutTally() }) { Text("Reset") }
+                TextButton(onClick = { state.resetMatchup() }) { Text("Reset") }
             }
+
+            Record(state)
         }
+    }
+}
+
+/**
+ * The record so far, and what it says to do about the die roll.
+ *
+ * Two rates, kept apart, because the decision a player makes at the start of a
+ * match is *whether to go first* — and against some decks the answer is the
+ * opposite of the usual one. Saying which is better is the whole point; leaving
+ * two percentages side by side to be compared by eye is doing three-quarters of
+ * the work and stopping.
+ */
+@Composable
+private fun Record(state: DeckBuilderState) {
+    val matchup = state.matchup
+    if (matchup.total == 0) {
+        Text(
+            "Judge each opening and the record builds, kept apart for going first and second.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Rate("GOING 1ST", matchup.goingFirst)
+        Rate("GOING 2ND", matchup.goingSecond)
+
+        Box(Modifier.weight(1f))
+
+        val advice = when (matchup.preference()) {
+            Preference.FIRST -> "go first against this"
+            Preference.SECOND -> "go second against this"
+            // Quiet until there is something to say. Five hands a side is not
+            // statistics, it is the point past which somebody would have formed
+            // an opinion anyway.
+            null -> null
+        }
+        if (advice != null) {
+            Text(advice, style = tacticalStyle(), color = MasterToolPalette.Success)
+        }
+    }
+}
+
+@Composable
+private fun Rate(label: String, tally: HandTally) {
+    val rate = tally.brickRate
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = tacticalStyle(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(Modifier.width(8.dp))
+        Text(
+            if (rate == null) "—" else "${percent(rate)} bricks in ${tally.total}",
+            style = tacticalStyle(),
+            color = when {
+                rate == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                rate >= 0.25 -> MasterToolPalette.Danger
+                rate >= 0.15 -> MasterToolPalette.Warning
+                else -> MasterToolPalette.Success
+            },
+        )
     }
 }
 
