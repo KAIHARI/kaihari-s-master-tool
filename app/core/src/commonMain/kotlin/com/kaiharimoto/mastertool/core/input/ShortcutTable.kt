@@ -44,6 +44,7 @@ enum class ShortcutAction {
     TOGGLE_TEST_HAND,
     TOGGLE_SIDING,
     TOGGLE_HELP,
+    TOGGLE_SHOWCASE,
     DISMISS,
     FOCUS_MAIN,
     FOCUS_EXTRA,
@@ -162,6 +163,14 @@ object ShortcutTable {
         Shortcut(
             KeyChord("f", ctrl = true), ShortcutAction.FOCUS_SEARCH, ShortcutScope.ANYWHERE,
             "Jump to the search box", allowedInTextInput = true,
+        ),
+
+        // Anywhere rather than builder-only, so the same key that opens it
+        // closes it. Everything else here is asymmetric on purpose -- Escape
+        // closes them -- but a view with no controls at all needs its key back.
+        Shortcut(
+            KeyChord("v"), ShortcutAction.TOGGLE_SHOWCASE, ShortcutScope.ANYWHERE,
+            "See the deck with nothing on top of it",
         ),
 
         // Undo is deliberately not allowed while typing: renaming a deck is not a

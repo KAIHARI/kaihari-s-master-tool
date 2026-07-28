@@ -53,6 +53,51 @@ object GridFitter {
         return GridFit(ceiling, fits = false)
     }
 
+    /**
+     * One column count for several grids stacked one above another.
+     *
+     * The whole deck at once, which is a different question from three sections
+     * each sized on their own: the Main, Extra and Side share a card size, so
+     * they share a column count, and the answer is the fewest columns that lets
+     * *everything* fit. Sizing them separately would give the Side deck's
+     * fifteen cards a different card size from the Main's forty, and a deck laid
+     * out at two scales does not read as one deck.
+     *
+     * [gaps] is whatever space sits between the blocks, since it comes out of
+     * the same height budget the cards are competing for.
+     */
+    fun fitAll(
+        counts: List<Int>,
+        availableWidth: Float,
+        availableHeight: Float,
+        spacing: Float,
+        gaps: Float,
+        aspectRatio: Float,
+        minColumns: Int,
+        maxColumns: Int,
+    ): GridFit {
+        val floor = minColumns.coerceAtLeast(1)
+        val ceiling = maxColumns.coerceAtLeast(floor)
+
+        val present = counts.filter { it > 0 }
+        if (present.isEmpty()) return GridFit(floor, fits = true)
+        if (availableWidth <= 0f || availableHeight <= 0f || aspectRatio <= 0f) {
+            return GridFit(floor, fits = false)
+        }
+
+        val budget = availableHeight - gaps
+        if (budget <= 0f) return GridFit(ceiling, fits = false)
+
+        for (columns in floor..ceiling) {
+            val total = present.sumOf {
+                requiredHeight(it, columns, availableWidth, spacing, aspectRatio).toDouble()
+            }
+            if (total <= budget) return GridFit(columns, fits = true)
+        }
+
+        return GridFit(ceiling, fits = false)
+    }
+
     /** Height a [columns]-wide grid of [count] cards would take. */
     fun requiredHeight(
         count: Int,

@@ -146,6 +146,8 @@ class DeckBuilderState(
 
     var issuesVisible by mutableStateOf(false)
 
+    var showcaseVisible by mutableStateOf(false)
+
     var helpVisible by mutableStateOf(false)
 
     var eggVisible by mutableStateOf(false)

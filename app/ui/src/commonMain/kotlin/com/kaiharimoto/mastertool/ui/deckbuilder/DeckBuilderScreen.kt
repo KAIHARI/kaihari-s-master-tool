@@ -96,7 +96,8 @@ fun DeckBuilderScreen(
 
     val overlayOpen = state.inspection != null || state.filtersVisible ||
         state.statsVisible || state.issuesVisible || state.helpVisible ||
-        state.eggVisible || state.sidingVisible || state.testHandVisible
+        state.eggVisible || state.sidingVisible || state.testHandVisible ||
+        state.showcaseVisible
 
     ShortcutHost(
         context = ShortcutContext(
@@ -121,6 +122,7 @@ fun DeckBuilderScreen(
                 }
                 ShortcutAction.TOGGLE_SIDING -> state.sidingVisible = !state.sidingVisible
                 ShortcutAction.TOGGLE_HELP -> state.helpVisible = !state.helpVisible
+                ShortcutAction.TOGGLE_SHOWCASE -> state.showcaseVisible = !state.showcaseVisible
                 ShortcutAction.DISMISS -> dismissTopLayer(state) { focusManager.clearFocus() }
                 ShortcutAction.FOCUS_MAIN -> layout.focusSection(DeckSection.MAIN)
                 ShortcutAction.FOCUS_EXTRA -> layout.focusSection(DeckSection.EXTRA)
@@ -266,6 +268,12 @@ fun DeckBuilderScreen(
         ShortcutHelpSheet(onDismiss = { state.helpVisible = false })
     }
 
+    // Not a sheet. A sheet would leave the builder showing around the edges,
+    // and the whole point is that there is nothing else on the screen.
+    if (state.showcaseVisible) {
+        DeckShowcase(state, onDismiss = { state.showcaseVisible = false })
+    }
+
     if (state.eggVisible) {
         val pinned = layout.preferences.easterEggPool
 
@@ -334,6 +342,7 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
     when {
         // Topmost first. The egg covers everything, so it leaves first too.
         state.eggVisible -> state.eggVisible = false
+        state.showcaseVisible -> state.showcaseVisible = false
         state.inspection != null -> state.inspection = null
         state.helpVisible -> state.helpVisible = false
         state.filtersVisible -> state.filtersVisible = false

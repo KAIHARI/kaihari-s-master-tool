@@ -212,3 +212,110 @@ class CardWidthTest {
         assertEquals(width / 0.5f, oneRow, 0.001f)
     }
 }
+
+/**
+ * The whole deck at one card size.
+ *
+ * Three sections sized independently would give the Side deck's fifteen cards a
+ * different scale from the Main's forty, and a deck laid out at two scales does
+ * not read as one deck. So they share a column count, and it is the fewest that
+ * lets everything fit.
+ */
+class FitAllTest {
+
+    private fun fit(
+        counts: List<Int>,
+        width: Float = 1200f,
+        height: Float = 800f,
+        gaps: Float = 0f,
+    ) = GridFitter.fitAll(
+        counts = counts,
+        availableWidth = width,
+        availableHeight = height,
+        spacing = 0f,
+        gaps = gaps,
+        aspectRatio = 59f / 86f,
+        minColumns = 3,
+        maxColumns = 20,
+    )
+
+    @Test
+    fun everythingHasToFitNotJustTheBiggestBlock() {
+        // The Main deck alone would fit at fewer columns; the Extra and Side sit
+        // under it and are competing for the same height.
+        val mainOnly = fit(listOf(40))
+        val wholeDeck = fit(listOf(40, 15, 15))
+
+        assertTrue(
+            wholeDeck.columns >= mainOnly.columns,
+            "adding cards below cannot let the cards get bigger",
+        )
+    }
+
+    @Test
+    fun anEmptySectionCostsNothing() {
+        // A deck with no Side deck must lay out exactly like one that has no
+        // Side deck section at all, rather than paying for an absent row.
+        assertEquals(fit(listOf(40, 15)).columns, fit(listOf(40, 15, 0)).columns)
+    }
+
+    @Test
+    fun everySectionRoundsUpToAWholeRowOfItsOwn() {
+        // The sections do not share rows: 41 cards in 8 columns is 6 rows, and a
+        // 1-card Extra deck under it is a 7th, not a card tucked into the gap.
+        val separate = fit(listOf(41, 1), height = 500f)
+        val combined = fit(listOf(42), height = 500f)
+
+        assertTrue(separate.columns >= combined.columns)
+    }
+
+    @Test
+    fun theGapsComeOutOfTheSameBudget() {
+        val tight = fit(listOf(40, 15, 15), height = 620f, gaps = 0f)
+        val withGaps = fit(listOf(40, 15, 15), height = 620f, gaps = 120f)
+
+        assertTrue(withGaps.columns >= tight.columns)
+    }
+
+    @Test
+    fun nothingToLayOutFitsTrivially() {
+        assertTrue(fit(emptyList()).fits)
+        assertTrue(fit(listOf(0, 0, 0)).fits)
+        assertEquals(3, fit(listOf(0, 0, 0)).columns)
+    }
+
+    @Test
+    fun aDeckThatCannotFitSaysSoAtTheSmallestCards() {
+        val impossible = fit(listOf(60, 15, 15), height = 40f)
+
+        assertFalse(impossible.fits)
+        assertEquals(20, impossible.columns)
+    }
+
+    @Test
+    fun gapsBiggerThanTheSpaceDoNotLoop() {
+        val result = fit(listOf(40), height = 100f, gaps = 400f)
+
+        assertFalse(result.fits)
+        assertEquals(20, result.columns)
+    }
+
+    @Test
+    fun nonsenseDimensionsAreRefused() {
+        assertFalse(fit(listOf(40), width = 0f).fits)
+        assertFalse(fit(listOf(40), height = 0f).fits)
+    }
+
+    @Test
+    fun oneSectionAgreesWithTheOrdinaryFitter() {
+        // fitAll is a generalisation, not a second implementation, and this is
+        // what says so.
+        listOf(1, 12, 40, 60).forEach { count ->
+            assertEquals(
+                GridFitter.fit(count, 1200f, 800f, 0f, 59f / 86f, 3, 20).columns,
+                fit(listOf(count)).columns,
+                "$count cards",
+            )
+        }
+    }
+}
