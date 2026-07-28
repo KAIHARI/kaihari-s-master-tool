@@ -130,6 +130,17 @@ class DeckBuilderState(
     var deckName by mutableStateOf("Untitled Deck")
         private set
 
+    /**
+     * Whatever the player wrote about this deck.
+     *
+     * Stored, loaded and shown in the library since the repository was written,
+     * and until now unwritable — which was worse than a missing feature. `save`
+     * defaults the column to the empty string, so every save from the builder
+     * was quietly clearing whatever was in it.
+     */
+    var deckNotes by mutableStateOf("")
+        private set
+
     var deckId by mutableStateOf<String?>(null)
         private set
 
@@ -202,6 +213,8 @@ class DeckBuilderState(
 
     /** Whether the siding panel is up. */
     var sidingVisible by mutableStateOf(false)
+
+    var notesVisible by mutableStateOf(false)
 
     var testHandVisible by mutableStateOf(false)
 
@@ -933,6 +946,11 @@ class DeckBuilderState(
      * stack: it used to be restored alongside the deck, so undoing a card add
      * silently reverted a rename made after it.
      */
+    fun updateNotes(value: String) {
+        deckNotes = value
+        scheduleAutosave()
+    }
+
     fun rename(value: String) {
         deckName = value
         // The name is written into the same row as the cards, and a deck whose
@@ -965,6 +983,7 @@ class DeckBuilderState(
         val token = pushUndo(deck)
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
+        deckNotes = ""
         extended = null
         showToast("Started a new deck.", undo = { undoIfCurrent(token) })
     }
@@ -1004,7 +1023,7 @@ class DeckBuilderState(
      * "would I lose this".
      */
     val saveStatus: SaveStatus by derivedStateOf {
-        SaveTracking.status(deck, deckName, savedSnapshot)
+        SaveTracking.status(deck, deckName, deckNotes, savedSnapshot)
     }
 
     private fun scheduleAutosave() {
@@ -1030,8 +1049,9 @@ class DeckBuilderState(
     private suspend fun writeToDisk(id: String) {
         val name = deckName.ifBlank { "Untitled Deck" }
         val written = deck
-        deps.deckRepository.save(id, name, written, extended)
-        savedSnapshot = SavedSnapshot(written, name)
+        val notes = deckNotes
+        deps.deckRepository.save(id, name, written, extended, notes)
+        savedSnapshot = SavedSnapshot(written, name, notes)
     }
 
     fun load(id: String) {
@@ -1042,8 +1062,9 @@ class DeckBuilderState(
             registeredDeck = stored.entry.deck
             dealSerial++
             deckName = stored.entry.name
+            deckNotes = stored.entry.notes
             deckId = stored.entry.id
-            savedSnapshot = SavedSnapshot(stored.entry.deck, stored.entry.name)
+            savedSnapshot = SavedSnapshot(stored.entry.deck, stored.entry.name, stored.entry.notes)
             extended = stored.extended
             undoStack.clear()
             redoStack.clear()
@@ -1063,6 +1084,7 @@ class DeckBuilderState(
             registeredDeck = parsed.document.deck
             dealSerial++
             deckName = file.name.substringBeforeLast('.').ifBlank { "Imported Deck" }
+            deckNotes = ""
             extended = parsed.document.extended
 
             val warning = parsed.warnings.size

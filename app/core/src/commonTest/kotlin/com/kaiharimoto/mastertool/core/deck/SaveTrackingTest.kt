@@ -12,8 +12,15 @@ class SaveTrackingTest {
     private fun deck(vararg values: Int) =
         Deck(main = values.map(::CardId), extra = emptyList(), side = emptyList())
 
-    private fun status(current: Deck, name: String = "Deck", saved: SavedSnapshot? = null) =
-        SaveTracking.status(current, name, saved)
+    private fun status(
+        current: Deck,
+        name: String = "Deck",
+        notes: String = "",
+        saved: SavedSnapshot? = null,
+    ) = SaveTracking.status(current, name, notes, saved)
+
+    private fun snapshot(deck: Deck, name: String = "Deck", notes: String = "") =
+        SavedSnapshot(deck, name, notes)
 
     @Test
     fun anUntouchedDeckHasNothingToSay() {
@@ -33,7 +40,7 @@ class SaveTrackingTest {
 
         assertEquals(
             SaveStatus.SAVED,
-            status(stored, "Deck", SavedSnapshot(stored, "Deck")),
+            status(stored, "Deck", saved = snapshot(stored)),
         )
     }
 
@@ -43,7 +50,7 @@ class SaveTrackingTest {
 
         assertEquals(
             SaveStatus.UNSAVED_CHANGES,
-            status(deck(1, 2), "Deck", SavedSnapshot(stored, "Deck")),
+            status(deck(1, 2), "Deck", saved = snapshot(stored)),
         )
     }
 
@@ -54,7 +61,7 @@ class SaveTrackingTest {
 
         assertEquals(
             SaveStatus.UNSAVED_CHANGES,
-            status(deck(3, 2, 1), "Deck", SavedSnapshot(stored, "Deck")),
+            status(deck(3, 2, 1), "Deck", saved = snapshot(stored)),
         )
     }
 
@@ -64,7 +71,7 @@ class SaveTrackingTest {
 
         assertEquals(
             SaveStatus.UNSAVED_CHANGES,
-            status(stored, "Renamed", SavedSnapshot(stored, "Deck")),
+            status(stored, "Renamed", saved = snapshot(stored)),
         )
     }
 
@@ -74,7 +81,7 @@ class SaveTrackingTest {
         // of you is a deletion waiting to be written.
         assertEquals(
             SaveStatus.UNSAVED_CHANGES,
-            status(Deck.EMPTY, "Deck", SavedSnapshot(deck(1, 2), "Deck")),
+            status(Deck.EMPTY, "Deck", saved = snapshot(deck(1, 2))),
         )
     }
 
@@ -96,14 +103,35 @@ class SaveTrackingTest {
     }
 
     @Test
+    fun editingTheNotesIsAChangeLikeAnyOther() {
+        // The notes are written by the same save, so a snapshot that forgot them
+        // would report the deck saved the moment somebody typed a note.
+        val stored = deck(1)
+
+        assertEquals(
+            SaveStatus.UNSAVED_CHANGES,
+            status(stored, "Deck", notes = "side out Nibiru", saved = snapshot(stored)),
+        )
+        assertEquals(
+            SaveStatus.SAVED,
+            status(stored, "Deck", notes = "plan", saved = snapshot(stored, notes = "plan")),
+        )
+    }
+
+    @Test
+    fun aNoteOnAnEmptyDeckIsStillWork() {
+        assertEquals(SaveStatus.NEVER_SAVED, status(Deck.EMPTY, notes = "matchup plan"))
+    }
+
+    @Test
     fun everyStatusIsReachable() {
         // A state nothing can produce is a state the UI has a branch for and
         // will never show.
         val produced = setOf(
             status(Deck.EMPTY),
             status(deck(1)),
-            status(deck(1), "Deck", SavedSnapshot(deck(1), "Deck")),
-            status(deck(2), "Deck", SavedSnapshot(deck(1), "Deck")),
+            status(deck(1), "Deck", saved = snapshot(deck(1))),
+            status(deck(2), "Deck", saved = snapshot(deck(1))),
         )
 
         assertEquals(SaveStatus.entries.toSet(), produced)

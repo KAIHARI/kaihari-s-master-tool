@@ -97,7 +97,7 @@ fun DeckBuilderScreen(
     val overlayOpen = state.inspection != null || state.filtersVisible ||
         state.statsVisible || state.issuesVisible || state.helpVisible ||
         state.eggVisible || state.sidingVisible || state.testHandVisible ||
-        state.showcaseVisible
+        state.showcaseVisible || state.notesVisible
 
     ShortcutHost(
         context = ShortcutContext(
@@ -268,6 +268,10 @@ fun DeckBuilderScreen(
         ShortcutHelpSheet(onDismiss = { state.helpVisible = false })
     }
 
+    if (state.notesVisible) {
+        DeckNotesPanel(state)
+    }
+
     // Not a sheet. A sheet would leave the builder showing around the edges,
     // and the whole point is that there is nothing else on the screen.
     if (state.showcaseVisible) {
@@ -349,6 +353,7 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
         state.statsVisible -> state.statsVisible = false
         state.sidingVisible -> state.sidingVisible = false
         state.testHandVisible -> state.testHandVisible = false
+        state.notesVisible -> state.notesVisible = false
         state.issuesVisible -> state.issuesVisible = false
         // Before the search box, and after every overlay: a selection is the
         // most recent thing you started, and putting cards down is what Escape

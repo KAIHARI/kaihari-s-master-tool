@@ -594,6 +594,54 @@ class DeckBuilderStateTest {
         assertEquals(SaveStatus.NEVER_SAVED, state.saveStatus, "an import is a new deck")
     }
 
+    @Test
+    fun notesSurviveEverySaveAfterTheFirst() = runTest {
+        // The hole this closes: `save` defaults the notes column to the empty
+        // string, so every save from the builder was quietly clearing whatever
+        // had been written there.
+        val deps = testDependencies()
+        val state = builderState(deps)
+        state.addCard(TestPool.ash)
+        state.updateNotes("side out Nibiru on the draw")
+        state.save()
+
+        state.addCard(TestPool.maxx)
+        advanceUntilIdle()
+
+        assertEquals(
+            "side out Nibiru on the draw",
+            deps.deckRepository.byId(requireNonNull(state.deckId))?.entry?.notes,
+        )
+    }
+
+    @Test
+    fun notesComeBackWithTheDeck() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        state.addCard(TestPool.ash)
+        state.updateNotes("Kashtira is the bad one")
+        state.save()
+        val id = requireNonNull(state.deckId)
+
+        state.newDeck()
+        assertEquals("", state.deckNotes, "a new deck starts with no notes")
+
+        state.load(id)
+        assertEquals("Kashtira is the bad one", state.deckNotes)
+        assertEquals(SaveStatus.SAVED, state.saveStatus)
+    }
+
+    @Test
+    fun writingANoteIsAnUnsavedChange() = runTest {
+        val state = builderState()
+        state.addCard(TestPool.ash)
+        state.save()
+
+        state.updateNotes("something")
+
+        assertEquals(SaveStatus.UNSAVED_CHANGES, state.saveStatus)
+    }
+
     // ---- the cursor --------------------------------------------------------
 
     @Test

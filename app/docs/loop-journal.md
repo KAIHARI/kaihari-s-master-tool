@@ -500,11 +500,30 @@ different decks" was not expressible and the test quietly made one deck out of
 two. The same shape as the bug it was written to catch, which is worth noticing
 — a fixture can have the defect it is testing for.
 
+## 26. Three days ago
+
+A timestamp is a fact and "3 days ago" is an answer, and the second one is what
+anybody asks of a saved deck. The question only became worth answering once
+decks saved themselves — before that, "last modified" meant "last time you
+remembered to press save", which is not information about the deck.
+
+Deliberately coarse, and with no calendar, no time zone and no formatter:
+elapsed milliseconds are all it needs, which is why the whole range can be
+walked in a test without a clock. So "yesterday" means *about a day ago* rather
+than yesterday's date — the right simplification, since a deck saved at 00:30
+was not "yesterday" at 01:00 in any sense a person means. A clock that went
+backwards says "just now", because "in 3 hours" would be true and useless.
+
+The clock is read once when the screen opens rather than once per tile. Nine
+decks saved in the same minute then agree with each other, and a recomposition
+triggered by something else entirely does not make the numbers twitch — which
+reads as a glitch rather than as time passing.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **482 tests**, up from 249, plus
+`:core` carries the arithmetic for all of it, at **490 tests**, up from 249, plus
 **56 in `:ui`** where there were none.
 
 Still open: the sandbox board, a full shootout mode with an opponent's deck, and

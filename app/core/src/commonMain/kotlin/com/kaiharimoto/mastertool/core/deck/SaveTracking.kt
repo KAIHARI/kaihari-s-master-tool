@@ -2,8 +2,14 @@ package com.kaiharimoto.mastertool.core.deck
 
 import com.kaiharimoto.mastertool.core.model.Deck
 
-/** What is on disk, if anything is. */
-data class SavedSnapshot(val deck: Deck, val name: String)
+/**
+ * What is on disk, if anything is.
+ *
+ * Everything a save writes has to be in here. A field the writer sends but the
+ * snapshot forgets is a field that reports itself saved the moment it changes,
+ * which is worse than not tracking it at all.
+ */
+data class SavedSnapshot(val deck: Deck, val name: String, val notes: String)
 
 /**
  * Where the work stands relative to what has been written down.
@@ -41,10 +47,15 @@ enum class SaveStatus {
  */
 object SaveTracking {
 
-    fun status(current: Deck, name: String, saved: SavedSnapshot?): SaveStatus = when {
-        saved == null && current.isEmpty() -> SaveStatus.UNTOUCHED
+    fun status(
+        current: Deck,
+        name: String,
+        notes: String,
+        saved: SavedSnapshot?,
+    ): SaveStatus = when {
+        saved == null && current.isEmpty() && notes.isEmpty() -> SaveStatus.UNTOUCHED
         saved == null -> SaveStatus.NEVER_SAVED
-        current == saved.deck && name == saved.name -> SaveStatus.SAVED
+        current == saved.deck && name == saved.name && notes == saved.notes -> SaveStatus.SAVED
         else -> SaveStatus.UNSAVED_CHANGES
     }
 
