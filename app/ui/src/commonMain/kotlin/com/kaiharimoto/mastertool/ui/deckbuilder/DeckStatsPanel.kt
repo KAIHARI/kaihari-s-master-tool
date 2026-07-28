@@ -29,7 +29,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
+import com.kaiharimoto.mastertool.core.model.Attribute
 import com.kaiharimoto.mastertool.core.model.DeckSection
+import com.kaiharimoto.mastertool.core.search.CardFilter
 import com.kaiharimoto.mastertool.ui.components.percent
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
@@ -47,6 +49,8 @@ fun DeckStatsPanel(
     statistics: DeckStatistics,
     section: DeckSection,
     onSectionChange: (DeckSection) -> Unit,
+    /** Browses the pool by a facet the breakdown names. */
+    onBrowse: (CardFilter) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -121,16 +125,23 @@ fun DeckStatsPanel(
 
             if (statistics.byAttribute.isNotEmpty()) {
                 Section("Attribute") {
-                    CountChips(statistics.byAttribute.map { it.key.name to it.value })
+                    CountChips(statistics.byAttribute.map { it.key.name to it.value }) { name ->
+                        Attribute.entries.firstOrNull { it.name == name }
+                            ?.let { onBrowse(CardFilter(attributes = setOf(it))) }
+                    }
                 }
             }
 
             if (statistics.byRace.isNotEmpty()) {
-                Section("Monster type") { CountChips(statistics.byRace.toList()) }
+                Section("Monster type") {
+                    CountChips(statistics.byRace.toList()) { onBrowse(CardFilter(races = setOf(it))) }
+                }
             }
 
             if (statistics.byArchetype.isNotEmpty()) {
-                Section("Archetype") { CountChips(statistics.byArchetype.toList()) }
+                Section("Archetype") {
+                    CountChips(statistics.byArchetype.toList()) { onBrowse(CardFilter(archetypes = setOf(it))) }
+                }
             }
         }
     }
@@ -231,14 +242,17 @@ private fun LevelHistogram(byLevel: Map<Int, Int>) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CountChips(entries: List<Pair<String, Int>>) {
+private fun CountChips(entries: List<Pair<String, Int>>, onPick: (String) -> Unit) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         entries.take(12).forEach { (label, count) ->
-            AssistChip(onClick = {}, label = { Text("$label  $count") })
+            // These looked interactive and were not: an AssistChip with an empty
+            // onClick. Seeing that the deck runs eleven FIRE monsters is the
+            // moment you want to look at the others, so that is what it does.
+            AssistChip(onClick = { onPick(label) }, label = { Text("$label  $count") })
         }
     }
 }

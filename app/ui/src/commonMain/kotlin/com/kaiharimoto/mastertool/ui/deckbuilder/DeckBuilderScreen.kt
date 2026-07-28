@@ -210,6 +210,11 @@ fun DeckBuilderScreen(
             statistics = state.statistics,
             section = state.statsSection,
             onSectionChange = { state.statsSection = it },
+            onBrowse = { filter ->
+                state.onQueryChange("")
+                state.onFilterChange(filter)
+                state.statsVisible = false
+            },
             onDismiss = { state.statsVisible = false },
         )
     }
