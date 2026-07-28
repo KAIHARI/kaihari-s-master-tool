@@ -47,7 +47,9 @@ fun DragOverlay(controller: DragController, format: Format) {
                 }
                 .alpha(0.92f),
         ) {
-            CardTile(card = session.card, format = format)
+            // Already lifted, rotated and dimmed by the block above; the foil's
+            // own lift and tilt on top of that reads as two effects fighting.
+            CardTile(card = session.card, format = format, foil = false)
         }
     }
 }

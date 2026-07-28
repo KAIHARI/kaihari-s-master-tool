@@ -59,6 +59,13 @@ fun CardTile(
     copies: Int = 0,
     dimmed: Boolean = false,
     highlighted: Boolean = false,
+    /**
+     * Whether this card catches the light.
+     *
+     * Off for the copy that follows the cursor during a drag, which is already
+     * lifted, rotated and shadowed — a second effect on top reads as a bug.
+     */
+    foil: Boolean = true,
     onClick: () -> Unit = {},
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
@@ -69,6 +76,7 @@ fun CardTile(
         modifier = modifier
             .aspectRatio(CARD_ASPECT_RATIO)
             .clip(shape)
+            .foil(foil)
             .background(MasterToolPalette.SurfaceRaised)
             // The card's own printed edge, not a UI outline. Deck panes lay cards
             // out touching, so this hairline is the only thing separating one from
