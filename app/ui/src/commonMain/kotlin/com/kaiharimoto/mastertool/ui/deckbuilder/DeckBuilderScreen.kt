@@ -23,9 +23,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.components.CardInspector
+import com.kaiharimoto.mastertool.ui.dnd.DragController
+import com.kaiharimoto.mastertool.ui.dnd.DragOverlay
+import com.kaiharimoto.mastertool.ui.dnd.DragSession
+import com.kaiharimoto.mastertool.ui.dnd.DropHover
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
 /**
@@ -45,6 +50,15 @@ fun DeckBuilderScreen(
     onOpenLibrary: () -> Unit,
 ) {
     val snackbarHost = remember { SnackbarHostState() }
+    val density = LocalDensity.current
+    val drag = remember { DragController(canDrop = state::canDrop) }
+
+    // The resolver works in pixels; these are the only two numbers in it that
+    // are really about how big a finger is.
+    with(density) {
+        drag.rowTolerancePx = 8.dp.toPx()
+        drag.hysteresisPx = 10.dp.toPx()
+    }
 
     LaunchedEffect(state.toast?.id) {
         val toast = state.toast ?: return@LaunchedEffect
@@ -63,35 +77,49 @@ fun DeckBuilderScreen(
         updateState.consumeMessage()
     }
 
+    val onDropped: (DragSession, DropHover?) -> Unit = { session, landed ->
+        applyDrop(state, session, landed)
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            DeckBuilderTopBar(state, layout, updateState, onOpenLibrary)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+        // The dragged card is composed here, outside every pane, so it is not
+        // clipped by the grid it was lifted out of.
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            Column(Modifier.fillMaxSize()) {
+                DeckBuilderTopBar(state, layout, updateState, onOpenLibrary)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
-            Row(
-                Modifier
-                    .fillMaxSize()
-                    .onGloballyPositioned { layout.builderWidthPx = it.size.width.toFloat() },
-            ) {
-                SearchPane(
-                    state = state,
-                    layout = layout,
-                    modifier = Modifier.weight(layout.preferences.searchWeight).fillMaxHeight(),
-                )
+                Row(
+                    Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { layout.builderWidthPx = it.size.width.toFloat() },
+                ) {
+                    SearchPane(
+                        state = state,
+                        layout = layout,
+                        drag = drag,
+                        onDropped = onDropped,
+                        modifier = Modifier.weight(layout.preferences.searchWeight).fillMaxHeight(),
+                    )
 
-                SearchDeckDivider(onDrag = layout::resizeSearchPane)
+                    SearchDeckDivider(onDrag = layout::resizeSearchPane)
 
-                DeckPanes(
-                    state = state,
-                    layout = layout,
-                    modifier = Modifier
-                        .weight(1f - layout.preferences.searchWeight)
-                        .fillMaxHeight(),
-                )
+                    DeckPanes(
+                        state = state,
+                        layout = layout,
+                        drag = drag,
+                        onDropped = onDropped,
+                        modifier = Modifier
+                            .weight(1f - layout.preferences.searchWeight)
+                            .fillMaxHeight(),
+                    )
+                }
             }
+
+            DragOverlay(drag, state.format)
         }
     }
 
@@ -149,6 +177,35 @@ fun DeckBuilderScreen(
                 }
             },
             onDismiss = { state.issuesVisible = false },
+        )
+    }
+}
+
+/**
+ * Turns a completed drag into a deck edit.
+ *
+ * Four outcomes, and every one of them routes through the same editor that tap
+ * and the stepper use — so a drop is undoable, and a drop the rules refuse says
+ * so in the same words as any other rejected edit.
+ */
+private fun applyDrop(state: DeckBuilderState, session: DragSession, landed: DropHover?) {
+    if (landed == null || !landed.accepted) return
+
+    val target = landed.section
+    when {
+        // Dropped back on the pool: the copy leaves the deck.
+        target == null -> session.section?.let { from ->
+            state.removeAt(session.card, from, session.index)
+        }
+
+        session.section == null -> state.addCardAt(session.card, target, landed.index)
+
+        else -> state.moveCardTo(
+            card = session.card,
+            from = session.section,
+            fromIndex = session.index,
+            to = target,
+            insertBefore = landed.index,
         )
     }
 }

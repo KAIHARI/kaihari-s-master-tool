@@ -122,11 +122,13 @@ schema changes.
 
 ## Status
 
-Shipping in v1: deck builder with search and filters, per-section copy steppers
-and moves, adjustable and collapsible deck panes with per-section sorting and
-card density, an inspector you can page through the results in, deck statistics
-with opening-hand odds, a deck-check panel that jumps to the card an issue names,
-a TCG/OCG toggle, deck library, YDK/YDKX import, export and share.
+Shipping in v1: deck builder with search and filters, drag and drop between the
+pool and every deck section, per-section copy steppers and moves, adjustable and
+collapsible deck panes with per-section sorting and card density, an inspector
+you can page through the results in, deck statistics with opening-hand odds, a
+deck-check panel that jumps to the card an issue names, a TCG/OCG toggle, deck
+library, YDK/YDKX import, export and share.
 
 Not yet built: siding patterns, shootout mode, the sandbox board simulator,
-PDF export, drag-and-drop between deck sections, keyboard shortcuts.
+PDF export, keyboard shortcuts, and autoscrolling a pane while dragging over its
+edge.

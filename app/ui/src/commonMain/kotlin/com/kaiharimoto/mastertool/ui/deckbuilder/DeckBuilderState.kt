@@ -264,6 +264,52 @@ class DeckBuilderState(
         applyEdit(DeckEditor.setCount(deck, card, section, count, format), card)
     }
 
+    // ---- drops -------------------------------------------------------------
+    //
+    // Every one of these goes through the same `applyEdit` as tapping does, so a
+    // drop is undoable and a rejected drop explains itself in the same words.
+
+    fun addCardAt(card: Card, section: DeckSection, index: Int) {
+        applyEdit(DeckEditor.addAt(deck, card, section, index, format), card)
+    }
+
+    fun moveCardTo(
+        card: Card,
+        from: DeckSection,
+        fromIndex: Int,
+        to: DeckSection,
+        insertBefore: Int,
+    ) {
+        applyEdit(DeckEditor.moveAt(deck, card, from, fromIndex, to, insertBefore, format), card)
+    }
+
+    /** Drag-out: the copy at [index] leaves the deck. */
+    fun removeAt(card: Card, section: DeckSection, index: Int) {
+        when (val result = DeckEditor.removeAt(deck, section, index)) {
+            is DeckEdit.Applied -> {
+                val token = pushUndo(deck)
+                deck = result.deck
+                showToast("Removed ${card.name}.", undo = { undoIfCurrent(token) })
+            }
+            is DeckEdit.Rejected -> Unit
+        }
+    }
+
+    /**
+     * Whether a drop would be accepted, for live feedback during a drag.
+     *
+     * [from] is null when the card is being dragged out of the search pane.
+     */
+    fun canDrop(card: Card, from: DeckSection?, to: DeckSection): Boolean {
+        if (!DeckEditor.sectionAccepts(card, to)) return false
+        // A move does not change how many copies the deck holds, so only a card
+        // arriving from the pool can be stopped by the banlist.
+        if (from == null && DeckEditor.remainingCopies(deck, card, format) <= 0) return false
+        // Reordering within a section needs no room; arriving in a new one does.
+        if (from != to && deck[to].size >= to.maxSize) return false
+        return true
+    }
+
     fun removeAllCopies(card: Card, section: DeckSection) {
         val remaining = deck[section].filterNot { it == card.id }
         if (remaining.size == deck[section].size) return

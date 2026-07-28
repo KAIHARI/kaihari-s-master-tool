@@ -1,9 +1,8 @@
 package com.kaiharimoto.mastertool.ui.components
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
@@ -35,10 +34,10 @@ const val CARD_ASPECT_RATIO = 59f / 86f
 /**
  * A single card.
  *
- * Both tap and long-press are wired because a tablet has no hover: the web tool
- * put the card detail behind a mouse-over, which simply does not exist here.
+ * Tap only. Long press belongs to `DragSource`, which wraps these: two detectors
+ * competing for the same press is a gesture that works differently depending on
+ * how fast you were.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CardTile(
     card: Card,
@@ -48,7 +47,6 @@ fun CardTile(
     dimmed: Boolean = false,
     highlighted: Boolean = false,
     onClick: () -> Unit = {},
-    onLongClick: () -> Unit = {},
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     val shape = RoundedCornerShape(4.dp)
@@ -68,7 +66,7 @@ fun CardTile(
                 },
                 shape = shape,
             )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .clickable(onClick = onClick),
     ) {
         // Drawn beneath the artwork rather than only when both URLs are absent:
         // a card whose image fails to load — the offline case this app is built

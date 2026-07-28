@@ -29,14 +29,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.ui.components.CardTile
+import com.kaiharimoto.mastertool.ui.dnd.DragController
+import com.kaiharimoto.mastertool.ui.dnd.DragSession
+import com.kaiharimoto.mastertool.ui.dnd.DragSource
+import com.kaiharimoto.mastertool.ui.dnd.DropHover
 
 @Composable
 fun SearchPane(
     state: DeckBuilderState,
     layout: DeckLayoutState,
+    drag: DragController,
+    onDropped: (DragSession, DropHover?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val gridState = rememberLazyGridState()
@@ -47,7 +56,14 @@ fun SearchPane(
         gridState.scrollToItem(0)
     }
 
-    Column(modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        modifier
+            // Registered as a drop target so a card can be dragged out of the deck
+            // and dropped back where cards come from.
+            .onGloballyPositioned { drag.registerSearchPane(it.boundsInRoot()) }
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         OutlinedTextField(
             value = state.query,
             onValueChange = state::onQueryChange,
@@ -127,16 +143,23 @@ fun SearchPane(
         ) {
             items(state.results.size, key = { state.results[it].id.value }) { position ->
                 val card = state.results[position]
-                CardTile(
-                    card = card,
-                    format = state.format,
-                    copies = state.copiesInDeck(card.id),
-                    // Cards that cannot be added are dimmed rather than hidden,
-                    // so the pool stays stable while you scan it.
-                    dimmed = state.remaining(card) == 0,
-                    onClick = { state.addCard(card) },
-                    onLongClick = { state.inspect(state.results, position) },
-                )
+                DragSource(
+                    controller = drag,
+                    key = card.id.value,
+                    session = { DragSession(card, section = null, index = position, size = IntSize.Zero) },
+                    onLongPress = { state.inspect(state.results, position) },
+                    onDropped = onDropped,
+                ) {
+                    CardTile(
+                        card = card,
+                        format = state.format,
+                        copies = state.copiesInDeck(card.id),
+                        // Cards that cannot be added are dimmed rather than hidden,
+                        // so the pool stays stable while you scan it.
+                        dimmed = state.remaining(card) == 0,
+                        onClick = { state.addCard(card) },
+                    )
+                }
             }
         }
     }

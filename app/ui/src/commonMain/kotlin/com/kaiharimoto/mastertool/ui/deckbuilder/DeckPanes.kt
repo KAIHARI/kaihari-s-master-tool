@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,7 +43,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.deck.SortMode
@@ -52,6 +58,10 @@ import com.kaiharimoto.mastertool.core.prefs.SectionPreferences
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.accent
+import com.kaiharimoto.mastertool.ui.dnd.DragController
+import com.kaiharimoto.mastertool.ui.dnd.DragSession
+import com.kaiharimoto.mastertool.ui.dnd.DragSource
+import com.kaiharimoto.mastertool.ui.dnd.DropHover
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlinx.coroutines.delay
 
@@ -74,6 +84,8 @@ private val SECTION_ORDER =
 fun DeckPanes(
     state: DeckBuilderState,
     layout: DeckLayoutState,
+    drag: DragController,
+    onDropped: (DragSession, DropHover?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -87,6 +99,8 @@ fun DeckPanes(
             DeckSectionPane(
                 state = state,
                 layout = layout,
+                drag = drag,
+                onDropped = onDropped,
                 section = section,
                 modifier = if (preferences.collapsed) Modifier else Modifier.weight(preferences.weight),
             )
@@ -134,6 +148,8 @@ private fun PaneDivider(enabled: Boolean, onDrag: (Float) -> Unit) {
 private fun DeckSectionPane(
     state: DeckBuilderState,
     layout: DeckLayoutState,
+    drag: DragController,
+    onDropped: (DragSession, DropHover?) -> Unit,
     section: DeckSection,
     modifier: Modifier = Modifier,
 ) {
@@ -142,6 +158,14 @@ private fun DeckSectionPane(
     val accent = section.accent()
     val gridState = rememberLazyGridState()
     var flashed by remember { mutableStateOf<CardId?>(null) }
+    var gridOrigin by remember { mutableStateOf(Offset.Zero) }
+
+    val hover = drag.hover?.takeIf { it.section == section }
+    val dropBorder = when {
+        hover == null -> null
+        hover.accepted -> accent
+        else -> MasterToolPalette.Danger
+    }
 
     // Only the pane that owns the requested section reacts; the others ignore it.
     LaunchedEffect(state.revealRequest?.id) {
@@ -159,6 +183,22 @@ private fun DeckSectionPane(
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
             .background(MaterialTheme.colorScheme.surface)
+            .then(
+                // The whole pane lights up while a card is over it, in the
+                // section's own colour when the drop is legal and in red when it
+                // is not — a Link monster held over the Main deck says so before
+                // it is let go, rather than after.
+                if (dropBorder != null) {
+                    Modifier.border(2.dp, dropBorder, RoundedCornerShape(6.dp))
+                } else {
+                    Modifier
+                },
+            )
+            // Registered whole rather than just its grid, so a collapsed or empty
+            // pane is still somewhere a card can be dropped.
+            .onGloballyPositioned {
+                drag.registerPane(section, it.boundsInRoot(), gridState, gridOrigin)
+            }
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -180,20 +220,27 @@ private fun DeckSectionPane(
         LazyVerticalGrid(
             columns = GridCells.Fixed(preferences.columns),
             state = gridState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { gridOrigin = it.positionInRoot() },
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (layout.preferences.stacked) {
+                // Stacks have no positional identity, so dragging one has nothing
+                // coherent to mean; the stepper in the menu does that job instead.
                 val stacks = DeckGrouping.stacks(ids)
                 items(stacks.size, key = { "${section.name}-stack-${stacks[it].id.value}" }) { i ->
                     val stack = stacks[i]
                     DeckCard(
                         state = state,
+                        drag = null,
+                        onDropped = onDropped,
                         section = section,
                         id = stack.id,
                         copies = stack.count,
                         highlighted = flashed == stack.id,
+                        insertionMarker = false,
                         siblings = ids,
                         position = stack.firstIndex,
                     )
@@ -203,10 +250,13 @@ private fun DeckSectionPane(
                 items(ids.size, key = { "${section.name}-$it-${ids[it].value}" }) { position ->
                     DeckCard(
                         state = state,
+                        drag = drag,
+                        onDropped = onDropped,
                         section = section,
                         id = ids[position],
                         copies = state.copiesIn(ids[position], section),
                         highlighted = flashed == ids[position],
+                        insertionMarker = hover?.accepted == true && hover.index == position,
                         siblings = ids,
                         position = position,
                     )
@@ -227,10 +277,13 @@ private fun DeckSectionPane(
 @Composable
 private fun DeckCard(
     state: DeckBuilderState,
+    drag: DragController?,
+    onDropped: (DragSession, DropHover?) -> Unit,
     section: DeckSection,
     id: CardId,
     copies: Int,
     highlighted: Boolean,
+    insertionMarker: Boolean,
     siblings: List<CardId>,
     position: Int,
 ) {
@@ -242,15 +295,40 @@ private fun DeckCard(
         return
     }
 
-    Box {
+    val tile: @Composable () -> Unit = {
         CardTile(
             card = card,
             format = state.format,
             copies = copies,
             highlighted = highlighted,
             onClick = { state.removeOne(card, section) },
-            onLongClick = { menuOpen = true },
-        )
+        ) {
+            // A bar down the leading edge of the card the drop would land before.
+            if (insertionMarker) {
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .width(3.dp)
+                        .align(Alignment.CenterStart)
+                        .background(MasterToolPalette.GoldBright),
+                )
+            }
+        }
+    }
+
+    Box {
+        if (drag == null) {
+            tile()
+        } else {
+            DragSource(
+                controller = drag,
+                key = "${section.name}-$position-${id.value}",
+                session = { DragSession(card, section, position, IntSize.Zero) },
+                onLongPress = { menuOpen = true },
+                onDropped = onDropped,
+                content = tile,
+            )
+        }
 
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
