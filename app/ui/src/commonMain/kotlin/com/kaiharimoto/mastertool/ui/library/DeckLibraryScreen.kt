@@ -17,6 +17,14 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -95,6 +103,12 @@ fun DeckLibraryScreen(
                     DeckCard(
                         stored = stored,
                         onOpen = { onOpenDeck(stored.entry.id) },
+                        onRename = { name ->
+                            scope.launch {
+                                deps.deckRepository.rename(stored.entry.id, name)
+                                reloadToken++
+                            }
+                        },
                         onDelete = {
                             scope.launch {
                                 deps.deckRepository.delete(stored.entry.id)
@@ -109,17 +123,50 @@ fun DeckLibraryScreen(
 }
 
 @Composable
-private fun DeckCard(stored: StoredDeck, onOpen: () -> Unit, onDelete: () -> Unit) {
+private fun DeckCard(
+    stored: StoredDeck,
+    onOpen: () -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
     val deck = stored.entry.deck
+    var renaming by remember { mutableStateOf(false) }
+    var draft by remember(stored.entry.id) { mutableStateOf(stored.entry.name) }
 
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    stored.entry.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
+                if (renaming) {
+                    // Committed on the tick or on Done, and abandoned on the
+                    // cross. A deck name is worth confirming: the file it writes
+                    // is named after it.
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        singleLine = true,
+                        label = { Text("Deck name") },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = { renaming = false; commit(draft, stored, onRename) },
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { renaming = false; commit(draft, stored, onRename) }) {
+                        Icon(Icons.Filled.Check, contentDescription = "Save name")
+                    }
+                    IconButton(onClick = { renaming = false; draft = stored.entry.name }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Keep the old name")
+                    }
+                } else {
+                    Text(
+                        stored.entry.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { renaming = true }) {
+                        Icon(Icons.Filled.Edit, contentDescription = "Rename ${stored.entry.name}")
+                    }
+                }
                 IconButton(onClick = onDelete) {
                     Icon(
                         Icons.Filled.Delete,
@@ -135,6 +182,18 @@ private fun DeckCard(stored: StoredDeck, onOpen: () -> Unit, onDelete: () -> Uni
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            if (stored.entry.notes.isNotBlank()) {
+                // Stored end to end since the repository was written and never
+                // shown anywhere. Whatever is in there was worth writing down.
+                Text(
+                    stored.entry.notes,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
             if (stored.extended != null) {
                 // Signals that this deck carries desktop-authored YDKX data.
                 Text(
@@ -147,4 +206,10 @@ private fun DeckCard(stored: StoredDeck, onOpen: () -> Unit, onDelete: () -> Uni
             TextButton(onClick = onOpen) { Text("Open") }
         }
     }
+}
+
+/** Renames only if the name actually changed and is not blank. */
+private fun commit(draft: String, stored: StoredDeck, onRename: (String) -> Unit) {
+    val name = draft.trim()
+    if (name.isNotEmpty() && name != stored.entry.name) onRename(name)
 }
