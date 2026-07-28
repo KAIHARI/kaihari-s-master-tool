@@ -95,7 +95,27 @@ class ShortcutTableTest {
             ShortcutTable.resolve(KeyChord("left"), inspecting),
         )
         assertEquals(ShortcutAction.NEXT_CARD, ShortcutTable.resolve(KeyChord("right"), inspecting))
-        assertNull(ShortcutTable.resolve(KeyChord("left"), builder))
+    }
+
+    @Test
+    fun theSameArrowMovesTheCursorWhenTheInspectorIsShut() {
+        // Two meanings for one key, told apart by scope alone. The inspector
+        // entries are declared first, which is the whole mechanism -- so this
+        // pair is really a test that declaration order still decides.
+        assertEquals(ShortcutAction.CURSOR_LEFT, ShortcutTable.resolve(KeyChord("left"), builder))
+        assertEquals(ShortcutAction.CURSOR_DOWN, ShortcutTable.resolve(KeyChord("down"), builder))
+    }
+
+    @Test
+    fun modifiersSayWhatToDoWithTheCursor() {
+        assertEquals(
+            ShortcutAction.EXTEND_RIGHT,
+            ShortcutTable.resolve(KeyChord("right", shift = true), builder),
+        )
+        assertEquals(
+            ShortcutAction.CARRY_UP,
+            ShortcutTable.resolve(KeyChord("up", ctrl = true), builder),
+        )
     }
 
     @Test
@@ -141,9 +161,33 @@ class ShortcutTableTest {
     }
 
     @Test
-    fun everyShortcutIsDescribedForTheHelpSheet() {
-        // The help sheet renders this table, so a blank description is a blank row.
-        ShortcutTable.all.forEach { assertTrue(it.description.isNotBlank()) }
+    fun everyShortcutIsEitherDescribedOrOneOfADescribedSet() {
+        // The help sheet renders this table, so a blank description is a binding
+        // that goes unmentioned. That is allowed for exactly one reason: the
+        // three siblings of each arrow row, which are covered by the row their
+        // lead entry prints. Anything else with a blank description is a binding
+        // somebody added and forgot to explain.
+        val describedShapes = ShortcutTable.all
+            .filter { it.inHelp }
+            .map { Triple(it.chord.ctrl, it.chord.shift, it.scope) }
+            .toSet()
+
+        ShortcutTable.all.filterNot { it.inHelp }.forEach { shortcut ->
+            assertTrue(
+                Triple(shortcut.chord.ctrl, shortcut.chord.shift, shortcut.scope) in describedShapes,
+                "${shortcut.chord.label} is bound but nothing in the help sheet mentions it",
+            )
+        }
+    }
+
+    @Test
+    fun everyActionIsReachable() {
+        // The other half of the same worry: an action added to the enum and
+        // never bound is a feature that exists and cannot be used.
+        val bound = ShortcutTable.all.map { it.action }.toSet()
+        val unreachable = ShortcutAction.entries.filterNot { it in bound }
+
+        assertTrue(unreachable.isEmpty(), "nothing fires these: $unreachable")
     }
 
     @Test

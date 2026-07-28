@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
 import com.kaiharimoto.mastertool.core.deck.TidyBy
+import com.kaiharimoto.mastertool.core.layout.GridStep
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.ImportedFile
 import kotlin.test.Test
@@ -458,6 +459,150 @@ class DeckBuilderStateTest {
         state.importFromFile()
 
         assertTrue(state.dealSerial > before)
+    }
+
+    // ---- the cursor --------------------------------------------------------
+
+    @Test
+    fun theFirstArrowPutsTheCursorDownRatherThanMovingIt() {
+        // Otherwise the first press appears to do nothing, and the second one
+        // looks like the first press was the thing that failed.
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+
+        state.moveCursor(GridStep.RIGHT, columns = 3, extend = false)
+
+        assertEquals(setOf(0), state.selection.indices)
+        assertEquals(main, state.selection.section)
+    }
+
+    @Test
+    fun arrowsWalkTheGrid() {
+        val state = builderState()
+        TestPool.many(7).forEach { state.addCard(it) }
+        state.select(main, 1)
+
+        state.moveCursor(GridStep.DOWN, columns = 3, extend = false)
+        assertEquals(setOf(4), state.selection.indices)
+
+        state.moveCursor(GridStep.LEFT, columns = 3, extend = false)
+        assertEquals(setOf(3), state.selection.indices)
+
+        state.moveCursor(GridStep.UP, columns = 3, extend = false)
+        assertEquals(setOf(0), state.selection.indices)
+    }
+
+    @Test
+    fun anEdgeLeavesTheCursorWhereItIs() {
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.select(main, 0)
+
+        state.moveCursor(GridStep.UP, columns = 3, extend = false)
+
+        assertEquals(setOf(0), state.selection.indices)
+    }
+
+    @Test
+    fun holdingShiftGrowsTheSelectionOneCardAtATime() {
+        // The derived focus is what makes the second press reach further than
+        // the first instead of measuring from the anchor again.
+        val state = builderState()
+        TestPool.many(8).forEach { state.addCard(it) }
+        state.select(main, 2)
+
+        repeat(3) { state.moveCursor(GridStep.RIGHT, columns = 4, extend = true) }
+
+        assertEquals((2..5).toSet(), state.selection.indices)
+    }
+
+    @Test
+    fun carryingMovesTheCardsAndKeepsHoldOfThem() {
+        val state = builderState()
+        val cards = TestPool.many(6)
+        cards.forEach { state.addCard(it) }
+        state.select(main, 0)
+
+        state.carrySelection(GridStep.RIGHT, columns = 3)
+
+        assertEquals(cards[1].id, state.deck.main[0])
+        assertEquals(cards[0].id, state.deck.main[1])
+        assertEquals(setOf(1), state.selection.indices, "a carried card has to stay held")
+    }
+
+    @Test
+    fun aCarriedCardCanBeWalkedAcrossThePane() {
+        val state = builderState()
+        val cards = TestPool.many(6)
+        cards.forEach { state.addCard(it) }
+        state.select(main, 0)
+
+        repeat(3) { state.carrySelection(GridStep.RIGHT, columns = 3) }
+
+        assertEquals(3, state.deck.main.indexOf(cards[0].id))
+    }
+
+    @Test
+    fun carryingAGroupKeepsItsOrder() {
+        val state = builderState()
+        val cards = TestPool.many(6)
+        cards.forEach { state.addCard(it) }
+        state.select(main, 0)
+        state.selectThrough(main, 1)
+
+        state.carrySelection(GridStep.RIGHT, columns = 3)
+
+        assertEquals(listOf(cards[2].id, cards[0].id, cards[1].id), state.deck.main.take(3))
+        assertEquals(setOf(1, 2), state.selection.indices)
+    }
+
+    @Test
+    fun carryingIntoTheEdgeDoesNothingAtAll() {
+        // Clamped, so the deck is unchanged -- and an unchanged deck must not go
+        // on the undo stack, or holding the key down fills it with nothing.
+        val state = builderState()
+        val cards = TestPool.many(4)
+        cards.forEach { state.addCard(it) }
+        state.select(main, 3)
+        val before = state.deck.main
+
+        repeat(3) { state.carrySelection(GridStep.RIGHT, columns = 2) }
+        assertEquals(before, state.deck.main)
+
+        state.undo()
+        assertEquals(
+            before.dropLast(1),
+            state.deck.main,
+            "undo should reach the last card added, not three no-op carries",
+        )
+    }
+
+    @Test
+    fun carryingWithNothingHeldDoesNothing() {
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+        val before = state.deck.main
+
+        state.carrySelection(GridStep.DOWN, columns = 2)
+
+        assertEquals(before, state.deck.main)
+    }
+
+    @Test
+    fun theCursorAsksForTheCardItLandedOnToBeShown() {
+        val state = builderState()
+        TestPool.many(9).forEach { state.addCard(it) }
+        state.select(main, 0)
+
+        state.moveCursor(GridStep.DOWN, columns = 3, extend = false)
+        val first = state.reveal
+
+        state.moveCursor(GridStep.DOWN, columns = 3, extend = false)
+        val second = state.reveal
+
+        assertEquals(3, first?.index)
+        assertEquals(6, second?.index)
+        assertTrue((second?.serial ?: 0) > (first?.serial ?: 0), "a repeat request has to look new")
     }
 
     // ---- tidying -----------------------------------------------------------

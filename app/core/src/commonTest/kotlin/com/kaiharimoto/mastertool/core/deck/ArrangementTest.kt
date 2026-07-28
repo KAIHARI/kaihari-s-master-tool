@@ -176,3 +176,114 @@ class RearrangeTest {
         assertEquals(ids(9), result.deck.side)
     }
 }
+
+/**
+ * Carrying a group by arrow key.
+ *
+ * The drag form of this is `reorderManyTo`, which is told where to land. This is
+ * the keyboard form, which is only told "one further that way" — so the whole
+ * question is what "one further" means once the group is out of the list.
+ */
+class CarryTest {
+
+    private fun deck(vararg values: Int) =
+        Deck(main = values.map(::CardId), extra = emptyList(), side = emptyList())
+
+    private fun carry(deck: Deck, indices: Collection<Int>, delta: Int) =
+        (DeckEditor.carry(deck, DeckSection.MAIN, indices, delta) as DeckEdit.Applied)
+            .deck.main.map { it.value }
+
+    @Test
+    fun oneCardMovesOnePlace() {
+        assertEquals(listOf(2, 1, 3, 4), carry(deck(1, 2, 3, 4), listOf(0), delta = 1))
+        assertEquals(listOf(1, 3, 2, 4), carry(deck(1, 2, 3, 4), listOf(2), delta = -1))
+    }
+
+    @Test
+    fun aGroupMovesAsOne() {
+        assertEquals(listOf(3, 1, 2, 4, 5), carry(deck(1, 2, 3, 4, 5), listOf(0, 1), delta = 1))
+        assertEquals(listOf(4, 5, 1, 2, 3), carry(deck(1, 2, 3, 4, 5), listOf(3, 4), delta = -3))
+    }
+
+    @Test
+    fun aRowIsJustABiggerDelta() {
+        // Down in a three-column grid is +3, and the card has to come out one
+        // row below where it was rather than three places along a list it is no
+        // longer in.
+        assertEquals(listOf(2, 3, 4, 1, 5, 6, 7), carry(deck(1, 2, 3, 4, 5, 6, 7), listOf(0), delta = 3))
+    }
+
+    @Test
+    fun runningOffTheEndClampsInsteadOfRefusing() {
+        // The key is held down. A group already at the bottom reporting an error
+        // on every repeat would be shouting about pushing it as far as it goes.
+        assertEquals(listOf(1, 2, 3), carry(deck(1, 2, 3), listOf(2), delta = 5))
+        assertEquals(listOf(1, 2, 3), carry(deck(1, 2, 3), listOf(0), delta = -5))
+        assertEquals(listOf(2, 3, 1), carry(deck(1, 2, 3), listOf(1, 2), delta = -9))
+    }
+
+    @Test
+    fun aScatteredGroupGathersAtItsFirstCard() {
+        // The first card is what the group is anchored on, however far apart the
+        // rest of it is.
+        assertEquals(listOf(2, 1, 4, 3, 5), carry(deck(1, 2, 3, 4, 5), listOf(0, 3), delta = 1))
+    }
+
+    @Test
+    fun carryingIsAlwaysAPermutation() {
+        val start = deck(1, 2, 3, 4, 5, 6)
+
+        (-4..4).forEach { delta ->
+            listOf(listOf(0), listOf(2, 3), listOf(1, 4), listOf(0, 1, 2), listOf(5)).forEach { picked ->
+                val moved = DeckEditor.carry(start, DeckSection.MAIN, picked, delta)
+                assertTrue(moved is DeckEdit.Applied, "rejected $picked by $delta")
+                assertEquals(
+                    start.main.sortedBy { it.value },
+                    moved.deck.main.sortedBy { it.value },
+                    "picked $picked by $delta",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun theLandingIndexIsWhereTheCardsActuallyEndUp() {
+        // Written once and used twice, by the move and by whatever re-selects
+        // the cards afterwards.
+        val start = deck(1, 2, 3, 4, 5, 6)
+
+        listOf(listOf(0), listOf(2, 3), listOf(1, 4), listOf(0, 1, 2)).forEach { picked ->
+            (-3..3).forEach { delta ->
+                val landed = DeckEditor.carryLanding(picked, delta, count = 6)
+                val moved = (DeckEditor.carry(start, DeckSection.MAIN, picked, delta) as DeckEdit.Applied)
+                    .deck.main
+
+                val carried = picked.sorted().map { start.main[it] }
+                assertEquals(
+                    carried,
+                    moved.subList(landed, landed + carried.size),
+                    "picked $picked by $delta",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun noDeltaGathersButDoesNotMove() {
+        assertEquals(listOf(1, 3, 2, 4), carry(deck(1, 2, 3, 4), listOf(0, 2), delta = 0))
+    }
+
+    @Test
+    fun carryingNothingIsAllowedAndDoesNothing() {
+        val start = deck(1, 2, 3)
+        assertEquals(
+            start,
+            (DeckEditor.carry(start, DeckSection.MAIN, emptyList(), 2) as DeckEdit.Applied).deck,
+        )
+    }
+
+    @Test
+    fun aPositionThatIsNotThereIsRejected() {
+        assertTrue(DeckEditor.carry(deck(1, 2, 3), DeckSection.MAIN, listOf(7), 1) is DeckEdit.Rejected)
+    }
+}

@@ -171,3 +171,56 @@ class SelectionTest {
         assertEquals(listOf(2, 5, 7), selection.ordered())
     }
 }
+
+/**
+ * Where the next shift-arrow measures to.
+ *
+ * Derived rather than stored, so this is what says the derivation is right.
+ */
+class SelectionFocusTest {
+
+    private val main = DeckSection.MAIN
+
+    @Test
+    fun aSingleCardIsItsOwnFocus() {
+        assertEquals(4, Selections.focusOf(Selections.only(main, 4)))
+    }
+
+    @Test
+    fun theFocusIsTheEndAwayFromTheAnchor() {
+        val growingRight = Selections.extendTo(Selections.only(main, 2), main, 5)
+        assertEquals(5, Selections.focusOf(growingRight))
+
+        val growingLeft = Selections.extendTo(Selections.only(main, 5), main, 2)
+        assertEquals(2, Selections.focusOf(growingLeft))
+    }
+
+    @Test
+    fun extendingAgainFromTheFocusKeepsGrowingTheSameWay() {
+        // The whole point: hold shift and press right twice and the range
+        // reaches two further, rather than the second press measuring from the
+        // anchor again and going nowhere.
+        var selection = Selections.only(main, 2)
+        repeat(3) {
+            selection = Selections.extendTo(selection, main, Selections.focusOf(selection) + 1)
+        }
+
+        assertEquals((2..5).toSet(), selection.indices)
+        assertEquals(2, selection.anchor)
+    }
+
+    @Test
+    fun shrinkingBackPastTheAnchorTurnsAround() {
+        var selection = Selections.extendTo(Selections.only(main, 5), main, 7)
+        repeat(4) {
+            selection = Selections.extendTo(selection, main, Selections.focusOf(selection) - 1)
+        }
+
+        assertEquals((3..5).toSet(), selection.indices)
+    }
+
+    @Test
+    fun anEmptySelectionHasNoFocus() {
+        assertEquals(Selection.NONE, Selections.focusOf(Selection.EMPTY))
+    }
+}

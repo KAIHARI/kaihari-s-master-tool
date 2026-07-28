@@ -100,6 +100,17 @@ class DeckLayoutState(
         displayedColumns[section] = columns
     }
 
+    /**
+     * How wide the pane's grid actually is, for anything that has to think in
+     * rows — an arrow key stepping down, a block selection.
+     *
+     * Falls back to the stored preference, which is what would have been used
+     * had the pane not measured yet. Not snapshot state on purpose: this is read
+     * at the moment a key is pressed, never during composition.
+     */
+    fun columnsOn(section: DeckSection): Int =
+        displayedColumns[section] ?: preferences[section].columns
+
     fun setAutoFit(section: DeckSection, autoFit: Boolean) {
         updateSection(section) { it.copy(autoFit = autoFit) }
     }

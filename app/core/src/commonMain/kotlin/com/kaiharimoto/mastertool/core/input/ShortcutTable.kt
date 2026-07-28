@@ -25,6 +25,8 @@ data class KeyChord(
                     "slash" -> "/"
                     "left" -> "←"
                     "right" -> "→"
+                    "up" -> "↑"
+                    "down" -> "↓"
                     else -> key.uppercase()
                 }
             )
@@ -48,6 +50,24 @@ enum class ShortcutAction {
     FOCUS_SIDE,
     PREVIOUS_CARD,
     NEXT_CARD,
+
+    /** Move the cursor. */
+    CURSOR_LEFT,
+    CURSOR_RIGHT,
+    CURSOR_UP,
+    CURSOR_DOWN,
+
+    /** Move the cursor and take everything it passes over. */
+    EXTEND_LEFT,
+    EXTEND_RIGHT,
+    EXTEND_UP,
+    EXTEND_DOWN,
+
+    /** Move the cards themselves. */
+    CARRY_LEFT,
+    CARRY_RIGHT,
+    CARRY_UP,
+    CARRY_DOWN,
 }
 
 /** Where a shortcut applies. Checked in the order the entries are declared. */
@@ -82,7 +102,24 @@ data class Shortcut(
      * deck name opens the statistics panel and the issue list on the way past.
      */
     val allowedInTextInput: Boolean = false,
-)
+    /**
+     * What the help sheet prints instead of the chord.
+     *
+     * For a set of bindings that are one idea — the four arrow keys — printing
+     * four rows that each say a quarter of it is worse than printing one that
+     * says all of it.
+     */
+    val helpLabel: String? = null,
+) {
+    /**
+     * Whether the help sheet lists this binding.
+     *
+     * Keyed off the description being blank rather than off a separate flag,
+     * because a binding with nothing to say about itself is exactly the one that
+     * should not take up a row — and that way the two cannot disagree.
+     */
+    val inHelp: Boolean get() = description.isNotBlank()
+}
 
 /**
  * Every keyboard shortcut, as data.
@@ -169,6 +206,35 @@ object ShortcutTable {
             KeyChord("slash", shift = true), ShortcutAction.TOGGLE_HELP, ShortcutScope.BUILDER,
             "This list",
         ),
+
+        // Arranging without a mouse. The cursor is the selection, so all three
+        // rows below are the same three verbs applied to it: move it, grow it,
+        // or carry what it holds. Declared after the inspector's own arrow
+        // bindings, which is what lets paging a card beat moving a cursor while
+        // the inspector is open.
+        Shortcut(
+            KeyChord("left"), ShortcutAction.CURSOR_LEFT, ShortcutScope.BUILDER,
+            "Move the cursor between cards", helpLabel = "← → ↑ ↓",
+        ),
+        Shortcut(KeyChord("right"), ShortcutAction.CURSOR_RIGHT, ShortcutScope.BUILDER, ""),
+        Shortcut(KeyChord("up"), ShortcutAction.CURSOR_UP, ShortcutScope.BUILDER, ""),
+        Shortcut(KeyChord("down"), ShortcutAction.CURSOR_DOWN, ShortcutScope.BUILDER, ""),
+
+        Shortcut(
+            KeyChord("left", shift = true), ShortcutAction.EXTEND_LEFT, ShortcutScope.BUILDER,
+            "Take everything the cursor passes over", helpLabel = "Shift + arrows",
+        ),
+        Shortcut(KeyChord("right", shift = true), ShortcutAction.EXTEND_RIGHT, ShortcutScope.BUILDER, ""),
+        Shortcut(KeyChord("up", shift = true), ShortcutAction.EXTEND_UP, ShortcutScope.BUILDER, ""),
+        Shortcut(KeyChord("down", shift = true), ShortcutAction.EXTEND_DOWN, ShortcutScope.BUILDER, ""),
+
+        Shortcut(
+            KeyChord("left", ctrl = true), ShortcutAction.CARRY_LEFT, ShortcutScope.BUILDER,
+            "Carry the held cards to a new place", helpLabel = "Ctrl + arrows",
+        ),
+        Shortcut(KeyChord("right", ctrl = true), ShortcutAction.CARRY_RIGHT, ShortcutScope.BUILDER, ""),
+        Shortcut(KeyChord("up", ctrl = true), ShortcutAction.CARRY_UP, ShortcutScope.BUILDER, ""),
+        Shortcut(KeyChord("down", ctrl = true), ShortcutAction.CARRY_DOWN, ShortcutScope.BUILDER, ""),
     )
 
     fun resolve(chord: KeyChord, context: ShortcutContext): ShortcutAction? =

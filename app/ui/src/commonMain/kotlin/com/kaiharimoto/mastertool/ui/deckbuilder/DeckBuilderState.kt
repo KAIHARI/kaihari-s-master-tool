@@ -32,6 +32,8 @@ import com.kaiharimoto.mastertool.core.model.Deck
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.search.CardFilter
+import com.kaiharimoto.mastertool.core.layout.GridNavigation
+import com.kaiharimoto.mastertool.core.layout.GridStep
 import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.core.search.Completions
 import com.kaiharimoto.mastertool.core.search.NameCompletion
@@ -566,6 +568,92 @@ class DeckBuilderState(
             "Moved ${moving.size} cards.",
             undo = { undoIfCurrent(token) },
         )
+    }
+
+    /**
+     * A card the panes should scroll to.
+     *
+     * Carries a serial because the same card can need revealing twice — arrow
+     * into it, scroll away with the wheel, arrow again — and without one the
+     * second request looks identical to the first and nothing happens.
+     */
+    data class Reveal(val section: DeckSection, val index: Int, val serial: Long)
+
+    var reveal by mutableStateOf<Reveal?>(null)
+        private set
+
+    private var revealSerial = 0L
+
+    private fun revealCursor(section: DeckSection, index: Int) {
+        reveal = Reveal(section, index, ++revealSerial)
+    }
+
+    /**
+     * Moves the cursor by arrow key, or grows the selection with it.
+     *
+     * There is no separate cursor: the selection *is* the cursor, which is what
+     * makes the keyboard and the mouse the same feature rather than two that
+     * have to be kept looking alike. An arrow pressed with nothing selected puts
+     * the cursor down rather than moving one — the alternative is a first press
+     * that appears to do nothing.
+     */
+    fun moveCursor(step: GridStep, columns: Int, extend: Boolean) {
+        val section = selection.section ?: DeckSection.MAIN
+        val count = deck[section].size
+        if (count == 0) return
+
+        if (selection.isEmpty) {
+            selection = Selections.only(section, 0)
+            revealCursor(section, 0)
+            return
+        }
+
+        val to = GridNavigation.step(Selections.focusOf(selection), count, columns, step) ?: return
+        selection = if (extend) {
+            Selections.extendTo(selection, section, to)
+        } else {
+            Selections.only(section, to)
+        }
+        revealCursor(section, to)
+    }
+
+    /**
+     * Carries the held cards one place, or one row, that way.
+     *
+     * No toast. Everything else that edits the deck announces itself, and it
+     * should — but this fires on every repeat of a held key, and a stack of
+     * toasts saying "moved 1 card" would bury the thing being arranged. The
+     * cards visibly moving is the confirmation, which is the same argument that
+     * keeps `addTopMatch` quiet.
+     */
+    fun carrySelection(step: GridStep, columns: Int) {
+        val section = selection.section ?: return
+        val moving = selection.ordered()
+        if (moving.isEmpty()) return
+
+        val delta = when (step) {
+            GridStep.LEFT -> -1
+            GridStep.RIGHT -> 1
+            GridStep.UP -> -columns
+            GridStep.DOWN -> columns
+        }
+
+        val result = DeckEditor.carry(deck, section, moving, delta)
+        if (result !is DeckEdit.Applied || result.deck == deck) return
+
+        pushUndo(deck)
+        deck = result.deck
+
+        // Assigning the deck cleared the selection, which is right in general
+        // and wrong here: this edit knows exactly where the cards went, and
+        // dropping them after one press would make the second press impossible.
+        val landed = DeckEditor.carryLanding(moving, delta, count = deck[section].size)
+        selection = Selection(
+            section = section,
+            indices = (landed until landed + moving.size).toSet(),
+            anchor = landed,
+        )
+        revealCursor(section, landed)
     }
 
     // ---- editing -----------------------------------------------------------

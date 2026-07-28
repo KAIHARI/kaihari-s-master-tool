@@ -134,6 +134,24 @@ object Selections {
      * silently came to mean different cards than the ones highlighted would be
      * worse than one that went away — the next action on it moves real cards.
      */
+    /**
+     * The moving end of a range — where the next shift-arrow measures *to*.
+     *
+     * There is no separate focus field, and adding one would mean every place
+     * that builds a selection had to keep it right. It can be derived instead:
+     * [extendTo] always produces a contiguous range with the anchor at one end,
+     * so the focus is the other end — the one further from the anchor. A single
+     * card is its own focus, which falls out of the same comparison rather than
+     * needing a case.
+     */
+    fun focusOf(current: Selection): Int {
+        if (current.isEmpty) return current.anchor
+        val lowest = current.indices.min()
+        val highest = current.indices.max()
+        val anchor = if (current.anchor == Selection.NONE) lowest else current.anchor
+        return if (anchor - lowest >= highest - anchor) lowest else highest
+    }
+
     fun afterEdit(current: Selection, section: DeckSection): Selection =
         if (current.section == section) Selection.EMPTY else current
 }

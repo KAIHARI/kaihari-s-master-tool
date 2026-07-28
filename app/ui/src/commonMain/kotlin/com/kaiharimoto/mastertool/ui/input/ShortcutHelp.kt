@@ -64,11 +64,15 @@ fun ShortcutHelpSheet(onDismiss: () -> Unit) {
 
 @Composable
 private fun Group(title: String, shortcuts: List<Shortcut>) {
-    if (shortcuts.isEmpty()) return
+    // A binding with nothing to say about itself is one of a set — the three
+    // siblings of each arrow row — and printing four rows that each say a
+    // quarter of the same idea is worse than printing one that says all of it.
+    val listed = shortcuts.filter { it.inHelp }
+    if (listed.isEmpty()) return
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-        shortcuts.forEach { shortcut ->
+        listed.forEach { shortcut ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -82,7 +86,7 @@ private fun Group(title: String, shortcuts: List<Shortcut>) {
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                 ) {
                     Text(
-                        shortcut.chord.label,
+                        shortcut.helpLabel ?: shortcut.chord.label,
                         style = MaterialTheme.typography.labelMedium,
                         textAlign = TextAlign.Center,
                     )

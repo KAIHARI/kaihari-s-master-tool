@@ -314,12 +314,54 @@ it. Editing still uses a real text field, because that is what keeps focus
 reporting working — without it, typing "side" into a deck name opens the
 statistics panel and the deck check on the way past.
 
+## 17. Finishing the word
+
+The search box ranks fuzzily, which is right for finding a card and wrong for
+finishing one. So the completion ignores scoring entirely: it offers a name only
+when that name literally continues the characters already typed, which makes
+accepting one identical to having typed faster.
+
+That rule pays for itself twice. Results are debounced, so for a moment after
+each keystroke the names being consulted are the *previous* query's — and a
+completion that must literally continue the query can only under-offer, never
+mis-offer. There is no staleness bug to fix because there is no staleness bug to
+have.
+
+The field is hand-built to carry it. Ghost text has to line up with real text
+character for character, and the only way to guarantee that is to draw both with
+the same style at the same origin — which means owning the padding rather than
+inheriting `OutlinedTextField`'s. The ghost is one `Text` holding the whole name
+with the typed prefix drawn transparent: the invisible run occupies exactly the
+right width because it *is* the text it is standing in for.
+
+## 18. Tidying, which is not sorting
+
+A sort decides the whole order from one property, and that is why the sort button
+gets pressed once and never again by anyone who arranged their deck on purpose.
+Every other builder offers only that.
+
+A tidy is a stable partition instead — cards collect into groups, groups lay end
+to end, and inside a group nothing moves. Three are on offer, and the discipline
+was that each had to be something `DeckSorter` cannot express, because two menu
+entries differing by a subtlety is a worse offer than one that is clear about
+what it costs. Gathering copies has no sort equivalent at all. Grouping by type
+brings the monsters together without re-levelling them on the way past. Grouping
+by archetype leaves the engines in the order somebody put them in, where a sort
+would alphabetise and silently undo that decision.
+
+Two things fell out of building it. `gatherCopies` turned out to be `groupBy`
+keyed on the card itself, so there is one implementation rather than two that
+could drift. And because a tidy hands over a whole list rather than editing by
+index, it cannot be trusted the way the other edits can — so it goes through a
+new `rearrange`, which refuses any order that is not a permutation of what was
+already there.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **402 tests**, up from 249, plus
-**31 in `:ui`** where there were none.
+`:core` carries the arithmetic for all of it, at **414 tests**, up from 249, plus
+**37 in `:ui`** where there were none.
 
 Still open: the sandbox board, a full shootout mode with an opponent's deck, and
 PDF export of a siding sheet.

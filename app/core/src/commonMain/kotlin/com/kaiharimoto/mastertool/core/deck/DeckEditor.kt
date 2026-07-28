@@ -261,6 +261,58 @@ object DeckEditor {
         insertBefore - fromIndices.toSet().count { it < insertBefore }
 
     /**
+     * Shifts a group [delta] places along without naming a destination.
+     *
+     * The form a keyboard arrow arrives in. A drag knows where it is pointing;
+     * an arrow key only knows "one further that way", and one further has to
+     * mean one *place in the deck* rather than one index in a list the group has
+     * already been lifted out of.
+     *
+     * Running off the end clamps rather than refusing, because the key is held
+     * down: a group at the bottom that reported an error on every repeat would
+     * be shouting about the perfectly ordinary act of pushing it as far as it
+     * goes. A clamped move that changes nothing returns the deck unchanged, and
+     * the caller can see that for itself.
+     */
+    fun carry(
+        deck: Deck,
+        section: DeckSection,
+        fromIndices: Collection<Int>,
+        delta: Int,
+    ): DeckEdit {
+        val contents = deck[section]
+        val moving = fromIndices.toSortedSet()
+
+        if (moving.isEmpty()) return DeckEdit.Applied(deck)
+        if (moving.any { it !in contents.indices }) {
+            return DeckEdit.Rejected(RejectionReason.NOT_PRESENT)
+        }
+
+        val lifted = moving.map { contents[it] }
+        val remaining = contents.filterIndexed { index, _ -> index !in moving }
+        val target = carryLanding(moving, delta, contents.size)
+
+        val rebuilt = remaining.toMutableList()
+        rebuilt.addAll(target, lifted)
+        return DeckEdit.Applied(deck.with(section, rebuilt))
+    }
+
+    /**
+     * Where a group carried [delta] places ends up.
+     *
+     * Measured from the first card of the group, because that is the one the
+     * whole group is anchored on however scattered the rest of it is. Public for
+     * the same reason as [landingIndex]: the answer is needed by the move and
+     * again by whatever has to re-select the cards afterwards.
+     */
+    fun carryLanding(fromIndices: Collection<Int>, delta: Int, count: Int): Int {
+        val moving = fromIndices.toSet()
+        if (moving.isEmpty()) return 0
+        val start = moving.min()
+        return (start + delta).coerceIn(0, count - moving.size)
+    }
+
+    /**
      * Moves one copy to an exact position in another section.
      *
      * [move] appends, which is right for a button but wrong for a drag: a card

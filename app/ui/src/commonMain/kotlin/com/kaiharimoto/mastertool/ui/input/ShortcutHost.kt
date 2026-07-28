@@ -97,6 +97,8 @@ internal val CHORD_KEYS: Map<Key, String> = mapOf(
     Key.Slash to "slash",
     Key.DirectionLeft to "left",
     Key.DirectionRight to "right",
+    Key.DirectionUp to "up",
+    Key.DirectionDown to "down",
     Key.One to "1",
     Key.Two to "2",
     Key.Three to "3",

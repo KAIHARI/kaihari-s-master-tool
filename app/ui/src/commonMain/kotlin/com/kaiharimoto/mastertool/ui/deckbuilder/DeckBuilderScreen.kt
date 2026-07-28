@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.input.ShortcutAction
+import com.kaiharimoto.mastertool.core.layout.GridStep
 import com.kaiharimoto.mastertool.core.input.ShortcutContext
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.DeckSection
@@ -126,6 +127,24 @@ fun DeckBuilderScreen(
                 ShortcutAction.FOCUS_SIDE -> layout.focusSection(DeckSection.SIDE)
                 ShortcutAction.PREVIOUS_CARD -> state.pageInspection(-1)
                 ShortcutAction.NEXT_CARD -> state.pageInspection(1)
+
+                // The grid's width is a layout fact, so it is fetched here at
+                // the moment the key is pressed rather than held in the state
+                // holder, which would then have to be told about every resize.
+                ShortcutAction.CURSOR_LEFT -> state.arrow(layout, GridStep.LEFT)
+                ShortcutAction.CURSOR_RIGHT -> state.arrow(layout, GridStep.RIGHT)
+                ShortcutAction.CURSOR_UP -> state.arrow(layout, GridStep.UP)
+                ShortcutAction.CURSOR_DOWN -> state.arrow(layout, GridStep.DOWN)
+
+                ShortcutAction.EXTEND_LEFT -> state.arrow(layout, GridStep.LEFT, extend = true)
+                ShortcutAction.EXTEND_RIGHT -> state.arrow(layout, GridStep.RIGHT, extend = true)
+                ShortcutAction.EXTEND_UP -> state.arrow(layout, GridStep.UP, extend = true)
+                ShortcutAction.EXTEND_DOWN -> state.arrow(layout, GridStep.DOWN, extend = true)
+
+                ShortcutAction.CARRY_LEFT -> state.carry(layout, GridStep.LEFT)
+                ShortcutAction.CARRY_RIGHT -> state.carry(layout, GridStep.RIGHT)
+                ShortcutAction.CARRY_UP -> state.carry(layout, GridStep.UP)
+                ShortcutAction.CARRY_DOWN -> state.carry(layout, GridStep.DOWN)
             }
         },
     ) {
@@ -279,6 +298,28 @@ fun DeckBuilderScreen(
             onDismiss = { state.eggVisible = false },
         )
     }
+}
+
+/**
+ * An arrow key, given the width of the pane it lands in.
+ *
+ * The state holder deliberately does not know how wide any grid is — that is a
+ * layout fact, remeasured on every resize, and a copy of it kept elsewhere would
+ * be a copy that goes stale between the resize and the next key press. So it is
+ * fetched here, at the moment of the press, from the pane that just measured it.
+ */
+private fun DeckBuilderState.arrow(
+    layout: DeckLayoutState,
+    step: GridStep,
+    extend: Boolean = false,
+) {
+    val section = selection.section ?: DeckSection.MAIN
+    moveCursor(step, layout.columnsOn(section), extend)
+}
+
+private fun DeckBuilderState.carry(layout: DeckLayoutState, step: GridStep) {
+    val section = selection.section ?: return
+    carrySelection(step, layout.columnsOn(section))
 }
 
 /**

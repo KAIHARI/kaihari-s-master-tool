@@ -188,6 +188,15 @@ private fun DeckSectionPane(
     // manual control starts from what is already on screen.
     var effectiveColumns by remember { mutableStateOf(preferences.columns) }
 
+    // A cursor arrowed past the bottom of the pane has to bring the pane with
+    // it, or it is a cursor that can be lost by pressing down.
+    LaunchedEffect(state.reveal) {
+        val reveal = state.reveal ?: return@LaunchedEffect
+        if (reveal.section == section && reveal.index in ids.indices) {
+            gridState.animateScrollToItem(reveal.index)
+        }
+    }
+
     // One animation for the whole pane. Each card works out its own progress
     // from its index, because forty Animatables to show a quarter-second effect
     // is forty coroutines for something the arithmetic already knows.
