@@ -29,6 +29,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,15 +88,7 @@ fun DeckBuilderTopBar(
             color = MaterialTheme.colorScheme.primary,
         )
 
-        OutlinedTextField(
-            value = state.deckName,
-            onValueChange = state::rename,
-            singleLine = true,
-            label = { Text("Deck") },
-            modifier = Modifier
-                .width(240.dp)
-                .onFocusChanged { state.onTextFieldFocusChanged(it.isFocused) },
-        )
+        DeckName(state)
 
         Text(
             "${state.deck.main.size} main · ${state.deck.extra.size} extra · " +
@@ -291,4 +296,77 @@ fun DeckBuilderTopBar(
             }
         }
     }
+}
+
+/**
+ * The deck's name, as a title rather than as a form field.
+ *
+ * A labelled text box says "fill this in". The name of the thing you are
+ * looking at is a heading, and this is the top of the only screen it appears
+ * on — so it reads as one until you touch it, which is the only moment it needs
+ * to be editable.
+ *
+ * The field is still a real text field while it is open, so it keeps reporting
+ * focus. That is what suppresses single-key shortcuts: without it, typing
+ * "side" into a deck name would open the statistics panel and the deck check on
+ * the way past.
+ */
+@Composable
+private fun DeckName(state: DeckBuilderState) {
+    var editing by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+
+    if (!editing) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .clickable { editing = true }
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+        ) {
+            Text(
+                state.deckName.ifBlank { "Untitled Deck" },
+                style = MaterialTheme.typography.titleLarge,
+                color = if (state.deckName.isBlank()) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 260.dp),
+            )
+            // Faint, because the whole row is the target and this only has to
+            // say that it is one.
+            Icon(
+                Icons.Filled.Edit,
+                contentDescription = "Rename deck",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.padding(start = 6.dp).size(16.dp),
+            )
+        }
+        return
+    }
+
+    OutlinedTextField(
+        value = state.deckName,
+        onValueChange = state::rename,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.titleMedium,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { editing = false }),
+        modifier = Modifier
+            .width(260.dp)
+            .focusRequester(focus)
+            .onFocusChanged { focused ->
+                state.onTextFieldFocusChanged(focused.isFocused)
+                // Closing on focus loss rather than needing a second gesture:
+                // clicking away from a name you have finished typing is the
+                // gesture, and asking for confirmation as well would be asking
+                // twice.
+                if (!focused.isFocused) editing = false
+            },
+    )
+
+    LaunchedEffect(Unit) { focus.requestFocus() }
 }
