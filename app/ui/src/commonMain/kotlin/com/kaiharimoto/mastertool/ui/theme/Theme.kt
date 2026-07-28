@@ -4,14 +4,11 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
-import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /**
  * Swiss Prismatic, carried over from the tool this replaces.
@@ -114,29 +111,6 @@ private val LightColors = lightColorScheme(
     error = MasterToolPalette.Danger,
 )
 
-/**
- * Type scale tuned for arm's length on a 14-inch tablet: larger base sizes than
- * the Material defaults, with tight tracking on headings so long card names stay
- * on one line.
- *
- * The original set Inter, which is not bundled here — adding a font resource
- * would mean taking back the Compose resources dependency this project
- * deliberately dropped, for a face most platforms already approximate. The
- * colour system is what reads as the original; the letterforms are not.
- */
-private val AppTypography = Typography().run {
-    copy(
-        headlineMedium = headlineMedium.copy(
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = (-0.5).sp,
-        ),
-        titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.25).sp),
-        titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold),
-        labelLarge = labelLarge.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp),
-        bodyMedium = bodyMedium.copy(fontSize = 15.sp),
-    )
-}
-
 /** `--radius-sm` through `--radius-xl`. */
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),
@@ -153,7 +127,9 @@ fun MasterToolTheme(
 ) {
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = AppTypography,
+        // Built in composition rather than as a constant: the faces are bundled
+        // resources, and loading one is a composable call.
+        typography = masterToolTypography(),
         shapes = AppShapes,
         content = content,
     )

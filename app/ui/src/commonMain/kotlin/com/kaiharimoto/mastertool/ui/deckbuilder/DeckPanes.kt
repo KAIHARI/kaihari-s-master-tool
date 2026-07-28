@@ -72,6 +72,7 @@ import com.kaiharimoto.mastertool.ui.dnd.DragSource
 import com.kaiharimoto.mastertool.ui.dnd.DropHover
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.tableSurface
+import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 import kotlinx.coroutines.delay
 
 /** How long a revealed card keeps its highlight before settling back. */
@@ -463,7 +464,7 @@ private fun SectionHeader(
             } else {
                 "  $count / ${section.maxSize}"
             },
-            style = MaterialTheme.typography.labelMedium,
+            style = tacticalStyle(),
             color = when {
                 overCapacity || underMinimum -> MasterToolPalette.Danger
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -482,7 +483,7 @@ private fun SectionHeader(
             ) {
                 Icon(Icons.Filled.Remove, contentDescription = "Fewer, larger cards per row")
             }
-            Text(columns.toString(), style = MaterialTheme.typography.labelMedium)
+            Text(columns.toString(), style = tacticalStyle())
             IconButton(
                 onClick = { layout.setColumns(section, columns + 1) },
                 enabled = columns < SectionPreferences.MAX_COLUMNS,

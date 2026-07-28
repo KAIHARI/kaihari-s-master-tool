@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,6 +30,7 @@ import com.kaiharimoto.mastertool.core.model.BanStatus
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 
 /** Yu-Gi-Oh! cards are 59 x 86 mm. Everything that shows one uses this ratio. */
 const val CARD_ASPECT_RATIO = 59f / 86f
@@ -153,9 +155,8 @@ private fun BanBadge(status: BanStatus, modifier: Modifier = Modifier) {
     ) {
         Text(
             text = label,
-            fontSize = 12.sp,
             color = MasterToolPalette.Ink,
-            style = MaterialTheme.typography.labelSmall,
+            style = tacticalStyle().copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
         )
     }
 }
@@ -171,9 +172,8 @@ private fun CopyBadge(copies: Int, modifier: Modifier = Modifier) {
     ) {
         Text(
             text = copies.toString(),
-            fontSize = 13.sp,
             color = MasterToolPalette.Ink,
-            style = MaterialTheme.typography.labelMedium,
+            style = tacticalStyle().copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
         )
     }
 }

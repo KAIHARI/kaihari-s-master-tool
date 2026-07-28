@@ -42,6 +42,8 @@ import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
 import com.kaiharimoto.mastertool.ui.egg.ChibiLogo
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.displayFamily
+import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
 @Composable
@@ -64,9 +66,11 @@ fun DeckBuilderTopBar(
     ) {
         ChibiLogo(onWake = { state.eggVisible = true })
 
+        // The one place the display face is used. It is angular enough that a
+        // second use would start shouting.
         Text(
             "kai's master tool",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleMedium.copy(fontFamily = displayFamily()),
             color = MasterToolPalette.Accent,
         )
 
@@ -83,7 +87,9 @@ fun DeckBuilderTopBar(
         Text(
             "${state.deck.main.size} main · ${state.deck.extra.size} extra · " +
                 "${state.deck.side.size} side",
-            style = MaterialTheme.typography.labelMedium,
+            // Three numbers that change while you watch. In a proportional face
+            // the whole row shifts when one of them reaches double digits.
+            style = tacticalStyle(),
         )
 
         // The legality readout is the way in to the issue list: knowing there are
