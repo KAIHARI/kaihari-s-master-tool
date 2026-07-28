@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.deck.DeckKeys
 import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.layout.DealAnimation
 import com.kaiharimoto.mastertool.core.layout.GridFit
 import com.kaiharimoto.mastertool.core.layout.GridFitter
@@ -642,9 +643,37 @@ private fun SectionHeader(
                     Icon(Icons.Filled.MoreVert, contentDescription = "${section.displayName} deck options")
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    // Tidy first, and with the blurbs, because the difference
+                    // between the two halves of this menu is the whole point: a
+                    // tidy moves cards next to each other and leaves the rest of
+                    // the arrangement alone, a sort throws the arrangement away.
+                    // Somebody who arranged this pane by hand needs to be able
+                    // to tell which is which before pressing one.
+                    MenuHeading("Tidy — keeps your order")
+                    TidyBy.entries.forEach { mode ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(mode.label)
+                                    Text(
+                                        mode.blurb,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            },
+                            onClick = {
+                                menuOpen = false
+                                state.tidySection(section, mode)
+                            },
+                        )
+                    }
+
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    MenuHeading("Sort — replaces your order")
                     SortMode.entries.filter { it != SortMode.MANUAL }.forEach { mode ->
                         DropdownMenuItem(
-                            text = { Text("Sort by ${mode.displayName.lowercase()}") },
+                            text = { Text("By ${mode.displayName.lowercase()}") },
                             onClick = {
                                 menuOpen = false
                                 layout.setSortMode(section, mode)
@@ -667,6 +696,17 @@ private fun SectionHeader(
             )
         }
     }
+}
+
+/** A label inside a menu, styled so it cannot be mistaken for something to press. */
+@Composable
+private fun MenuHeading(text: String) {
+    Text(
+        text,
+        style = tacticalStyle(),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
+    )
 }
 
 /**

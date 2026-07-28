@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.ImportedFile
 import kotlin.test.Test
@@ -457,6 +458,76 @@ class DeckBuilderStateTest {
         state.importFromFile()
 
         assertTrue(state.dealSerial > before)
+    }
+
+    // ---- tidying -----------------------------------------------------------
+
+    @Test
+    fun gatheringCopiesMovesOnlyTheStrayCopy() = runTest {
+        // The pool is empty here, and that is deliberate: gathering copies is the
+        // one tidy that needs to know nothing about the cards, so it has to work
+        // on a deck imported before the database finished downloading.
+        val state = builderState()
+        state.addCard(TestPool.ash)
+        state.addCard(TestPool.imperm)
+        state.addCard(TestPool.ash)
+
+        state.tidySection(main, TidyBy.COPIES)
+
+        assertEquals(
+            listOf(TestPool.ash.id, TestPool.ash.id, TestPool.imperm.id),
+            state.deck.main,
+        )
+    }
+
+    @Test
+    fun tidyingAnAlreadyTidySectionDoesNothingToUndo() = runTest {
+        // Pressing it twice must not put a no-op on the undo stack, or the undo
+        // after it appears to do nothing.
+        val state = builderState()
+        state.addCard(TestPool.ash)
+        state.addCard(TestPool.imperm)
+        state.addCard(TestPool.ash)
+
+        state.tidySection(main, TidyBy.COPIES)
+        val tidied = state.deck.main
+        state.tidySection(main, TidyBy.COPIES)
+        state.undo()
+
+        assertEquals(
+            listOf(TestPool.ash.id, TestPool.imperm.id, TestPool.ash.id),
+            state.deck.main,
+            "undo should reach past the second press, which changed nothing",
+        )
+        assertEquals(3, tidied.size)
+    }
+
+    @Test
+    fun aTidyIsUndoable() = runTest {
+        val state = builderState()
+        state.addCard(TestPool.ash)
+        state.addCard(TestPool.imperm)
+        state.addCard(TestPool.ash)
+        val before = state.deck.main
+
+        state.tidySection(main, TidyBy.COPIES)
+        state.undo()
+
+        assertEquals(before, state.deck.main)
+    }
+
+    @Test
+    fun aTidyNeverChangesWhatIsInTheDeck() = runTest {
+        val state = builderState()
+        val cards = TestPool.many(9)
+        cards.forEach { state.addCard(it) }
+        cards.take(3).forEach { state.addCard(it) }
+        val before = state.deck.main.sortedBy { it.value }
+
+        TidyBy.entries.forEach { mode ->
+            state.tidySection(main, mode)
+            assertEquals(before, state.deck.main.sortedBy { it.value }, "$mode changed the deck")
+        }
     }
 
     private fun requireNonNull(value: String?): String =

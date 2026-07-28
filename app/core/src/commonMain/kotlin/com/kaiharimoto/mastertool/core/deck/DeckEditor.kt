@@ -147,6 +147,25 @@ object DeckEditor {
         return DeckEdit.Applied(removed.deck.with(to, target + card.id))
     }
 
+    /**
+     * Replaces a section's order wholesale, having checked it is only an order.
+     *
+     * Everything else here edits by index, so it cannot lose a card by
+     * construction. This one takes a whole list from somewhere else and has to
+     * earn that trust instead: the incoming order must be a permutation of what
+     * is already there — same cards, same number of copies of each — or the edit
+     * is refused. That is what keeps a tidy honestly a tidy, whatever the
+     * grouping function was thinking.
+     */
+    fun rearrange(deck: Deck, section: DeckSection, order: List<CardId>): DeckEdit {
+        val contents = deck[section]
+        if (order.size != contents.size) return DeckEdit.Rejected(RejectionReason.NOT_PRESENT)
+        if (order.groupingBy { it }.eachCount() != contents.groupingBy { it }.eachCount()) {
+            return DeckEdit.Rejected(RejectionReason.NOT_PRESENT)
+        }
+        return DeckEdit.Applied(deck.with(section, order))
+    }
+
     /** Reorders within a section, for drag-to-arrange. */
     fun reorder(deck: Deck, section: DeckSection, fromIndex: Int, toIndex: Int): DeckEdit {
         val contents = deck[section]

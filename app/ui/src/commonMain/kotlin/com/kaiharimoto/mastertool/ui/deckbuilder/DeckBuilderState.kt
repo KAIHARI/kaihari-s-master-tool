@@ -8,6 +8,8 @@ import com.kaiharimoto.mastertool.core.data.SyncResult
 import com.kaiharimoto.mastertool.core.deck.DeckEdit
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
 import com.kaiharimoto.mastertool.core.deck.DeckSorter
+import com.kaiharimoto.mastertool.core.deck.DeckTidy
+import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.deck.HandSimulator
 import com.kaiharimoto.mastertool.core.deck.HandTally
 import com.kaiharimoto.mastertool.core.deck.OpeningHand
@@ -713,6 +715,39 @@ class DeckBuilderState(
             "Sorted ${section.displayName} Deck by ${mode.displayName.lowercase()}.",
             undo = { undoIfCurrent(token) },
         )
+    }
+
+    /**
+     * Tidies a section without deciding its order.
+     *
+     * Deliberately does not touch the section's stored sort mode the way
+     * [sortSection] does. After a tidy the arrangement is still a manual one --
+     * cards moved next to each other, nothing else disturbed -- and recording a
+     * mode would claim the pane is now maintained by the program.
+     *
+     * Routed through `DeckEditor.rearrange` rather than assigning the list
+     * directly, so a grouping function that somehow lost a card is refused
+     * instead of quietly shortening the deck.
+     */
+    fun tidySection(section: DeckSection, mode: TidyBy) {
+        val current = deck[section]
+        val tidied = DeckTidy.apply(current, mode, index::byId)
+        if (tidied == current) {
+            showToast("${section.displayName} Deck is already tidy.")
+            return
+        }
+
+        when (val edit = DeckEditor.rearrange(deck, section, tidied)) {
+            is DeckEdit.Applied -> {
+                val token = pushUndo(deck)
+                deck = edit.deck
+                showToast(
+                    "${mode.label} in the ${section.displayName} Deck.",
+                    undo = { undoIfCurrent(token) },
+                )
+            }
+            is DeckEdit.Rejected -> showToast("That tidy would have changed the deck, so nothing moved.")
+        }
     }
 
     /** Every section currently holding [id], for controls that act on a card. */
