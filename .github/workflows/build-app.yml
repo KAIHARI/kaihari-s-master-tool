@@ -95,3 +95,19 @@ jobs:
       - name: Build desktop application
         working-directory: app
         run: ./gradlew :desktopApp:assemble --stacktrace
+
+      # The only place :ui tests can run. The module needs Google's Maven to
+      # compile at all, so in a restricted environment these are unrunnable --
+      # which is exactly why the state holders are plain objects over Compose's
+      # snapshot system rather than something needing a window.
+      - name: Run :ui tests
+        working-directory: app
+        run: ./gradlew :ui:desktopTest --stacktrace
+
+      - name: Upload UI test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-report
+          path: app/ui/build/reports/tests/desktopTest
+          if-no-files-found: ignore

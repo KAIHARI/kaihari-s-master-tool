@@ -32,6 +32,22 @@ kotlin {
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
         }
+
+        // The state holders are plain classes over Compose's snapshot system,
+        // which runs perfectly well with no window and no composition -- so the
+        // 600-line heart of this module can be tested like any other object.
+        //
+        // Desktop rather than common, because a test needs a SQL driver and a
+        // JDBC one must never end up in the APK. It is also the only target that
+        // can run here at all: this module does not compile without Google's
+        // Maven, so CI is the only place these ever execute.
+        val desktopTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.sqldelight.driver.jvm)
+            }
+        }
     }
 }
 
