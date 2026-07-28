@@ -33,6 +33,7 @@ import com.kaiharimoto.mastertool.core.input.ShortcutContext
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.components.CardInspector
+import com.kaiharimoto.mastertool.ui.components.MasterToolSnackbar
 import com.kaiharimoto.mastertool.ui.egg.EasterEgg
 import com.kaiharimoto.mastertool.ui.dnd.DragAutoScroll
 import com.kaiharimoto.mastertool.ui.dnd.DragController
@@ -148,7 +149,7 @@ fun DeckBuilderScreen(
         },
     ) {
         Scaffold(
-            snackbarHost = { SnackbarHost(snackbarHost) },
+            snackbarHost = { SnackbarHost(snackbarHost) { MasterToolSnackbar(it) } },
             containerColor = MaterialTheme.colorScheme.background,
         ) { padding ->
             // The dragged card is composed here, outside every pane, so it is not

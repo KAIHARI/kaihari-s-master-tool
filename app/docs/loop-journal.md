@@ -661,6 +661,32 @@ and the property test walks them, so a new tidy appears in both by existing. The
 same shape as the shortcut table and the overlay enum — three times now that
 declaring the list once has meant the second place could not fall behind.
 
+## 34. The same clothes, everywhere
+
+Eight panels — inspector, deck check, statistics, filters, siding, test hands,
+notes, help — had each built their own `ModalBottomSheet` with the same three
+lines of boilerplate and Material's own looks. So the deck sat on cloth and
+every panel that opened over it was a grey slab with a grey pill on top: a
+different program's dialog, eight times over.
+
+One wrapper now. The container is the mat, so a panel is the same surface as the
+table it slides over; the corner is 8dp rather than Material's 28, which is the
+language the 6dp panes and 3dp cards already speak; and the handle is a short
+accent bar rather than the pill every Android app has. The sheet state moved
+inside, because not one of the eight ever did anything with it except pass it
+straight back.
+
+Then the snackbar, which was the last Material surface and is the most-seen
+thing in the program — nearly every edit raises one. Same cloth, a 4dp corner,
+and a hairline of accent so it reads as lifted off the table rather than printed
+on it. "Undo" keeps the bright accent, because it is the only word here that has
+to be found in a hurry.
+
+Both of these were cheap because they were *one* change each rather than eight
+and one. That is the same lesson as the shortcut table, the overlay enum and the
+tidy list, arriving from the visual side: the thing worth doing once is deciding
+where a decision lives.
+
 ---
 
 ## Where this stands
