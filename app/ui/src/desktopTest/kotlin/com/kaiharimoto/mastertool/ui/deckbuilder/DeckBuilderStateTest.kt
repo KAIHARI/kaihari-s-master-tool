@@ -26,7 +26,7 @@ class DeckBuilderStateTest {
     @Test
     fun selectingBuildsAGroupAndClearingEndsIt() = runTest {
         val state = builderState()
-        repeat(4) { state.addCard(TestPool.ash) }
+        TestPool.many(4).forEach { state.addCard(it) }
 
         state.select(main, 0)
         state.toggleSelected(main, 2)
@@ -39,7 +39,7 @@ class DeckBuilderStateTest {
     @Test
     fun aRangeCoversEverythingBetween() = runTest {
         val state = builderState()
-        repeat(6) { state.addCard(TestPool.ash) }
+        TestPool.many(6).forEach { state.addCard(it) }
 
         state.select(main, 1)
         state.selectThrough(main, 4)
@@ -50,7 +50,7 @@ class DeckBuilderStateTest {
     @Test
     fun aBlockIsARectangle() = runTest {
         val state = builderState()
-        repeat(12) { state.addCard(TestPool.ash) }
+        TestPool.many(12).forEach { state.addCard(it) }
 
         state.select(main, 0)
         state.selectBlockThrough(main, index = 5, columns = 4)
@@ -62,7 +62,7 @@ class DeckBuilderStateTest {
     @Test
     fun aBlockCannotSelectPositionsThatDoNotExist() = runTest {
         val state = builderState()
-        repeat(5) { state.addCard(TestPool.ash) }
+        TestPool.many(5).forEach { state.addCard(it) }
 
         state.select(main, 0)
         state.selectBlockThrough(main, index = 4, columns = 4)
@@ -75,11 +75,12 @@ class DeckBuilderStateTest {
         // Enforced by the deck's own setter rather than at each call site, so
         // this is the test that the enforcement actually reaches all of them.
         val state = builderState()
-        repeat(4) { state.addCard(TestPool.ash) }
+        val cards = TestPool.many(4)
+        cards.forEach { state.addCard(it) }
         state.select(main, 1)
         state.selectThrough(main, 3)
 
-        state.removeOne(TestPool.ash, main)
+        state.removeOne(cards.first(), main)
 
         assertTrue(state.selection.isEmpty, "a stale selection would move the wrong cards")
     }
@@ -87,7 +88,7 @@ class DeckBuilderStateTest {
     @Test
     fun aGroupOnlyTravelsWhenThereIsMoreThanOneOfIt() = runTest {
         val state = builderState()
-        repeat(4) { state.addCard(TestPool.ash) }
+        TestPool.many(4).forEach { state.addCard(it) }
 
         state.select(main, 1)
         assertFalse(state.dragCarriesSelection(main, 1), "one card is not a group")

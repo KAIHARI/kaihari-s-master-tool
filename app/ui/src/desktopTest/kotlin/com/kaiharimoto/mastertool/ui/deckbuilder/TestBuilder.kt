@@ -126,6 +126,17 @@ internal object TestPool {
         frameType = "trap",
     )
 
+    /**
+     * [count] distinct cards.
+     *
+     * Adding the same card over and over does not build a deck of that size --
+     * the copy limit stops it at three, which is correct and is exactly the trap
+     * a test that wanted twelve cards fell into.
+     */
+    fun many(count: Int): List<Card> = (1..count).map {
+        monster(900_000 + it, "Test Card $it", Attribute.DARK)
+    }
+
     private fun monster(id: Int, name: String, attribute: Attribute) = Card(
         id = CardId(id),
         name = name,
