@@ -95,9 +95,19 @@ from under you. It is driven by a frame clock rather than by pointer movement,
 because holding a card still against an edge is the gesture.
 
 The long press now shows a filling ring. It was four hundred milliseconds of no
-feedback at all, which is indistinguishable from a press that is not working.
+feedback at all, which is indistinguishable from a press that is not working. It
+fires a haptic on completion but opens nothing — the menu still opens on release,
+which is what keeps holding-then-dragging possible.
 
-Still open: multi-select and carrying several cards at once.
+Several cards can be picked up and carried together, entered from the long-press
+menu rather than a modifier key so it exists at all on a tablet. Both kinds of
+range are offered: a reading-order run, and the rectangle, which is what you want
+when the thing you arranged is a column of ratios.
+
+The invariant behind it is enforced by construction — assigning a deck clears the
+selection, because a selection is a set of positions into that deck. Eight places
+write a deck; one forgetting would leave a selection pointing at different cards
+than the highlighted ones, and the next thing done to it moves real cards.
 
 ## 4. Type
 
@@ -167,3 +177,67 @@ The codec **merges** rather than re-encodes. The `#ydkx-extended` payload is not
 this app's document: the desktop tool also writes a background gradient, a
 category, tags, a last-used stamp and the opponent's full decklist there, and
 decoding to a data class and back would have deleted all of it.
+
+## 8. Everything that was already there
+
+Four things the code knew how to do and nothing called.
+
+**Enter adds the top match**, leaving the query alone — so three presses is
+three copies without a hand leaving the keyboard. The fastest way to build a
+deck either program has, and the original had it.
+
+**The pool has a density control.** `searchColumns` had been stored, clamped and
+read since the pane was written; nothing ever set it, so the only reachable
+value was the default.
+
+**The statistics chips browse the pool.** Every one was an `AssistChip` with an
+empty `onClick` — the exact pattern the card inspector had already been fixed
+for, in the one panel that was not.
+
+`CardIndex.suggest` was deleted rather than wired up: the pool below the search
+box is already the live result list, so a dropdown of the same cards would be
+the same query drawn twice.
+
+## 9. Weight
+
+A dragged card pinned exactly to the pointer is where the illusion breaks —
+nothing with mass tracks a hand perfectly. It trails on a spring now and swings
+into the direction of travel, both from the same number so there is no second
+opinion about how fast the drag is going.
+
+Critically damped, with damping derived from stiffness rather than a second
+dial, because a card that oscillated around your finger would be worse than one
+that never lagged. The timestep is capped: a spring given a large enough step
+does not lose accuracy, it *diverges*, and backgrounding the app mid-drag would
+have thrown the card off screen permanently. Tested at 30fps as well as 60 —
+desktop and a tablet do not agree, and a spring tuned at one that rings at the
+other is a bug nobody would reproduce.
+
+## 10. Dealing
+
+Opening a saved list put forty cards on screen at once, the one moment here that
+could not happen at a table. They arrive in a wave now, dropped onto their places
+rather than faded in — a card that arrives by becoming opaque has not come from
+anywhere.
+
+One animation per pane; each card derives its own progress from its index. The
+property worth testing is that *every* card has landed by the end: get that
+wrong and the last few snap into place when the animation stops, which is worse
+than not animating at all.
+
+## 11. The pool
+
+The last undesigned third of the screen. Same cloth as the mat, turned over:
+shadowed along the top instead of lit there, because the panes are a surface
+things are laid on and the pool is a box things come out of. Its gutter closes
+to four rather than to zero — cards in a box have gaps, cards in an arrangement
+do not, and that difference is what stops it reading as a fourth deck section.
+
+---
+
+## Where this stands
+
+`:core` carries the arithmetic for all of it, at **373 tests**, up from 249.
+
+Still open: the siding editor (plans can be used but only written on the
+desktop), shootout mode, the sandbox board, and PDF export.
