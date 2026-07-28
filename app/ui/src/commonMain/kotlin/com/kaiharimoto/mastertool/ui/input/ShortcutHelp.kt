@@ -68,7 +68,7 @@ private fun Group(title: String, shortcuts: List<Shortcut>) {
     if (shortcuts.isEmpty()) return
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = MasterToolPalette.Gold)
+        Text(title, style = MaterialTheme.typography.labelLarge, color = MasterToolPalette.Accent)
         shortcuts.forEach { shortcut ->
             Row(
                 modifier = Modifier.fillMaxWidth(),

@@ -56,11 +56,11 @@ fun CardTile(
         modifier = modifier
             .aspectRatio(CARD_ASPECT_RATIO)
             .clip(shape)
-            .background(MasterToolPalette.SlateRaised)
+            .background(MasterToolPalette.SurfaceRaised)
             .border(
                 width = if (highlighted) 2.dp else 1.dp,
                 color = if (highlighted) {
-                    MasterToolPalette.GoldBright
+                    MasterToolPalette.AccentBright
                 } else {
                     MaterialTheme.colorScheme.outline
                 },
@@ -135,7 +135,7 @@ private fun CopyBadge(copies: Int, modifier: Modifier = Modifier) {
         modifier = modifier
             .size(22.dp)
             .clip(RoundedCornerShape(4.dp))
-            .background(MasterToolPalette.Gold),
+            .background(MasterToolPalette.Accent),
         contentAlignment = Alignment.Center,
     ) {
         Text(

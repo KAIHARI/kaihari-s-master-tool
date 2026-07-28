@@ -85,7 +85,7 @@ fun HoverPreview(card: Card, content: @Composable () -> Unit) {
                     Modifier
                         .padding(8.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MasterToolPalette.Slate)
+                        .background(MasterToolPalette.Surface)
                         .border(1.dp, MasterToolPalette.Line, RoundedCornerShape(8.dp))
                         .padding(6.dp),
                 ) {

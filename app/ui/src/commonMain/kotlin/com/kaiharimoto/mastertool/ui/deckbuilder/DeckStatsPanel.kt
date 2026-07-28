@@ -81,10 +81,13 @@ fun DeckStatsPanel(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Tile("Cards", statistics.sectionSize.toString(), MasterToolPalette.Gold)
-                Tile("Monsters", statistics.monsters.toString(), MasterToolPalette.MainAccent)
-                Tile("Spells", statistics.spells.toString(), MasterToolPalette.SideAccent)
-                Tile("Traps", statistics.traps.toString(), MasterToolPalette.ExtraAccent)
+                // Card-type colours, not section colours: these count what the
+                // cards are, and the two happened to look the same while meaning
+                // different things.
+                Tile("Cards", statistics.sectionSize.toString(), MasterToolPalette.Accent)
+                Tile("Monsters", statistics.monsters.toString(), MasterToolPalette.Monster)
+                Tile("Spells", statistics.spells.toString(), MasterToolPalette.Spell)
+                Tile("Traps", statistics.traps.toString(), MasterToolPalette.Trap)
             }
 
             if (statistics.total > 0) {
@@ -159,13 +162,13 @@ private fun OpeningHandOdds(statistics: DeckStatistics) {
                 Text(
                     percent(statistics.openingHandOdds(copies, handSize = 5)),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MasterToolPalette.Gold,
+                    color = MasterToolPalette.Accent,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
                     percent(statistics.openingHandOdds(copies, handSize = 6)),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MasterToolPalette.GoldBright,
+                    color = MasterToolPalette.AccentBright,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -185,13 +188,13 @@ private fun DistributionBar(statistics: DeckStatistics) {
         // `weight` rejects zero, so a deck with no traps must skip the segment
         // rather than lay out a zero-width one.
         if (statistics.monsters > 0) {
-            Box(Modifier.weight(statistics.monsters.toFloat()).fillMaxHeight().background(MasterToolPalette.MainAccent))
+            Box(Modifier.weight(statistics.monsters.toFloat()).fillMaxHeight().background(MasterToolPalette.Monster))
         }
         if (statistics.spells > 0) {
-            Box(Modifier.weight(statistics.spells.toFloat()).fillMaxHeight().background(MasterToolPalette.SideAccent))
+            Box(Modifier.weight(statistics.spells.toFloat()).fillMaxHeight().background(MasterToolPalette.Spell))
         }
         if (statistics.traps > 0) {
-            Box(Modifier.weight(statistics.traps.toFloat()).fillMaxHeight().background(MasterToolPalette.ExtraAccent))
+            Box(Modifier.weight(statistics.traps.toFloat()).fillMaxHeight().background(MasterToolPalette.Trap))
         }
     }
 }
@@ -217,7 +220,7 @@ private fun LevelHistogram(byLevel: Map<Int, Int>) {
                         .fillMaxWidth()
                         .height((56 * count / peak).coerceAtLeast(3).dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(MasterToolPalette.MainAccent),
+                        .background(MasterToolPalette.Monster),
                 )
                 Text(level.toString(), style = MaterialTheme.typography.labelSmall)
             }

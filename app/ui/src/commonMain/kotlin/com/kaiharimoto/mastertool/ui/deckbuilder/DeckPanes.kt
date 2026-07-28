@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -34,8 +35,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,10 +50,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.layout.GridFit
+import com.kaiharimoto.mastertool.core.layout.GridFitter
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.DeckSection
@@ -160,6 +166,9 @@ private fun DeckSectionPane(
     val gridState = rememberLazyGridState()
     var flashed by remember { mutableStateOf<CardId?>(null) }
     var gridOrigin by remember { mutableStateOf(Offset.Zero) }
+    // What the grid actually settled on, so the header can report it and taking
+    // manual control starts from what is already on screen.
+    var effectiveColumns by remember { mutableStateOf(preferences.columns) }
 
     val hover = drag.hover?.takeIf { it.section == section }
     val dropBorder = when {
@@ -203,7 +212,7 @@ private fun DeckSectionPane(
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SectionHeader(state, layout, section, ids.size, preferences, accent)
+        SectionHeader(state, layout, section, ids.size, preferences, effectiveColumns, accent)
 
         if (preferences.collapsed) return@Column
 
@@ -218,49 +227,93 @@ private fun DeckSectionPane(
             return@Column
         }
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(preferences.columns),
-            state = gridState,
-            modifier = Modifier
-                .fillMaxSize()
-                .onGloballyPositioned { gridOrigin = it.positionInRoot() },
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (layout.preferences.stacked) {
-                // Stacks have no positional identity, so dragging one has nothing
-                // coherent to mean; the stepper in the menu does that job instead.
-                val stacks = DeckGrouping.stacks(ids)
-                items(stacks.size, key = { "${section.name}-stack-${stacks[it].id.value}" }) { i ->
-                    val stack = stacks[i]
-                    DeckCard(
-                        state = state,
-                        drag = null,
-                        onDropped = onDropped,
-                        section = section,
-                        id = stack.id,
-                        copies = stack.count,
-                        highlighted = flashed == stack.id,
-                        insertionMarker = false,
-                        siblings = ids,
-                        position = stack.firstIndex,
+        val stacks = if (layout.preferences.stacked) DeckGrouping.stacks(ids) else emptyList()
+        val itemCount = if (layout.preferences.stacked) stacks.size else ids.size
+
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val density = LocalDensity.current
+            val spacing = 6.dp
+
+            // Recomputed on every layout pass, which is cheap and means the grid
+            // re-fits the moment the pane is resized or a card is added.
+            val fit = with(density) {
+                if (preferences.autoFit) {
+                    GridFitter.fit(
+                        count = itemCount,
+                        availableWidth = maxWidth.toPx(),
+                        availableHeight = maxHeight.toPx(),
+                        spacing = spacing.toPx(),
+                        aspectRatio = CARD_ASPECT_RATIO,
+                        minColumns = SectionPreferences.MIN_COLUMNS,
+                        maxColumns = SectionPreferences.MAX_COLUMNS,
+                    )
+                } else {
+                    GridFit(
+                        columns = preferences.columns,
+                        fits = GridFitter.requiredHeight(
+                            count = itemCount,
+                            columns = preferences.columns,
+                            availableWidth = maxWidth.toPx(),
+                            spacing = spacing.toPx(),
+                            aspectRatio = CARD_ASPECT_RATIO,
+                        ) <= maxHeight.toPx(),
                     )
                 }
-            } else {
-                // Indexed keys because a deck legitimately holds duplicate passcodes.
-                items(ids.size, key = { "${section.name}-$it-${ids[it].value}" }) { position ->
-                    DeckCard(
-                        state = state,
-                        drag = drag,
-                        onDropped = onDropped,
-                        section = section,
-                        id = ids[position],
-                        copies = state.copiesIn(ids[position], section),
-                        highlighted = flashed == ids[position],
-                        insertionMarker = hover?.accepted == true && hover.index == position,
-                        siblings = ids,
-                        position = position,
-                    )
+            }
+
+            // Nothing to scroll means nothing for a drag to be mistaken for, so
+            // the card can be picked up the instant the finger moves.
+            val competesWithScroll = !fit.fits
+
+            // Written after composition rather than during it — the header sits
+            // above this and only needs the number on the next pass.
+            SideEffect { effectiveColumns = fit.columns }
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(fit.columns),
+                state = gridState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned { gridOrigin = it.positionInRoot() },
+                horizontalArrangement = Arrangement.spacedBy(spacing),
+                verticalArrangement = Arrangement.spacedBy(spacing),
+            ) {
+                if (layout.preferences.stacked) {
+                    // Stacks have no positional identity, so dragging one has
+                    // nothing coherent to mean; the stepper does that job instead.
+                    items(stacks.size, key = { "${section.name}-stack-${stacks[it].id.value}" }) { i ->
+                        val stack = stacks[i]
+                        DeckCard(
+                            state = state,
+                            drag = null,
+                            competesWithScroll = competesWithScroll,
+                            onDropped = onDropped,
+                            section = section,
+                            id = stack.id,
+                            copies = stack.count,
+                            highlighted = flashed == stack.id,
+                            insertionMarker = false,
+                            siblings = ids,
+                            position = stack.firstIndex,
+                        )
+                    }
+                } else {
+                    // Indexed keys because a deck legitimately holds duplicates.
+                    items(ids.size, key = { "${section.name}-$it-${ids[it].value}" }) { position ->
+                        DeckCard(
+                            state = state,
+                            drag = drag,
+                            competesWithScroll = competesWithScroll,
+                            onDropped = onDropped,
+                            section = section,
+                            id = ids[position],
+                            copies = state.copiesIn(ids[position], section),
+                            highlighted = flashed == ids[position],
+                            insertionMarker = hover?.accepted == true && hover.index == position,
+                            siblings = ids,
+                            position = position,
+                        )
+                    }
                 }
             }
         }
@@ -279,6 +332,7 @@ private fun DeckSectionPane(
 private fun DeckCard(
     state: DeckBuilderState,
     drag: DragController?,
+    competesWithScroll: Boolean,
     onDropped: (DragSession, DropHover?) -> Unit,
     section: DeckSection,
     id: CardId,
@@ -312,7 +366,7 @@ private fun DeckCard(
                             .fillMaxHeight()
                             .width(3.dp)
                             .align(Alignment.CenterStart)
-                            .background(MasterToolPalette.GoldBright),
+                            .background(MasterToolPalette.AccentBright),
                     )
                 }
             }
@@ -326,6 +380,7 @@ private fun DeckCard(
             DragSource(
                 controller = drag,
                 key = "${section.name}-$position-${id.value}",
+                competesWithScroll = competesWithScroll,
                 session = { DragSession(card, section, position, IntSize.Zero) },
                 onLongPress = { menuOpen = true },
                 onDropped = onDropped,
@@ -370,6 +425,7 @@ private fun SectionHeader(
     section: DeckSection,
     count: Int,
     preferences: SectionPreferences,
+    columns: Int,
     accent: androidx.compose.ui.graphics.Color,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -405,22 +461,33 @@ private fun SectionHeader(
         Box(Modifier.weight(1f))
 
         if (!preferences.collapsed) {
-            // Scale the cards rather than the pane. The desktop tool shared one
-            // slider between sections with a button to say which it currently
-            // drove; a control whose target is invisible is a control you have to
-            // test before you trust.
+            // Sized to fit by default. The steppers always work and always start
+            // from what is on screen; reaching for one is itself the decision to
+            // take over, so there is no mode to switch first.
             IconButton(
-                onClick = { layout.setColumns(section, preferences.columns - 1) },
-                enabled = preferences.columns > SectionPreferences.MIN_COLUMNS,
+                onClick = { layout.setColumns(section, columns - 1) },
+                enabled = columns > SectionPreferences.MIN_COLUMNS,
             ) {
                 Icon(Icons.Filled.Remove, contentDescription = "Fewer, larger cards per row")
             }
-            Text(preferences.columns.toString(), style = MaterialTheme.typography.labelMedium)
+            Text(columns.toString(), style = MaterialTheme.typography.labelMedium)
             IconButton(
-                onClick = { layout.setColumns(section, preferences.columns + 1) },
-                enabled = preferences.columns < SectionPreferences.MAX_COLUMNS,
+                onClick = { layout.setColumns(section, columns + 1) },
+                enabled = columns < SectionPreferences.MAX_COLUMNS,
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "More, smaller cards per row")
+            }
+
+            if (preferences.autoFit) {
+                Text(
+                    "Auto",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                TextButton(onClick = { layout.setAutoFit(section, true) }) {
+                    Text("Auto", style = MaterialTheme.typography.labelMedium)
+                }
             }
 
             Box {
@@ -468,7 +535,7 @@ private fun UnknownCardTile(id: CardId) {
         Modifier
             .aspectRatio(CARD_ASPECT_RATIO)
             .clip(RoundedCornerShape(4.dp))
-            .background(MasterToolPalette.SlateRaised)
+            .background(MasterToolPalette.SurfaceRaised)
             .padding(4.dp),
         contentAlignment = Alignment.Center,
     ) {

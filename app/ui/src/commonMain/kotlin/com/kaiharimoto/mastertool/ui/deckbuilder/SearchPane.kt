@@ -154,6 +154,9 @@ fun SearchPane(
                 DragSource(
                     controller = drag,
                     key = card.id.value,
+                    // The pool is thousands of cards deep and always scrolls, so
+                    // a finger that moves straight away is scrolling it.
+                    competesWithScroll = true,
                     session = { DragSession(card, section = null, index = position, size = IntSize.Zero) },
                     onLongPress = { state.inspect(state.results, position) },
                     onDropped = onDropped,

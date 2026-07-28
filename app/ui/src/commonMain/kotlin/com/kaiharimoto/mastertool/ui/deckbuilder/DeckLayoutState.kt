@@ -79,8 +79,13 @@ class DeckLayoutState(
         }
     }
 
+    /** Reaching for the density control is itself the decision to size by hand. */
     fun setColumns(section: DeckSection, columns: Int) {
-        updateSection(section) { it.copy(columns = columns) }
+        updateSection(section) { it.copy(columns = columns, autoFit = false) }
+    }
+
+    fun setAutoFit(section: DeckSection, autoFit: Boolean) {
+        updateSection(section) { it.copy(autoFit = autoFit) }
     }
 
     fun setSortMode(section: DeckSection, mode: SortMode) {

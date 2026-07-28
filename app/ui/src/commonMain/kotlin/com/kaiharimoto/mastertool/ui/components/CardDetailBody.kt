@@ -74,7 +74,7 @@ fun CardDetailBody(
                     .width(200.dp)
                     .height(292.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(MasterToolPalette.SlateRaised),
+                    .background(MasterToolPalette.SurfaceRaised),
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -130,7 +130,7 @@ fun CardDetailBody(
                             "${percent(openingHandOdds(copiesHome, 6))} going second " +
                             "(in $mainDeckSize cards)",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MasterToolPalette.Gold,
+                        color = MasterToolPalette.Accent,
                     )
                 }
             }

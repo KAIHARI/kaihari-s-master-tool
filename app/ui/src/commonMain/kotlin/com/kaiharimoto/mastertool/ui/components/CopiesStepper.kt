@@ -68,7 +68,7 @@ fun CopiesStepper(
             count.toString(),
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
-            color = if (count > 0) MasterToolPalette.Gold else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (count > 0) MasterToolPalette.Accent else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(24.dp),
         )
 

@@ -10,8 +10,16 @@ import kotlinx.serialization.Serializable
 data class SectionPreferences(
     /** Share of the deck column's height, relative to the other panes. */
     val weight: Float,
-    /** Cards per row. */
+    /** Cards per row, used only when [autoFit] is off. */
     val columns: Int,
+    /**
+     * Size the cards so the whole section is visible, rather than by hand.
+     *
+     * On by default. A deck is a small, known quantity and the useful default is
+     * to see all of it; picking a column count manually means re-picking it every
+     * time the deck grows past a row.
+     */
+    val autoFit: Boolean = true,
     val collapsed: Boolean = false,
     val sortMode: SortMode = SortMode.MANUAL,
 ) {
