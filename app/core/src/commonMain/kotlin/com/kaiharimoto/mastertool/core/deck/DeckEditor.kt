@@ -190,6 +190,48 @@ object DeckEditor {
     }
 
     /**
+     * Moves several copies at once so they land before whatever currently sits at
+     * [insertBefore], keeping their order relative to each other.
+     *
+     * The same shape as [reorderTo] and the same trap, multiplied: the drop
+     * position describes the list as it looks before anything is lifted, so the
+     * destination has to be discounted by however many of the moving cards were
+     * in front of it. Getting that wrong puts a group of three down two slots
+     * from where it was aimed, and only when dragging rightwards.
+     *
+     * Their relative order is preserved because it is an arrangement — picking up
+     * four cards and putting them down should not shuffle them.
+     */
+    fun reorderManyTo(
+        deck: Deck,
+        section: DeckSection,
+        fromIndices: Collection<Int>,
+        insertBefore: Int,
+    ): DeckEdit {
+        val contents = deck[section]
+        val moving = fromIndices.toSortedSet()
+
+        if (moving.isEmpty()) return DeckEdit.Applied(deck)
+        if (moving.any { it !in contents.indices }) {
+            return DeckEdit.Rejected(RejectionReason.NOT_PRESENT)
+        }
+        if (insertBefore !in 0..contents.size) {
+            return DeckEdit.Rejected(RejectionReason.NOT_PRESENT)
+        }
+
+        val lifted = moving.map { contents[it] }
+        val remaining = contents.filterIndexed { index, _ -> index !in moving }
+
+        // Every moving card that started before the drop point leaves a gap the
+        // drop point has to slide back through.
+        val target = insertBefore - moving.count { it < insertBefore }
+
+        val rebuilt = remaining.toMutableList()
+        rebuilt.addAll(target.coerceIn(0, rebuilt.size), lifted)
+        return DeckEdit.Applied(deck.with(section, rebuilt))
+    }
+
+    /**
      * Moves one copy to an exact position in another section.
      *
      * [move] appends, which is right for a button but wrong for a drag: a card
