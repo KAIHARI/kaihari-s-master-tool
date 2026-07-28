@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.ui.dnd
 
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -7,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntSize
+import com.kaiharimoto.mastertool.core.layout.EdgeScroll
 import com.kaiharimoto.mastertool.core.layout.GridDropResolver
 import com.kaiharimoto.mastertool.core.layout.ItemBox
 import com.kaiharimoto.mastertool.core.model.Card
@@ -77,6 +79,9 @@ class DragController(
     var rowTolerancePx: Float = 8f
     var hysteresisPx: Float = 12f
 
+    /** Pixels per second at the very edge of a pane. Eased down from there by [EdgeScroll]. */
+    var autoScrollVelocity: Float = 1400f
+
     private val panes = mutableMapOf<DeckSection, PaneRegistration>()
     private var searchBounds: Rect = Rect.Zero
 
@@ -117,6 +122,41 @@ class DragController(
     fun cancel() {
         session = null
         hover = null
+    }
+
+    /**
+     * Scrolls the pane the card is being held over, if it is being held near an
+     * edge, and works out where the card would land now that the grid has moved
+     * underneath it.
+     *
+     * Driven a frame at a time by `DragAutoScroll` rather than from [move], which
+     * only fires while the pointer is actually moving — and holding a card still
+     * at the bottom of a pane is precisely the gesture this exists to serve.
+     *
+     * Reads [pointer] from a coroutine rather than from composition, so watching
+     * it here costs no recomposition.
+     */
+    suspend fun autoScrollStep(seconds: Float) {
+        val active = session ?: return
+        if (seconds <= 0f) return
+
+        val pane = panes.values.firstOrNull { it.bounds.contains(pointer) } ?: return
+        val grid = pane.gridState ?: return
+
+        val velocity = EdgeScroll.velocity(
+            pointerY = pointer.y,
+            top = pane.bounds.top,
+            bottom = pane.bounds.bottom,
+            maxVelocity = autoScrollVelocity,
+        )
+        if (velocity == 0f) return
+
+        // Zero consumed means the list is already at that end, so there is
+        // nothing new under the pointer and nothing to re-resolve.
+        if (grid.scrollBy(velocity * seconds) == 0f) return
+
+        val next = resolve(pointer, active)
+        if (next != hover) hover = next
     }
 
     private fun resolve(point: Offset, active: DragSession): DropHover? {

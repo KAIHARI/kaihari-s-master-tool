@@ -33,6 +33,7 @@ import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.components.CardInspector
 import com.kaiharimoto.mastertool.ui.egg.EasterEgg
+import com.kaiharimoto.mastertool.ui.dnd.DragAutoScroll
 import com.kaiharimoto.mastertool.ui.dnd.DragController
 import com.kaiharimoto.mastertool.ui.dnd.DragOverlay
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
@@ -160,6 +161,9 @@ fun DeckBuilderScreen(
                 }
 
                 DragOverlay(drag, state.format)
+                // Draws nothing; it is here for the same reason the overlay is,
+                // which is that a drag outlives the pane it started in.
+                DragAutoScroll(drag)
             }
         }
     } // ShortcutHost
