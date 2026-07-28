@@ -118,6 +118,13 @@ class DeckBuilderState(
     var matchCount by mutableStateOf(0)
         private set
 
+    /**
+     * Whether the results are cards that *say* the query rather than are called
+     * it, which happens only when nothing is named that.
+     */
+    var matchedText by mutableStateOf(false)
+        private set
+
     private var currentDeck by mutableStateOf(Deck.EMPTY)
 
     /**
@@ -458,6 +465,7 @@ class DeckBuilderState(
             }
             results = outcome.cards
             matchCount = outcome.matchCount
+            matchedText = outcome.matchedText
         }
     }
 

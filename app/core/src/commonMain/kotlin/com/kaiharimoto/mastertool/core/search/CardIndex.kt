@@ -14,6 +14,14 @@ import com.kaiharimoto.mastertool.core.model.CardId
 data class SearchOutcome(
     val cards: List<Card>,
     val matchCount: Int,
+    /**
+     * True when nothing was *named* this and these are cards that *say* it.
+     *
+     * Worth reporting rather than blending in: the results are answering a
+     * different question from the one that was asked, and a screen that quietly
+     * substitutes one for the other is a screen you stop trusting.
+     */
+    val matchedText: Boolean = false,
 ) {
     val truncated: Boolean get() = matchCount > cards.size
 
@@ -102,12 +110,52 @@ class CardIndex private constructor(
         )
 
         // Every match is already in `hits`, so the total costs nothing extra.
-        return SearchOutcome(cards = hits.take(limit).map { it.card }, matchCount = hits.size)
+        if (hits.isNotEmpty()) {
+            return SearchOutcome(cards = hits.take(limit).map { it.card }, matchCount = hits.size)
+        }
+
+        return searchText(query, filter, limit)
+    }
+
+    /**
+     * What the cards say, when nothing is called it.
+     *
+     * "Which of these banishes?" is a real question about a deck and there was
+     * nowhere to ask it. Making it a fallback rather than a mode means it needs
+     * no control, no prefix and no explaining — and costs nothing in the common
+     * case, because it only runs once a name search has already come back
+     * empty, which is exactly when somebody was looking for something else.
+     *
+     * Deliberately literal. Card text is written in a house style with its own
+     * punctuation and the fuzzy scoring that suits a half-remembered *name* would
+     * turn "banish" into a hundred cards that merely rhyme with it.
+     */
+    private fun searchText(query: String, filter: CardFilter, limit: Int): SearchOutcome {
+        val needle = query.trim()
+        if (needle.length < MIN_TEXT_LENGTH) return SearchOutcome.EMPTY
+
+        val matches = cards.filter { card ->
+            filter.matches(card) && card.description.contains(needle, ignoreCase = true)
+        }
+
+        return SearchOutcome(
+            // By name, so asking the same question twice gets the same answer.
+            cards = matches.sortedBy { it.name }.take(limit),
+            matchCount = matches.size,
+            matchedText = matches.isNotEmpty(),
+        )
     }
 
     private class ScoredCard(val card: Card, val score: Int)
 
     companion object {
+        /**
+         * Below this, a text search is noise: every card says "a" and half of
+         * them say "in", and a two-letter fallback would fire constantly on the
+         * way to typing a name.
+         */
+        const val MIN_TEXT_LENGTH = 3
+
         fun build(cards: List<Card>): CardIndex {
             val byId = HashMap<CardId, Card>(cards.size * 2)
             val byName = HashMap<String, Card>(cards.size)

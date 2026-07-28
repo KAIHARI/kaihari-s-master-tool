@@ -177,6 +177,10 @@ watch the rate over a run of them.
 Tidying, which is not sorting: gather stray copies, group by type or archetype.
 Each is a stable partition, so the arrangement inside a group survives it.
 
+Search finds cards by name, forgivingly, and completes the name as you type it.
+When nothing is *called* what you typed, it tells you so and shows the cards
+that *say* it instead.
+
 Notes: whatever you want to remember about the deck, written into it and saved
 with it, and shown in the library.
 

@@ -721,11 +721,33 @@ The id lives in the preferences document. Not a layout setting, and there
 anyway: that document is what the app remembers about itself between runs, and a
 table for one nullable string is a table too many.
 
+## 37. When nothing is called that
+
+`Card.description` had been stored, loaded and never read. Meanwhile "which of
+these banishes?" is a real question about a deck with nowhere to ask it.
+
+The shape it took is the part worth recording. Not a mode, not a toggle, not a
+`text:` prefix — a *fallback*. The name search runs as it always did, and only
+when it comes back with nothing does the pool get asked what the cards say. That
+needs no control and no explaining, and it costs nothing in the common case,
+because it only runs at the moment somebody was already looking for something
+else.
+
+Two deliberate limits. The text match is literal rather than fuzzy: card text is
+written in a house style, and the typo tolerance that suits a half-remembered
+*name* would turn "banish" into a hundred cards that merely rhyme with it. And
+it needs three characters, because every card says "a" and half say "in", so a
+two-letter fallback would fire constantly on the way to typing a name.
+
+The pool says so when it happens — "nothing is called that — 12 say it". A
+screen that quietly substitutes one question for another is a screen you stop
+trusting, and these results really are answering a different one.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **531 tests**, up from 249, plus
+`:core` carries the arithmetic for all of it, at **542 tests**, up from 249, plus
 **84 in `:ui`** where there were none — a module that cannot even be compiled in
 the environment this was written in.
 

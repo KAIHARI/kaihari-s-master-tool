@@ -145,10 +145,17 @@ fun SearchPane(
             Text(
                 // Says how many cards matched, not how big the pool is: the old
                 // readout compared a 150-card page against all 13,000 cards.
-                if (state.matchCount > state.results.size) {
-                    "${state.results.size} of ${state.matchCount} matches"
-                } else {
-                    "${state.matchCount} matches"
+                // And says when it has answered a different question from the
+                // one asked, rather than passing off cards that *say* the query
+                // as cards that are called it.
+                buildString {
+                    if (state.matchedText) append("nothing is called that — ")
+                    if (state.matchCount > state.results.size) {
+                        append("${state.results.size} of ${state.matchCount}")
+                    } else {
+                        append("${state.matchCount}")
+                    }
+                    append(if (state.matchedText) " say it" else " matches")
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
