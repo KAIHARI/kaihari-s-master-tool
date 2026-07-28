@@ -19,6 +19,9 @@ import com.kaiharimoto.mastertool.core.deck.DeckStatistics
 import com.kaiharimoto.mastertool.core.deck.DeckValidation
 import com.kaiharimoto.mastertool.core.deck.DeckValidator
 import com.kaiharimoto.mastertool.core.deck.RejectionReason
+import com.kaiharimoto.mastertool.core.deck.SaveStatus
+import com.kaiharimoto.mastertool.core.deck.SaveTracking
+import com.kaiharimoto.mastertool.core.deck.SavedSnapshot
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.siding.SidingCodec
 import com.kaiharimoto.mastertool.core.siding.SidingDiff
@@ -100,6 +103,10 @@ class DeckBuilderState(
      * than at the eight places that write a deck: one of them forgetting would
      * leave a selection quietly pointing at different cards than the ones
      * highlighted, and the next thing done to it moves real cards.
+     *
+     * It also starts the autosave clock, for the same reason and with more at
+     * stake: an edit that did not schedule a save is an edit that can be lost,
+     * and there is no way to notice that has happened until it matters.
      */
     var deck: Deck
         get() = currentDeck
@@ -107,6 +114,7 @@ class DeckBuilderState(
             if (value == currentDeck) return
             currentDeck = value
             selection = Selection.EMPTY
+            scheduleAutosave()
         }
 
     /**
@@ -927,24 +935,45 @@ class DeckBuilderState(
      */
     fun rename(value: String) {
         deckName = value
+        // The name is written into the same row as the cards, and a deck whose
+        // title says one thing while its file says another is exactly the kind
+        // of drift nobody notices until the file is the only copy left.
+        scheduleAutosave()
     }
 
     // ---- persistence -------------------------------------------------------
 
+    /**
+     * Everything that swaps the open deck for a different one has to let go of
+     * the old deck's id *first*.
+     *
+     * Assigning `deck` schedules an autosave, and an autosave that fires with
+     * the previous deck's id writes the new contents into the old deck's row.
+     * That is a saved deck being silently replaced by a different one, which is
+     * the worst thing this program could do, so it is done in one place and the
+     * three callers say why they are calling it.
+     */
+    private fun releaseOpenDeck() {
+        autosaveJob?.cancel()
+        deckId = null
+        savedSnapshot = null
+    }
+
     fun newDeck() {
+        releaseOpenDeck()
         registeredDeck = Deck.EMPTY
         val token = pushUndo(deck)
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
-        deckId = null
         extended = null
         showToast("Started a new deck.", undo = { undoIfCurrent(token) })
     }
 
     fun save(onSaved: (String) -> Unit = {}) {
+        autosaveJob?.cancel()
         scope.launch {
             val id = deckId ?: deps.newDeckId().also { deckId = it }
-            deps.deckRepository.save(id, deckName.ifBlank { "Untitled Deck" }, deck, extended)
+            writeToDisk(id)
             // Saving is the other way a list becomes the one you registered,
             // which is what stops a saved swap reading as a pending one forever.
             registeredDeck = deck
@@ -953,14 +982,68 @@ class DeckBuilderState(
         }
     }
 
+    /**
+     * How long an edit sits before it is written down.
+     *
+     * Long enough that arranging a pane by hand is one write rather than forty,
+     * short enough that nobody gets up and walks away inside it.
+     */
+    private val autosaveDelayMs = 1_500L
+
+    private var autosaveJob: Job? = null
+
+    /** What is on disk, or null if nothing is. */
+    private var savedSnapshot by mutableStateOf<SavedSnapshot?>(null)
+
+    /**
+     * Whether the work in front of you exists anywhere else.
+     *
+     * Shown in the toolbar rather than kept internal, because the whole design
+     * rests on the first save being manual: if the program will not write a
+     * never-saved deck on its own, it owes the person a standing answer to
+     * "would I lose this".
+     */
+    val saveStatus: SaveStatus by derivedStateOf {
+        SaveTracking.status(deck, deckName, savedSnapshot)
+    }
+
+    private fun scheduleAutosave() {
+        // Read now rather than after the delay: the point is to decide on the
+        // state that prompted the edit, and `deckId` cannot become null while a
+        // save is pending anyway -- `newDeck` cancels first.
+        if (!SaveTracking.shouldAutosave(deckId, saveStatus)) return
+
+        autosaveJob?.cancel()
+        autosaveJob = scope.launch {
+            delay(autosaveDelayMs)
+            deckId?.let { writeToDisk(it) }
+        }
+    }
+
+    /**
+     * The one place a deck reaches the database.
+     *
+     * Both callers have to leave the snapshot matching what was written, and a
+     * snapshot that drifted from disk would report unsaved changes forever or,
+     * worse, report none while there were some.
+     */
+    private suspend fun writeToDisk(id: String) {
+        val name = deckName.ifBlank { "Untitled Deck" }
+        val written = deck
+        deps.deckRepository.save(id, name, written, extended)
+        savedSnapshot = SavedSnapshot(written, name)
+    }
+
     fun load(id: String) {
         scope.launch {
             val stored = deps.deckRepository.byId(id) ?: return@launch
+            releaseOpenDeck()
             deck = stored.entry.deck
             registeredDeck = stored.entry.deck
             dealSerial++
             deckName = stored.entry.name
             deckId = stored.entry.id
+            savedSnapshot = SavedSnapshot(stored.entry.deck, stored.entry.name)
             extended = stored.extended
             undoStack.clear()
             redoStack.clear()
@@ -973,12 +1056,13 @@ class DeckBuilderState(
             val file = deps.fileAccess.importDeck() ?: return@launch
             val parsed = YdkCodec.parse(file.content)
 
+            // An imported file is a new deck, not an edit to the open one.
+            releaseOpenDeck()
             val token = pushUndo(deck)
             deck = parsed.document.deck
             registeredDeck = parsed.document.deck
             dealSerial++
             deckName = file.name.substringBeforeLast('.').ifBlank { "Imported Deck" }
-            deckId = null
             extended = parsed.document.extended
 
             val warning = parsed.warnings.size

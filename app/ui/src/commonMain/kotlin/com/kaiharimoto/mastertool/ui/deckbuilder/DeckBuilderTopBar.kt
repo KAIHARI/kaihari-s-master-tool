@@ -25,6 +25,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -51,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.prefs.ThemeChoice
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
@@ -153,9 +155,7 @@ fun DeckBuilderTopBar(
         IconButton(onClick = { state.statsVisible = true }) {
             Icon(Icons.Filled.BarChart, contentDescription = "Deck statistics")
         }
-        IconButton(onClick = { state.save() }) {
-            Icon(Icons.Filled.Save, contentDescription = "Save deck")
-        }
+        SaveControl(state)
         TextButton(onClick = onOpenLibrary) { Text("Library") }
 
         // Everything that is not part of building the list lives behind one
@@ -375,4 +375,57 @@ private fun DeckName(state: DeckBuilderState) {
     )
 
     LaunchedEffect(Unit) { focus.requestFocus() }
+}
+
+/**
+ * Save, and a standing answer to "would I lose this".
+ *
+ * The program will not write a deck that has never been saved — that would fill
+ * a library with Untitled Decks nobody asked for — so the first save is manual,
+ * and the price of that decision is that the state has to be visible rather
+ * than assumed. A deck that has been saved once keeps itself saved from then on,
+ * and says so quietly.
+ */
+@Composable
+private fun SaveControl(state: DeckBuilderState) {
+    val status = state.saveStatus
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = { state.save() }) {
+            Icon(
+                Icons.Filled.Save,
+                contentDescription = when (status) {
+                    SaveStatus.NEVER_SAVED -> "Save deck — not saved yet"
+                    SaveStatus.UNSAVED_CHANGES -> "Save deck — unsaved changes"
+                    else -> "Save deck"
+                },
+                tint = when (status) {
+                    // The only alarming state, and the only one worth colour.
+                    SaveStatus.NEVER_SAVED -> MasterToolPalette.Warning
+                    SaveStatus.UNTOUCHED -> MaterialTheme.colorScheme.onSurfaceVariant
+                    else -> LocalContentColor.current
+                },
+            )
+        }
+
+        // Nothing at all for an untouched deck: a program that says "unsaved"
+        // about an empty screen is a program crying wolf before anything has
+        // happened.
+        val label = when (status) {
+            SaveStatus.UNTOUCHED -> null
+            SaveStatus.NEVER_SAVED -> "NOT SAVED"
+            SaveStatus.UNSAVED_CHANGES -> "SAVING…"
+            SaveStatus.SAVED -> "SAVED"
+        }
+        if (label != null) {
+            Text(
+                label,
+                style = tacticalStyle(),
+                color = when (status) {
+                    SaveStatus.NEVER_SAVED -> MasterToolPalette.Warning
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+    }
 }

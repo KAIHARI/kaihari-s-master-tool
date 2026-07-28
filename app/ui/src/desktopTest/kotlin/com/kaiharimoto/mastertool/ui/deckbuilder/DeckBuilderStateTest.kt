@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.layout.GridStep
 import com.kaiharimoto.mastertool.core.model.DeckSection
@@ -9,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -459,6 +461,137 @@ class DeckBuilderStateTest {
         state.importFromFile()
 
         assertTrue(state.dealSerial > before)
+    }
+
+    // ---- saving ------------------------------------------------------------
+
+    @Test
+    fun anEmptyDeckSaysNothingAboutBeingSaved() = runTest {
+        // A program that says "unsaved" about an empty screen is crying wolf
+        // before anything has happened.
+        assertEquals(SaveStatus.UNTOUCHED, builderState().saveStatus)
+    }
+
+    @Test
+    fun workThatHasNeverBeenSavedSaysSo() = runTest {
+        val state = builderState()
+        state.addCard(TestPool.ash)
+
+        assertEquals(SaveStatus.NEVER_SAVED, state.saveStatus)
+    }
+
+    @Test
+    fun savingClearsTheWarning() = runTest {
+        val state = builderState()
+        state.addCard(TestPool.ash)
+        state.save()
+
+        assertEquals(SaveStatus.SAVED, state.saveStatus)
+    }
+
+    @Test
+    fun anEditAfterSavingIsWrittenWithoutBeingAskedTo() = runTest {
+        // The whole point: the first save is manual, and every one after it is
+        // not.
+        val deps = testDependencies()
+        val state = builderState(deps)
+        state.addCard(TestPool.ash)
+        state.save()
+
+        state.addCard(TestPool.maxx)
+        advanceUntilIdle()
+
+        val stored = deps.deckRepository.byId(requireNonNull(state.deckId))
+        assertEquals(
+            listOf(TestPool.ash.id, TestPool.maxx.id),
+            stored?.entry?.deck?.main,
+            "the second card never reached the database",
+        )
+        assertEquals(SaveStatus.SAVED, state.saveStatus)
+    }
+
+    @Test
+    fun renamingIsWrittenTheSameWay() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        state.addCard(TestPool.ash)
+        state.save()
+
+        state.rename("Snake-Eye")
+        advanceUntilIdle()
+
+        assertEquals("Snake-Eye", deps.deckRepository.byId(requireNonNull(state.deckId))?.entry?.name)
+    }
+
+    @Test
+    fun aDeckNobodyEverSavedIsNeverWrittenOnItsOwn() = runTest {
+        // Autosaving everything fills a library with Untitled Decks somebody
+        // then has to go and delete, which is worse than asking once.
+        val deps = testDependencies()
+        val state = builderState(deps)
+
+        state.addCard(TestPool.ash)
+        advanceUntilIdle()
+
+        assertTrue(deps.deckRepository.all().isEmpty())
+        assertEquals(SaveStatus.NEVER_SAVED, state.saveStatus)
+    }
+
+    @Test
+    fun startingANewDeckCannotOverwriteTheOneThatWasOpen() = runTest {
+        // The trap this whole ordering exists for. Assigning `deck` schedules a
+        // save, so clearing the deck before letting go of its id would write an
+        // empty list into the row of a deck somebody had just saved.
+        val deps = testDependencies()
+        val state = builderState(deps)
+        state.addCard(TestPool.ash)
+        state.addCard(TestPool.maxx)
+        state.save()
+        val savedId = requireNonNull(state.deckId)
+
+        state.newDeck()
+        advanceUntilIdle()
+
+        assertEquals(
+            2,
+            deps.deckRepository.byId(savedId)?.entry?.deck?.main?.size,
+            "the saved deck was replaced by the new empty one",
+        )
+    }
+
+    @Test
+    fun openingAnotherDeckCannotOverwriteTheOneThatWasOpen() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        state.addCard(TestPool.ash)
+        state.save()
+        val first = requireNonNull(state.deckId)
+
+        state.newDeck()
+        state.addCard(TestPool.maxx)
+        state.addCard(TestPool.nibiru)
+        state.save()
+
+        state.load(first)
+        advanceUntilIdle()
+
+        assertEquals(listOf(TestPool.ash.id), state.deck.main)
+        assertEquals(SaveStatus.SAVED, state.saveStatus, "a freshly opened deck is not dirty")
+    }
+
+    @Test
+    fun importingDoesNotWriteOverTheOpenDeck() = runTest {
+        val deps = testDependencies(StubFileAccess(sidedFile))
+        val state = builderState(deps)
+        state.addCard(TestPool.ash)
+        state.save()
+        val savedId = requireNonNull(state.deckId)
+
+        state.importFromFile()
+        advanceUntilIdle()
+
+        assertEquals(listOf(TestPool.ash.id), deps.deckRepository.byId(savedId)?.entry?.deck?.main)
+        assertEquals(SaveStatus.NEVER_SAVED, state.saveStatus, "an import is a new deck")
     }
 
     // ---- the cursor --------------------------------------------------------
