@@ -95,7 +95,7 @@ fun DeckBuilderScreen(
 
     val overlayOpen = state.inspection != null || state.filtersVisible ||
         state.statsVisible || state.issuesVisible || state.helpVisible ||
-        state.eggVisible || state.sidingVisible
+        state.eggVisible || state.sidingVisible || state.testHandVisible
 
     ShortcutHost(
         context = ShortcutContext(
@@ -170,6 +170,8 @@ fun DeckBuilderScreen(
     } // ShortcutHost
 
     if (state.sidingVisible) SidingPanel(state)
+
+    if (state.testHandVisible) TestHandPanel(state)
 
     state.inspection?.let { inspection ->
         CardInspector(
@@ -289,6 +291,7 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
         state.filtersVisible -> state.filtersVisible = false
         state.statsVisible -> state.statsVisible = false
         state.sidingVisible -> state.sidingVisible = false
+        state.testHandVisible -> state.testHandVisible = false
         state.issuesVisible -> state.issuesVisible = false
         state.query.isNotEmpty() -> state.onQueryChange("")
         else -> clearFocus()

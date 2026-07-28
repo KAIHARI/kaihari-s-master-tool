@@ -195,6 +195,15 @@ fun DeckBuilderTopBar(
                         layout.update { it.copy(stacked = !it.stacked) }
                     },
                 )
+                DropdownMenuItem(
+                    text = { Text("Test hand…") },
+                    onClick = {
+                        menuOpen = false
+                        state.dealTestHand(state.testHandGoingFirst)
+                        state.testHandVisible = true
+                    },
+                )
+
                 // Always available. A deck with no plans is exactly the deck
                 // you are about to record the first one for.
                 DropdownMenuItem(

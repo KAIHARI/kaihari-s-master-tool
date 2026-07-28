@@ -318,6 +318,91 @@ class DeckBuilderStateTest {
         assertTrue(written.contains("somethingThisAppDoesNotKnow"), written)
     }
 
+    // ---- test hands --------------------------------------------------------
+
+    @Test
+    fun dealingTakesFiveOrSixOffTheTop() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+
+        state.dealTestHand(goingFirst = true)
+        assertEquals(5, state.testHand!!.size)
+
+        state.dealTestHand(goingFirst = false)
+        assertEquals(6, state.testHand!!.size)
+    }
+
+    @Test
+    fun aDealtHandOnlyHoldsCardsFromTheDeck() = runTest {
+        val state = builderState()
+        val cards = TestPool.many(40)
+        cards.forEach { state.addCard(it) }
+        state.dealTestHand(goingFirst = true)
+
+        val ids = cards.map { it.id }.toSet()
+        assertTrue(state.testHand!!.cards.all { it in ids })
+    }
+
+    @Test
+    fun judgingCountsAndDealsTheNextHand() = runTest {
+        // The loop: look, judge, next. Anything that made you press deal again
+        // would halve how many hands you actually look at.
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.dealTestHand(goingFirst = true)
+
+        state.judgeTestHand(playable = true)
+        state.judgeTestHand(playable = false)
+
+        assertEquals(1, state.handTally.playable)
+        assertEquals(1, state.handTally.bricks)
+        assertEquals(0.5, state.handTally.brickRate!!, 0.0001)
+        assertTrue(state.testHand != null, "a new hand should already be waiting")
+    }
+
+    @Test
+    fun judgingWithNoHandDoesNothing() = runTest {
+        val state = builderState()
+        state.judgeTestHand(playable = false)
+
+        assertEquals(0, state.handTally.total)
+    }
+
+    @Test
+    fun drawingOneAddsToTheHandFromUnderneath() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.dealTestHand(goingFirst = true)
+
+        state.drawOneMore()
+
+        assertEquals(6, state.testHand!!.size)
+    }
+
+    @Test
+    fun theTallySurvivesReshufflingAndIsClearedByHand() = runTest {
+        // It only means something over a run of hands, so a reshuffle must not
+        // quietly reset it.
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.dealTestHand(goingFirst = true)
+        state.judgeTestHand(playable = false)
+
+        state.dealTestHand(goingFirst = true)
+        assertEquals(1, state.handTally.total)
+
+        state.resetHandTally()
+        assertEquals(0, state.handTally.total)
+    }
+
+    @Test
+    fun anEmptyDeckDealsNothingRatherThanFailing() = runTest {
+        val state = builderState()
+        state.dealTestHand(goingFirst = true)
+
+        assertEquals(0, state.testHand!!.size)
+    }
+
     // ---- the deal ----------------------------------------------------------
 
     @Test

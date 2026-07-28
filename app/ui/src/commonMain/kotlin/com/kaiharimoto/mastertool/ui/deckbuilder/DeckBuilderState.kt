@@ -8,6 +8,9 @@ import com.kaiharimoto.mastertool.core.data.SyncResult
 import com.kaiharimoto.mastertool.core.deck.DeckEdit
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
 import com.kaiharimoto.mastertool.core.deck.DeckSorter
+import com.kaiharimoto.mastertool.core.deck.HandSimulator
+import com.kaiharimoto.mastertool.core.deck.HandTally
+import com.kaiharimoto.mastertool.core.deck.OpeningHand
 import com.kaiharimoto.mastertool.core.deck.Selection
 import com.kaiharimoto.mastertool.core.deck.Selections
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
@@ -31,6 +34,7 @@ import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.core.ydk.YdkCodec
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import kotlinx.coroutines.CoroutineScope
+import kotlin.random.Random
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -182,6 +186,24 @@ class DeckBuilderState(
 
     /** Whether the siding panel is up. */
     var sidingVisible by mutableStateOf(false)
+
+    var testHandVisible by mutableStateOf(false)
+
+    /** The hand currently on the table, if one has been dealt. */
+    var testHand by mutableStateOf<OpeningHand?>(null)
+        private set
+
+    var testHandGoingFirst by mutableStateOf(true)
+        private set
+
+    /**
+     * How the deck has been opening.
+     *
+     * Kept across reshuffles and cleared by hand, because the number only means
+     * something over a run of hands -- one brick is not information.
+     */
+    var handTally by mutableStateOf(HandTally())
+        private set
 
     /**
      * The decklist as last opened or saved — the one you registered.
@@ -339,6 +361,35 @@ class DeckBuilderState(
             results = outcome.cards
             matchCount = outcome.matchCount
         }
+    }
+
+    // ---- test hands --------------------------------------------------------
+
+    /**
+     * Shuffles the Main deck and deals.
+     *
+     * Uses the shared random rather than a seed, because the point is not to
+     * reproduce a hand -- it is to keep seeing new ones until a pattern shows up.
+     */
+    fun dealTestHand(goingFirst: Boolean) {
+        testHandGoingFirst = goingFirst
+        testHand = HandSimulator.deal(deck.main, goingFirst, Random.Default)
+    }
+
+    /** Records a verdict and immediately deals the next hand, which is the loop. */
+    fun judgeTestHand(playable: Boolean) {
+        if (testHand == null) return
+        handTally = handTally.judged(playable)
+        dealTestHand(testHandGoingFirst)
+    }
+
+    /** One more card, for a hand that hinges on the draw. */
+    fun drawOneMore() {
+        testHand = testHand?.let(HandSimulator::drawOne)
+    }
+
+    fun resetHandTally() {
+        handTally = HandTally()
     }
 
     // ---- siding ------------------------------------------------------------
