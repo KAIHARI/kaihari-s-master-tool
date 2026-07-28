@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -53,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -461,17 +461,39 @@ private fun DeckCard(
                     )
                 }
 
-                // A bar down the leading edge of the card the drop would land
-                // before, in the colour of the section it would land in -- which
-                // is the same colour that pane is bound in.
+                // Where the drop would land, in the colour of the section it
+                // would land in — the same colour that pane is bound in.
+                //
+                // It was a plain bar, and a plain bar on the leading edge of a
+                // card is indistinguishable from that card's own edge, which is
+                // exactly the reading a zero gutter invites: the cards touch, so
+                // every seam already looks like a line. The serifs are what make
+                // it a mark rather than a border, and the light spilling to the
+                // right says which card is being displaced.
                 if (insertionMarker) {
-                    Box(
-                        Modifier
-                            .fillMaxHeight()
-                            .width(3.dp)
-                            .align(Alignment.CenterStart)
-                            .background(section.accent()),
-                    )
+                    Canvas(Modifier.matchParentSize()) {
+                        val bar = 3.dp.toPx()
+                        val serif = 10.dp.toPx()
+                        val thickness = 3.dp.toPx()
+                        val spill = 18.dp.toPx()
+
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                0f to accent.copy(alpha = 0.40f),
+                                1f to Color.Transparent,
+                                startX = 0f,
+                                endX = spill,
+                            ),
+                            size = Size(spill, size.height),
+                        )
+                        drawRect(color = accent, size = Size(bar, size.height))
+                        drawRect(color = accent, size = Size(serif, thickness))
+                        drawRect(
+                            color = accent,
+                            topLeft = Offset(0f, size.height - thickness),
+                            size = Size(serif, thickness),
+                        )
+                    }
                 }
             }
         }
