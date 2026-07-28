@@ -447,12 +447,65 @@ property of `AppDependencies` and every module that assembles the graph has to
 be able to see the type — the same classpath rule that bit the first `:ui` test,
 seen from the other side.
 
+## 24. A deck that looks like a deck
+
+The library listed saved decks by name, which is to say it listed filenames,
+and a player with nine of them was reading nine filenames to find the one they
+meant. Each tile now shows three of its own cards.
+
+Which three is a judgement, so it went in `:core` with tests rather than being
+decided inline: most copies first, because three copies of a card is the
+strongest statement a decklist makes about what it is trying to do, and ties go
+to whichever was put first. That tie-break earns its keep — the order is
+authored in this program, so moving a card to the front of the Main deck is a
+way of saying it is the one that matters, and the face follows. There is a test
+that states exactly that, because it is a behaviour somebody could otherwise
+mistake for a bug.
+
+The cards are fanned rather than butted together, which is the one place in this
+program where cards deliberately do not touch. A deck pane is an arrangement;
+this is a portrait of one, and three rectangles in a row reads as a contact
+sheet. The browser prototype is what showed that — it was not obvious in the
+code, and it was immediate in a screenshot.
+
+## 25. The thing that would have been unforgivable
+
+Saving was entirely manual. Build for an hour on a tablet, have the OS reclaim
+the process, and the deck is gone. Every other item in this journal is about how
+the program feels; this one is about it not losing your work, which outranks all
+of them.
+
+A deck saved once now keeps itself saved. A deck never saved is still never
+written on its own, because autosaving everything fills a library with Untitled
+Decks somebody then has to delete — the price of that choice being that the
+program owes a standing answer to "would I lose this", which the toolbar now
+gives. And nothing at all for an empty deck: saying "unsaved" before anything
+has happened is crying wolf.
+
+The autosave hangs off the deck's own setter, the same choke point that clears
+the selection, for the same reason and with more at stake — an edit that did not
+schedule a save is an edit that can be lost, and nothing notices until it
+matters.
+
+That made assignment order load-bearing in three places, which is the part worth
+remembering. New deck, open deck and import all replace the open deck, and
+assigning the deck schedules a save — so letting go of the old deck's id has to
+come *first*, or the new contents land in the old deck's row. A saved deck
+silently replaced by a different one is the worst thing this program could do,
+so it happens in one named place and three tests each try to make it happen.
+
+CI caught one of them failing, and it turned out to be the test fixture rather
+than the code: `newDeckId` returned the same string every time, so "two
+different decks" was not expressible and the test quietly made one deck out of
+two. The same shape as the bug it was written to catch, which is worth noticing
+— a fixture can have the defect it is testing for.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **460 tests**, up from 249, plus
-**47 in `:ui`** where there were none.
+`:core` carries the arithmetic for all of it, at **482 tests**, up from 249, plus
+**56 in `:ui`** where there were none.
 
 Still open: the sandbox board, a full shootout mode with an opponent's deck, and
 PDF export of a siding sheet.

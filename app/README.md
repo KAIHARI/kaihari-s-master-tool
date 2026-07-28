@@ -177,5 +177,10 @@ watch the rate over a run of them.
 Tidying, which is not sorting: gather stray copies, group by type or archetype.
 Each is a stable partition, so the arrangement inside a group survives it.
 
+A deck saved once keeps itself saved — every edit after the first save is
+written without being asked. A deck that has never been saved is never written
+on its own, and the toolbar says so. Saved decks show three of their own cards
+in the library rather than only a name.
+
 Not yet built: the sandbox board simulator, a full shootout against an
 opponent's deck, and PDF export of a siding sheet.
