@@ -15,6 +15,10 @@ import com.kaiharimoto.mastertool.core.deck.DeckValidation
 import com.kaiharimoto.mastertool.core.deck.DeckValidator
 import com.kaiharimoto.mastertool.core.deck.RejectionReason
 import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.siding.SidingCodec
+import com.kaiharimoto.mastertool.core.siding.SidingEngine
+import com.kaiharimoto.mastertool.core.siding.SidingPattern
+import com.kaiharimoto.mastertool.core.siding.SidingProblem
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.Deck
@@ -166,8 +170,26 @@ class DeckBuilderState(
      */
     var revealRequest by mutableStateOf<RevealRequest?>(null)
 
-    /** The `#ydkx-extended` payload of the loaded deck, preserved untouched. */
-    private var extended: JsonObject? = null
+    /**
+     * The `#ydkx-extended` payload of the loaded deck, preserved untouched.
+     *
+     * Snapshot state because the siding panel is read off it: loading a `.ydkx`
+     * has to make its patterns appear without anything else being told.
+     */
+    private var extended by mutableStateOf<JsonObject?>(null)
+
+    /** Whether the siding panel is up. */
+    var sidingVisible by mutableStateOf(false)
+
+    /**
+     * The matchup plans carried by the loaded file, keyed as it keys them.
+     *
+     * Read straight out of the payload rather than kept alongside it, so there
+     * is one copy and it cannot drift from what would be written back.
+     */
+    val sidingPatterns: Map<String, SidingPattern> by derivedStateOf {
+        SidingCodec.read(extended)
+    }
 
     private val undoStack = ArrayDeque<Deck>()
     private val redoStack = ArrayDeque<Deck>()
@@ -285,6 +307,64 @@ class DeckBuilderState(
             matchCount = outcome.matchCount
         }
     }
+
+    // ---- siding ------------------------------------------------------------
+
+    /**
+     * Swaps the deck over for a matchup.
+     *
+     * One edit and one undo, because that is what it is: between games two and
+     * three you make a decision, and taking it back is one decision too.
+     *
+     * A plan that no longer fits the deck still applies as far as it can and
+     * says what it could not do — there is a clock running, and refusing to side
+     * because one card had already been moved would be the wrong trade.
+     */
+    fun applySiding(pattern: SidingPattern, goingFirst: Boolean) {
+        val result = SidingEngine.apply(deck, pattern, goingFirst)
+        if (result.deck == deck) {
+            showToast("Nothing to swap for ${pattern.deckName}.")
+            return
+        }
+
+        val token = pushUndo(deck)
+        deck = result.deck
+        sidingVisible = false
+
+        val going = if (goingFirst) "going first" else "going second"
+        showToast(
+            if (result.isClean) {
+                "Sided for ${pattern.deckName}, $going."
+            } else {
+                "Sided for ${pattern.deckName}, $going — ${describe(result.problems)}"
+            },
+            undo = { undoIfCurrent(token) },
+        )
+    }
+
+    /**
+     * What went wrong, in words that name the card.
+     *
+     * "You have two of these, not three" can be acted on at a table; "siding
+     * failed" cannot.
+     */
+    private fun describe(problems: List<SidingProblem>): String {
+        val first = problems.first()
+        val rest = problems.size - 1
+        val text = when (first) {
+            is SidingProblem.NotInMain ->
+                "${nameOf(first.card)} isn't in the Main deck ${first.wanted} times " +
+                    "(found ${first.found})"
+            is SidingProblem.NotInSide ->
+                "${nameOf(first.card)} isn't in the Side deck ${first.wanted} times " +
+                    "(found ${first.found})"
+            is SidingProblem.Unbalanced ->
+                "it swaps ${first.cardsIn} in for ${first.cardsOut} out"
+        }
+        return if (rest > 0) "$text, and $rest more." else "$text."
+    }
+
+    private fun nameOf(id: CardId): String = index.byId(id)?.name ?: id.value.toString()
 
     // ---- selection ---------------------------------------------------------
     //

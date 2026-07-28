@@ -94,7 +94,8 @@ fun DeckBuilderScreen(
     val focusManager = LocalFocusManager.current
 
     val overlayOpen = state.inspection != null || state.filtersVisible ||
-        state.statsVisible || state.issuesVisible || state.helpVisible || state.eggVisible
+        state.statsVisible || state.issuesVisible || state.helpVisible ||
+        state.eggVisible || state.sidingVisible
 
     ShortcutHost(
         context = ShortcutContext(
@@ -167,6 +168,8 @@ fun DeckBuilderScreen(
             }
         }
     } // ShortcutHost
+
+    if (state.sidingVisible) SidingPanel(state)
 
     state.inspection?.let { inspection ->
         CardInspector(
@@ -280,6 +283,7 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
         state.helpVisible -> state.helpVisible = false
         state.filtersVisible -> state.filtersVisible = false
         state.statsVisible -> state.statsVisible = false
+        state.sidingVisible -> state.sidingVisible = false
         state.issuesVisible -> state.issuesVisible = false
         state.query.isNotEmpty() -> state.onQueryChange("")
         else -> clearFocus()

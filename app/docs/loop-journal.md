@@ -123,6 +123,36 @@ numbers negated gives grey paper with a dirty rim.
 
 Semantic colours stay constants. A deck over sixty cards is wrong in every theme.
 
+## 6. Motion
+
+Cards move now instead of appearing somewhere else. The fix was not an
+animation, it was the key: tiles were keyed by position, so inserting a card at
+index three changed the key of every tile after it and the grid saw the whole
+tail replaced rather than moved. Keying by *which copy* a tile is leaves every
+other identity untouched.
+
+The dragged card casts a contact shadow — a radial gradient rather than
+`Modifier.blur`, which is a no-op below Android 12 and this app runs from 26.
+
+## 6b. The one red build
+
+CI went red once, on the commit that made twenty-three theme-blind colours
+follow the theme: `CardTile` read `LocalMasterToolColors` and never imported it.
+One line, four minutes, and entirely avoidable.
+
+`tools/check-imports.py` now catches that class of mistake locally. Getting it
+*quiet* was the whole job — the first version reported thirty-eight suspects,
+all wrong, because "the Main Deck" in a KDoc paragraph looks exactly like a use
+of `Deck`. It now ignores comments and string bodies, names the file binds
+itself, anything after a dot, and anything already imported under that name from
+elsewhere. Removing the import again makes it report that and nothing else.
+
+**Run it before every push:**
+
+```bash
+cd app && python3 tools/check-imports.py
+```
+
 ## 7. Siding
 
 Both halves of the domain, ahead of any UI.

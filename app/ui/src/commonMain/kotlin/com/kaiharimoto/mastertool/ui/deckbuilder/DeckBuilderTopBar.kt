@@ -195,6 +195,21 @@ fun DeckBuilderTopBar(
                         layout.update { it.copy(stacked = !it.stacked) }
                     },
                 )
+                // Only offered when the loaded file actually carries plans, which
+                // it does only if it came from the desktop tool as a .ydkx.
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (state.sidingPatterns.isEmpty()) {
+                                "Siding — none in this deck"
+                            } else {
+                                "Siding… (${state.sidingPatterns.size})"
+                            },
+                        )
+                    },
+                    enabled = state.sidingPatterns.isNotEmpty(),
+                    onClick = { menuOpen = false; state.sidingVisible = true },
+                )
                 DropdownMenuItem(
                     text = { Text("Reset layout") },
                     onClick = {
