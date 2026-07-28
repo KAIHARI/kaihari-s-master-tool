@@ -698,6 +698,29 @@ Small enough to be worth saying why it is here at all: this is the screen you
 arrive on, and everything else in the loop assumed you had already found the
 deck you meant.
 
+## 36. Picking up where you left off
+
+A deck that saves itself and then greets you with an empty pane next time has
+only done half the job. The program now remembers which deck was open and opens
+it again.
+
+The interesting part is what "remember" had to mean. Written whenever the open
+deck changes rather than on the way out, because there is no reliable moment of
+closing on a tablet — the process is reclaimed without ceremony, which is the
+case this exists for in the first place.
+
+And it ignores a null id rather than storing one, for two reasons that turned
+out to agree. It removes a race I had written in: the restore reads the
+preferences, opens a deck asynchronously, and the id only arrives once that load
+finishes — so a null written in the meantime erases the very thing being
+restored. It is also simply the better behaviour, since a new deck has no id and
+cannot be reopened, and forgetting a real deck in order to remember nothing is a
+worse thing to find on next launch.
+
+The id lives in the preferences document. Not a layout setting, and there
+anyway: that document is what the app remembers about itself between runs, and a
+table for one nullable string is a table too many.
+
 ---
 
 ## Where this stands

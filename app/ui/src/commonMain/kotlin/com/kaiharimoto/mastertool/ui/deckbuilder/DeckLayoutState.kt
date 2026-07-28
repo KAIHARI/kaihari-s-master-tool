@@ -128,12 +128,20 @@ class DeckLayoutState(
     /**
      * Remembers which deck was open, so the next run opens it again.
      *
-     * Called on every save rather than only on close, because there is no
-     * reliable moment of closing on either platform — a tablet's process is
-     * reclaimed without ceremony, and that is exactly the case this exists for.
+     * Called whenever the open deck changes rather than on the way out, because
+     * there is no reliable moment of closing on either platform — a tablet's
+     * process is reclaimed without ceremony, and that is the case this exists
+     * for in the first place.
+     *
+     * A null id is ignored rather than stored, for two reasons that happen to
+     * agree. It removes a race: the restore reads this document, opens a deck,
+     * and the id only arrives once that load finishes, so a null in the meantime
+     * would erase the very thing being restored. And it is the better behaviour
+     * anyway — a new deck has no id, cannot be reopened, and forgetting the last
+     * real one to remember nothing is a worse thing to find on next launch.
      */
     fun rememberOpenDeck(id: String?) {
-        if (preferences.lastDeckId == id) return
+        if (id == null || preferences.lastDeckId == id) return
         update { it.copy(lastDeckId = id) }
     }
 

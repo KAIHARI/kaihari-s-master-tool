@@ -180,7 +180,8 @@ Each is a stable partition, so the arrangement inside a group survives it.
 Notes: whatever you want to remember about the deck, written into it and saved
 with it, and shown in the library.
 
-A deck saved once keeps itself saved — every edit after the first save is
+The deck you were working on is the one that opens next time. A deck saved once
+keeps itself saved — every edit after the first save is
 written without being asked. A deck that has never been saved is never written
 on its own, and the toolbar says so. Saved decks show three of their own cards
 in the library rather than only a name.

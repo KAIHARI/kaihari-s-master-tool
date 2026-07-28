@@ -298,15 +298,18 @@ class LastDeckTest {
     }
 
     @Test
-    fun closingToANewDeckForgetsIt() = runTest {
-        // A new deck has no id, and reopening the previous one on the next run
-        // would be the program deciding what you meant to be working on.
+    fun havingNoDeckOpenDoesNotEraseTheLastRealOne() = runTest {
+        // Two reasons that agree. The restore opens a deck asynchronously, so
+        // the id is null for a moment *after* the document has been read --
+        // storing that would erase the thing being restored. And a new deck
+        // cannot be reopened anyway, so forgetting a real one to remember
+        // nothing is a worse thing to find on next launch.
         val layout = layoutState()
         layout.rememberOpenDeck("snake-eye")
 
         layout.rememberOpenDeck(null)
 
-        assertEquals(null, layout.preferences.lastDeckId)
+        assertEquals("snake-eye", layout.preferences.lastDeckId)
     }
 
     @Test
