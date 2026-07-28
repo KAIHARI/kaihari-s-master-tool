@@ -58,6 +58,7 @@ import com.kaiharimoto.mastertool.core.data.StoredDeck
 import com.kaiharimoto.mastertool.core.deck.DeckIdentity
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.search.CardIndex
+import com.kaiharimoto.mastertool.core.search.TextMatching
 import com.kaiharimoto.mastertool.core.util.RelativeTime
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
@@ -91,8 +92,19 @@ fun DeckLibraryScreen(
     // entirely, which reads as a glitch rather than as time passing.
     val openedAt = remember(reloadToken) { deps.now() }
 
+    var query by remember { mutableStateOf("") }
+
     LaunchedEffect(reloadToken) {
         decks = deps.deckRepository.all()
+    }
+
+    val shown = remember(decks, query) {
+        val needle = TextMatching.normalize(query)
+        if (needle.isEmpty()) {
+            decks
+        } else {
+            decks.filter { TextMatching.normalize(it.entry.name).contains(needle) }
+        }
     }
 
     val colors = LocalMasterToolColors.current
@@ -117,17 +129,37 @@ fun DeckLibraryScreen(
                 }
                 Text("Deck Library", style = MaterialTheme.typography.headlineMedium)
                 Box(Modifier.weight(1f))
+
+                // Punctuation-insensitive, through the same normaliser the card
+                // search uses, so "snake eye" finds "Snake-Eye". Deck names are
+                // typed by hand and remembered approximately.
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    label = { Text("Find a deck") },
+                    modifier = Modifier.width(260.dp),
+                )
+                Box(Modifier.width(12.dp))
                 Text(
-                    "${decks.size} saved",
-                    style = MaterialTheme.typography.labelLarge,
+                    if (shown.size == decks.size) {
+                        "${decks.size} saved"
+                    } else {
+                        "${shown.size} of ${decks.size}"
+                    },
+                    style = tacticalStyle(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            if (decks.isEmpty()) {
+            if (shown.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        "No saved decks yet. Build one and hit Save, or import a .ydk file.",
+                        if (decks.isEmpty()) {
+                            "No saved decks yet. Build one and hit Save, or import a .ydk file."
+                        } else {
+                            "No deck here is called that."
+                        },
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -141,7 +173,7 @@ fun DeckLibraryScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(decks, key = { it.entry.id }) { stored ->
+                items(shown, key = { it.entry.id }) { stored ->
                     DeckCard(
                         stored = stored,
                         index = index,
