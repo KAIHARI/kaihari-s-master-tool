@@ -1,6 +1,12 @@
 package com.kaiharimoto.mastertool.ui.library
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +20,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Card
+// Aliased because `Card` means a Yu-Gi-Oh card everywhere else in this
+// codebase, and one file where it means a container is one file where a
+// reader has to check.
+import androidx.compose.material3.Card as MaterialCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,10 +47,24 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.kaiharimoto.mastertool.core.data.StoredDeck
+import com.kaiharimoto.mastertool.core.deck.DeckIdentity
+import com.kaiharimoto.mastertool.core.model.Card
+import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.ui.AppDependencies
+import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
+import com.kaiharimoto.mastertool.ui.components.CARD_CORNER
+import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
+import com.kaiharimoto.mastertool.ui.theme.wellSurface
 import kotlinx.coroutines.launch
 
 /**
@@ -53,6 +76,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun DeckLibraryScreen(
     deps: AppDependencies,
+    index: CardIndex,
     onOpenDeck: (String) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -102,6 +126,7 @@ fun DeckLibraryScreen(
                 items(decks, key = { it.entry.id }) { stored ->
                     DeckCard(
                         stored = stored,
+                        index = index,
                         onOpen = { onOpenDeck(stored.entry.id) },
                         onRename = { name ->
                             scope.launch {
@@ -125,6 +150,7 @@ fun DeckLibraryScreen(
 @Composable
 private fun DeckCard(
     stored: StoredDeck,
+    index: CardIndex,
     onOpen: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
@@ -133,7 +159,9 @@ private fun DeckCard(
     var renaming by remember { mutableStateOf(false) }
     var draft by remember(stored.entry.id) { mutableStateOf(stored.entry.name) }
 
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+    MaterialCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+        DeckFaces(DeckIdentity.faces(deck).mapNotNull(index::byId))
+
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (renaming) {
@@ -177,8 +205,8 @@ private fun DeckCard(
             }
 
             Text(
-                "${deck.main.size} main · ${deck.extra.size} extra · ${deck.side.size} side",
-                style = MaterialTheme.typography.bodyMedium,
+                "${deck.main.size} MAIN · ${deck.extra.size} EXTRA · ${deck.side.size} SIDE",
+                style = tacticalStyle(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
@@ -205,6 +233,68 @@ private fun DeckCard(
 
             TextButton(onClick = onOpen) { Text("Open") }
         }
+    }
+}
+
+private val FACE_WIDTH = 78.dp
+private val FACE_STEP = 80.dp
+private val FAN_HEIGHT = 116.dp
+
+/**
+ * Three cards, laid out, standing for the whole deck.
+ *
+ * A saved deck listed by name alone is a filename, and a player with nine of
+ * them is reading nine filenames to find the one they mean. Three faces and they
+ * find it without reading anything.
+ *
+ * Fanned rather than butted together, which is the one place in this program
+ * where cards deliberately do not touch: a deck pane is an arrangement and this
+ * is a portrait of one, and three rectangles in a row reads as a contact sheet.
+ * They bleed off the bottom under a scrim so the name can sit close underneath
+ * without a hard edge between them.
+ */
+@Composable
+private fun DeckFaces(faces: List<Card>) {
+    val mat = LocalMasterToolColors.current.mat
+    val surface = MaterialTheme.colorScheme.surface
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(FAN_HEIGHT)
+            .wellSurface(mat),
+    ) {
+        faces.take(3).forEachIndexed { position, card ->
+            AsyncImage(
+                model = card.imageUrlSmall ?: card.imageUrl,
+                contentDescription = card.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .offset(
+                        x = 14.dp + FACE_STEP * position,
+                        // The middle card sits a little proud, which is what
+                        // makes three cards read as a hand rather than a row.
+                        y = if (position == 1) 8.dp else 15.dp,
+                    )
+                    .width(FACE_WIDTH)
+                    .aspectRatio(CARD_ASPECT_RATIO)
+                    .graphicsLayer { rotationZ = (position - 1) * 7f }
+                    .clip(RoundedCornerShape(CARD_CORNER))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            )
+        }
+
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(FAN_HEIGHT)
+                .background(
+                    Brush.verticalGradient(
+                        0.45f to Color.Transparent,
+                        1f to surface,
+                    ),
+                ),
+        )
     }
 }
 

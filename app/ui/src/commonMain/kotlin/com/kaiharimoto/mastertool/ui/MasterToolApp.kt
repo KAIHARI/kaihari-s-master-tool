@@ -65,6 +65,9 @@ fun MasterToolApp(deps: AppDependencies) {
 
             Screen.Library -> DeckLibraryScreen(
                 deps = deps,
+                // The pool the builder already has. The library needs it only to
+                // turn three passcodes into three pictures.
+                index = builderState.index,
                 onOpenDeck = { id ->
                     builderState.load(id)
                     screen = Screen.DeckBuilder
