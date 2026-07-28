@@ -321,6 +321,16 @@ class DeckBuilderState(
     var youGoFirst by mutableStateOf(true)
         private set
 
+    /**
+     * How your openings have fared against *this* deck.
+     *
+     * Reset when the opponent changes, because a record against one list says
+     * nothing about another and a tally that quietly carried over would be worse
+     * than no tally at all.
+     */
+    var shootoutTally by mutableStateOf(HandTally())
+        private set
+
     /** The hand currently on the table, if one has been dealt. */
     var testHand by mutableStateOf<OpeningHand?>(null)
         private set
@@ -530,6 +540,7 @@ class DeckBuilderState(
             val parsed = YdkCodec.parse(file.content)
             opponentDeck = parsed.document.deck
             opponentName = file.name.substringBeforeLast('.').ifBlank { "Opponent" }
+            shootoutTally = HandTally()
             dealShootout(youGoFirst)
         }
     }
@@ -545,6 +556,23 @@ class DeckBuilderState(
         youGoFirst = goingFirst
         yourOpening = HandSimulator.deal(deck.main, goingFirst, Random.Default)
         theirOpening = HandSimulator.deal(opponentDeck.main, !goingFirst, Random.Default)
+    }
+
+    /**
+     * Records how that opening looked against theirs, and deals the next one.
+     *
+     * The same judgement the test-hand panel asks for, against a real deck
+     * instead of an imagined one — which is the difference between "does this
+     * open" and "does this open against the thing everybody is playing".
+     */
+    fun judgeShootout(playable: Boolean) {
+        if (yourOpening == null) return
+        shootoutTally = shootoutTally.judged(playable)
+        dealShootout(youGoFirst)
+    }
+
+    fun resetShootoutTally() {
+        shootoutTally = HandTally()
     }
 
     fun resetHandTally() {

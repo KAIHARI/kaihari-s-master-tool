@@ -22,6 +22,7 @@ import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.core.deck.HandSimulator
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.HoverPreview
+import com.kaiharimoto.mastertool.ui.components.percent
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 
@@ -116,7 +117,7 @@ fun TestHandPanel(state: DeckBuilderState) {
                     if (rate == null) {
                         "no hands judged"
                     } else {
-                        "${tally.bricks} bricks in ${tally.total}  ·  ${percentOf(rate)}"
+                        "${tally.bricks} bricks in ${tally.total}  ·  ${percent(rate)}"
                     },
                     style = tacticalStyle(),
                     color = when {
@@ -132,9 +133,4 @@ fun TestHandPanel(state: DeckBuilderState) {
             }
         }
     }
-}
-
-private fun percentOf(rate: Double): String {
-    val whole = (rate * 1000).toInt()
-    return "${whole / 10}.${whole % 10}%"
 }

@@ -529,6 +529,43 @@ class DeckBuilderStateTest {
         assertTrue((state.theirOpening?.size ?: 0) > 0)
     }
 
+    @Test
+    fun judgingAShootoutHandCountsItAndDealsTheNext() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+
+        state.judgeShootout(playable = false)
+        state.judgeShootout(playable = true)
+
+        assertEquals(2, state.shootoutTally.total)
+        assertEquals(1, state.shootoutTally.bricks)
+        assertTrue(state.yourOpening != null, "judging deals the next hand")
+    }
+
+    @Test
+    fun changingOpponentStartsTheRecordAgain() = runTest {
+        // A record against one list says nothing about another, and a tally that
+        // quietly carried over would be worse than no tally at all.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+        state.judgeShootout(playable = false)
+
+        state.loadOpponent()
+
+        assertEquals(0, state.shootoutTally.total)
+    }
+
+    @Test
+    fun judgingWithNothingDealtDoesNothing() = runTest {
+        val state = builderState()
+
+        state.judgeShootout(playable = true)
+
+        assertEquals(0, state.shootoutTally.total)
+    }
+
     // ---- showing what happened ---------------------------------------------
 
     @Test

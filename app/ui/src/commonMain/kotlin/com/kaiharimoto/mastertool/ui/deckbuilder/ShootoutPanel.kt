@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -20,6 +21,8 @@ import com.kaiharimoto.mastertool.core.deck.OpeningHand
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.HoverPreview
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
+import com.kaiharimoto.mastertool.ui.components.percent
+import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 
 /**
@@ -91,16 +94,32 @@ fun ShootoutPanel(state: DeckBuilderState) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Button(onClick = { state.dealShootout(state.youGoFirst) }) { Text("Deal again") }
+                // The same judgement the test-hand panel asks for, against a
+                // real deck instead of an imagined one.
+                Button(onClick = { state.judgeShootout(playable = true) }) { Text("Playable") }
+                OutlinedButton(onClick = { state.judgeShootout(playable = false) }) { Text("Brick") }
+                TextButton(onClick = { state.dealShootout(state.youGoFirst) }) { Text("Deal again") }
                 TextButton(onClick = { state.loadOpponent() }) { Text("Change opponent…") }
 
                 Box(Modifier.weight(1f))
 
+                val tally = state.shootoutTally
+                val rate = tally.brickRate
                 Text(
-                    "${state.opponentDeck.main.size} MAIN · ${state.opponentDeck.side.size} SIDE",
+                    if (rate == null) {
+                        "no hands judged"
+                    } else {
+                        "${tally.bricks} bricks in ${tally.total}  ·  ${percent(rate)}"
+                    },
                     style = tacticalStyle(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = when {
+                        rate == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                        rate >= 0.25 -> MasterToolPalette.Danger
+                        rate >= 0.15 -> MasterToolPalette.Warning
+                        else -> MasterToolPalette.Success
+                    },
                 )
+                TextButton(onClick = { state.resetShootoutTally() }) { Text("Reset") }
             }
         }
     }
