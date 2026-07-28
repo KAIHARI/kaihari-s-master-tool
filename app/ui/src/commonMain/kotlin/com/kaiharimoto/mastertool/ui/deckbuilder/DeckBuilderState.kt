@@ -547,6 +547,17 @@ class DeckBuilderState(
 
         val token = pushUndo(deck)
         deck = result.deck
+
+        // Assigning the deck cleared the selection, which is right in general and
+        // wrong here: this is the one edit that knows exactly where the cards
+        // went. Keeping them selected is what lets a group be nudged twice.
+        val landed = DeckEditor.landingIndex(moving, insertBefore)
+        selection = Selection(
+            section = section,
+            indices = (landed until landed + moving.size).toSet(),
+            anchor = landed,
+        )
+
         showToast(
             "Moved ${moving.size} cards.",
             undo = { undoIfCurrent(token) },

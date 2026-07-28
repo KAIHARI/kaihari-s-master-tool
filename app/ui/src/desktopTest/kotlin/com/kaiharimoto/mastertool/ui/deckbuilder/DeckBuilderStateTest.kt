@@ -128,6 +128,37 @@ class DeckBuilderStateTest {
         assertEquals(before, state.deck.main)
     }
 
+    @Test
+    fun aMovedGroupStaysSelectedWhereItLanded() = runTest {
+        // The one edit that knows exactly where the cards went, so it is the one
+        // that can put the selection back -- which is what lets a group be
+        // nudged twice without picking it up again.
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+
+        state.select(main, 0)
+        state.toggleSelected(main, 1)
+        state.moveSelectionTo(main, insertBefore = 6)
+
+        assertEquals(setOf(4, 5), state.selection.indices)
+        assertEquals(main, state.selection.section)
+    }
+
+    @Test
+    fun aGroupCanBeNudgedTwice() = runTest {
+        val state = builderState()
+        val cards = TestPool.many(6)
+        cards.forEach { state.addCard(it) }
+
+        state.select(main, 0)
+        state.toggleSelected(main, 1)
+        state.moveSelectionTo(main, insertBefore = 6)
+        state.moveSelectionTo(main, insertBefore = 0)
+
+        assertEquals(listOf(cards[0].id, cards[1].id), state.deck.main.take(2))
+        assertEquals(setOf(0, 1), state.selection.indices)
+    }
+
     // ---- siding ------------------------------------------------------------
 
     private val sidedFile = ImportedFile(

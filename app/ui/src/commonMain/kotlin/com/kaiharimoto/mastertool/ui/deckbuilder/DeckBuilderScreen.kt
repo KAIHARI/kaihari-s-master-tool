@@ -300,6 +300,10 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
         state.sidingVisible -> state.sidingVisible = false
         state.testHandVisible -> state.testHandVisible = false
         state.issuesVisible -> state.issuesVisible = false
+        // Before the search box, and after every overlay: a selection is the
+        // most recent thing you started, and putting cards down is what Escape
+        // means while you are holding some.
+        !state.selection.isEmpty -> state.clearSelection()
         state.query.isNotEmpty() -> state.onQueryChange("")
         else -> clearFocus()
     }

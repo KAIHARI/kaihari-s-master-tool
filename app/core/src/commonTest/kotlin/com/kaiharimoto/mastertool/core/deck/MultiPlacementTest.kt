@@ -134,6 +134,28 @@ class MultiPlacementTest {
     }
 
     @Test
+    fun theLandingIndexIsWhereTheCardsActuallyEndUp() {
+        // Written down once and used twice -- by the move, and by whatever has
+        // to know afterwards where the group went. Two copies of this discount
+        // is how the two come to disagree.
+        val start = deck(1, 2, 3, 4, 5, 6)
+
+        listOf(listOf(0, 1), listOf(2, 5), listOf(1, 3, 4), listOf(5)).forEach { picked ->
+            (0..6).forEach { destination ->
+                val landed = DeckEditor.landingIndex(picked, destination)
+                val moved = (move(start, picked, destination) as DeckEdit.Applied).deck.main
+
+                val carried = picked.sorted().map { start.main[it] }
+                assertEquals(
+                    carried,
+                    moved.subList(landed, landed + carried.size),
+                    "picked $picked to $destination",
+                )
+            }
+        }
+    }
+
+    @Test
     fun duplicateCardsMoveByPositionNotByPasscode() {
         // Three copies of the same card: moving the first must move the first,
         // and the other two must stay where they are.

@@ -221,15 +221,25 @@ object DeckEditor {
 
         val lifted = moving.map { contents[it] }
         val remaining = contents.filterIndexed { index, _ -> index !in moving }
-
-        // Every moving card that started before the drop point leaves a gap the
-        // drop point has to slide back through.
-        val target = insertBefore - moving.count { it < insertBefore }
+        val target = landingIndex(moving, insertBefore)
 
         val rebuilt = remaining.toMutableList()
         rebuilt.addAll(target.coerceIn(0, rebuilt.size), lifted)
         return DeckEdit.Applied(deck.with(section, rebuilt))
     }
+
+    /**
+     * Where a group carried from [fromIndices] ends up when dropped before
+     * [insertBefore].
+     *
+     * Every moving card that started ahead of the drop point leaves a gap the
+     * drop point slides back through. Public because the answer is needed twice
+     * — once to perform the move and once by anything that has to know where the
+     * cards went — and having that discount written down twice is how the two
+     * come to disagree.
+     */
+    fun landingIndex(fromIndices: Collection<Int>, insertBefore: Int): Int =
+        insertBefore - fromIndices.toSet().count { it < insertBefore }
 
     /**
      * Moves one copy to an exact position in another section.
