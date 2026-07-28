@@ -295,12 +295,31 @@ neither would be true.
 The shuffle takes a `Random` rather than reaching for the global one, which is
 the only reason any of it is testable.
 
+## 15. The keyboard seam
+
+`H` deals a test hand and `P` opens the siding plans, both in the table the help
+sheet renders — so pressing `?` lists them without anyone writing them twice.
+
+The interesting part is underneath. `:core` says which chords exist and `:ui`
+turns a key event into one, and nothing made those agree: a binding whose key was
+missing from the map was not a compile error, it was a shortcut that silently did
+nothing — indistinguishable, from outside, from having misread the help. The map
+is now named rather than private, and three tests hold it against the table.
+
+## 16. The last form field
+
+The deck's name was a labelled text box, which says "fill this in". It is the
+name of the thing you are looking at, so it reads as a heading until you touch
+it. Editing still uses a real text field, because that is what keeps focus
+reporting working — without it, typing "side" into a deck name opens the
+statistics panel and the deck check on the way past.
+
 ---
 
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **402 tests**, up from 249, plus
-**28 in `:ui`** where there were none.
+**31 in `:ui`** where there were none.
 
 Still open: the sandbox board, a full shootout mode with an opponent's deck, and
 PDF export of a siding sheet.
