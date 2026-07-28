@@ -611,12 +611,39 @@ the person who asked for this wants to review before the next build.
 
 Deliberately not started. Recorded instead.
 
+## 32. Two ways of not saying anything
+
+A card added to a pane that is already full landed out of sight, and the only
+sign it had worked was a number in the header changing — the same amount of
+feedback as nothing having happened. The pane now brings it into view, and shows
+the copy just added rather than the first one, because scrolling to the first Ash
+Blossom when you added the third answers a question nobody asked.
+
+It does not flash. The card appearing is the confirmation, and a flash on every
+add would be a strobe; the flash stays for a card somebody went looking for,
+which is the deck check naming a problem. The pane also stopped scrolling when
+the card is already in front of you — that was wrong for the deck check too, and
+jumping a visible card to the top of the pane is movement that answers nothing.
+
+The other silence: stacked mode turns dragging off, because a stack has no
+position and there is nothing coherent for dragging one to mean. True, and
+invisible — cards simply stopped moving, which reads as the program having
+broken rather than as a mode. The menu entry now says what the mode costs before
+it is chosen.
+
+Leaving it at that rather than making stacks draggable was a judgement about
+this environment more than about the feature. Making it work means translating
+drop positions between stack coordinates and card coordinates through the drag
+controller, and that is exactly the kind of multi-file change that cannot be
+compiled here and has already cost two red builds today. It is worth doing with
+a compiler in the room.
+
 ---
 
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **492 tests**, up from 249, plus
-**59 in `:ui`** where there were none.
+**66 in `:ui`** where there were none.
 
 Still open, in the order they are worth doing:
 

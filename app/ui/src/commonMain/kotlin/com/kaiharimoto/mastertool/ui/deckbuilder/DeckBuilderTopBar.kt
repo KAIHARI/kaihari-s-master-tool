@@ -3,6 +3,7 @@ package com.kaiharimoto.mastertool.ui.deckbuilder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -199,13 +200,29 @@ fun DeckBuilderTopBar(
                 )
                 DropdownMenuItem(
                     text = {
-                        Text(
-                            if (layout.preferences.stacked) {
-                                "Show every copy"
-                            } else {
-                                "Stack duplicate cards"
-                            }
-                        )
+                        Column {
+                            Text(
+                                if (layout.preferences.stacked) {
+                                    "Show every copy"
+                                } else {
+                                    "Stack duplicate cards"
+                                }
+                            )
+                            // A stack has no position, so there is nothing
+                            // coherent for dragging one to mean and the panes
+                            // stop accepting drags while stacked. That was true
+                            // and invisible: cards simply stopped moving, which
+                            // reads as the program having broken.
+                            Text(
+                                if (layout.preferences.stacked) {
+                                    "arranging comes back"
+                                } else {
+                                    "counts instead of cards; arranging turns off"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     },
                     onClick = {
                         menuOpen = false
