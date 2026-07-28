@@ -31,6 +31,8 @@ import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.search.CardFilter
 import com.kaiharimoto.mastertool.core.search.CardIndex
+import com.kaiharimoto.mastertool.core.search.Completions
+import com.kaiharimoto.mastertool.core.search.NameCompletion
 import com.kaiharimoto.mastertool.core.ydk.YdkCodec
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import kotlinx.coroutines.CoroutineScope
@@ -586,6 +588,34 @@ class DeckBuilderState(
     fun addTopMatch() {
         val card = results.firstOrNull() ?: return
         addCard(card)
+    }
+
+    /**
+     * The rest of the best typeable name, drawn as grey text after the cursor.
+     *
+     * Derived from `results`, which is debounced, so for a moment after each
+     * keystroke this is computed against the previous query's names. That is
+     * safe by construction rather than by timing: a completion is only offered
+     * when the name continues what is in the box, so stale names offer nothing
+     * rather than something wrong.
+     */
+    val completion: NameCompletion? by derivedStateOf {
+        Completions.firstIn(query, results.map { it.name })
+    }
+
+    /**
+     * Finishes the word, and nothing else.
+     *
+     * Notably it does not add the card. Completing a name and adding a copy are
+     * two different intentions -- often the name is being finished in order to
+     * read it, or to narrow the pool before choosing between three printings --
+     * and binding them to one key would make Tab unusable for the first.
+     */
+    fun acceptCompletion(): String? {
+        val name = completion?.name ?: return null
+        query = name
+        runSearch(immediate = true)
+        return name
     }
 
     fun removeOne(card: Card, section: DeckSection) {

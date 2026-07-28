@@ -105,7 +105,6 @@ class CardIndex private constructor(
         return SearchOutcome(cards = hits.take(limit).map { it.card }, matchCount = hits.size)
     }
 
-    /** Short list for the autocomplete dropdown. */
     private class ScoredCard(val card: Card, val score: Int)
 
     companion object {
