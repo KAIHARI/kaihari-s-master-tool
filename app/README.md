@@ -190,6 +190,13 @@ written without being asked. A deck that has never been saved is never written
 on its own, and the toolbar says so. Saved decks show three of their own cards
 in the library rather than only a name.
 
-Not yet built: a full shootout against an opponent's deck (a structured
-playtest run — trials, siding for both sides between games, a report), the
-sandbox board simulator, and PDF export of a siding sheet.
+Shootout: load the deck you are testing against and see both openings at once.
+Judge them loosely, or run it properly — a set number of trials with game one
+off the list you registered and the rest off the sided one, drawn as a score
+sheet whose two rows are the two brick rates underneath it. The report says
+whether the side deck is working, and stays quiet until there are enough hands
+to say. A run survives siding, because that is what it measures; it ends the
+moment you change which sixty cards you brought.
+
+Not yet built: siding for the *opponent* between games, the sandbox board
+simulator, and PDF export of a siding sheet.

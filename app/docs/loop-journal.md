@@ -844,20 +844,92 @@ Losing a twenty-hand record to one swapped card is annoying. Keeping it and
 letting it read as evidence about the list now in front of you is worse, and
 those were the only two options.
 
+## 43. A shootout is trials, not hands
+
+The last large thing on the list, and the shape of it was recorded back in
+section 31 rather than guessed at. What was already built judges loose openings
+against a real opponent's list and says how often yours bricks. What was missing
+is the structure a tournament actually has: game one off the list you
+registered, everything after it off the sided one.
+
+That split is the whole feature. The reason anybody owns a side deck is the gap
+between those two numbers, and nothing in the program could measure it, because
+nothing knew which version of a list dealt which hand.
+
+The run is a plain value, so undoing a whole trial is a `dropLast`. That case is
+real and not the same as undoing a verdict: realise halfway through a match that
+you sided against the wrong deck and game one of that trial has stopped being
+evidence about anything either.
+
+It declines to answer twice, and the second one took a correction. Under ten
+hands from each version it stays quiet. The margin then has to sit *above* what
+one hand is worth at that sample — at ten hands a single verdict moves the rate
+ten points, so a ten-point margin would report one lucky opening as proof the
+side deck works. The first draft had exactly that bug and a test I had written
+to catch it passed for the wrong reason.
+
+But "no difference" is printed as loudly as the other two verdicts. A side deck
+that measurably changes nothing against a matchup is fifteen cards doing no
+work, and that is usually the finding worth acting on.
+
+## 44. The record that survives siding, and the one that cannot
+
+Two days ago every record of how a deck opens was thrown away whenever the Main
+deck changed, on the grounds that siding mid-shootout makes a tally a lie. That
+was right, and it is wrong for a run, which is the one record that labels each
+hand with the version of the list that dealt it. Siding is not what spoils a
+run; siding is what it measures.
+
+So a run survives a swap and nothing else does. Telling those apart needed a
+test the Main deck alone cannot pass: moving a card in from the Side deck and
+adding a card you never registered look identical from the Main deck. Comparing
+all three sections by count does it — siding moves cards across the line, it
+never changes which sixty you brought.
+
+Whether a hand was post-side is read off the deck rather than assumed from the
+trial number, because nothing enforces the swap. A run that assumed compliance
+would be confidently wrong about the only thing it exists to measure, and
+forgetting to side is now recorded as what it was.
+
+Writing the test found the mistake that would have looked completely normal on
+screen. The panel deals the next opening the moment a verdict is given, and
+siding happens *after* that — so game two's hand came off the pre-side list and
+would have been filed as post-side, every trial, invisibly. The deck moving
+during a run now deals your side again.
+
+## 45. Reading a run at a glance
+
+Prototyped in HTML and looked at before any Compose was written, which is the
+only way visual work happens here.
+
+The first version marked each opening with a shape: filled for playable, struck
+through for a brick, and a notched corner for post-side. At twenty pixels the
+notch was invisible. The second version threw the shape away and used position —
+game one along the top band, everything post-side beneath it — and the sheet
+became readable without a legend, so the legend went away too.
+
+The two rows *are* the two numbers underneath it. A glance down the sheet says
+whether the bottom band is greener than the top, which is the entire question.
+
+One thing deliberately removed inside a run: dealing again. Shuffling until the
+hand looks good and only then judging it is how a sample stops meaning anything,
+and a run is nothing but its sample. Loose judging still offers it, because
+there it costs nothing.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **542 tests**, up from 249, plus
-**96 in `:ui`** where there were none — a module that cannot even be compiled in
+`:core` carries the arithmetic for all of it, at **576 tests**, up from 249, plus
+**114 in `:ui`** where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
 Still open, in the order they are worth doing:
 
-**The rest of shootout mode.** Both openings against a loaded opponent deck are
-built (section 39). What is missing is the run structure: a set number of
-trials, siding for both sides between games, undo of a whole trial, and a report
-at the end. Section 31 records its shape.
+**Siding for the opponent, between games.** A run sides *your* deck and records
+which version dealt each hand (sections 43-45). The deck across the table never
+changes — which is the half of a real match still missing, and the reason their
+turn-two board looks the same in game three as in game one.
 
 **The sandbox board.** Where the best idea in the original lives: the gesture
 *is* the orientation — quick drop is attack, a horizontal flick is defense, a
