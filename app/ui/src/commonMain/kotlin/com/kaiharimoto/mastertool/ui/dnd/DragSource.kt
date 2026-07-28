@@ -63,6 +63,9 @@ fun DragSource(
     // name in the middle of a gesture is not something to leave for later.
     var tileSize by remember { mutableStateOf(IntSize.Zero) }
     var lifted by remember { mutableStateOf(false) }
+    // Where the finger is resting, while it is still resting. Null the moment the
+    // press turns into anything else, which is what cancels the ring.
+    var pressAt by remember { mutableStateOf<Offset?>(null) }
 
     val haptics = LocalHapticFeedback.current
 
@@ -81,30 +84,37 @@ fun DragSource(
                     val settleFor = if (competesWithScroll) HOLD_MS else 0L
 
                     var latest: PointerInputChange = down
+                    pressAt = down.position
 
-                    // Wait for the gesture to say what it is.
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id }
-                            ?: return@awaitEachGesture
-                        latest = change
+                    // Wait for the gesture to say what it is. Every way out of
+                    // this block has to put the ring away, hence the finally.
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                                ?: return@awaitEachGesture
+                            latest = change
 
-                        val heldFor = change.uptimeMillis - down.uptimeMillis
-                        val travelled = (change.position - down.position).getDistance()
+                            val heldFor = change.uptimeMillis - down.uptimeMillis
+                            val travelled = (change.position - down.position).getDistance()
 
-                        if (!change.pressed) {
-                            // Let go without dragging. Held still and long enough
-                            // is a menu press; anything shorter is a tap, and the
-                            // tile's own click handler is welcome to it.
-                            if (heldFor >= MENU_MS && travelled <= slop) onLongPress()
-                            return@awaitEachGesture
+                            if (!change.pressed) {
+                                // Let go without dragging. Held still and long
+                                // enough is a menu press; anything shorter is a
+                                // tap, and the tile's own click handler is
+                                // welcome to it.
+                                if (heldFor >= MENU_MS && travelled <= slop) onLongPress()
+                                return@awaitEachGesture
+                            }
+
+                            if (travelled > slop) {
+                                // Moved too soon to be anything but a scroll.
+                                if (heldFor < settleFor) return@awaitEachGesture
+                                break
+                            }
                         }
-
-                        if (travelled > slop) {
-                            // Moved too soon to be anything but a scroll.
-                            if (heldFor < settleFor) return@awaitEachGesture
-                            break
-                        }
+                    } finally {
+                        pressAt = null
                     }
 
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -130,5 +140,6 @@ fun DragSource(
             },
     ) {
         content()
+        LongPressRing(pressAt, MENU_MS)
     }
 }
