@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
         val deps = AppDependencies(
             cardRepository = app.cardRepository,
             deckRepository = app.deckRepository,
+            preferencesRepository = app.preferencesRepository,
             fileAccess = this,
             updateChecker = app.updateChecker,
             updater = AndroidAppUpdater(this, app.httpClient),

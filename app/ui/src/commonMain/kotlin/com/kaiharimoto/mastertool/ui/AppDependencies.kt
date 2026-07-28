@@ -2,6 +2,7 @@ package com.kaiharimoto.mastertool.ui
 
 import com.kaiharimoto.mastertool.core.data.CardRepository
 import com.kaiharimoto.mastertool.core.data.DeckRepository
+import com.kaiharimoto.mastertool.core.data.PreferencesRepository
 import com.kaiharimoto.mastertool.core.update.UpdateChecker
 import com.kaiharimoto.mastertool.ui.update.AppUpdater
 import kotlinx.coroutines.CoroutineDispatcher
@@ -37,6 +38,7 @@ interface DeckFileAccess {
 class AppDependencies(
     val cardRepository: CardRepository,
     val deckRepository: DeckRepository,
+    val preferencesRepository: PreferencesRepository,
     val fileAccess: DeckFileAccess,
     val updateChecker: UpdateChecker,
     val updater: AppUpdater,

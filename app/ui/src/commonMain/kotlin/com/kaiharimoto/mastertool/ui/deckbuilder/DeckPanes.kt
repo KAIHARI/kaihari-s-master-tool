@@ -1,0 +1,400 @@
+package com.kaiharimoto.mastertool.ui.deckbuilder
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.core.deck.DeckGrouping
+import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.model.Card
+import com.kaiharimoto.mastertool.core.model.CardId
+import com.kaiharimoto.mastertool.core.model.DeckSection
+import com.kaiharimoto.mastertool.core.prefs.SectionPreferences
+import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
+import com.kaiharimoto.mastertool.ui.components.CardTile
+import com.kaiharimoto.mastertool.ui.components.accent
+import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import kotlinx.coroutines.delay
+
+/** How long a revealed card keeps its highlight before settling back. */
+private const val FLASH_MS = 1400L
+
+private val SECTION_ORDER =
+    listOf(DeckSection.MAIN, DeckSection.EXTRA, DeckSection.SIDE)
+
+/**
+ * The three deck sections, stacked and resizable.
+ *
+ * The panes trade height across a divider rather than each being sized on its
+ * own, so dragging one boundary leaves everything on the far side of it where it
+ * was. A collapsed pane keeps its header — it is still a drop target and still
+ * says how many cards it holds — and drops out of the weighting entirely, which
+ * is what makes collapsing the Side deck actually give its space to the Main.
+ */
+@Composable
+fun DeckPanes(
+    state: DeckBuilderState,
+    layout: DeckLayoutState,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .onGloballyPositioned { layout.deckColumnHeightPx = it.size.height.toFloat() }
+            .padding(12.dp),
+    ) {
+        SECTION_ORDER.forEachIndexed { position, section ->
+            val preferences = layout.preferences[section]
+
+            DeckSectionPane(
+                state = state,
+                layout = layout,
+                section = section,
+                modifier = if (preferences.collapsed) Modifier else Modifier.weight(preferences.weight),
+            )
+
+            val next = SECTION_ORDER.getOrNull(position + 1)
+            if (next != null) {
+                PaneDivider(
+                    enabled = !preferences.collapsed && !layout.preferences[next].collapsed,
+                    onDrag = { delta -> layout.resizePanes(section, next, delta) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaneDivider(enabled: Boolean, onDrag: (Float) -> Unit) {
+    val draggableState = rememberDraggableState(onDelta = onDrag)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (enabled) 16.dp else 8.dp)
+            .then(
+                if (enabled) {
+                    Modifier.draggable(draggableState, Orientation.Vertical)
+                } else {
+                    Modifier
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (enabled) {
+            Box(
+                Modifier
+                    .size(width = 56.dp, height = 3.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.outline),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeckSectionPane(
+    state: DeckBuilderState,
+    layout: DeckLayoutState,
+    section: DeckSection,
+    modifier: Modifier = Modifier,
+) {
+    val ids = state.deck[section]
+    val preferences = layout.preferences[section]
+    val accent = section.accent()
+    val gridState = rememberLazyGridState()
+    var flashed by remember { mutableStateOf<CardId?>(null) }
+
+    // Only the pane that owns the requested section reacts; the others ignore it.
+    LaunchedEffect(state.revealRequest?.id) {
+        val request = state.revealRequest ?: return@LaunchedEffect
+        if (request.section != section) return@LaunchedEffect
+
+        gridState.animateScrollToItem(request.position)
+        flashed = request.cardId
+        delay(FLASH_MS)
+        flashed = null
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SectionHeader(state, layout, section, ids.size, preferences, accent)
+
+        if (preferences.collapsed) return@Column
+
+        if (ids.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "Tap a card on the left to add it here",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            return@Column
+        }
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(preferences.columns),
+            state = gridState,
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (layout.preferences.stacked) {
+                val stacks = DeckGrouping.stacks(ids)
+                items(stacks.size, key = { "${section.name}-stack-${stacks[it].id.value}" }) { i ->
+                    val stack = stacks[i]
+                    DeckCard(
+                        state = state,
+                        section = section,
+                        id = stack.id,
+                        copies = stack.count,
+                        highlighted = flashed == stack.id,
+                        siblings = ids,
+                        position = stack.firstIndex,
+                    )
+                }
+            } else {
+                // Indexed keys because a deck legitimately holds duplicate passcodes.
+                items(ids.size, key = { "${section.name}-$it-${ids[it].value}" }) { position ->
+                    DeckCard(
+                        state = state,
+                        section = section,
+                        id = ids[position],
+                        copies = state.copiesIn(ids[position], section),
+                        highlighted = flashed == ids[position],
+                        siblings = ids,
+                        position = position,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One card in a deck pane.
+ *
+ * Tap removes a copy, which is the action you take most and which the snackbar
+ * can put straight back. Everything less common — and everything that cannot be
+ * undone by tapping again — is behind the long-press menu rather than behind a
+ * second gesture nobody would find.
+ */
+@Composable
+private fun DeckCard(
+    state: DeckBuilderState,
+    section: DeckSection,
+    id: CardId,
+    copies: Int,
+    highlighted: Boolean,
+    siblings: List<CardId>,
+    position: Int,
+) {
+    val card: Card? = state.index.byId(id)
+    var menuOpen by remember { mutableStateOf(false) }
+
+    if (card == null) {
+        UnknownCardTile(id)
+        return
+    }
+
+    Box {
+        CardTile(
+            card = card,
+            format = state.format,
+            copies = copies,
+            highlighted = highlighted,
+            onClick = { state.removeOne(card, section) },
+            onLongClick = { menuOpen = true },
+        )
+
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text("Inspect") },
+                onClick = {
+                    menuOpen = false
+                    state.inspect(siblings.mapNotNull { state.index.byId(it) }, position)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Remove one") },
+                onClick = { menuOpen = false; state.removeOne(card, section) },
+            )
+            if (copies > 1) {
+                DropdownMenuItem(
+                    text = { Text("Remove all $copies") },
+                    onClick = { menuOpen = false; state.removeAllCopies(card, section) },
+                )
+            }
+
+            HorizontalDivider()
+
+            val elsewhere = if (section == DeckSection.SIDE) card.requiredSection() else DeckSection.SIDE
+            DropdownMenuItem(
+                text = { Text("Move one to ${elsewhere.displayName}") },
+                onClick = { menuOpen = false; state.moveCard(card, section, elsewhere) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(
+    state: DeckBuilderState,
+    layout: DeckLayoutState,
+    section: DeckSection,
+    count: Int,
+    preferences: SectionPreferences,
+    accent: androidx.compose.ui.graphics.Color,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val overCapacity = count > section.maxSize
+    val underMinimum = count < section.minSize
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .size(width = 4.dp, height = 18.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(accent),
+        )
+        Text(
+            "  ${section.displayName} Deck",
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            // Read from the section rather than written out, so the bounds cannot
+            // drift from the ones the validator enforces.
+            if (section.minSize > 0) {
+                "  $count / ${section.minSize}–${section.maxSize}"
+            } else {
+                "  $count / ${section.maxSize}"
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = when {
+                overCapacity || underMinimum -> MasterToolPalette.Danger
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+
+        Box(Modifier.weight(1f))
+
+        if (!preferences.collapsed) {
+            // Scale the cards rather than the pane. The desktop tool shared one
+            // slider between sections with a button to say which it currently
+            // drove; a control whose target is invisible is a control you have to
+            // test before you trust.
+            IconButton(
+                onClick = { layout.setColumns(section, preferences.columns - 1) },
+                enabled = preferences.columns > SectionPreferences.MIN_COLUMNS,
+            ) {
+                Icon(Icons.Filled.Remove, contentDescription = "Fewer, larger cards per row")
+            }
+            Text(preferences.columns.toString(), style = MaterialTheme.typography.labelMedium)
+            IconButton(
+                onClick = { layout.setColumns(section, preferences.columns + 1) },
+                enabled = preferences.columns < SectionPreferences.MAX_COLUMNS,
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "More, smaller cards per row")
+            }
+
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "${section.displayName} deck options")
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    SortMode.entries.filter { it != SortMode.MANUAL }.forEach { mode ->
+                        DropdownMenuItem(
+                            text = { Text("Sort by ${mode.displayName.lowercase()}") },
+                            onClick = {
+                                menuOpen = false
+                                layout.setSortMode(section, mode)
+                                state.sortSection(section, mode)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        IconButton(onClick = { layout.toggleCollapsed(section) }) {
+            Icon(
+                if (preferences.collapsed) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
+                contentDescription = if (preferences.collapsed) {
+                    "Expand ${section.displayName} deck"
+                } else {
+                    "Collapse ${section.displayName} deck"
+                },
+            )
+        }
+    }
+}
+
+/**
+ * A passcode the card database does not know.
+ *
+ * Given the same shape as a real card so it does not collapse its grid row, and
+ * showing the passcode because that is the only thing anyone can act on — it is
+ * what the validator names in the matching error.
+ */
+@Composable
+private fun UnknownCardTile(id: CardId) {
+    Box(
+        Modifier
+            .aspectRatio(CARD_ASPECT_RATIO)
+            .clip(RoundedCornerShape(4.dp))
+            .background(MasterToolPalette.SlateRaised)
+            .padding(4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "Unknown\n${id.value}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MasterToolPalette.Danger,
+        )
+    }
+}

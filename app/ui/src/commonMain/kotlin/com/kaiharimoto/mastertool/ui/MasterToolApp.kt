@@ -16,6 +16,7 @@ import coil3.request.crossfade
 import com.kaiharimoto.mastertool.core.remote.HttpClientFactory
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderScreen
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
+import com.kaiharimoto.mastertool.ui.deckbuilder.DeckLayoutState
 import com.kaiharimoto.mastertool.ui.library.DeckLibraryScreen
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
 import com.kaiharimoto.mastertool.ui.update.UpdateDialog
@@ -36,11 +37,15 @@ private sealed interface Screen {
 fun MasterToolApp(deps: AppDependencies) {
     val scope = rememberCoroutineScope()
     val builderState = remember { DeckBuilderState(deps, scope) }
+    val layoutState = remember { DeckLayoutState(deps.preferencesRepository, scope) }
     val updateState = remember { UpdateState(deps.updateChecker, deps.updater, scope) }
     var screen by remember { mutableStateOf<Screen>(Screen.DeckBuilder) }
 
     DisposableEffect(Unit) {
         configureImageLoader()
+        // The format is a layout preference on disk but belongs to the builder at
+        // runtime, so it is handed over once the stored settings arrive.
+        layoutState.start { preferences -> builderState.onFormatChange(preferences.format) }
         builderState.start()
         // Silent on launch: it only interrupts if there is something to install.
         updateState.check(userInitiated = false)
@@ -51,6 +56,7 @@ fun MasterToolApp(deps: AppDependencies) {
         when (screen) {
             Screen.DeckBuilder -> DeckBuilderScreen(
                 state = builderState,
+                layout = layoutState,
                 updateState = updateState,
                 onOpenLibrary = { screen = Screen.Library },
             )

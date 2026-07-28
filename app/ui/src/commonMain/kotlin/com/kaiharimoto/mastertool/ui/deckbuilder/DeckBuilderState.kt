@@ -7,10 +7,12 @@ import androidx.compose.runtime.setValue
 import com.kaiharimoto.mastertool.core.data.SyncResult
 import com.kaiharimoto.mastertool.core.deck.DeckEdit
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
+import com.kaiharimoto.mastertool.core.deck.DeckSorter
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
 import com.kaiharimoto.mastertool.core.deck.DeckValidation
 import com.kaiharimoto.mastertool.core.deck.DeckValidator
 import com.kaiharimoto.mastertool.core.deck.RejectionReason
+import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.Deck
@@ -85,7 +87,14 @@ class DeckBuilderState(
     var syncMessage by mutableStateOf<String?>(null)
         private set
 
-    var inspectedCard by mutableStateOf<Card?>(null)
+    /**
+     * The inspector opens onto a list, not a card.
+     *
+     * Opening a card from the search results and then flipping through the rest
+     * of them is how you compare candidates for a slot; opening one card and
+     * having to close it to see the next is how you stop bothering.
+     */
+    var inspection by mutableStateOf<Inspection?>(null)
 
     var filtersVisible by mutableStateOf(false)
 
@@ -255,6 +264,38 @@ class DeckBuilderState(
         applyEdit(DeckEditor.setCount(deck, card, section, count, format), card)
     }
 
+    fun removeAllCopies(card: Card, section: DeckSection) {
+        val remaining = deck[section].filterNot { it == card.id }
+        if (remaining.size == deck[section].size) return
+
+        val token = pushUndo(deck)
+        deck = deck.with(section, remaining)
+        showToast(
+            "Removed every copy of ${card.name} from ${section.displayName}.",
+            undo = { undoIfCurrent(token) },
+        )
+    }
+
+    /**
+     * Reorders a section.
+     *
+     * An edit, not a view setting: the stored order is what gets written back to
+     * `.ydk`, so sorting only the display would leave the file disagreeing with
+     * the deck. Being an edit also means one press of undo puts it back.
+     */
+    fun sortSection(section: DeckSection, mode: SortMode) {
+        val current = deck[section]
+        val sorted = DeckSorter.sort(current, index::byId, mode, format)
+        if (sorted == current) return
+
+        val token = pushUndo(deck)
+        deck = deck.with(section, sorted)
+        showToast(
+            "Sorted ${section.displayName} Deck by ${mode.displayName.lowercase()}.",
+            undo = { undoIfCurrent(token) },
+        )
+    }
+
     /** Every section currently holding [id], for controls that act on a card. */
     fun sectionsHolding(id: CardId): List<DeckSection> =
         DeckSection.entries.filter { section -> deck[section].any { it == id } }
@@ -417,6 +458,14 @@ class DeckBuilderState(
 
     // ---- helpers -----------------------------------------------------------
 
+    /** Opens the inspector on [index] of [cards], which it can then page through. */
+    fun inspect(cards: List<Card>, index: Int) {
+        if (cards.isEmpty()) return
+        inspection = Inspection(cards, index.coerceIn(0, cards.lastIndex))
+    }
+
+    fun inspect(card: Card) = inspect(listOf(card), 0)
+
     fun copiesInDeck(id: CardId): Int = deck.copiesOf(id)
 
     fun remaining(card: Card): Int = DeckEditor.remainingCopies(deck, card, format)
@@ -442,6 +491,9 @@ class DeckBuilderState(
         const val UNDO_DEPTH = 50
     }
 }
+
+/** What the inspector is showing, and what it can page to from there. */
+data class Inspection(val cards: List<Card>, val index: Int)
 
 /** A request to scroll a card into view, raised by the issues panel. */
 data class RevealRequest(
