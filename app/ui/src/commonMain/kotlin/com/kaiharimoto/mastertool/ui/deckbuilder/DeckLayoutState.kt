@@ -104,6 +104,16 @@ class DeckLayoutState(
         updateSection(section) { it.copy(autoFit = autoFit) }
     }
 
+    /**
+     * Cards per row in the pool. Zero means size to fit, which is the default.
+     *
+     * The preference has been stored and read since the pane was written and
+     * nothing ever set it, so the only reachable value was the default.
+     */
+    fun setSearchColumns(columns: Int) {
+        update { it.copy(searchColumns = columns.coerceAtLeast(0)) }
+    }
+
     /** Persisted like every other layout setting, and applied on the next frame. */
     fun setTheme(theme: ThemeChoice) {
         update { it.copy(theme = theme) }

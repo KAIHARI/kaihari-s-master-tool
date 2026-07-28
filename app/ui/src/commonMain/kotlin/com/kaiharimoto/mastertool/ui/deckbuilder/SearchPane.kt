@@ -13,9 +13,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
@@ -38,11 +41,16 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.ui.components.CardTile
+import com.kaiharimoto.mastertool.core.prefs.SectionPreferences
+import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 import com.kaiharimoto.mastertool.ui.components.HoverPreview
 import com.kaiharimoto.mastertool.ui.dnd.DragController
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
 import com.kaiharimoto.mastertool.ui.dnd.DragSource
 import com.kaiharimoto.mastertool.ui.dnd.DropHover
+
+/** Where the stepper starts when it takes over from sizing-to-fit. */
+private const val DEFAULT_POOL_COLUMNS = 6
 
 @Composable
 fun SearchPane(
@@ -87,6 +95,9 @@ fun SearchPane(
                 }
             },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            // Enter adds the best match and leaves the query alone, so three
+            // presses is three copies without a hand leaving the keyboard.
+            keyboardActions = KeyboardActions(onSearch = { state.addTopMatch() }),
         )
 
         Row(
@@ -104,6 +115,30 @@ fun SearchPane(
                 )
             }
             Box(Modifier.weight(1f))
+
+            // The pool's own density. Sized to fit until you say otherwise,
+            // like the deck panes; "Fit" puts it back.
+            val fixed = layout.preferences.searchColumns
+            IconButton(
+                onClick = { layout.setSearchColumns(if (fixed > 0) fixed - 1 else DEFAULT_POOL_COLUMNS - 1) },
+                enabled = fixed != SectionPreferences.MIN_COLUMNS,
+            ) {
+                Icon(Icons.Filled.Remove, contentDescription = "Fewer, larger cards per row")
+            }
+            if (fixed > 0) {
+                TextButton(onClick = { layout.setSearchColumns(0) }) {
+                    Text(fixed.toString(), style = tacticalStyle())
+                }
+            } else {
+                Text("Fit", style = tacticalStyle(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(
+                onClick = { layout.setSearchColumns(if (fixed > 0) fixed + 1 else DEFAULT_POOL_COLUMNS + 1) },
+                enabled = fixed != SectionPreferences.MAX_COLUMNS,
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "More, smaller cards per row")
+            }
+
             Text(
                 // Says how many cards matched, not how big the pool is: the old
                 // readout compared a 150-card page against all 13,000 cards.

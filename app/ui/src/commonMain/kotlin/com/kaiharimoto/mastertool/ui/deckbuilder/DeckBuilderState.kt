@@ -427,6 +427,24 @@ class DeckBuilderState(
         applyEdit(DeckEditor.add(deck, card, section, format), card)
     }
 
+    /**
+     * Adds the best current match and leaves the search box exactly as it was.
+     *
+     * The tool this replaces cached its autocomplete matches so that a keypress
+     * could add the top one instantly, and it is the fastest way to build a deck
+     * that either program has: type three letters, press enter three times, and
+     * there are three copies in the deck without a hand leaving the keyboard.
+     *
+     * Keeping the query is the whole point -- clearing it would make the second
+     * copy cost as much as the first. There is no toast either: the card
+     * appearing in the pane is the confirmation, and three of them in a row
+     * would bury the screen.
+     */
+    fun addTopMatch() {
+        val card = results.firstOrNull() ?: return
+        addCard(card)
+    }
+
     fun removeOne(card: Card, section: DeckSection) {
         when (val result = DeckEditor.remove(deck, card.id, section)) {
             is DeckEdit.Applied -> {

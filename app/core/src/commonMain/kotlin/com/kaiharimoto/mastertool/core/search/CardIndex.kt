@@ -106,9 +106,6 @@ class CardIndex private constructor(
     }
 
     /** Short list for the autocomplete dropdown. */
-    fun suggest(query: String, limit: Int = 8): List<Card> =
-        search(query, CardFilter.NONE, limit).cards
-
     private class ScoredCard(val card: Card, val score: Int)
 
     companion object {
