@@ -96,7 +96,8 @@ fun HoverPreview(card: Card, content: @Composable () -> Unit) {
                         modifier = Modifier
                             .width(280.dp)
                             .height(408.dp)
-                            .clip(RoundedCornerShape(CARD_CORNER)),
+                            .clip(RoundedCornerShape(CARD_CORNER))
+                            .foilSweep(),
                     )
                 }
             }

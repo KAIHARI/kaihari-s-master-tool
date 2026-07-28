@@ -1,5 +1,10 @@
 package com.kaiharimoto.mastertool.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -95,6 +100,47 @@ fun Modifier.foil(enabled: Boolean = true): Modifier {
         .drawWithContent {
             drawContent()
             shadingFor(pointer, size)?.let { drawFoil(it) }
+        }
+}
+
+/**
+ * Foil on a card nobody is pointing at, lit by a light that moves instead.
+ *
+ * Touch has no hover, so on a tablet [foil] only ever fires while a finger is
+ * covering the card it is lighting. This is for the two places a card is shown
+ * to be looked at rather than to be picked up — the hover preview and the
+ * inspector — where a slow sweep is the whole point and there is exactly one
+ * card on screen to animate.
+ *
+ * Deliberately not used on deck tiles: forty cards each running their own
+ * animation is forty layers invalidating every frame, to show an effect at a
+ * size too small to read.
+ */
+@Composable
+fun Modifier.foilSweep(periodMillis: Int = 7_000): Modifier {
+    val transition = rememberInfiniteTransition(label = "foil")
+    val progress = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            // Linear because the sweep is already an ellipse; easing it as well
+            // would make the light hesitate at two arbitrary points of the loop.
+            animation = tween(durationMillis = periodMillis, easing = LinearEasing),
+        ),
+        label = "sweep",
+    )
+
+    return this
+        .graphicsLayer {
+            if (size.width <= 0f || size.height <= 0f) return@graphicsLayer
+            val shading = FoilMath.sweep(progress.value, size.width, size.height)
+            rotationX = shading.rotationXDegrees
+            rotationY = shading.rotationYDegrees
+        }
+        .drawWithContent {
+            drawContent()
+            if (size.width <= 0f || size.height <= 0f) return@drawWithContent
+            drawFoil(FoilMath.sweep(progress.value, size.width, size.height))
         }
 }
 

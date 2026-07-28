@@ -74,7 +74,8 @@ fun CardDetailBody(
                     .width(200.dp)
                     .height(292.dp)
                     .clip(RoundedCornerShape(CARD_CORNER))
-                    .background(MasterToolPalette.SurfaceRaised),
+                    .background(MasterToolPalette.SurfaceRaised)
+                    .foilSweep(),
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
