@@ -604,6 +604,61 @@ class DeckBuilderStateTest {
     }
 
     @Test
+    fun aVerdictCanBeTakenBackOnce() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+
+        state.judgeShootout(playable = false)
+        assertEquals(1, state.matchup.total)
+        assertTrue(state.canUndoVerdict)
+
+        state.undoVerdict()
+
+        assertEquals(0, state.matchup.total)
+        assertFalse(state.canUndoVerdict, "one step, and the offer goes with it")
+    }
+
+    @Test
+    fun thereIsNothingToTakeBackBeforeAVerdict() = runTest {
+        val state = builderState()
+
+        assertFalse(state.canUndoVerdict)
+        state.undoVerdict()
+        assertEquals(0, state.matchup.total)
+    }
+
+    @Test
+    fun resettingTheRecordAlsoDropsTheOfferToUndo() = runTest {
+        // Otherwise undo restores a record from before a reset somebody asked
+        // for, which is the opposite of what they asked for.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+        state.judgeShootout(playable = true)
+
+        state.resetMatchup()
+
+        assertFalse(state.canUndoVerdict)
+    }
+
+    @Test
+    fun eitherSideCanDrawOneMore() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+        state.dealShootout(goingFirst = true)
+        val yours = state.yourOpening!!.size
+        val theirs = state.theirOpening!!.size
+
+        state.drawOneMoreShootout(yours = true)
+        state.drawOneMoreShootout(yours = false)
+
+        assertEquals(yours + 1, state.yourOpening?.size)
+        assertEquals(theirs + 1, state.theirOpening?.size)
+    }
+
+    @Test
     fun changingOpponentStartsTheRecordAgain() = runTest {
         // A record against one list says nothing about another, and a tally that
         // quietly carried over would be worse than no tally at all.

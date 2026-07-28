@@ -167,6 +167,7 @@ class DeckBuilderState(
     private fun forgetHandRecords() {
         handTally = HandTally()
         matchup = MatchupRecord()
+        matchupBeforeVerdict = null
     }
 
     /**
@@ -350,6 +351,18 @@ class DeckBuilderState(
      */
     var matchup by mutableStateOf(MatchupRecord())
         private set
+
+    /**
+     * The record as it was before the last verdict, for taking one back.
+     *
+     * One step only, and null once used. A misjudged hand is gone by the time
+     * anybody notices — the next one has already been dealt — so what this
+     * offers is putting the *count* right, not the hand back, and pretending
+     * otherwise would be the wrong promise.
+     */
+    private var matchupBeforeVerdict by mutableStateOf<MatchupRecord?>(null)
+
+    val canUndoVerdict: Boolean get() = matchupBeforeVerdict != null
 
     /** The hand currently on the table, if one has been dealt. */
     var testHand by mutableStateOf<OpeningHand?>(null)
@@ -590,12 +603,34 @@ class DeckBuilderState(
         // whichever chip is selected now -- they are the same until somebody
         // switches sides mid-judgement, and then they are not.
         val wentFirst = yourOpening?.goingFirst ?: return
+        matchupBeforeVerdict = matchup
         matchup = matchup.judged(wentFirst, playable)
         dealShootout(youGoFirst)
     }
 
+    /** Puts the count right after a misclick. The hand itself is long gone. */
+    fun undoVerdict() {
+        matchup = matchupBeforeVerdict ?: return
+        matchupBeforeVerdict = null
+    }
+
+    /**
+     * One more card, for a hand that hinges on the draw.
+     *
+     * Available to both sides, because what their turn-two draw does to your
+     * board is half of what a shootout is for.
+     */
+    fun drawOneMoreShootout(yours: Boolean) {
+        if (yours) {
+            yourOpening = yourOpening?.let(HandSimulator::drawOne)
+        } else {
+            theirOpening = theirOpening?.let(HandSimulator::drawOne)
+        }
+    }
+
     fun resetMatchup() {
         matchup = MatchupRecord()
+        matchupBeforeVerdict = null
     }
 
     fun resetHandTally() {

@@ -85,11 +85,13 @@ fun ShootoutPanel(state: DeckBuilderState) {
                 state = state,
                 title = state.deckName.ifBlank { "Your deck" },
                 hand = state.yourOpening,
+                onDraw = { state.drawOneMoreShootout(yours = true) },
             )
             Side(
                 state = state,
                 title = state.opponentName.ifBlank { "Opponent" },
                 hand = state.theirOpening,
+                onDraw = { state.drawOneMoreShootout(yours = false) },
             )
 
             Row(
@@ -101,6 +103,12 @@ fun ShootoutPanel(state: DeckBuilderState) {
                 Button(onClick = { state.judgeShootout(playable = true) }) { Text("Playable") }
                 OutlinedButton(onClick = { state.judgeShootout(playable = false) }) { Text("Brick") }
                 TextButton(onClick = { state.dealShootout(state.youGoFirst) }) { Text("Deal again") }
+                if (state.canUndoVerdict) {
+                    // Puts the count right after a misclick. It does not bring
+                    // the hand back -- the next one has already been dealt --
+                    // and the label says only what it does.
+                    TextButton(onClick = { state.undoVerdict() }) { Text("Undo that verdict") }
+                }
                 TextButton(onClick = { state.loadOpponent() }) { Text("Change opponent…") }
 
                 Box(Modifier.weight(1f))
@@ -179,7 +187,12 @@ private fun Rate(label: String, tally: HandTally) {
 
 /** One player's name and opening, which is the same shape on both sides. */
 @Composable
-private fun Side(state: DeckBuilderState, title: String, hand: OpeningHand?) {
+private fun Side(
+    state: DeckBuilderState,
+    title: String,
+    hand: OpeningHand?,
+    onDraw: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = MaterialTheme.typography.titleSmall)
@@ -189,6 +202,12 @@ private fun Side(state: DeckBuilderState, title: String, hand: OpeningHand?) {
                 style = tacticalStyle(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Box(Modifier.weight(1f))
+            // Both sides, because what their turn-two draw does to your board
+            // is half of what a shootout is for.
+            if (hand != null && hand.remaining.isNotEmpty()) {
+                TextButton(onClick = onDraw) { Text("Draw one") }
+            }
         }
 
         if (hand == null || hand.size == 0) {
