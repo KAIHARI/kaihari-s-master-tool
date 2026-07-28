@@ -464,7 +464,7 @@ class DeckBuilderStateTest {
     // ---- the cursor --------------------------------------------------------
 
     @Test
-    fun theFirstArrowPutsTheCursorDownRatherThanMovingIt() {
+    fun theFirstArrowPutsTheCursorDownRatherThanMovingIt() = runTest {
         // Otherwise the first press appears to do nothing, and the second one
         // looks like the first press was the thing that failed.
         val state = builderState()
@@ -477,7 +477,7 @@ class DeckBuilderStateTest {
     }
 
     @Test
-    fun arrowsWalkTheGrid() {
+    fun arrowsWalkTheGrid() = runTest {
         val state = builderState()
         TestPool.many(7).forEach { state.addCard(it) }
         state.select(main, 1)
@@ -493,7 +493,7 @@ class DeckBuilderStateTest {
     }
 
     @Test
-    fun anEdgeLeavesTheCursorWhereItIs() {
+    fun anEdgeLeavesTheCursorWhereItIs() = runTest {
         val state = builderState()
         TestPool.many(6).forEach { state.addCard(it) }
         state.select(main, 0)
@@ -504,7 +504,7 @@ class DeckBuilderStateTest {
     }
 
     @Test
-    fun holdingShiftGrowsTheSelectionOneCardAtATime() {
+    fun holdingShiftGrowsTheSelectionOneCardAtATime() = runTest {
         // The derived focus is what makes the second press reach further than
         // the first instead of measuring from the anchor again.
         val state = builderState()
@@ -517,7 +517,7 @@ class DeckBuilderStateTest {
     }
 
     @Test
-    fun carryingMovesTheCardsAndKeepsHoldOfThem() {
+    fun carryingMovesTheCardsAndKeepsHoldOfThem() = runTest {
         val state = builderState()
         val cards = TestPool.many(6)
         cards.forEach { state.addCard(it) }
@@ -531,7 +531,7 @@ class DeckBuilderStateTest {
     }
 
     @Test
-    fun aCarriedCardCanBeWalkedAcrossThePane() {
+    fun aCarriedCardCanBeWalkedAcrossThePane() = runTest {
         val state = builderState()
         val cards = TestPool.many(6)
         cards.forEach { state.addCard(it) }
@@ -543,7 +543,7 @@ class DeckBuilderStateTest {
     }
 
     @Test
-    fun carryingAGroupKeepsItsOrder() {
+    fun carryingAGroupKeepsItsOrder() = runTest {
         val state = builderState()
         val cards = TestPool.many(6)
         cards.forEach { state.addCard(it) }
@@ -557,7 +557,7 @@ class DeckBuilderStateTest {
     }
 
     @Test
-    fun carryingIntoTheEdgeDoesNothingAtAll() {
+    fun carryingIntoTheEdgeDoesNothingAtAll() = runTest {
         // Clamped, so the deck is unchanged -- and an unchanged deck must not go
         // on the undo stack, or holding the key down fills it with nothing.
         val state = builderState()
@@ -578,7 +578,7 @@ class DeckBuilderStateTest {
     }
 
     @Test
-    fun carryingWithNothingHeldDoesNothing() {
+    fun carryingWithNothingHeldDoesNothing() = runTest {
         val state = builderState()
         TestPool.many(4).forEach { state.addCard(it) }
         val before = state.deck.main
@@ -589,7 +589,7 @@ class DeckBuilderStateTest {
     }
 
     @Test
-    fun theCursorAsksForTheCardItLandedOnToBeShown() {
+    fun theCursorAsksForTheCardItLandedOnToBeShown() = runTest {
         val state = builderState()
         TestPool.many(9).forEach { state.addCard(it) }
         state.select(main, 0)
