@@ -132,3 +132,75 @@ class DeckTidyTest {
     private fun trap(id: Int, name: String) =
         Card(id = CardId(id), name = name, type = "Trap Card", frameType = "trap")
 }
+
+/**
+ * The tidy the Extra deck actually wants.
+ *
+ * Grouping fifteen Extra deck cards by "card type" tells you they are all
+ * monsters. Grouping them by how they are summoned is how the pane is read.
+ */
+class SummonTidyTest {
+
+    private fun card(id: Int, name: String, frameType: String) =
+        Card(id = CardId(id), name = name, type = "Monster", frameType = frameType)
+
+    private val link = card(1, "Accesscode Talker", "link")
+    private val xyz = card(2, "Number 41", "xyz")
+    private val fusion = card(3, "Mudragon", "fusion")
+    private val synchro = card(4, "Baronne", "synchro")
+    private val fusionPendulum = card(5, "Beyond the Pendulum", "fusion_pendulum")
+    private val ritual = card(6, "Nekroz of Areadbhair", "ritual")
+    private val effect = card(7, "Ash Blossom", "effect")
+
+    private val pool = listOf(link, xyz, fusion, synchro, fusionPendulum, ritual, effect)
+        .associateBy { it.id }
+
+    private fun tidy(vararg cards: Card) =
+        DeckTidy.apply(cards.map { it.id }, TidyBy.SUMMONING) { pool[it] }
+
+    @Test
+    fun anExtraDeckComesOutInReadingOrder() {
+        assertEquals(
+            listOf(fusion.id, synchro.id, xyz.id, link.id),
+            tidy(link, xyz, fusion, synchro),
+        )
+    }
+
+    @Test
+    fun aCompoundFrameTakesTheFirstThingItIs() {
+        // "fusion_pendulum" is a Fusion monster that also happens to be a
+        // Pendulum, and it belongs with the Fusions.
+        assertEquals(listOf(fusion.id, fusionPendulum.id, link.id), tidy(link, fusion, fusionPendulum))
+    }
+
+    @Test
+    fun theMainDeckGetsSomethingUsefulToo() {
+        // Not only an Extra deck tidy: Rituals ahead of Effects is a real
+        // ordering for a Main deck as well.
+        assertEquals(listOf(ritual.id, effect.id), tidy(effect, ritual))
+    }
+
+    @Test
+    fun aFrameNothingRecognisesGoesLast() {
+        val stranger = card(99, "Odd One", "skill")
+        val withStranger = pool + (stranger.id to stranger)
+
+        assertEquals(
+            listOf(fusion.id, stranger.id),
+            DeckTidy.apply(listOf(stranger.id, fusion.id), TidyBy.SUMMONING) { withStranger[it] },
+        )
+    }
+
+    @Test
+    fun itIsStillAStablePartition() {
+        val first = card(11, "Link A", "link")
+        val second = card(12, "Link B", "link")
+        val withLinks = pool + mapOf(first.id to first, second.id to second)
+        val start = listOf(second.id, fusion.id, first.id)
+
+        val once = DeckTidy.apply(start, TidyBy.SUMMONING) { withLinks[it] }
+
+        assertEquals(listOf(fusion.id, second.id, first.id), once, "order inside a group survives")
+        assertEquals(once, DeckTidy.apply(once, TidyBy.SUMMONING) { withLinks[it] })
+    }
+}

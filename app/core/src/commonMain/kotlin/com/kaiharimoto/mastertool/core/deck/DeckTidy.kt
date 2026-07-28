@@ -22,6 +22,9 @@ import com.kaiharimoto.mastertool.core.model.CardId
  * - [ARCHETYPE] groups by engine and leaves the engines in the order they were
  *   already in. A sort would alphabetise them, silently undoing the decision to
  *   put one at the front.
+ * - [SUMMONING] is the one the Extra deck actually wants. Grouping fifteen cards
+ *   by "card type" tells you they are all monsters; grouping them by how they
+ *   are summoned is how every player already reads that pane.
  *
  * Anything a sort already does is left to the sort. Two menu entries that differ
  * by a subtlety is a worse offer than one that is clear about what it costs.
@@ -30,6 +33,26 @@ enum class TidyBy(val label: String, val blurb: String) {
     COPIES("Gather copies", "strays rejoin their siblings"),
     CATEGORY("Group by type", "order kept inside each group"),
     ARCHETYPE("Group by archetype", "engines stay where you put them"),
+    SUMMONING("Group by summon type", "Fusion, Synchro, Xyz, Link"),
+}
+
+/**
+ * How a card is summoned, read off the frame rather than the type line.
+ *
+ * The frame is what carries it — the same reason [com.kaiharimoto.mastertool
+ * .core.model.Card.isExtraDeck] reads it — and a Fusion Pendulum monster has a
+ * compound frame, so this matches on containment and takes the first hit. The
+ * order is declaration order, which is the order an Extra deck is read in.
+ */
+private enum class SummonFrame(val fragment: String) {
+    RITUAL("ritual"),
+    FUSION("fusion"),
+    SYNCHRO("synchro"),
+    XYZ("xyz"),
+    LINK("link"),
+    PENDULUM("pendulum"),
+    NORMAL("normal"),
+    EFFECT("effect"),
 }
 
 object DeckTidy {
@@ -54,5 +77,11 @@ object DeckTidy {
 
             // No comparator, on purpose. See the note above.
             TidyBy.ARCHETYPE -> Arrangement.groupBy(ids) { lookup(it)?.archetype }
+
+            TidyBy.SUMMONING -> Arrangement.groupBy(ids, compareBy { it.ordinal }) { id ->
+                lookup(id)?.frameType?.let { frame ->
+                    SummonFrame.entries.firstOrNull { frame.contains(it.fragment, true) }
+                }
+            }
         }
 }

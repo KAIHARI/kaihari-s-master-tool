@@ -638,12 +638,35 @@ controller, and that is exactly the kind of multi-file change that cannot be
 compiled here and has already cost two red builds today. It is worth doing with
 a compiler in the room.
 
+## 33. Testing the room, and the tidy the Extra deck wanted
+
+`DeckLayoutState` had no tests, and it carries the only real arithmetic left in
+the UI layer: three panes trading weight across a divider. It is also where a
+mistake hides best — a resize that quietly shrinks the pane on the far side of
+the drag reads as the drag being imprecise rather than as a bug. Eighteen tests
+now, over the parts that are easy to get wrong and impossible to notice: that a
+resize preserves the total and never moves the third pane, that hitting a
+minimum stops the drag rather than paying for space nobody received, and that
+pinning a pane's column count stops having an opinion afterwards — it runs on
+every frame of a drag, so a second opinion would overwrite the first mid-gesture.
+
+Then a fourth tidy. Grouping fifteen Extra deck cards by "card type" tells you
+they are all monsters; grouping them by *how they are summoned* is how that pane
+is already read. It works off the frame rather than the type line — the same
+thing `isExtraDeck` reads — and takes the first match, so a Fusion Pendulum
+monster files with the Fusions where it belongs.
+
+Worth noting what it cost in the UI: nothing. The menu renders `TidyBy.entries`
+and the property test walks them, so a new tidy appears in both by existing. The
+same shape as the shortcut table and the overlay enum — three times now that
+declaring the list once has meant the second place could not fall behind.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **492 tests**, up from 249, plus
-**66 in `:ui`** where there were none.
+`:core` carries the arithmetic for all of it, at **497 tests**, up from 249, plus
+**84 in `:ui`** where there were none.
 
 Still open, in the order they are worth doing:
 
