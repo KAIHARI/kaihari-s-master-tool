@@ -1,15 +1,18 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.kaiharimoto.mastertool.core.data.SyncResult
 import com.kaiharimoto.mastertool.core.deck.DeckEdit
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
+import com.kaiharimoto.mastertool.core.deck.DeckSorter
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
 import com.kaiharimoto.mastertool.core.deck.DeckValidation
 import com.kaiharimoto.mastertool.core.deck.DeckValidator
 import com.kaiharimoto.mastertool.core.deck.RejectionReason
+import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.Deck
@@ -23,6 +26,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 
 /** A transient message shown in the snackbar, optionally with an undo action. */
@@ -31,6 +35,15 @@ data class Toast(
     val undo: (() -> Unit)? = null,
     val id: Long = 0,
 )
+
+/**
+ * Identifies one edit so its snackbar can only undo *that* edit.
+ *
+ * A snackbar outlives the action that raised it. Without this, removing a card,
+ * adding three more and then pressing the still-visible "Undo" would undo the
+ * last add — the stack has no idea which button the user thought they pressed.
+ */
+data class UndoToken(val serial: Long)
 
 /**
  * State holder for the deck builder.
@@ -55,6 +68,10 @@ class DeckBuilderState(
     var results by mutableStateOf<List<Card>>(emptyList())
         private set
 
+    /** How many cards matched in total, which is usually more than were drawn. */
+    var matchCount by mutableStateOf(0)
+        private set
+
     var deck by mutableStateOf(Deck.EMPTY)
         private set
 
@@ -70,9 +87,42 @@ class DeckBuilderState(
     var syncMessage by mutableStateOf<String?>(null)
         private set
 
-    var inspectedCard by mutableStateOf<Card?>(null)
+    /**
+     * The inspector opens onto a list, not a card.
+     *
+     * Opening a card from the search results and then flipping through the rest
+     * of them is how you compare candidates for a slot; opening one card and
+     * having to close it to see the next is how you stop bothering.
+     */
+    var inspection by mutableStateOf<Inspection?>(null)
 
     var filtersVisible by mutableStateOf(false)
+
+    var statsVisible by mutableStateOf(false)
+
+    var issuesVisible by mutableStateOf(false)
+
+    var helpVisible by mutableStateOf(false)
+
+    var eggVisible by mutableStateOf(false)
+
+    /**
+     * Whether any text field in the builder has the caret.
+     *
+     * A count rather than a flag because focus moving from one field to another
+     * reports the two changes in whichever order it likes, and a flag would end
+     * up clear when focus had simply moved next door.
+     */
+    private var focusedTextFields by mutableStateOf(0)
+
+    val textInputFocused: Boolean get() = focusedTextFields > 0
+
+    fun onTextFieldFocusChanged(focused: Boolean) {
+        focusedTextFields = (focusedTextFields + if (focused) 1 else -1).coerceAtLeast(0)
+    }
+
+    /** Which section the statistics panel is reporting on. */
+    var statsSection by mutableStateOf(DeckSection.MAIN)
 
     var toast by mutableStateOf<Toast?>(null)
         private set
@@ -80,20 +130,54 @@ class DeckBuilderState(
     var format by mutableStateOf(Format.TCG)
         private set
 
+    /**
+     * Set when an issue or a search result should be brought into view.
+     *
+     * Cleared by the pane once it has scrolled, so the same card can be
+     * requested again later.
+     */
+    var revealRequest by mutableStateOf<RevealRequest?>(null)
+
     /** The `#ydkx-extended` payload of the loaded deck, preserved untouched. */
     private var extended: JsonObject? = null
 
-    private val undoStack = ArrayDeque<Pair<Deck, String>>()
+    private val undoStack = ArrayDeque<Deck>()
+    private val redoStack = ArrayDeque<Deck>()
     private var searchJob: Job? = null
     private var toastCounter = 0L
+    private var editSerial = 0L
 
-    val validation: DeckValidation
-        get() = DeckValidator.validate(deck, index::byId, format)
+    /**
+     * Recomputed only when the deck, pool or format actually changes.
+     *
+     * As a plain `get()` this ran on every recomposition of anything that read
+     * it — including every keystroke in the deck-name field, since that shares a
+     * recomposition scope with the legality readout — and validation walks every
+     * distinct card scanning all three sections.
+     */
+    val validation: DeckValidation by derivedStateOf {
+        DeckValidator.validate(deck, index::byId, format)
+    }
 
-    val statistics: DeckStatistics
-        get() = DeckStatistics.of(deck, index::byId, DeckSection.MAIN)
+    val statistics: DeckStatistics by derivedStateOf {
+        DeckStatistics.of(deck, index::byId, statsSection)
+    }
 
-    val canUndo: Boolean get() = undoStack.isNotEmpty()
+    /** Main-deck statistics, which is what opening-hand odds are drawn from. */
+    val mainStatistics: DeckStatistics by derivedStateOf {
+        DeckStatistics.of(deck, index::byId, DeckSection.MAIN)
+    }
+
+    /**
+     * Backed by observable state rather than read from the deques directly: a
+     * plain `ArrayDeque` is invisible to snapshot observation, so the undo button
+     * never noticed it had become enabled.
+     */
+    var canUndo by mutableStateOf(false)
+        private set
+
+    var canRedo by mutableStateOf(false)
+        private set
 
     // ---- lifecycle ---------------------------------------------------------
 
@@ -149,7 +233,9 @@ class DeckBuilderState(
     }
 
     fun onFilterChange(value: CardFilter) {
-        filter = value
+        // The format is owned by the toolbar, not the filter sheet, so it is
+        // stamped on here rather than left for whoever consumes the filter.
+        filter = value.copy(format = format)
         runSearch(immediate = true)
     }
 
@@ -157,10 +243,18 @@ class DeckBuilderState(
 
     private fun runSearch(immediate: Boolean = false) {
         searchJob?.cancel()
+        val activeQuery = query
+        val activeFilter = filter
         searchJob = scope.launch {
             // Debounced so a fast typist scans the pool once, not once per key.
             if (!immediate) delay(SEARCH_DEBOUNCE_MS)
-            results = index.search(query, filter.copy(format = format), limit = RESULT_LIMIT)
+            // Scoring 13,000 names with a bounded Levenshtein is far too much
+            // work for the frame thread, and `scope` is the composition's.
+            val outcome = withContext(deps.computeDispatcher) {
+                index.search(activeQuery, activeFilter, limit = RESULT_LIMIT)
+            }
+            results = outcome.cards
+            matchCount = outcome.matchCount
         }
     }
 
@@ -171,14 +265,13 @@ class DeckBuilderState(
     }
 
     fun removeOne(card: Card, section: DeckSection) {
-        val before = deck
         when (val result = DeckEditor.remove(deck, card.id, section)) {
             is DeckEdit.Applied -> {
-                pushUndo(before)
+                val token = pushUndo(deck)
                 deck = result.deck
-                showToast("Removed ${card.name}.", undo = { undo() })
+                showToast("Removed ${card.name}.", undo = { undoIfCurrent(token) })
             }
-            is DeckEdit.Rejected -> Unit
+            is DeckEdit.Rejected -> showToast(explain(result.reason, card))
         }
     }
 
@@ -189,6 +282,90 @@ class DeckBuilderState(
     fun setCount(card: Card, section: DeckSection, count: Int) {
         applyEdit(DeckEditor.setCount(deck, card, section, count, format), card)
     }
+
+    // ---- drops -------------------------------------------------------------
+    //
+    // Every one of these goes through the same `applyEdit` as tapping does, so a
+    // drop is undoable and a rejected drop explains itself in the same words.
+
+    fun addCardAt(card: Card, section: DeckSection, index: Int) {
+        applyEdit(DeckEditor.addAt(deck, card, section, index, format), card)
+    }
+
+    fun moveCardTo(
+        card: Card,
+        from: DeckSection,
+        fromIndex: Int,
+        to: DeckSection,
+        insertBefore: Int,
+    ) {
+        applyEdit(DeckEditor.moveAt(deck, card, from, fromIndex, to, insertBefore, format), card)
+    }
+
+    /** Drag-out: the copy at [index] leaves the deck. */
+    fun removeAt(card: Card, section: DeckSection, index: Int) {
+        when (val result = DeckEditor.removeAt(deck, section, index)) {
+            is DeckEdit.Applied -> {
+                val token = pushUndo(deck)
+                deck = result.deck
+                showToast("Removed ${card.name}.", undo = { undoIfCurrent(token) })
+            }
+            is DeckEdit.Rejected -> Unit
+        }
+    }
+
+    /**
+     * Whether a drop would be accepted, for live feedback during a drag.
+     *
+     * [from] is null when the card is being dragged out of the search pane.
+     */
+    fun canDrop(card: Card, from: DeckSection?, to: DeckSection): Boolean {
+        if (!DeckEditor.sectionAccepts(card, to)) return false
+        // A move does not change how many copies the deck holds, so only a card
+        // arriving from the pool can be stopped by the banlist.
+        if (from == null && DeckEditor.remainingCopies(deck, card, format) <= 0) return false
+        // Reordering within a section needs no room; arriving in a new one does.
+        if (from != to && deck[to].size >= to.maxSize) return false
+        return true
+    }
+
+    fun removeAllCopies(card: Card, section: DeckSection) {
+        val remaining = deck[section].filterNot { it == card.id }
+        if (remaining.size == deck[section].size) return
+
+        val token = pushUndo(deck)
+        deck = deck.with(section, remaining)
+        showToast(
+            "Removed every copy of ${card.name} from ${section.displayName}.",
+            undo = { undoIfCurrent(token) },
+        )
+    }
+
+    /**
+     * Reorders a section.
+     *
+     * An edit, not a view setting: the stored order is what gets written back to
+     * `.ydk`, so sorting only the display would leave the file disagreeing with
+     * the deck. Being an edit also means one press of undo puts it back.
+     */
+    fun sortSection(section: DeckSection, mode: SortMode) {
+        val current = deck[section]
+        val sorted = DeckSorter.sort(current, index::byId, mode, format)
+        if (sorted == current) return
+
+        val token = pushUndo(deck)
+        deck = deck.with(section, sorted)
+        showToast(
+            "Sorted ${section.displayName} Deck by ${mode.displayName.lowercase()}.",
+            undo = { undoIfCurrent(token) },
+        )
+    }
+
+    /** Every section currently holding [id], for controls that act on a card. */
+    fun sectionsHolding(id: CardId): List<DeckSection> =
+        DeckSection.entries.filter { section -> deck[section].any { it == id } }
+
+    fun copiesIn(id: CardId, section: DeckSection): Int = deck[section].count { it == id }
 
     private fun applyEdit(edit: DeckEdit, card: Card) {
         when (edit) {
@@ -222,27 +399,53 @@ class DeckBuilderState(
         RejectionReason.NOT_PRESENT -> "That card isn't in this section."
     }
 
-    private fun pushUndo(previous: Deck) {
-        undoStack.addLast(previous to deckName)
+    // ---- history -----------------------------------------------------------
+
+    private fun pushUndo(previous: Deck): UndoToken {
+        undoStack.addLast(previous)
         while (undoStack.size > UNDO_DEPTH) undoStack.removeFirst()
+        // A new edit invalidates anything that was undone to reach this point.
+        redoStack.clear()
+        return stamp()
     }
 
     fun undo() {
-        val (previousDeck, previousName) = undoStack.removeLastOrNull() ?: return
-        deck = previousDeck
-        deckName = previousName
+        val previous = undoStack.removeLastOrNull() ?: return
+        redoStack.addLast(deck)
+        deck = previous
+        stamp()
     }
 
-    /**
-     * Named for consistency with the other change handlers — and because
-     * `setFormat` would collide on the JVM with the setter that `var format`
-     * already generates.
-     */
+    fun redo() {
+        val next = redoStack.removeLastOrNull() ?: return
+        undoStack.addLast(deck)
+        deck = next
+        stamp()
+    }
+
+    /** Undoes an edit only while it is still the most recent one. */
+    private fun undoIfCurrent(token: UndoToken) {
+        if (editSerial == token.serial) undo()
+    }
+
+    private fun stamp(): UndoToken {
+        editSerial++
+        canUndo = undoStack.isNotEmpty()
+        canRedo = redoStack.isNotEmpty()
+        return UndoToken(editSerial)
+    }
+
     fun onFormatChange(value: Format) {
         format = value
+        filter = filter.copy(format = value)
         runSearch(immediate = true)
     }
 
+    /**
+     * Renaming is not a deck edit and deliberately does not touch the undo
+     * stack: it used to be restored alongside the deck, so undoing a card add
+     * silently reverted a rename made after it.
+     */
     fun rename(value: String) {
         deckName = value
     }
@@ -250,12 +453,12 @@ class DeckBuilderState(
     // ---- persistence -------------------------------------------------------
 
     fun newDeck() {
-        pushUndo(deck)
+        val token = pushUndo(deck)
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
         deckId = null
         extended = null
-        showToast("Started a new deck.", undo = { undo() })
+        showToast("Started a new deck.", undo = { undoIfCurrent(token) })
     }
 
     fun save(onSaved: (String) -> Unit = {}) {
@@ -275,6 +478,8 @@ class DeckBuilderState(
             deckId = stored.entry.id
             extended = stored.extended
             undoStack.clear()
+            redoStack.clear()
+            stamp()
         }
     }
 
@@ -283,7 +488,7 @@ class DeckBuilderState(
             val file = deps.fileAccess.importDeck() ?: return@launch
             val parsed = YdkCodec.parse(file.content)
 
-            pushUndo(deck)
+            val token = pushUndo(deck)
             deck = parsed.document.deck
             deckName = file.name.substringBeforeLast('.').ifBlank { "Imported Deck" }
             deckId = null
@@ -293,7 +498,7 @@ class DeckBuilderState(
                 .takeIf { it > 0 }
                 ?.let { " ($it line${if (it == 1) "" else "s"} skipped)" }
                 .orEmpty()
-            showToast("Imported ${deck.totalCards} cards$warning.", undo = { undo() })
+            showToast("Imported ${deck.totalCards} cards$warning.", undo = { undoIfCurrent(token) })
         }
     }
 
@@ -318,9 +523,37 @@ class DeckBuilderState(
 
     // ---- helpers -----------------------------------------------------------
 
+    /** Opens the inspector on [index] of [cards], which it can then page through. */
+    fun inspect(cards: List<Card>, index: Int) {
+        if (cards.isEmpty()) return
+        inspection = Inspection(cards, index.coerceIn(0, cards.lastIndex))
+    }
+
+    fun inspect(card: Card) = inspect(listOf(card), 0)
+
+    /** Steps the inspector through the list it was opened on. */
+    fun pageInspection(delta: Int) {
+        val current = inspection ?: return
+        val next = (current.index + delta).coerceIn(0, current.cards.lastIndex)
+        if (next != current.index) inspection = current.copy(index = next)
+    }
+
+    /** Keeps the stored page in step when the inspector is swiped rather than keyed. */
+    fun onInspectionPageChanged(index: Int) {
+        val current = inspection ?: return
+        if (current.index != index) inspection = current.copy(index = index)
+    }
+
     fun copiesInDeck(id: CardId): Int = deck.copiesOf(id)
 
     fun remaining(card: Card): Int = DeckEditor.remainingCopies(deck, card, format)
+
+    /** Asks the owning pane to scroll [id] into view and flash it. */
+    fun reveal(section: DeckSection, id: CardId) {
+        val position = deck[section].indexOfFirst { it == id }
+        if (position < 0) return
+        revealRequest = RevealRequest(section, position, id, ++toastCounter)
+    }
 
     fun showToast(message: String, undo: (() -> Unit)? = null) {
         toast = Toast(message, undo, ++toastCounter)
@@ -336,3 +569,14 @@ class DeckBuilderState(
         const val UNDO_DEPTH = 50
     }
 }
+
+/** What the inspector is showing, and what it can page to from there. */
+data class Inspection(val cards: List<Card>, val index: Int)
+
+/** A request to scroll a card into view, raised by the issues panel. */
+data class RevealRequest(
+    val section: DeckSection,
+    val position: Int,
+    val cardId: CardId,
+    val id: Long,
+)

@@ -9,6 +9,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.kaiharimoto.mastertool.core.data.CardRepository
 import com.kaiharimoto.mastertool.core.data.DatabaseFactory
 import com.kaiharimoto.mastertool.core.data.DeckRepository
+import com.kaiharimoto.mastertool.core.data.PreferencesRepository
 import com.kaiharimoto.mastertool.core.remote.HttpClientFactory
 import com.kaiharimoto.mastertool.core.remote.YgoProDeckApi
 import com.kaiharimoto.mastertool.core.update.GitHubReleaseApi
@@ -55,6 +56,10 @@ private fun buildDependencies(): AppDependencies {
         deckRepository = DeckRepository(
             database = database,
             clock = System::currentTimeMillis,
+            ioDispatcher = Dispatchers.IO,
+        ),
+        preferencesRepository = PreferencesRepository(
+            database = database,
             ioDispatcher = Dispatchers.IO,
         ),
         fileAccess = DesktopDeckFileAccess(),

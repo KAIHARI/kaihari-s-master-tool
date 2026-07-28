@@ -22,6 +22,9 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.materialIconsExtended)
             implementation(compose.ui)
+            // Back again, and used this time: the chibi logo is bundled art that
+            // has to load identically on a tablet and on a desktop.
+            implementation(compose.components.resources)
 
             implementation(libs.kotlinx.coroutines.core)
             // Used directly: the YDKX payload is carried through the UI untouched.
@@ -30,6 +33,14 @@ kotlin {
             implementation(libs.coil.network.ktor)
         }
     }
+}
+
+// Named explicitly rather than derived, so the generated accessors land somewhere
+// predictable and the import does not move when the module's namespace does.
+compose.resources {
+    publicResClass = true
+    packageOfResClass = "com.kaiharimoto.mastertool.ui.art"
+    generateResClass = auto
 }
 
 android {

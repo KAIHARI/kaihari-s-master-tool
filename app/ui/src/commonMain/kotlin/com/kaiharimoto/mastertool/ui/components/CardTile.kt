@@ -1,9 +1,8 @@
 package com.kaiharimoto.mastertool.ui.components
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
@@ -35,10 +34,10 @@ const val CARD_ASPECT_RATIO = 59f / 86f
 /**
  * A single card.
  *
- * Both tap and long-press are wired because a tablet has no hover: the web tool
- * put the card detail behind a mouse-over, which simply does not exist here.
+ * Tap only. Long press belongs to `DragSource`, which wraps these: two detectors
+ * competing for the same press is a gesture that works differently depending on
+ * how fast you were.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CardTile(
     card: Card,
@@ -46,8 +45,8 @@ fun CardTile(
     format: Format = Format.TCG,
     copies: Int = 0,
     dimmed: Boolean = false,
+    highlighted: Boolean = false,
     onClick: () -> Unit = {},
-    onLongClick: () -> Unit = {},
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     val shape = RoundedCornerShape(4.dp)
@@ -57,29 +56,37 @@ fun CardTile(
         modifier = modifier
             .aspectRatio(CARD_ASPECT_RATIO)
             .clip(shape)
-            .background(MasterToolPalette.SlateRaised)
-            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .background(MasterToolPalette.SurfaceRaised)
+            .border(
+                width = if (highlighted) 2.dp else 1.dp,
+                color = if (highlighted) {
+                    MasterToolPalette.AccentBright
+                } else {
+                    MaterialTheme.colorScheme.outline
+                },
+                shape = shape,
+            )
+            .clickable(onClick = onClick),
     ) {
+        // Drawn beneath the artwork rather than only when both URLs are absent:
+        // a card whose image fails to load — the offline case this app is built
+        // for — otherwise renders as a blank rectangle with nothing to read.
+        Text(
+            text = card.name,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.Center).padding(4.dp),
+        )
+
         AsyncImage(
             model = card.imageUrlSmall ?: card.imageUrl,
             contentDescription = card.name,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
         )
-
-        // Shown until the artwork arrives, and permanently for cards that have none.
-        if (card.imageUrlSmall == null && card.imageUrl == null) {
-            Text(
-                text = card.name,
-                style = MaterialTheme.typography.labelSmall,
-                textAlign = TextAlign.Center,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.Center).padding(4.dp),
-            )
-        }
 
         if (dimmed) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
@@ -128,7 +135,7 @@ private fun CopyBadge(copies: Int, modifier: Modifier = Modifier) {
         modifier = modifier
             .size(22.dp)
             .clip(RoundedCornerShape(4.dp))
-            .background(MasterToolPalette.Gold),
+            .background(MasterToolPalette.Accent),
         contentAlignment = Alignment.Center,
     ) {
         Text(

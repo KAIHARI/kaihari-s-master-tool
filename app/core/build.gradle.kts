@@ -57,6 +57,12 @@ sqldelight {
     databases {
         create("MasterToolDatabase") {
             packageName.set("com.kaiharimoto.mastertool.core.db")
+            // `verifyMigrations` is deliberately left off: it requires a checked-in
+            // .db snapshot of each old schema, and this plugin version registers no
+            // task to produce one. `MigrationTest` makes the same assertion from
+            // the test source set instead — it upgrades a real version 1 database
+            // and compares the result against a freshly created one — which has the
+            // advantage of running in the :core test job on every push.
         }
     }
 }

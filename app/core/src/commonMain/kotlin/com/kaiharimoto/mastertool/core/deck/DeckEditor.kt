@@ -62,6 +62,21 @@ object DeckEditor {
         card: Card,
         section: DeckSection = card.requiredSection(),
         format: Format = Format.TCG,
+    ): DeckEdit = addAt(deck, card, section, deck[section].size, format)
+
+    /**
+     * Adds a copy at an exact position, for a drop onto a particular slot.
+     *
+     * [add] delegates here so the two cannot drift: a card dropped between two
+     * others has to be checked against the banlist and the section's capacity in
+     * exactly the same way as one added by tapping.
+     */
+    fun addAt(
+        deck: Deck,
+        card: Card,
+        section: DeckSection,
+        index: Int,
+        format: Format = Format.TCG,
     ): DeckEdit {
         if (!card.isPlayable) return DeckEdit.Rejected(RejectionReason.NOT_PLAYABLE, card)
         if (!sectionAccepts(card, section)) {
@@ -78,7 +93,10 @@ object DeckEditor {
             return DeckEdit.Rejected(RejectionReason.COPY_LIMIT, card)
         }
 
-        return DeckEdit.Applied(deck.with(section, contents + card.id))
+        val at = index.coerceIn(0, contents.size)
+        return DeckEdit.Applied(
+            deck.with(section, contents.toMutableList().also { it.add(at, card.id) })
+        )
     }
 
     /** Removes a single copy. Removes the last one so repeated taps feel stable. */
@@ -138,6 +156,77 @@ object DeckEditor {
         val mutable = contents.toMutableList()
         mutable.add(toIndex, mutable.removeAt(fromIndex))
         return DeckEdit.Applied(deck.with(section, mutable))
+    }
+
+    /**
+     * Moves the copy at [fromIndex] so it lands before whatever currently sits at
+     * [insertBefore].
+     *
+     * This is the form a drop position actually arrives in: the resolver reports
+     * a gap in the list as it looks right now, before anything has been picked
+     * up. Removing the dragged card first shifts everything after it down one, so
+     * a drop to the right needs that accounted for — doing it here means the
+     * caller never has to know, and the off-by-one has one home instead of one
+     * per call site.
+     */
+    fun reorderTo(
+        deck: Deck,
+        section: DeckSection,
+        fromIndex: Int,
+        insertBefore: Int,
+    ): DeckEdit {
+        val contents = deck[section]
+        if (fromIndex !in contents.indices) return DeckEdit.Rejected(RejectionReason.NOT_PRESENT)
+        if (insertBefore !in 0..contents.size) {
+            return DeckEdit.Rejected(RejectionReason.NOT_PRESENT)
+        }
+
+        val target = if (insertBefore > fromIndex) insertBefore - 1 else insertBefore
+        if (target == fromIndex) return DeckEdit.Applied(deck)
+
+        val mutable = contents.toMutableList()
+        mutable.add(target, mutable.removeAt(fromIndex))
+        return DeckEdit.Applied(deck.with(section, mutable))
+    }
+
+    /**
+     * Moves one copy to an exact position in another section.
+     *
+     * [move] appends, which is right for a button but wrong for a drag: a card
+     * dropped onto a particular slot has to land there. Performed as a single
+     * transaction, so a move the destination rejects leaves the source untouched.
+     */
+    fun moveAt(
+        deck: Deck,
+        card: Card,
+        from: DeckSection,
+        fromIndex: Int,
+        to: DeckSection,
+        insertBefore: Int,
+        format: Format = Format.TCG,
+    ): DeckEdit {
+        if (from == to) return reorderTo(deck, from, fromIndex, insertBefore)
+
+        val source = deck[from]
+        if (fromIndex !in source.indices || source[fromIndex] != card.id) {
+            return DeckEdit.Rejected(RejectionReason.NOT_PRESENT)
+        }
+        if (!sectionAccepts(card, to)) {
+            return DeckEdit.Rejected(RejectionReason.WRONG_SECTION, card)
+        }
+        if (deck[to].size >= to.maxSize) {
+            return DeckEdit.Rejected(RejectionReason.SECTION_FULL, card)
+        }
+
+        val removed = removeAt(deck, from, fromIndex)
+        if (removed !is DeckEdit.Applied) return removed
+
+        // The copy count is unchanged by a move, so the banlist cannot reject it.
+        val target = removed.deck[to]
+        val at = insertBefore.coerceIn(0, target.size)
+        return DeckEdit.Applied(
+            removed.deck.with(to, target.toMutableList().also { it.add(at, card.id) })
+        )
     }
 
     /**

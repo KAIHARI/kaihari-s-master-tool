@@ -100,10 +100,37 @@ pool at a venue with no signal.
 **Landscape-locked on Android.** Removes rotation recreation entirely, which is
 why the app uses plain remembered state holders instead of ViewModels.
 
+**Sorting a deck is an edit, not a view setting.** The stored order is exactly
+what gets written back to `.ydk`, so a sort that only reordered the display would
+leave the file disagreeing with the deck from then on. Being an edit also means
+undo puts it back.
+
+**Layout settings are one JSON document in the SQLite database.** No DataStore
+(Android-only, would need a separate desktop path) and no settings library.
+Storing them as a document rather than a column per setting means adding a
+preference is a field, never a migration. Everything read back is clamped: a
+weight of zero or NaN reaches `Modifier.weight`, which rejects both.
+
+**A new table needs a migration file, and the failure is invisible on a fresh
+install.** SQLDelight derives the schema version from the number of `.sqm` files,
+and both driver factories hand `MasterToolDatabase.Schema` to the driver. Adding
+a table to a `.sq` file alone leaves the version unchanged, so no migration runs
+and the first query throws — on every device that already has the app, and on
+none of the ones used for testing. `MigrationTest` upgrades a real old database
+and compares it against a freshly created one; add a case to it whenever the
+schema changes.
+
 ## Status
 
-Shipping in v1: deck builder with search and filters, deck library, YDK/YDKX
-import, export and share.
+Shipping in v1: deck builder with search and filters, drag and drop between the
+pool and every deck section, per-section copy steppers and moves, adjustable and
+collapsible deck panes with per-section sorting and card density, an inspector
+you can page through the results in, deck statistics with opening-hand odds, a
+deck-check panel that jumps to the card an issue names, a TCG/OCG toggle, deck
+library, YDK/YDKX import, export and share.
+
+On desktop: keyboard shortcuts throughout (press `?` for the list, which is
+generated from the table that implements them) and a hover preview on any card.
 
 Not yet built: siding patterns, shootout mode, the sandbox board simulator,
-PDF export, drag-and-drop between deck sections.
+PDF export, and autoscrolling a pane while dragging over its edge.

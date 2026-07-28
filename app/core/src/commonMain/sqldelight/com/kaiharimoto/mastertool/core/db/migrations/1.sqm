@@ -1,0 +1,14 @@
+-- 1 -> 2: app-level preferences.
+--
+-- Required, not optional. Both driver factories hand `MasterToolDatabase.Schema`
+-- to the driver, and SQLDelight derives the schema version from the number of
+-- migration files. Adding `Preference.sq` without this file would leave the
+-- version at 1, so no migration would run at all on a device that already has
+-- the app — every existing install would be missing the table and would fail on
+-- the first read. Signed builds ship with an in-app updater, so those installs
+-- exist.
+
+CREATE TABLE preferenceEntity (
+    prefKey   TEXT NOT NULL PRIMARY KEY,
+    prefValue TEXT NOT NULL
+);
