@@ -60,6 +60,13 @@ data class UiPreferences(
     /** Show one tile per distinct card with a count, rather than one per copy. */
     val stacked: Boolean = false,
     val format: Format = Format.TCG,
+    /**
+     * Passcodes the easter egg throws, when it has been given a set to keep.
+     *
+     * Empty means "whatever is in the deck right now", which is the useful
+     * default and needs no curating.
+     */
+    val easterEggPool: List<Int> = emptyList(),
 ) {
     operator fun get(section: DeckSection): SectionPreferences = when (section) {
         DeckSection.MAIN -> main

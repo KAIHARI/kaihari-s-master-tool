@@ -104,6 +104,8 @@ class DeckBuilderState(
 
     var helpVisible by mutableStateOf(false)
 
+    var eggVisible by mutableStateOf(false)
+
     /**
      * Whether any text field in the builder has the caret.
      *

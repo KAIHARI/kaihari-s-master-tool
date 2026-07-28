@@ -29,8 +29,10 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.input.ShortcutAction
 import com.kaiharimoto.mastertool.core.input.ShortcutContext
+import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.components.CardInspector
+import com.kaiharimoto.mastertool.ui.egg.EasterEgg
 import com.kaiharimoto.mastertool.ui.dnd.DragController
 import com.kaiharimoto.mastertool.ui.dnd.DragOverlay
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
@@ -91,7 +93,7 @@ fun DeckBuilderScreen(
     val focusManager = LocalFocusManager.current
 
     val overlayOpen = state.inspection != null || state.filtersVisible ||
-        state.statsVisible || state.issuesVisible || state.helpVisible
+        state.statsVisible || state.issuesVisible || state.helpVisible || state.eggVisible
 
     ShortcutHost(
         context = ShortcutContext(
@@ -223,6 +225,39 @@ fun DeckBuilderScreen(
     if (state.helpVisible) {
         ShortcutHelpSheet(onDismiss = { state.helpVisible = false })
     }
+
+    if (state.eggVisible) {
+        val pinned = layout.preferences.easterEggPool
+
+        // A pinned set if one was kept, otherwise whatever is in the deck — which
+        // is the version of this that needs no curating and is never empty when
+        // there is anything to throw.
+        val pool = remember(pinned, state.deck, state.index) {
+            pinned.mapNotNull { state.index.byId(CardId(it)) }
+                .ifEmpty {
+                    (state.deck.main + state.deck.extra + state.deck.side)
+                        .distinct()
+                        .mapNotNull(state.index::byId)
+                }
+        }
+
+        EasterEgg(
+            pool = pool,
+            pinned = pinned.isNotEmpty(),
+            onPin = {
+                layout.update { preferences ->
+                    preferences.copy(
+                        easterEggPool = if (pinned.isNotEmpty()) {
+                            emptyList()
+                        } else {
+                            pool.map { it.id.value }
+                        },
+                    )
+                }
+            },
+            onDismiss = { state.eggVisible = false },
+        )
+    }
 }
 
 /**
@@ -235,6 +270,8 @@ fun DeckBuilderScreen(
  */
 private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
     when {
+        // Topmost first. The egg covers everything, so it leaves first too.
+        state.eggVisible -> state.eggVisible = false
         state.inspection != null -> state.inspection = null
         state.helpVisible -> state.helpVisible = false
         state.filtersVisible -> state.filtersVisible = false

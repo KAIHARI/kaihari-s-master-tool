@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
+import com.kaiharimoto.mastertool.ui.egg.ChibiLogo
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
@@ -61,6 +62,8 @@ fun DeckBuilderTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        ChibiLogo(onWake = { state.eggVisible = true })
+
         Text(
             "kai's master tool",
             style = MaterialTheme.typography.titleMedium,
