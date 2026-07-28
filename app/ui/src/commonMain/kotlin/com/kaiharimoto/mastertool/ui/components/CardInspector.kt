@@ -15,9 +15,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,7 +56,6 @@ fun CardInspector(
 ) {
     if (cards.isEmpty()) return
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val pagerState = rememberPagerState(
         initialPage = initialIndex.coerceIn(0, cards.lastIndex),
         pageCount = { cards.size },
@@ -73,7 +70,7 @@ fun CardInspector(
     }
     LaunchedEffect(pagerState.currentPage) { onPageChanged(pagerState.currentPage) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    MasterToolSheet(onDismiss = onDismiss) {
         if (cards.size > 1) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),

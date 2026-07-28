@@ -11,15 +11,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.core.deck.HandSimulator
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.HoverPreview
@@ -42,13 +41,9 @@ import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TestHandPanel(state: DeckBuilderState) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val hand = state.testHand
 
-    ModalBottomSheet(
-        onDismissRequest = { state.testHandVisible = false },
-        sheetState = sheetState,
-    ) {
+    MasterToolSheet(onDismiss = { state.testHandVisible = false }) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),

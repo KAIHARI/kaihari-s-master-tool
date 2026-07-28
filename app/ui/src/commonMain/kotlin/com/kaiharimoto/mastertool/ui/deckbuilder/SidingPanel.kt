@@ -14,10 +14,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
@@ -32,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.siding.SidingPattern
 import com.kaiharimoto.mastertool.core.siding.SidingSwap
@@ -58,13 +57,9 @@ import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SidingPanel(state: DeckBuilderState) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val patterns = state.sidingPatterns.entries.sortedBy { it.key }
 
-    ModalBottomSheet(
-        onDismissRequest = { state.sidingVisible = false },
-        sheetState = sheetState,
-    ) {
+    MasterToolSheet(onDismiss = { state.sidingVisible = false }) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
