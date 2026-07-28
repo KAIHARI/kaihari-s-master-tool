@@ -158,14 +158,24 @@ trail your hand on a spring while being carried. Several can be picked up and
 moved together. A pane scrolls while you hold a card over its edge, and a long
 press fills a ring so you can see it arriving.
 
+An empty section draws the deck that is not there yet: a slot for every card it
+will hold, at the size those cards will be. Press `V` and everything else goes
+away — the whole deck at the largest size it fits at, no controls on top of it.
+
 On desktop: keyboard shortcuts throughout (press `?` for the list, which is
 generated from the table that implements them) and a hover preview on any card.
+The whole deck can be arranged from the keyboard — arrows move a cursor, shift
+grows it, Ctrl carries what it holds. Typing in the search box completes the
+card's name.
 
 Siding works end to end. Plans arrive in a `.ydkx`, are applied as one undoable
 edit, and are recorded by doing them — side by hand, then keep what you did.
 
 Test hands: shuffle the Main deck, judge each opening as playable or a brick, and
 watch the rate over a run of them.
+
+Tidying, which is not sorting: gather stray copies, group by type or archetype.
+Each is a stable partition, so the arrangement inside a group survives it.
 
 Not yet built: the sandbox board simulator, a full shootout against an
 opponent's deck, and PDF export of a siding sheet.

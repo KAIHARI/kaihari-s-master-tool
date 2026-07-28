@@ -414,11 +414,44 @@ form to fill in rather than a table to work at. The first slot is ringed in the
 section's colour, which is what turns the whole thing from decoration into an
 answer to "where does the next one go".
 
+## 22. Somewhere to look at the deck
+
+Press V and everything else goes away: the deck at the largest size it fits at,
+dealt in one pass, with no header, no stepper and no count badge on top of it —
+and nothing to press, because anything pressed closes it.
+
+This is the point of the free ordering, and it was missing. An arrangement
+nobody can look at is not an arrangement, and until now there was nowhere in the
+program that showed a *deck* rather than a deck editor. Every other builder has
+the same hole; they all show you a decklist.
+
+The three sections share one card size, which is why the fitter grew `fitAll`.
+Sized separately, the Side deck's fifteen cards come out at a different scale
+from the Main's forty and it stops reading as one deck. It is a generalisation
+of the existing fitter rather than a second one, and a test says so by making
+the two agree on a single section.
+
+## 23. One client
+
+Card data, release checks and card art each built their own `HttpClient` —
+three connection pools and three thread pools for a program that talks to two
+hosts, and not one of them ever closed. The graph now carries one.
+
+Worth recording for the reason rather than the fix. Closing it on desktop is not
+about reclaiming memory from a process that is ending: Ktor's engine keeps
+non-daemon threads, so a window that has gone but a process that has not is the
+failure this prevents. Android's belongs to the Application, outlives every
+Activity recreation, and correctly never closes. And Ktor became an `api`
+dependency of `:ui` rather than an `implementation`, because the client is now a
+property of `AppDependencies` and every module that assembles the graph has to
+be able to see the type — the same classpath rule that bit the first `:ui` test,
+seen from the other side.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **451 tests**, up from 249, plus
+`:core` carries the arithmetic for all of it, at **460 tests**, up from 249, plus
 **47 in `:ui`** where there were none.
 
 Still open: the sandbox board, a full shootout mode with an opponent's deck, and
