@@ -58,11 +58,13 @@ import com.kaiharimoto.mastertool.core.data.StoredDeck
 import com.kaiharimoto.mastertool.core.deck.DeckIdentity
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.search.CardIndex
+import com.kaiharimoto.mastertool.core.util.RelativeTime
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CARD_CORNER
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.tableSurface
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 import com.kaiharimoto.mastertool.ui.theme.wellSurface
 import kotlinx.coroutines.launch
@@ -84,12 +86,28 @@ fun DeckLibraryScreen(
     var decks by remember { mutableStateOf<List<StoredDeck>>(emptyList()) }
     var reloadToken by remember { mutableStateOf(0) }
 
+    // Stamped when the screen opens. A clock read during composition would make
+    // "3 minutes ago" change under a recomposition triggered by something else
+    // entirely, which reads as a glitch rather than as time passing.
+    val openedAt = remember(reloadToken) { deps.now() }
+
     LaunchedEffect(reloadToken) {
         decks = deps.deckRepository.all()
     }
 
+    val colors = LocalMasterToolColors.current
+
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+        // The same cloth the deck panes are drawn on. Saved decks sitting on the
+        // table is the whole idea of this screen, and it was the last one still
+        // on a flat Material background.
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .tableSurface(colors.accent, colors.mat)
+                .padding(16.dp),
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -127,6 +145,9 @@ fun DeckLibraryScreen(
                     DeckCard(
                         stored = stored,
                         index = index,
+                        // Read once per visit rather than per tile, so nine
+                        // decks saved in the same minute all say the same thing.
+                        now = openedAt,
                         onOpen = { onOpenDeck(stored.entry.id) },
                         onRename = { name ->
                             scope.launch {
@@ -151,6 +172,7 @@ fun DeckLibraryScreen(
 private fun DeckCard(
     stored: StoredDeck,
     index: CardIndex,
+    now: Long,
     onOpen: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
@@ -204,11 +226,22 @@ private fun DeckCard(
                 }
             }
 
-            Text(
-                "${deck.main.size} MAIN · ${deck.extra.size} EXTRA · ${deck.side.size} SIDE",
-                style = tacticalStyle(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${deck.main.size} MAIN · ${deck.extra.size} EXTRA · ${deck.side.size} SIDE",
+                    style = tacticalStyle(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Box(Modifier.weight(1f))
+                // Worth saying now that decks save themselves: "when did I last
+                // touch this" is the question a shelf of them raises, and it
+                // used to have no answer anywhere in the program.
+                Text(
+                    RelativeTime.since(now, stored.entry.updatedAtEpochMs),
+                    style = tacticalStyle(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             if (stored.entry.notes.isNotBlank()) {
                 // Stored end to end since the repository was written and never
