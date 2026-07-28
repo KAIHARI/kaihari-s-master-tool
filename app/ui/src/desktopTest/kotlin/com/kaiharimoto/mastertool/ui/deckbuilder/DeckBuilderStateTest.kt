@@ -649,13 +649,27 @@ class DeckBuilderStateTest {
         state.loadOpponent()
         state.dealShootout(goingFirst = true)
         val yours = state.yourOpening!!.size
-        val theirs = state.theirOpening!!.size
 
         state.drawOneMoreShootout(yours = true)
-        state.drawOneMoreShootout(yours = false)
 
         assertEquals(yours + 1, state.yourOpening?.size)
-        assertEquals(theirs + 1, state.theirOpening?.size)
+    }
+
+    @Test
+    fun drawingFromAnExhaustedDeckChangesNothing() = runTest {
+        // The opponent list in this file is four cards, so going second they
+        // have already drawn all of it. Running out is a real answer, and the
+        // panel offers the draw only while there is something under the hand.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+        state.dealShootout(goingFirst = true)
+        val theirs = state.theirOpening!!
+
+        state.drawOneMoreShootout(yours = false)
+
+        assertTrue(theirs.remaining.isEmpty(), "the fixture is meant to be exhausted")
+        assertEquals(theirs, state.theirOpening)
     }
 
     @Test

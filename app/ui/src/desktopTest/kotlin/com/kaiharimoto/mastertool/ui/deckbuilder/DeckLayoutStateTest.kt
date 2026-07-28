@@ -275,6 +275,7 @@ class DeckLayoutStateTest {
  * Lives in the preferences document rather than a table of its own, because it
  * is one nullable string and a table for a sentence is a table too many.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class LastDeckTest {
 
     private fun TestScope.layoutState(): DeckLayoutState =
