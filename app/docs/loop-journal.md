@@ -687,12 +687,24 @@ and one. That is the same lesson as the shortcut table, the overlay enum and the
 tidy list, arriving from the visual side: the thing worth doing once is deciding
 where a decision lives.
 
+## 35. A shelf you can search
+
+A library of saved decks with no way to search it is a library you scroll.
+Names go through the same normaliser the card search uses, so "snake eye" finds
+"Snake-Eye" — deck names are typed by hand and remembered approximately, and
+that is exactly the case a plain substring match fails.
+
+Small enough to be worth saying why it is here at all: this is the screen you
+arrive on, and everything else in the loop assumed you had already found the
+deck you meant.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **497 tests**, up from 249, plus
-**84 in `:ui`** where there were none.
+`:core` carries the arithmetic for all of it, at **531 tests**, up from 249, plus
+**84 in `:ui`** where there were none — a module that cannot even be compiled in
+the environment this was written in.
 
 Still open, in the order they are worth doing:
 
