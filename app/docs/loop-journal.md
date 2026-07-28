@@ -743,6 +743,23 @@ The pool says so when it happens — "nothing is called that — 12 say it". A
 screen that quietly substitutes one question for another is a screen you stop
 trusting, and these results really are answering a different one.
 
+## 38. The templates that were not a feature
+
+The plan listed the original's four "siding templates" as work to port. Reading
+them settles it: they are hardcoded passcode lists with `// Example:` comments
+beside them — Ash Blossom in, Maxx "C" out — which is scaffolding somebody left
+in, not a feature. Siding a fixed list of cards into *any* deck is meaningless;
+those cards are very likely not in your Side deck at all.
+
+Not ported, deliberately. What is there instead is better and already built:
+side by hand, then keep what you did. The plan is recorded from a real swap in a
+real deck, so every card in it is one you actually own.
+
+There is a real feature adjacent to it — suggesting a plan from what is in your
+Side deck — but that is a different thing with a different name, and inventing
+it under cover of "porting the templates" would be the wrong way to arrive at
+it.
+
 ---
 
 ## Where this stands

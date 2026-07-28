@@ -174,7 +174,9 @@ fun SearchPane(
         if (state.results.isEmpty() && !state.isSyncing) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    "Nothing matches that.",
+                    // Two searches have now failed, and saying so is the
+                    // difference between "look again" and "it is not here".
+                    "Nothing is called that, and nothing says it either.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
