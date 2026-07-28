@@ -233,11 +233,39 @@ things are laid on and the pool is a box things come out of. Its gutter closes
 to four rather than to zero — cards in a box have gaps, cards in an arrangement
 do not, and that difference is what stops it reading as a fourth deck section.
 
+## 12. Testing the untestable module
+
+`:ui` had no tests and is the module that does not compile in this environment
+at all — everything in it was written without a compiler and verified only by CI
+agreeing that it parsed.
+
+It turns out not to need a UI harness. The state holders are plain objects over
+Compose's snapshot system, which runs with no window and no composition, so
+`DeckBuilderState` can be constructed against a real in-memory SQLite database
+and driven directly. Fifteen tests, running in CI on the desktop target, over
+exactly the things most recently written blind: selection ranges and blocks,
+that editing a deck drops its selection, that a group moves as one and is one
+undo, and that importing a `.ydkx`, siding, and exporting still carries the keys
+this app does not understand.
+
+**Three reds to get there, each worth writing down:**
+
+1. `:core` exposes Ktor as `implementation`, not `api` — so naming an
+   `HttpClient` in a `:ui` test asks for a class that is not on its classpath.
+2. `runTest`'s scope queues work on a scheduler that only advances when the test
+   says so, so every assertion arrived before the thing it asserted about. The
+   state holder gets an unconfined dispatcher instead.
+3. **The best one.** `repeat(12) { addCard(sameCard) }` does not build a deck of
+   twelve cards — the copy limit stops it at three. A test that wanted a
+   four-column grid was working with a single row. The app was right and the test
+   was wrong, which is the outcome you want from a first test run.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **373 tests**, up from 249.
+`:core` carries the arithmetic for all of it, at **381 tests**, up from 249, plus
+**15 in `:ui`** where there were none.
 
 Still open: the siding editor (plans can be used but only written on the
 desktop), shootout mode, the sandbox board, and PDF export.
