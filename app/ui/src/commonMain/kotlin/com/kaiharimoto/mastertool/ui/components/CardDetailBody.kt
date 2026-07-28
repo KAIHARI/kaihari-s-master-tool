@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -30,6 +31,7 @@ import com.kaiharimoto.mastertool.core.model.CardCategory
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.search.CardFilter
+import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
 /**
@@ -151,7 +153,7 @@ fun CardDetailBody(
             label = "Side Deck",
             count = copiesSide,
             max = limit,
-            accent = MasterToolPalette.SideAccent,
+            accent = DeckSection.SIDE.accent(),
             onChange = { onSetCount(DeckSection.SIDE, it) },
         )
 
@@ -174,11 +176,15 @@ fun CardDetailBody(
     }
 }
 
-internal fun DeckSection.accent() = when (this) {
-    DeckSection.MAIN -> MasterToolPalette.MainAccent
-    DeckSection.EXTRA -> MasterToolPalette.ExtraAccent
-    DeckSection.SIDE -> MasterToolPalette.SideAccent
-}
+/**
+ * The colour this section is bound in, under whatever theme is current.
+ *
+ * Composable because it reads the theme. It used to be three constants, which
+ * was fine while there was one surface and is not now that Classic binds in gold
+ * and Cyber in magenta.
+ */
+@Composable
+internal fun DeckSection.accent(): Color = LocalMasterToolColors.current.sections[this]
 
 @Composable
 private fun Fact(label: String, value: String) {

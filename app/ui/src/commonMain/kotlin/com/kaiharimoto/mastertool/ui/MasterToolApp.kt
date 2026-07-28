@@ -52,7 +52,9 @@ fun MasterToolApp(deps: AppDependencies) {
         onDispose { }
     }
 
-    MasterToolTheme {
+    // Read from stored settings, so the surface is whatever it was left as
+    // rather than whatever the tablet thinks the time of day is.
+    MasterToolTheme(layoutState.preferences.theme) {
         when (screen) {
             Screen.DeckBuilder -> DeckBuilderScreen(
                 state = builderState,

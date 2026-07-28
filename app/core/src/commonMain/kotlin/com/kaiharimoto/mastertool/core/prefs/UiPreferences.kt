@@ -83,6 +83,15 @@ data class UiPreferences(
      * zero is the card's own printed edge, drawn by `CardTile` — not space.
      */
     val cardGutter: Int = 0,
+    /**
+     * Which surface the deck is laid out on.
+     *
+     * Chosen rather than followed from the system: this app is used in one room
+     * under one set of lights at a time, and a tool that changed its own
+     * appearance at sunset because the tablet said so would be answering a
+     * question nobody asked it.
+     */
+    val theme: ThemeChoice = ThemeChoice.SWISS,
     val format: Format = Format.TCG,
     /**
      * Passcodes the easter egg throws, when it has been given a set to keep.

@@ -25,9 +25,14 @@ import androidx.compose.ui.unit.dp
  * The binding around the edge is the section's own colour. It is what tells the
  * three panes apart at a glance now that they are no longer separated by empty
  * background, and it is doing a job the header alone was doing before.
+ *
+ * [mat] rather than a constant, because a leather table and a lit desk are the
+ * same three effects at very different settings -- and a bright surface needs
+ * its lighting inverted, not its palette.
  */
 fun Modifier.tableSurface(
     accent: Color,
+    mat: MatColors,
     corner: Dp = 6.dp,
     weaveSpacing: Dp = 5.dp,
 ): Modifier = drawWithCache {
@@ -42,24 +47,26 @@ fun Modifier.tableSurface(
 
     val vignette = Brush.radialGradient(
         0.38f to Color.Transparent,
-        1f to Color.Black.copy(alpha = 0.42f),
+        1f to Color.Black.copy(alpha = mat.vignette),
         center = Offset(size.width / 2f, size.height / 2f),
         radius = maxOf(size.maxDimension * 0.72f, 1f),
     )
 
     val sheen = Brush.verticalGradient(
-        0f to Color.White.copy(alpha = 0.05f),
+        0f to Color.White.copy(alpha = mat.sheen),
         1f to Color.Transparent,
         startY = 0f,
         endY = maxOf(size.height * 0.58f, 1f),
     )
 
     onDrawBehind {
-        drawRoundRect(MasterToolPalette.Mat, cornerRadius = radius)
+        drawRoundRect(mat.base, cornerRadius = radius)
 
         // Warp light, weft dark: the same trick a photograph of cloth relies on.
-        drawPath(downhill, Color.White.copy(alpha = 0.022f), style = Stroke(1f))
-        drawPath(uphill, Color.Black.copy(alpha = 0.16f), style = Stroke(1f))
+        // Which of the two is lighter is the theme's business -- on a bright mat
+        // the warp is near-white and the weft is a faint blue-grey.
+        drawPath(downhill, mat.warp, style = Stroke(1f))
+        drawPath(uphill, mat.weft, style = Stroke(1f))
 
         drawRoundRect(brush = sheen, cornerRadius = radius)
         drawRoundRect(brush = vignette, cornerRadius = radius)

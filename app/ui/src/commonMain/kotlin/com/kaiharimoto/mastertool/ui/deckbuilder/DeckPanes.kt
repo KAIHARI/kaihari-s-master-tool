@@ -70,6 +70,7 @@ import com.kaiharimoto.mastertool.ui.dnd.DragController
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
 import com.kaiharimoto.mastertool.ui.dnd.DragSource
 import com.kaiharimoto.mastertool.ui.dnd.DropHover
+import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.tableSurface
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
@@ -198,7 +199,7 @@ private fun DeckSectionPane(
             // A mat rather than a panel, bound in the section's own colour —
             // which is what keeps the three panes apart now that the cards
             // inside them touch and no background shows between.
-            .tableSurface(accent)
+            .tableSurface(accent, LocalMasterToolColors.current.mat)
             .then(
                 // The whole pane lights up while a card is over it, in the
                 // section's own colour when the drop is legal and in red when it

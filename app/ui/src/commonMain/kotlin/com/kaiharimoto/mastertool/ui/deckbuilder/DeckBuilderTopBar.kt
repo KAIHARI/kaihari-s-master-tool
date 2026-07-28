@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.model.Format
+import com.kaiharimoto.mastertool.core.prefs.ThemeChoice
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
 import com.kaiharimoto.mastertool.ui.egg.ChibiLogo
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
@@ -200,10 +201,48 @@ fun DeckBuilderTopBar(
                         menuOpen = false
                         layout.update {
                             // Keep what is about the deck, reset what is about the room.
-                            UiPreferences.DEFAULT.copy(format = it.format, stacked = it.stacked)
+                            // The surface is a choice about the room and survives
+                            // anyway, because resetting it is not what this asks.
+                            UiPreferences.DEFAULT.copy(
+                                format = it.format,
+                                stacked = it.stacked,
+                                theme = it.theme,
+                            )
                         }
                     },
                 )
+
+                HorizontalDivider()
+
+                // Listed rather than cycled. Four is too many to arrive at by
+                // tapping, and the description is the point -- "Leather and gold"
+                // says what you are about to get where "Classic" does not.
+                ThemeChoice.entries.forEach { choice ->
+                    val current = layout.preferences.theme == choice
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (current) "${choice.displayName} ✓" else choice.displayName,
+                                color = if (current) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            )
+                        },
+                        trailingIcon = {
+                            Text(
+                                choice.description,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        onClick = {
+                            menuOpen = false
+                            layout.setTheme(choice)
+                        },
+                    )
+                }
 
                 HorizontalDivider()
 

@@ -7,6 +7,7 @@ import com.kaiharimoto.mastertool.core.data.PreferencesRepository
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.prefs.SectionPreferences
+import com.kaiharimoto.mastertool.core.prefs.ThemeChoice
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -101,6 +102,11 @@ class DeckLayoutState(
 
     fun setAutoFit(section: DeckSection, autoFit: Boolean) {
         updateSection(section) { it.copy(autoFit = autoFit) }
+    }
+
+    /** Persisted like every other layout setting, and applied on the next frame. */
+    fun setTheme(theme: ThemeChoice) {
+        update { it.copy(theme = theme) }
     }
 
     fun setSortMode(section: DeckSection, mode: SortMode) {
