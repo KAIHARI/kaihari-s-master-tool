@@ -24,6 +24,7 @@ import io.ktor.http.HttpStatusCode
 import java.util.Properties
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 
@@ -38,9 +39,15 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
  * through the repository: the pool only exists to *find* cards, and none of the
  * behaviour worth testing here is about finding them.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 internal fun testDependencies(
     fileAccess: DeckFileAccess = NoFileAccess,
 ): AppDependencies {
+    // Counted rather than constant. A fixture that hands out the same id twice
+    // cannot express "two different decks", which is exactly the situation the
+    // interesting persistence questions live in -- and it fails by quietly
+    // making one deck out of two rather than by complaining.
+    var decksCreated = 0
     val database = MasterToolDatabase(
         JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), MasterToolDatabase.Schema),
     )
@@ -61,7 +68,7 @@ internal fun testDependencies(
         fileAccess = fileAccess,
         updateChecker = UpdateChecker(GitHubReleaseApi(offline), currentVersionName = "1.0.0"),
         updater = NoUpdater,
-        newDeckId = { "test-deck" },
+        newDeckId = { "test-deck-${++decksCreated}" },
         now = { 0L },
         httpClient = offline,
         computeDispatcher = Dispatchers.Unconfined,
@@ -76,6 +83,7 @@ internal fun testDependencies(
  * is asserting about. Unconfined runs each launch eagerly, so importing a file
  * and then reading what it contained does what it looks like it does.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 internal fun TestScope.builderState(
     deps: AppDependencies = testDependencies(),
 ): DeckBuilderState =
