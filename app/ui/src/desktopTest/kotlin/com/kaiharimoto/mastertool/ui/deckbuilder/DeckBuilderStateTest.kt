@@ -25,7 +25,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun selectingBuildsAGroupAndClearingEndsIt() = runTest {
-        val state = builderState(backgroundScope)
+        val state = builderState()
         repeat(4) { state.addCard(TestPool.ash) }
 
         state.select(main, 0)
@@ -38,7 +38,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun aRangeCoversEverythingBetween() = runTest {
-        val state = builderState(backgroundScope)
+        val state = builderState()
         repeat(6) { state.addCard(TestPool.ash) }
 
         state.select(main, 1)
@@ -49,7 +49,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun aBlockIsARectangle() = runTest {
-        val state = builderState(backgroundScope)
+        val state = builderState()
         repeat(12) { state.addCard(TestPool.ash) }
 
         state.select(main, 0)
@@ -61,7 +61,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun aBlockCannotSelectPositionsThatDoNotExist() = runTest {
-        val state = builderState(backgroundScope)
+        val state = builderState()
         repeat(5) { state.addCard(TestPool.ash) }
 
         state.select(main, 0)
@@ -74,7 +74,7 @@ class DeckBuilderStateTest {
     fun editingTheDeckDropsTheSelection() = runTest {
         // Enforced by the deck's own setter rather than at each call site, so
         // this is the test that the enforcement actually reaches all of them.
-        val state = builderState(backgroundScope)
+        val state = builderState()
         repeat(4) { state.addCard(TestPool.ash) }
         state.select(main, 1)
         state.selectThrough(main, 3)
@@ -86,7 +86,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun aGroupOnlyTravelsWhenThereIsMoreThanOneOfIt() = runTest {
-        val state = builderState(backgroundScope)
+        val state = builderState()
         repeat(4) { state.addCard(TestPool.ash) }
 
         state.select(main, 1)
@@ -99,7 +99,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun movingAGroupKeepsEveryCard() = runTest {
-        val state = builderState(backgroundScope)
+        val state = builderState()
         listOf(TestPool.ash, TestPool.maxx, TestPool.nibiru, TestPool.droll)
             .forEach { state.addCard(it) }
         val before = state.deck.main
@@ -114,7 +114,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun movingAGroupIsOneUndo() = runTest {
-        val state = builderState(backgroundScope)
+        val state = builderState()
         listOf(TestPool.ash, TestPool.maxx, TestPool.nibiru).forEach { state.addCard(it) }
         val before = state.deck.main
 
@@ -160,7 +160,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun importingAYdkxBringsItsPlansWithIt() = runTest {
-        val state = builderState(backgroundScope, testDependencies(StubFileAccess(sidedFile)))
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
         state.importFromFile()
 
         assertEquals(setOf("Snake-Eye"), state.sidingPatterns.keys)
@@ -168,7 +168,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun sidingSwapsTheDeckOverAndUndoPutsItBack() = runTest {
-        val state = builderState(backgroundScope, testDependencies(StubFileAccess(sidedFile)))
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
         state.importFromFile()
         val before = state.deck
 
@@ -184,7 +184,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun sidingClosesThePanelItWasAppliedFrom() = runTest {
-        val state = builderState(backgroundScope, testDependencies(StubFileAccess(sidedFile)))
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
         state.importFromFile()
         state.sidingVisible = true
 
@@ -198,7 +198,7 @@ class DeckBuilderStateTest {
         // The README's promise, from the outside: import, side, export, and the
         // desktop tool's own keys are still in the file.
         val files = StubFileAccess(sidedFile)
-        val state = builderState(backgroundScope, testDependencies(files))
+        val state = builderState(testDependencies(files))
         state.importFromFile()
         state.applySiding(state.sidingPatterns.getValue("Snake-Eye"), goingFirst = true)
         state.exportToFile()
@@ -215,7 +215,7 @@ class DeckBuilderStateTest {
     fun addingACardIsNotADeal() = runTest {
         // The panes deal on this changing. Re-dealing forty cards because a
         // forty-first arrived would be a party trick.
-        val state = builderState(backgroundScope)
+        val state = builderState()
         val before = state.dealSerial
 
         state.addCard(TestPool.ash)
@@ -226,7 +226,7 @@ class DeckBuilderStateTest {
 
     @Test
     fun importingADeckIsADeal() = runTest {
-        val state = builderState(backgroundScope, testDependencies(StubFileAccess(sidedFile)))
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
         val before = state.dealSerial
 
         state.importFromFile()

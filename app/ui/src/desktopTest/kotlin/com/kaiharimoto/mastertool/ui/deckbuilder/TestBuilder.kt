@@ -24,6 +24,8 @@ import io.ktor.http.HttpStatusCode
 import java.util.Properties
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 
 /**
  * A deck builder driven directly, with a real database behind it.
@@ -65,10 +67,18 @@ internal fun testDependencies(
     )
 }
 
-internal fun builderState(
-    scope: CoroutineScope,
+/**
+ * A builder whose coroutines have already run by the time the call returns.
+ *
+ * `runTest`'s own scope queues work on a scheduler that only advances when the
+ * test says so, which would mean every assertion here came before the thing it
+ * is asserting about. Unconfined runs each launch eagerly, so importing a file
+ * and then reading what it contained does what it looks like it does.
+ */
+internal fun TestScope.builderState(
     deps: AppDependencies = testDependencies(),
-): DeckBuilderState = DeckBuilderState(deps, scope)
+): DeckBuilderState =
+    DeckBuilderState(deps, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
 
 internal object NoFileAccess : DeckFileAccess {
     override suspend fun importDeck(): ImportedFile? = null

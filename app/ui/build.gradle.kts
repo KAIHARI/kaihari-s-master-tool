@@ -46,6 +46,11 @@ kotlin {
                 implementation(kotlin("test"))
                 implementation(libs.kotlinx.coroutines.test)
                 implementation(libs.sqldelight.driver.jvm)
+                // :core keeps Ktor to itself, so naming an HttpClient here means
+                // asking for it directly. The mock engine is what lets the graph
+                // be built without anything being able to reach the network.
+                implementation(libs.ktor.client.core)
+                implementation(libs.ktor.client.mock)
             }
         }
     }
