@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -194,12 +195,19 @@ private fun ShowcaseBlock(
                             },
                     ) {
                         if (card == null) {
+                            // A card the pool has not downloaded, which is the
+                            // ordinary state for a minute after a first run. It
+                            // is drawn as an empty slot rather than a grey
+                            // rectangle -- the same treatment an empty pane uses
+                            // — so a deck opened too early reads as waiting for
+                            // its cards rather than as broken.
                             Box(
                                 Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(CARD_ASPECT_RATIO)
+                                    .padding(3.dp)
                                     .clip(RoundedCornerShape(CARD_CORNER))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    .background(Color.Black.copy(alpha = 0.22f)),
                             )
                         } else {
                             CardTile(card = card, format = state.format)
@@ -225,11 +233,19 @@ private fun Caption(state: DeckBuilderState, total: Int) {
             style = MaterialTheme.typography.titleMedium,
         )
         Box(Modifier.weight(1f))
+        // Says so when most of what is on screen is an empty slot, because
+        // "your card database has not arrived yet" and "this program cannot
+        // draw your deck" look identical otherwise.
+        val missing = SHOWCASE_ORDER
+            .flatMap { state.deck[it] }
+            .count { state.index.byId(it) == null }
+
         Text(
             SHOWCASE_ORDER
                 .filter { state.deck[it].isNotEmpty() }
                 .joinToString("   ") { "${it.displayName.uppercase()} ${state.deck[it].size}" } +
-                "   ·   $total",
+                "   ·   $total" +
+                if (missing > total / 2) "   ·   STILL DOWNLOADING" else "",
             style = tacticalStyle(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
