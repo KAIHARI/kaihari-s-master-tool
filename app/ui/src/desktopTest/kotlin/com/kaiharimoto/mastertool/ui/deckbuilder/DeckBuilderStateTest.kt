@@ -602,7 +602,7 @@ class DeckBuilderStateTest {
 
         assertEquals(3, first?.index)
         assertEquals(6, second?.index)
-        assertTrue((second?.serial ?: 0) > (first?.serial ?: 0), "a repeat request has to look new")
+        assertTrue((second?.serial ?: 0L) > (first?.serial ?: 0L), "a repeat request has to look new")
     }
 
     // ---- tidying -----------------------------------------------------------
