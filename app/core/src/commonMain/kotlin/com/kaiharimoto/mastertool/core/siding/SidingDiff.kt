@@ -52,6 +52,26 @@ object SidingDiff {
         )
     }
 
+    /**
+     * Whether one deck became the other by siding rather than by being edited.
+     *
+     * The distinction is not cosmetic — it decides whether a record of how a
+     * deck opens is still about the deck in front of you. Siding moves cards
+     * across the line between Main, Side and Extra; it never brings in a card
+     * you did not register, and it never takes one out of the building. So if
+     * the sixty are the same sixty, every hand dealt so far is still a hand
+     * dealt from *this* list, correctly labelled as pre- or post-side. If the
+     * sixty changed, you were deck building, and the record is about something
+     * that no longer exists.
+     *
+     * By count and across all three sections, because that is the only way to
+     * tell the two apart: moving a card from the Side deck to the Main deck and
+     * adding a card you did not bring look identical from the Main deck alone.
+     */
+    fun isSwap(before: Deck, after: Deck): Boolean = before.pool() == after.pool()
+
+    private fun Deck.pool(): Map<CardId, Int> = (main + side + extra).counted()
+
     private fun List<CardId>.counted(): Map<CardId, Int> =
         groupingBy { it }.eachCount()
 }

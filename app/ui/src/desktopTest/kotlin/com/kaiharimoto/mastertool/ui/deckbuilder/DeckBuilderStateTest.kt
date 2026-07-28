@@ -8,6 +8,8 @@ import com.kaiharimoto.mastertool.ui.ImportedFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -161,6 +163,151 @@ class DeckBuilderStateTest {
 
         assertEquals(listOf(cards[0].id, cards[1].id), state.deck.main.take(2))
         assertEquals(setOf(0, 1), state.selection.indices)
+    }
+
+    // ---- shootout runs -----------------------------------------------------
+
+    @Test
+    fun aRunStartsPreSideOnTheFirstTrial() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+
+        state.startRun(trials = 3)
+
+        val shootoutRun = assertNotNull(state.shootoutRun)
+        assertEquals(1, run.nextTrial)
+        assertFalse(run.nextIsSided, "game one is the registered list")
+        assertFalse(state.deckIsSided, "starting a run registers the list it is about")
+        assertNotNull(state.yourOpening, "a run deals its first opening immediately")
+    }
+
+    @Test
+    fun judgingGameOneAsksForTheSidedList() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.startRun(trials = 3)
+
+        state.judgeShootout(playable = true)
+
+        val shootoutRun = assertNotNull(state.shootoutRun)
+        assertEquals(1, run.nextTrial)
+        assertEquals(2, run.nextGame)
+        assertTrue(run.nextIsSided)
+    }
+
+    @Test
+    fun sidingKeepsTheRunAndDeckBuildingEndsIt() = runTest {
+        val state = builderState()
+        val cards = TestPool.many(40)
+        cards.forEach { state.addCard(it) }
+        state.startRun(trials = 3)
+        state.judgeShootout(playable = true)
+
+        state.moveCard(cards[0], DeckSection.MAIN, DeckSection.SIDE)
+        assertNotNull(state.shootoutRun, "a swap is the thing the run is measuring")
+        assertTrue(state.deckIsSided)
+
+        state.removeOne(cards[1], DeckSection.MAIN)
+        assertNull(state.shootoutRun, "taking a card out of the building is not siding")
+    }
+
+    @Test
+    fun sidingDealsYourOpeningAgainFromTheListYouWillActuallyPlay() = runTest {
+        // The hand for game two is dealt the moment game one is judged, which
+        // is before anybody sides. Left alone it would be a pre-side hand
+        // recorded as post-side, and it would look entirely normal.
+        val state = builderState()
+        // Sixteen, because the Side deck holds fifteen: everything but one card
+        // moves across, and then the opening can only be that one card.
+        val cards = TestPool.many(16)
+        cards.forEach { state.addCard(it) }
+        state.startRun(trials = 3)
+        state.judgeShootout(playable = true)
+        val dealtBeforeSiding = assertNotNull(state.yourOpening)
+
+        cards.drop(1).forEach { state.moveCard(it, DeckSection.MAIN, DeckSection.SIDE) }
+
+        val now = assertNotNull(state.yourOpening)
+        assertEquals(listOf(cards[0].id), now.cards, "dealt from the one card left")
+        assertEquals(dealtBeforeSiding.goingFirst, now.goingFirst, "same side of the die roll")
+    }
+
+    @Test
+    fun theReportKeepsTheTwoVersionsOfTheListApart() = runTest {
+        val state = builderState()
+        val cards = TestPool.many(40)
+        cards.forEach { state.addCard(it) }
+        state.startRun(trials = 3)
+
+        state.judgeShootout(playable = false)
+        state.moveCard(cards[0], DeckSection.MAIN, DeckSection.SIDE)
+        state.judgeShootout(playable = true)
+
+        val report = assertNotNull(state.runReport)
+        assertEquals(1, report.preSide.total)
+        assertEquals(1.0, report.preSide.brickRate)
+        assertEquals(1, report.postSide.total)
+        assertEquals(0.0, report.postSide.brickRate)
+    }
+
+    @Test
+    fun forgettingToSideIsRecordedAsWhatItWas() = runTest {
+        // The run asks for a sided deck and nothing enforces it. What gets
+        // recorded is the deck that dealt the hand, so the report stays true.
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.startRun(trials = 3)
+
+        state.judgeShootout(playable = true)
+        state.judgeShootout(playable = true)
+
+        val report = assertNotNull(state.runReport)
+        assertEquals(2, report.preSide.total)
+        assertEquals(0, report.postSide.total)
+    }
+
+    @Test
+    fun aFinishedRunStopsDealing() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.startRun(trials = 1)
+
+        val shootoutRun = assertNotNull(state.shootoutRun)
+        repeat(run.length) { state.judgeShootout(playable = true) }
+
+        val finished = assertNotNull(state.shootoutRun)
+        assertTrue(finished.finished)
+        assertEquals(run.length, finished.played)
+    }
+
+    @Test
+    fun undoingATrialThrowsAwayItsGameOneToo() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.startRun(trials = 3)
+        state.judgeShootout(playable = true)
+        state.judgeShootout(playable = true)
+        state.judgeShootout(playable = false)
+
+        state.undoTrial()
+
+        val shootoutRun = assertNotNull(state.shootoutRun)
+        assertEquals(2, run.played, "only the third game was part of the trial in progress")
+        assertEquals(2, run.nextTrial)
+    }
+
+    @Test
+    fun aVerdictInARunCanBeTakenBack() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.startRun(trials = 3)
+        state.judgeShootout(playable = false)
+
+        assertTrue(state.canUndoVerdict)
+        state.undoVerdict()
+
+        assertEquals(0, assertNotNull(state.shootoutRun).played)
+        assertFalse(state.canUndoVerdict, "one step only")
     }
 
     // ---- siding ------------------------------------------------------------

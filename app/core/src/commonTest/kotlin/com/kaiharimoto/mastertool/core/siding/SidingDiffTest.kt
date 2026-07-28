@@ -4,6 +4,7 @@ import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.Deck
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SidingDiffTest {
@@ -134,5 +135,49 @@ class SidingDiffTest {
         val after = deck(listOf(ash, nib))
 
         assertTrue(!SidingDiff.between(before, after).isBalanced)
+    }
+
+    @Test
+    fun movingACardAcrossTheLineIsASwap() {
+        val before = deck(listOf(ash, maxx, nib), listOf(droll))
+        val after = deck(listOf(ash, droll, nib), listOf(maxx))
+
+        assertTrue(SidingDiff.isSwap(before, after))
+    }
+
+    @Test
+    fun rearrangingIsASwapOfNothingAtAll() {
+        val before = deck(listOf(ash, maxx, nib))
+        val after = deck(listOf(nib, ash, maxx))
+
+        assertTrue(SidingDiff.isSwap(before, after))
+    }
+
+    @Test
+    fun bringingInACardYouDidNotRegisterIsNotSiding() {
+        val before = deck(listOf(ash, maxx), listOf(droll))
+        val after = deck(listOf(ash, maxx, imperm), listOf(droll))
+
+        assertFalse(SidingDiff.isSwap(before, after))
+    }
+
+    @Test
+    fun takingACardOutOfTheBuildingIsNotSidingEither() {
+        // The one the Main deck alone cannot tell apart from a swap: the Main
+        // deck lost a card in both cases, and only the Side deck says which.
+        val before = deck(listOf(ash, maxx), listOf(droll))
+        val sided = deck(listOf(ash, droll), listOf(maxx))
+        val cut = deck(listOf(ash, droll), listOf())
+
+        assertTrue(SidingDiff.isSwap(before, sided))
+        assertFalse(SidingDiff.isSwap(before, cut))
+    }
+
+    @Test
+    fun anExtraDeckSwapCountsToo() {
+        val before = Deck(main = listOf(ash), extra = listOf(maxx), side = listOf(nib))
+        val after = Deck(main = listOf(ash), extra = listOf(nib), side = listOf(maxx))
+
+        assertTrue(SidingDiff.isSwap(before, after))
     }
 }

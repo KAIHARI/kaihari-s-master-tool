@@ -23,6 +23,8 @@ import com.kaiharimoto.mastertool.core.deck.RejectionReason
 import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.deck.SaveTracking
 import com.kaiharimoto.mastertool.core.deck.SavedSnapshot
+import com.kaiharimoto.mastertool.core.deck.ShootoutReport
+import com.kaiharimoto.mastertool.core.deck.ShootoutRun
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.siding.SidingCodec
 import com.kaiharimoto.mastertool.core.siding.SidingDiff
@@ -149,9 +151,14 @@ class DeckBuilderState(
             // Openings are dealt from the Main deck, so that is what invalidates
             // a record of them. Extra and Side edits leave the question alone.
             val openingsChanged = value.main != currentDeck.main
+            // A swap keeps the same sixty cards; anything else is deck building.
+            val sameCards = SidingDiff.isSwap(currentDeck, value)
             currentDeck = value
             selection = Selection.EMPTY
-            if (openingsChanged) forgetHandRecords()
+            if (openingsChanged) {
+                forgetHandRecords(keepRun = sameCards)
+                if (shootoutRun != null) redealYours()
+            }
             scheduleAutosave()
         }
 
@@ -163,11 +170,21 @@ class DeckBuilderState(
      * which is the whole point of a shootout, changes it by design. Keeping the
      * number and letting it read as evidence about the list now in front of you
      * is worse than losing it.
+     *
+     * A run survives a swap, alone among the records, because it is the only one
+     * that knows which version of the list dealt each hand. Its whole accounting
+     * is pre-side against post-side, so siding does not spoil it — siding is
+     * what it is measuring. A loose tally has no such labelling and becomes a
+     * lie the moment the Main deck moves, which is why it goes either way.
      */
-    private fun forgetHandRecords() {
+    private fun forgetHandRecords(keepRun: Boolean = false) {
         handTally = HandTally()
         matchup = MatchupRecord()
         matchupBeforeVerdict = null
+        if (!keepRun) {
+            shootoutRun = null
+            runBeforeVerdict = null
+        }
     }
 
     /**
@@ -362,7 +379,35 @@ class DeckBuilderState(
      */
     private var matchupBeforeVerdict by mutableStateOf<MatchupRecord?>(null)
 
-    val canUndoVerdict: Boolean get() = matchupBeforeVerdict != null
+    val canUndoVerdict: Boolean get() = matchupBeforeVerdict != null || runBeforeVerdict != null
+
+    /**
+     * The run in progress, or null when openings are being judged loose.
+     *
+     * Two ways of using the same panel, and both are worth having. Dealing and
+     * judging until you have seen enough is how anybody actually tests a list
+     * against a deck they just thought of. A run is the other mode: a fixed
+     * number of trials, game one pre-side and the rest post-side, so the
+     * question stops being "does this open" and becomes "is my side deck doing
+     * anything against this".
+     */
+    var shootoutRun by mutableStateOf<ShootoutRun?>(null)
+        private set
+
+    private var runBeforeVerdict by mutableStateOf<ShootoutRun?>(null)
+
+    /**
+     * Whether the deck on the table is the registered list or a sided one.
+     *
+     * Derived rather than tracked, so a run cannot be wrong about it. The panel
+     * *asks* for a sided deck after game one; this is what actually happened,
+     * and a report that assumed compliance would be confidently wrong about the
+     * only thing it exists to measure.
+     */
+    val deckIsSided: Boolean get() = deck.main != registeredDeck.main
+
+    /** The pre-side and post-side halves of the run, or null when none is on. */
+    val runReport: ShootoutReport? get() = shootoutRun?.report()
 
     /** The hand currently on the table, if one has been dealt. */
     var testHand by mutableStateOf<OpeningHand?>(null)
@@ -574,6 +619,9 @@ class DeckBuilderState(
             opponentDeck = parsed.document.deck
             opponentName = file.name.substringBeforeLast('.').ifBlank { "Opponent" }
             matchup = MatchupRecord()
+            // A run is a run against one deck. Carrying it across to another
+            // would be the same lie as carrying the loose tally across.
+            endRun()
             dealShootout(youGoFirst)
         }
     }
@@ -603,6 +651,19 @@ class DeckBuilderState(
         // whichever chip is selected now -- they are the same until somebody
         // switches sides mid-judgement, and then they are not.
         val wentFirst = yourOpening?.goingFirst ?: return
+
+        val current = shootoutRun
+        if (current != null) {
+            runBeforeVerdict = current
+            // What the deck on the table actually is, not what the run asked for.
+            val next = current.record(wentFirst, sided = deckIsSided, playable = playable)
+            shootoutRun = next
+            // A finished run stops dealing. The last hand stays on the table to
+            // be looked at, and the report is the thing worth reading now.
+            if (!next.finished) dealShootout(next.suggestedFirst)
+            return
+        }
+
         matchupBeforeVerdict = matchup
         matchup = matchup.judged(wentFirst, playable)
         dealShootout(youGoFirst)
@@ -610,8 +671,73 @@ class DeckBuilderState(
 
     /** Puts the count right after a misclick. The hand itself is long gone. */
     fun undoVerdict() {
+        val previousRun = runBeforeVerdict
+        if (previousRun != null) {
+            shootoutRun = previousRun
+            runBeforeVerdict = null
+            return
+        }
         matchup = matchupBeforeVerdict ?: return
         matchupBeforeVerdict = null
+    }
+
+    // ---- runs --------------------------------------------------------------
+
+    /**
+     * Starts a run, and deals the first pre-side opening.
+     *
+     * Registers the list on the way in, so "sided" has something to be relative
+     * to. Starting a run *is* the statement that this is the deck you are
+     * testing — sixty cards you would hand to a judge — and without that the
+     * pre-side half of the report would be measuring whatever the deck happened
+     * to be when the panel opened.
+     */
+    fun startRun(trials: Int = ShootoutRun.DEFAULT_TRIALS) {
+        registeredDeck = deck
+        val fresh = ShootoutRun(trials = trials.coerceAtLeast(1))
+        shootoutRun = fresh
+        runBeforeVerdict = null
+        matchup = MatchupRecord()
+        matchupBeforeVerdict = null
+        dealShootout(fresh.suggestedFirst)
+    }
+
+    /**
+     * Throws away the trial in progress, or the last finished one.
+     *
+     * For the moment you realise you sided against the wrong list, at which
+     * point game one of that trial has stopped being evidence about anything
+     * either and taking back one verdict is not enough.
+     */
+    fun undoTrial() {
+        val current = shootoutRun ?: return
+        val rolled = current.undoTrial()
+        if (rolled == current) return
+        shootoutRun = rolled
+        runBeforeVerdict = null
+        dealShootout(rolled.suggestedFirst)
+    }
+
+    /**
+     * Shuffles your opening again from the deck as it now stands.
+     *
+     * Because the panel deals the next opening the moment a verdict is given,
+     * and siding happens *after* that. Without this, the hand sitting on the
+     * table for game two was dealt from the pre-side list and the run would
+     * record it as post-side — the one mistake that would make the whole report
+     * worthless, and it would look completely normal on screen.
+     *
+     * Their side is untouched: their deck did not move.
+     */
+    private fun redealYours() {
+        val hand = yourOpening ?: return
+        yourOpening = HandSimulator.deal(deck.main, hand.goingFirst, Random.Default)
+    }
+
+    /** Ends the run and goes back to judging loose openings. */
+    fun endRun() {
+        shootoutRun = null
+        runBeforeVerdict = null
     }
 
     /**
