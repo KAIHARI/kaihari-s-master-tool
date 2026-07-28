@@ -243,7 +243,7 @@ class DeckBuilderStateTest {
         state.moveCard(cards[0], DeckSection.MAIN, DeckSection.SIDE)
         state.judgeShootout(playable = true)
 
-        val report = assertNotNull(state.runReport)
+        val report = assertNotNull(state.shootoutRun).report()
         assertEquals(1, report.preSide.total)
         assertEquals(1.0, report.preSide.brickRate)
         assertEquals(1, report.postSide.total)
@@ -261,7 +261,7 @@ class DeckBuilderStateTest {
         state.judgeShootout(playable = true)
         state.judgeShootout(playable = true)
 
-        val report = assertNotNull(state.runReport)
+        val report = assertNotNull(state.shootoutRun).report()
         assertEquals(2, report.preSide.total)
         assertEquals(0, report.postSide.total)
     }

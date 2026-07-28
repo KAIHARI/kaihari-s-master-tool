@@ -1,14 +1,19 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -16,14 +21,28 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kaiharimoto.mastertool.core.deck.HandTally
 import com.kaiharimoto.mastertool.core.deck.OpeningHand
 import com.kaiharimoto.mastertool.core.deck.Preference
+import com.kaiharimoto.mastertool.core.deck.ShootoutGame
+import com.kaiharimoto.mastertool.core.deck.ShootoutReport
+import com.kaiharimoto.mastertool.core.deck.ShootoutRun
+import com.kaiharimoto.mastertool.core.deck.SideVerdict
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.HoverPreview
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.ui.components.percent
+import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 
@@ -39,11 +58,11 @@ import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
  * The opponent's deck is loaded from a file and kept entirely separate from the
  * one being built. Nothing here can edit either list.
  *
- * This is the first useful piece of a shootout rather than the whole thing: the
- * run structure the original had — a set number of trials, siding for both sides
- * between games, a report at the end — is recorded in the loop journal and not
- * built. Half a run structure would be worse than none, and two hands side by
- * side is worth having on its own.
+ * Two ways of using it. Loose, you deal and judge until you have seen enough —
+ * which is how anybody tests a list against a deck they just thought of. In a
+ * run, the panel walks a fixed number of trials with game one off the registered
+ * list and the rest off the sided one, and the report is the gap between those
+ * two numbers: whether the side deck is doing any work at all.
  */
 @Composable
 fun ShootoutPanel(state: DeckBuilderState) {
@@ -94,32 +113,354 @@ fun ShootoutPanel(state: DeckBuilderState) {
                 onDraw = { state.drawOneMoreShootout(yours = false) },
             )
 
+            val run = state.shootoutRun
+            if (run != null) RunPrompt(state, run)
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // The same judgement the test-hand panel asks for, against a
                 // real deck instead of an imagined one.
-                Button(onClick = { state.judgeShootout(playable = true) }) { Text("Playable") }
-                OutlinedButton(onClick = { state.judgeShootout(playable = false) }) { Text("Brick") }
-                TextButton(onClick = { state.dealShootout(state.youGoFirst) }) { Text("Deal again") }
+                Button(
+                    onClick = { state.judgeShootout(playable = true) },
+                    enabled = run?.finished != true,
+                ) { Text("Playable") }
+                OutlinedButton(
+                    onClick = { state.judgeShootout(playable = false) },
+                    enabled = run?.finished != true,
+                ) { Text("Brick") }
+
+                if (run == null) {
+                    // Not offered inside a run. Dealing until the hand looks
+                    // good and only then judging it is how a sample stops
+                    // meaning anything, and a run is nothing but its sample.
+                    TextButton(onClick = { state.dealShootout(state.youGoFirst) }) {
+                        Text("Deal again")
+                    }
+                }
                 if (state.canUndoVerdict) {
                     // Puts the count right after a misclick. It does not bring
                     // the hand back -- the next one has already been dealt --
                     // and the label says only what it does.
                     TextButton(onClick = { state.undoVerdict() }) { Text("Undo that verdict") }
                 }
+                if (run != null && run.played > 0) {
+                    TextButton(onClick = { state.undoTrial() }) { Text("Undo this trial") }
+                }
                 TextButton(onClick = { state.loadOpponent() }) { Text("Change opponent…") }
 
                 Box(Modifier.weight(1f))
 
-                TextButton(onClick = { state.resetMatchup() }) { Text("Reset") }
+                if (run == null) {
+                    TextButton(onClick = { state.resetMatchup() }) { Text("Reset") }
+                } else {
+                    TextButton(onClick = { state.endRun() }) { Text("End run") }
+                }
             }
 
-            Record(state)
+            if (run == null) {
+                Record(state)
+                StartRun(state)
+            } else {
+                RunSheet(run, run.report())
+            }
         }
     }
 }
+
+/**
+ * Offers a run, which is the other way of using this panel.
+ *
+ * Deliberately a choice rather than the only mode. Dealing and judging until
+ * you have seen enough is how anybody tests a list against a deck they just
+ * thought of, and making that go through a ten-trial ceremony would be worse
+ * for the common case in order to be better for the careful one.
+ */
+@Composable
+private fun StartRun(state: DeckBuilderState) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "Or run it properly:",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        listOf(5, 10, 20).forEach { trials ->
+            OutlinedButton(onClick = { state.startRun(trials) }) { Text("$trials trials") }
+        }
+        Text(
+            "Game one off the list you registered, the rest off the sided one.",
+            style = tacticalStyle(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * Where the run is, and what it wants next.
+ *
+ * The one line that has to be right: after game one it asks for the sided deck,
+ * and says whether it has one. Nothing forces the swap — the report records what
+ * actually dealt the hand — so this is the only place a player finds out they
+ * are about to file a pre-side hand as post-side.
+ */
+@Composable
+private fun RunPrompt(state: DeckBuilderState, run: ShootoutRun) {
+    if (run.finished) {
+        Text(
+            "That is the run. The last hand is still on the table.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "TRIAL ${run.nextTrial} OF ${run.trials}   ·   GAME ${run.nextGame}",
+            style = tacticalStyle(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Box(Modifier.weight(1f))
+
+        when {
+            !run.nextIsSided && state.deckIsSided -> Text(
+                "game one comes off the registered list",
+                style = tacticalStyle(),
+                color = MasterToolPalette.Warning,
+            )
+            run.nextIsSided && !state.deckIsSided -> {
+                Text(
+                    "side for this matchup",
+                    style = tacticalStyle(),
+                    color = MasterToolPalette.Warning,
+                )
+                TextButton(onClick = { state.sidingVisible = true }) { Text("Siding…") }
+            }
+            run.nextIsSided -> Text(
+                "sided",
+                style = tacticalStyle(),
+                color = MasterToolPalette.Success,
+            )
+            else -> Unit
+        }
+    }
+}
+
+/**
+ * The run as a score sheet.
+ *
+ * One mark per opening, game one along the top and everything post-side beneath
+ * it, so the two rows *are* the two numbers underneath — a glance down the sheet
+ * says whether the bottom band is greener than the top, which is the entire
+ * question a side deck exists to answer.
+ *
+ * Position carries the pre/post distinction rather than a shape or a colour,
+ * because it is the one encoding that survives being glanced at. An earlier
+ * version notched the corner of post-side marks and it was invisible at size.
+ */
+@Composable
+private fun RunSheet(run: ShootoutRun, report: ShootoutReport) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
+                RowLabel("GAME 1")
+                repeat(run.gamesPerTrial - 1) { RowLabel("SIDED") }
+                // Keeps the labels level with the marks, past the trial numbers.
+                Box(Modifier.height(NUMBER_HEIGHT))
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                (1..run.trials).forEach { trial ->
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(ROW_GAP),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        (1..run.gamesPerTrial).forEach { game ->
+                            val index = (trial - 1) * run.gamesPerTrial + (game - 1)
+                            GameMark(
+                                game = run.games.getOrNull(index),
+                                isNext = index == run.played && !run.finished,
+                            )
+                        }
+                        Box(Modifier.height(NUMBER_HEIGHT)) {
+                            Text(
+                                trial.toString(),
+                                style = tacticalStyle().copy(fontSize = 9.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(color = LocalMasterToolColors.current.mat.weft)
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(22.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            BigRate("GAME ONE", report.preSide.brickRate, report.preSide.total)
+            Text(
+                "→",
+                style = tacticalStyle().copy(fontSize = 20.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 14.dp),
+            )
+            BigRate("AFTER SIDING", report.postSide.brickRate, report.postSide.total)
+
+            Box(Modifier.weight(1f))
+
+            Verdict(report)
+        }
+    }
+}
+
+/**
+ * One opening: filled if it played, struck through if it bricked.
+ *
+ * Dashed for one not yet dealt, so an unfinished run reads as unfinished rather
+ * than as a run in which nothing happened.
+ */
+@Composable
+private fun GameMark(game: ShootoutGame?, isNext: Boolean) {
+    val pendingLine = LocalMasterToolColors.current.mat.weft
+    val next = LocalMasterToolColors.current.accentBright
+
+    Box(
+        Modifier.size(MARK_SIZE).drawBehind {
+            val corner = CornerRadius(2.dp.toPx())
+            val stroke = 1.5.dp.toPx()
+            val inset = stroke / 2f
+            val box = Size(size.width - stroke, size.height - stroke)
+
+            when {
+                game == null -> drawRoundRect(
+                    color = if (isNext) next else pendingLine,
+                    topLeft = Offset(inset, inset),
+                    size = box,
+                    cornerRadius = corner,
+                    style = Stroke(
+                        width = stroke,
+                        pathEffect = if (isNext) null else PathEffect.dashPathEffect(
+                            floatArrayOf(3.dp.toPx(), 3.dp.toPx()),
+                        ),
+                    ),
+                )
+
+                game.playable -> drawRoundRect(
+                    color = MasterToolPalette.Success,
+                    topLeft = Offset(inset, inset),
+                    size = box,
+                    cornerRadius = corner,
+                )
+
+                else -> {
+                    drawRoundRect(
+                        color = MasterToolPalette.Danger,
+                        topLeft = Offset(inset, inset),
+                        size = box,
+                        cornerRadius = corner,
+                        style = Stroke(width = stroke),
+                    )
+                    val pad = size.width * 0.28f
+                    drawLine(
+                        color = MasterToolPalette.Danger,
+                        start = Offset(pad, size.height - pad),
+                        end = Offset(size.width - pad, pad),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun RowLabel(text: String) {
+    Box(Modifier.height(MARK_SIZE), contentAlignment = Alignment.CenterStart) {
+        Text(
+            text,
+            style = tacticalStyle(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** A brick rate, sized to be read from across the desk. */
+@Composable
+private fun BigRate(label: String, rate: Double?, total: Int) {
+    Column {
+        Text(label, style = tacticalStyle(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            if (rate == null) "—" else percent(rate),
+            style = tacticalStyle().copy(
+                fontSize = 30.sp,
+                letterSpacing = (-1.5).sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = when {
+                rate == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                rate >= 0.25 -> MasterToolPalette.Danger
+                rate >= 0.15 -> MasterToolPalette.Warning
+                else -> MasterToolPalette.Success
+            },
+        )
+        Text(
+            "BRICKS IN $total",
+            style = tacticalStyle(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * What the run came to, or nothing at all.
+ *
+ * "No difference" is printed as loudly as the other two, because a side deck
+ * that measurably changes nothing against this matchup is fifteen cards doing no
+ * work — a finding, and usually the one worth acting on.
+ */
+@Composable
+private fun Verdict(report: ShootoutReport) {
+    val verdict = report.sideVerdict() ?: return
+    val (text, colour) = when (verdict) {
+        SideVerdict.HELPS -> "the side deck is working" to MasterToolPalette.Success
+        SideVerdict.HURTS -> "siding is making this worse" to MasterToolPalette.Danger
+        SideVerdict.NO_DIFFERENCE ->
+            "siding changes nothing here" to MasterToolPalette.Warning
+    }
+
+    Box(
+        Modifier
+            .drawBehind {
+                drawRoundRect(
+                    color = colour,
+                    cornerRadius = CornerRadius(2.dp.toPx()),
+                    style = Stroke(width = 1.dp.toPx()),
+                )
+            }
+            .padding(horizontal = 13.dp, vertical = 7.dp),
+    ) {
+        Text(text.uppercase(), style = tacticalStyle().copy(letterSpacing = 0.5.sp), color = colour)
+    }
+}
+
+private val MARK_SIZE = 20.dp
+private val ROW_GAP = 6.dp
+private val NUMBER_HEIGHT = 14.dp
 
 /**
  * The record so far, and what it says to do about the die roll.

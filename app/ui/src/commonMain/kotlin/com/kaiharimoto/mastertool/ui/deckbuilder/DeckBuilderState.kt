@@ -23,7 +23,6 @@ import com.kaiharimoto.mastertool.core.deck.RejectionReason
 import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.deck.SaveTracking
 import com.kaiharimoto.mastertool.core.deck.SavedSnapshot
-import com.kaiharimoto.mastertool.core.deck.ShootoutReport
 import com.kaiharimoto.mastertool.core.deck.ShootoutRun
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.siding.SidingCodec
@@ -405,9 +404,6 @@ class DeckBuilderState(
      * only thing it exists to measure.
      */
     val deckIsSided: Boolean get() = deck.main != registeredDeck.main
-
-    /** The pre-side and post-side halves of the run, or null when none is on. */
-    val runReport: ShootoutReport? get() = shootoutRun?.report()
 
     /** The hand currently on the table, if one has been dealt. */
     var testHand by mutableStateOf<OpeningHand?>(null)
