@@ -185,6 +185,12 @@ fun DeckBuilderTopBar(
 
                 HorizontalDivider()
 
+                // Reachable without a keyboard, which is the only way it exists
+                // at all on the tablet this app is landscape-locked for.
+                DropdownMenuItem(
+                    text = { Text("See the whole deck") },
+                    onClick = { menuOpen = false; state.showcaseVisible = true },
+                )
                 DropdownMenuItem(
                     text = {
                         Text(
