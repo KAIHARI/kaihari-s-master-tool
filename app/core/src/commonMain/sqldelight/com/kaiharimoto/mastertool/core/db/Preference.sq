@@ -1,0 +1,27 @@
+-- App-level settings, stored as one JSON document per key.
+--
+-- A key/value table rather than a column per setting: layout preferences change
+-- shape as the UI does, and a schema migration for every new slider would be a
+-- migration whose only purpose is to add a number. Adding a field to the
+-- serialised document costs nothing and old documents still parse.
+--
+-- Deliberately separate from `deckEntity.extendedJson`: that column is the
+-- desktop tool's `#ydkx-extended` payload, round-tripped verbatim, and writing
+-- app settings into it would corrupt siding patterns authored elsewhere.
+--
+-- `prefKey` / `prefValue` rather than `key` / `value` because both are keywords
+-- in enough SQL dialects to be worth avoiding.
+
+CREATE TABLE preferenceEntity (
+    prefKey   TEXT NOT NULL PRIMARY KEY,
+    prefValue TEXT NOT NULL
+);
+
+selectByKey:
+SELECT prefValue FROM preferenceEntity WHERE prefKey = ?;
+
+upsert:
+INSERT OR REPLACE INTO preferenceEntity(prefKey, prefValue) VALUES (?, ?);
+
+deleteByKey:
+DELETE FROM preferenceEntity WHERE prefKey = ?;
