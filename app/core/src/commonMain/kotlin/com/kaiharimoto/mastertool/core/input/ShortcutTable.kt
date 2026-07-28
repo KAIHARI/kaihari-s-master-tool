@@ -39,6 +39,8 @@ enum class ShortcutAction {
     TOGGLE_FILTERS,
     TOGGLE_STATS,
     TOGGLE_ISSUES,
+    TOGGLE_TEST_HAND,
+    TOGGLE_SIDING,
     TOGGLE_HELP,
     DISMISS,
     FOCUS_MAIN,
@@ -143,6 +145,14 @@ object ShortcutTable {
         ),
         Shortcut(KeyChord("s"), ShortcutAction.TOGGLE_STATS, ShortcutScope.BUILDER, "Statistics"),
         Shortcut(KeyChord("i"), ShortcutAction.TOGGLE_ISSUES, ShortcutScope.BUILDER, "Deck check"),
+        Shortcut(
+            KeyChord("h"), ShortcutAction.TOGGLE_TEST_HAND, ShortcutScope.BUILDER,
+            "Deal a test hand",
+        ),
+        Shortcut(
+            KeyChord("p"), ShortcutAction.TOGGLE_SIDING, ShortcutScope.BUILDER,
+            "Siding plans",
+        ),
         Shortcut(
             KeyChord("1"), ShortcutAction.FOCUS_MAIN, ShortcutScope.BUILDER,
             "Give the Main deck the whole column",

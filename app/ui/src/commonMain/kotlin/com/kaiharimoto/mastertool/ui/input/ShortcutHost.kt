@@ -85,17 +85,27 @@ private fun KeyEvent.toChord(): KeyChord? {
  * and a mapping that silently names keys nobody uses is a mapping that can
  * disagree with the table it feeds.
  */
-private fun Key.chordName(): String? = when (this) {
-    Key.Escape -> "escape"
-    Key.Slash -> "slash"
-    Key.DirectionLeft -> "left"
-    Key.DirectionRight -> "right"
-    Key.One -> "1"
-    Key.Two -> "2"
-    Key.Three -> "3"
-    Key.F -> "f"
-    Key.I -> "i"
-    Key.S -> "s"
-    Key.Z -> "z"
-    else -> null
-}
+/**
+ * Every key the shortcut table can name.
+ *
+ * Internal rather than private so a test can hold it against `ShortcutTable`:
+ * a binding whose key is missing from here is not a compile error, it is a
+ * shortcut that silently does nothing, which is the worst of both.
+ */
+internal val CHORD_KEYS: Map<Key, String> = mapOf(
+    Key.Escape to "escape",
+    Key.Slash to "slash",
+    Key.DirectionLeft to "left",
+    Key.DirectionRight to "right",
+    Key.One to "1",
+    Key.Two to "2",
+    Key.Three to "3",
+    Key.F to "f",
+    Key.H to "h",
+    Key.I to "i",
+    Key.P to "p",
+    Key.S to "s",
+    Key.Z to "z",
+)
+
+private fun Key.chordName(): String? = CHORD_KEYS[this]

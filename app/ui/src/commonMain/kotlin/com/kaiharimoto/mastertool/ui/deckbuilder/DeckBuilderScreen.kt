@@ -112,6 +112,13 @@ fun DeckBuilderScreen(
                 ShortcutAction.TOGGLE_FILTERS -> state.filtersVisible = !state.filtersVisible
                 ShortcutAction.TOGGLE_STATS -> state.statsVisible = !state.statsVisible
                 ShortcutAction.TOGGLE_ISSUES -> state.issuesVisible = !state.issuesVisible
+                ShortcutAction.TOGGLE_TEST_HAND -> {
+                    // Dealing on the way in, so the panel is never empty when it
+                    // opens -- the whole point is to be looking at a hand.
+                    if (!state.testHandVisible) state.dealTestHand(state.testHandGoingFirst)
+                    state.testHandVisible = !state.testHandVisible
+                }
+                ShortcutAction.TOGGLE_SIDING -> state.sidingVisible = !state.sidingVisible
                 ShortcutAction.TOGGLE_HELP -> state.helpVisible = !state.helpVisible
                 ShortcutAction.DISMISS -> dismissTopLayer(state) { focusManager.clearFocus() }
                 ShortcutAction.FOCUS_MAIN -> layout.focusSection(DeckSection.MAIN)
