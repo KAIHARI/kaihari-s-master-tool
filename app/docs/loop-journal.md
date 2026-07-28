@@ -784,12 +784,29 @@ Still not built, and still recorded rather than half-done: the run structure —
 a set number of trials, siding for both sides between games, a report at the
 end.
 
+## 40. Making it a loop
+
+Two hands side by side answers one question once. Judging each opening the way
+the test-hand panel does — playable, or a brick — and dealing the next turns it
+into the thing somebody actually does for twenty minutes before a tournament.
+
+The record resets when the opponent changes. A record against one list says
+nothing about another, and a tally that quietly carried over would be worse than
+having none.
+
+And a third formatter found and removed. The test-hand panel had its own private
+copy of the percentage formatting that already existed in `components`, and
+truncated where the original rounds — so the same brick rate could read 24.9% in
+one panel and 25.0% in the other. That is the fourth time in this loop that a
+thing written twice had started to disagree, and every one of them was found by
+going to use it somewhere else.
+
 ---
 
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **542 tests**, up from 249, plus
-**84 in `:ui`** where there were none — a module that cannot even be compiled in
+**96 in `:ui`** where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
 Still open, in the order they are worth doing:
