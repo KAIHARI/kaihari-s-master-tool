@@ -185,5 +185,6 @@ written without being asked. A deck that has never been saved is never written
 on its own, and the toolbar says so. Saved decks show three of their own cards
 in the library rather than only a name.
 
-Not yet built: the sandbox board simulator, a full shootout against an
-opponent's deck, and PDF export of a siding sheet.
+Not yet built: a full shootout against an opponent's deck (a structured
+playtest run — trials, siding for both sides between games, a report), the
+sandbox board simulator, and PDF export of a siding sheet.

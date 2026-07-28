@@ -572,6 +572,45 @@ both ends. Its height comes from the card aspect ratio rather than a second
 hardcoded number; the old 200×292 was very nearly the right ratio and not
 exactly it.
 
+## 30. One list instead of two
+
+Two lists said which layers cover the builder: one that silences the shortcuts,
+one that Escape closes. Nothing made them agree, and I had edited them
+separately twice in a day. A layer missing from the first leaks its keys through
+to the builder underneath; one missing from the second cannot be closed by
+Escape at all. Both fail quietly, which is the only reason they had not been
+noticed.
+
+There is now one enum in the order the layers stack, and both questions are
+answered from it. The `when`s over it are exhaustive — enforced since Kotlin 1.7
+rather than merely warned about — so a new layer will not compile until it says
+how it opens and closes. The test walks every member and its own `when` is
+exhaustive too, so it cannot quietly stop covering all of them.
+
+The first attempt at that used `val x: Unit = when (...)` to force
+exhaustiveness, which does not compile: assignments are not expressions in
+Kotlin. It was also unnecessary — the language already insists.
+
+## 31. What shootout mode actually is
+
+Read rather than guessed, from the original's `ShootoutManager`, because it is
+the last large thing on the list and it was worth knowing its shape before
+starting it.
+
+It is not "deal a hand and judge it" — that is the test-hand panel, which is
+built. It is a structured playtest *run*: load an opponent's deck from a `.ydk`,
+choose a mode and a number of trials, then work through them one at a time with
+opening hands for both decks, siding for **both sides** between games, undo of a
+whole trial, notes, and a report at the end that can be exported.
+
+So it composes almost everything already here — `HandSimulator`, `SidingEngine`,
+the deck repository, the siding panel — plus a run structure and a report that
+do not exist yet. That makes it a genuinely good next feature and a bad thing to
+start in the last hour of a loop: half a run structure is worse than none, and
+the person who asked for this wants to review before the next build.
+
+Deliberately not started. Recorded instead.
+
 ---
 
 ## Where this stands
@@ -579,5 +618,15 @@ exactly it.
 `:core` carries the arithmetic for all of it, at **492 tests**, up from 249, plus
 **59 in `:ui`** where there were none.
 
-Still open: the sandbox board, a full shootout mode with an opponent's deck, and
-PDF export of a siding sheet.
+Still open, in the order they are worth doing:
+
+**Shootout mode.** A structured playtest run against an opponent's deck —
+trials, siding for both sides between games, a report. Composes almost
+everything already built, and section 31 records its shape.
+
+**The sandbox board.** Where the best idea in the original lives: the gesture
+*is* the orientation — quick drop is attack, a horizontal flick is defense, a
+hold is face-down. Nothing on the market does this.
+
+**PDF export of a siding sheet.** The original's actual deliverable. Needs a PDF
+writer that resolves from Maven Central; spike before committing to it.
