@@ -62,6 +62,7 @@ import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.prefs.SectionPreferences
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
+import com.kaiharimoto.mastertool.ui.components.CARD_CORNER
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.HoverPreview
 import com.kaiharimoto.mastertool.ui.components.accent
@@ -232,7 +233,9 @@ private fun DeckSectionPane(
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val density = LocalDensity.current
-            val spacing = 6.dp
+            // Zero by default. Cards that touch read as one arrangement the way they
+            // do on a table; a gutter turns the same forty cards into forty tiles.
+            val spacing = layout.preferences.cardGutter.dp
 
             // Recomputed on every layout pass, which is cheap and means the grid
             // re-fits the moment the pane is resized or a card is added.
@@ -534,7 +537,7 @@ private fun UnknownCardTile(id: CardId) {
     Box(
         Modifier
             .aspectRatio(CARD_ASPECT_RATIO)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(CARD_CORNER))
             .background(MasterToolPalette.SurfaceRaised)
             .padding(4.dp),
         contentAlignment = Alignment.Center,

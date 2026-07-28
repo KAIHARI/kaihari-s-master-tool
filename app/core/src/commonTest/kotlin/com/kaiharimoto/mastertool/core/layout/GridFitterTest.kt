@@ -115,6 +115,49 @@ class GridFitterTest {
     }
 
     @Test
+    fun touchingCardsUseTheWholeWidth() {
+        // The default gutter is zero, so nothing is subtracted for gaps and the row
+        // is exactly the cards. Getting this wrong shrinks every card by a hair per
+        // column, which compounds across ten of them.
+        assertEquals(100f, GridFitter.requiredHeight(3, 3, 300f, 0f, 1f), 0.01f)
+        assertEquals(200f, GridFitter.requiredHeight(6, 3, 300f, 0f, 1f), 0.01f)
+    }
+
+    @Test
+    fun closingTheGutterWidensEveryCard() {
+        // The point of a zero gutter: at a given column count the width the gaps
+        // were taking goes to the cards instead.
+        (3..20).forEach { columns ->
+            val spaced = GridFitter.requiredHeight(60, columns, 900f, 6f, aspect)
+            val touching = GridFitter.requiredHeight(60, columns, 900f, 0f, aspect)
+            assertTrue(touching > spaced, "$columns columns did not grow when the gutter closed")
+        }
+    }
+
+    @Test
+    fun closingTheGutterCanCostAColumn() {
+        // Not the intuition, and worth pinning down. Wider cards are also taller,
+        // and past a certain row count that growth outweighs the row gaps removed:
+        // at 13 columns a near-full deck grows past the pane once the gutter goes,
+        // so the fitter correctly reaches for a fourteenth.
+        assertEquals(13, fit(count = 55, spacing = 6f).columns)
+        assertEquals(14, fit(count = 55, spacing = 0f).columns)
+    }
+
+    @Test
+    fun theChosenGridFitsWithNoGutterToo() {
+        // Same contract as `theChosenGridActuallyFitsTheSpace`, at the spacing the
+        // app actually ships with.
+        (1..60).forEach { count ->
+            val result = fit(count, spacing = 0f)
+            if (result.fits) {
+                val needed = GridFitter.requiredHeight(count, result.columns, 900f, 0f, aspect)
+                assertTrue(needed <= 500f, "$count cards in ${result.columns} columns overflowed")
+            }
+        }
+    }
+
+    @Test
     fun swappingBetweenSensibleSizesIsStable() {
         // Recomputed on every layout pass, so the same inputs must always give the
         // same answer — a grid that alternates between two column counts would

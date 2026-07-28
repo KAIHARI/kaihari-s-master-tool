@@ -59,6 +59,15 @@ data class UiPreferences(
     val side: SectionPreferences = SectionPreferences(weight = 1f, columns = 10),
     /** Show one tile per distinct card with a count, rather than one per copy. */
     val stacked: Boolean = false,
+    /**
+     * Space between cards in a deck pane, in dp.
+     *
+     * Zero by default, and that is the whole point: cards that touch read as one
+     * arrangement the way they do laid out on a table, where a gutter makes them
+     * read as separate tiles in a piece of software. What keeps them legible at
+     * zero is the card's own printed edge, drawn by `CardTile` — not space.
+     */
+    val cardGutter: Int = 0,
     val format: Format = Format.TCG,
     /**
      * Passcodes the easter egg throws, when it has been given a set to keep.
@@ -95,12 +104,17 @@ data class UiPreferences(
         main = main.sanitised(fallbackWeight = 2f),
         extra = extra.sanitised(fallbackWeight = 1f),
         side = side.sanitised(fallbackWeight = 1f),
+        cardGutter = cardGutter.coerceIn(MIN_CARD_GUTTER, MAX_CARD_GUTTER),
     )
 
     companion object {
         const val DEFAULT_SEARCH_WEIGHT = 0.36f
         const val MIN_SEARCH_WEIGHT = 0.2f
         const val MAX_SEARCH_WEIGHT = 0.7f
+
+        const val MIN_CARD_GUTTER = 0
+        /** Past this the pane stops reading as an arrangement and starts reading as a list. */
+        const val MAX_CARD_GUTTER = 12
 
         val DEFAULT = UiPreferences()
     }

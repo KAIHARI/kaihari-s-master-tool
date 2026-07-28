@@ -73,7 +73,7 @@ fun CardDetailBody(
                 modifier = Modifier
                     .width(200.dp)
                     .height(292.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(CARD_CORNER))
                     .background(MasterToolPalette.SurfaceRaised),
             )
 

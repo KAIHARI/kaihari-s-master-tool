@@ -94,6 +94,24 @@ class UiPreferencesTest {
     }
 
     @Test
+    fun sanitisingClampsTheCardGutter() {
+        assertEquals(
+            UiPreferences.MIN_CARD_GUTTER,
+            UiPreferences.DEFAULT.copy(cardGutter = -3).sanitised().cardGutter,
+        )
+        assertEquals(
+            UiPreferences.MAX_CARD_GUTTER,
+            UiPreferences.DEFAULT.copy(cardGutter = 400).sanitised().cardGutter,
+        )
+    }
+
+    @Test
+    fun cardsTouchByDefault() {
+        // Not a rounding artefact: zero is the arrangement this app is built around.
+        assertEquals(0, UiPreferences.DEFAULT.cardGutter)
+    }
+
+    @Test
     fun sanitisingLeavesAReasonableDocumentAlone() {
         assertEquals(UiPreferences.DEFAULT, UiPreferences.DEFAULT.sanitised())
     }

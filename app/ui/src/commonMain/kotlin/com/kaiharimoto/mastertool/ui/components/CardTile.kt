@@ -5,11 +5,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +34,17 @@ import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 const val CARD_ASPECT_RATIO = 59f / 86f
 
 /**
+ * Barely rounded, because a real card barely is.
+ *
+ * At the size a Main deck pane draws them a softer corner reads as a rounded UI
+ * tile rather than as a card, and the effect compounds across forty of them.
+ */
+val CARD_CORNER = 3.dp
+
+/** The dark line printed around every card. */
+val CARD_EDGE = Color.Black.copy(alpha = 0.85f)
+
+/**
  * A single card.
  *
  * Tap only. Long press belongs to `DragSource`, which wraps these: two detectors
@@ -49,7 +62,7 @@ fun CardTile(
     onClick: () -> Unit = {},
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
-    val shape = RoundedCornerShape(4.dp)
+    val shape = RoundedCornerShape(CARD_CORNER)
     val banStatus = card.banStatus(format)
 
     Box(
@@ -57,13 +70,12 @@ fun CardTile(
             .aspectRatio(CARD_ASPECT_RATIO)
             .clip(shape)
             .background(MasterToolPalette.SurfaceRaised)
+            // The card's own printed edge, not a UI outline. Deck panes lay cards
+            // out touching, so this hairline is the only thing separating one from
+            // the next — in the theme's outline colour they merged into a slab.
             .border(
                 width = if (highlighted) 2.dp else 1.dp,
-                color = if (highlighted) {
-                    MasterToolPalette.AccentBright
-                } else {
-                    MaterialTheme.colorScheme.outline
-                },
+                color = if (highlighted) MasterToolPalette.AccentBright else CARD_EDGE,
                 shape = shape,
             )
             .clickable(onClick = onClick),
@@ -91,6 +103,17 @@ fun CardTile(
         if (dimmed) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
         }
+
+        // A lit top edge. One card is a rectangle; a grid of them lit from above is
+        // a stack of physical objects, and the difference costs a single line.
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(horizontal = CARD_CORNER)
+                .height(1.dp)
+                .background(Color.White.copy(alpha = 0.16f)),
+        )
 
         if (banStatus != BanStatus.UNLIMITED) {
             BanBadge(banStatus, Modifier.align(Alignment.TopStart).padding(3.dp))
