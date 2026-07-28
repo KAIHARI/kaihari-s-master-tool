@@ -561,6 +561,49 @@ class DeckBuilderStateTest {
     }
 
     @Test
+    fun changingTheMainDeckThrowsTheRecordAway() = runTest {
+        // A brick rate measured over one forty is not a fact about a different
+        // forty, and siding mid-shootout -- which is the whole point of a
+        // shootout -- changes it by design.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+        state.judgeShootout(playable = true)
+        assertEquals(1, state.matchup.total)
+
+        state.addCard(TestPool.ash)
+
+        assertEquals(0, state.matchup.total)
+    }
+
+    @Test
+    fun theTestHandTallyGoesTheSameWay() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.dealTestHand(goingFirst = true)
+        state.judgeTestHand(playable = false)
+        assertEquals(1, state.handTally.total)
+
+        state.addCard(TestPool.ash)
+
+        assertEquals(0, state.handTally.total)
+    }
+
+    @Test
+    fun anExtraDeckEditLeavesTheRecordAlone() = runTest {
+        // Openings are dealt from the Main deck. An Extra deck change is not a
+        // change to the question being asked.
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.dealTestHand(goingFirst = true)
+        state.judgeTestHand(playable = true)
+
+        state.addCard(TestPool.ash, DeckSection.SIDE)
+
+        assertEquals(1, state.handTally.total)
+    }
+
+    @Test
     fun changingOpponentStartsTheRecordAgain() = runTest {
         // A record against one list says nothing about another, and a tally that
         // quietly carried over would be worse than no tally at all.

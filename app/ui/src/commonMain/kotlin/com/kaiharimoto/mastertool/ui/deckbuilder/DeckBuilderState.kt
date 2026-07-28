@@ -146,10 +146,28 @@ class DeckBuilderState(
         get() = currentDeck
         private set(value) {
             if (value == currentDeck) return
+            // Openings are dealt from the Main deck, so that is what invalidates
+            // a record of them. Extra and Side edits leave the question alone.
+            val openingsChanged = value.main != currentDeck.main
             currentDeck = value
             selection = Selection.EMPTY
+            if (openingsChanged) forgetHandRecords()
             scheduleAutosave()
         }
+
+    /**
+     * Throws away every record of how this deck opens.
+     *
+     * Called whenever the Main deck changes, because a brick rate measured over
+     * one forty is not a fact about a different forty — and siding mid-shootout,
+     * which is the whole point of a shootout, changes it by design. Keeping the
+     * number and letting it read as evidence about the list now in front of you
+     * is worse than losing it.
+     */
+    private fun forgetHandRecords() {
+        handTally = HandTally()
+        matchup = MatchupRecord()
+    }
 
     /**
      * Which cards are picked up, if any.

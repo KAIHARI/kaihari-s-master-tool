@@ -825,6 +825,25 @@ One detail found by writing the test: a verdict is recorded against the side the
 hand was actually *dealt* for, not whichever chip is selected when the verdict is
 given. Those are the same right up until somebody switches sides mid-judgement.
 
+## 42. A record of a deck that no longer exists
+
+The matchup record had a hole I put there an hour earlier: it survived edits to
+the deck it was a record of. Judge twenty hands, swap a card, and the twenty are
+still on screen as evidence about a forty that no longer exists.
+
+It matters more here than it would elsewhere, because *siding mid-shootout is
+the whole point of a shootout*. The one moment the feature is doing its job is
+the moment the record silently becomes a lie.
+
+So every record of how a deck opens is thrown away when the Main deck changes —
+the shootout record and the test-hand tally both, since it was the same hole
+twice. Extra and Side edits leave it alone, because openings are dealt from the
+Main deck and an Extra deck change is not a change to the question being asked.
+
+Losing a twenty-hand record to one swapped card is annoying. Keeping it and
+letting it read as evidence about the list now in front of you is worse, and
+those were the only two options.
+
 ---
 
 ## Where this stands
