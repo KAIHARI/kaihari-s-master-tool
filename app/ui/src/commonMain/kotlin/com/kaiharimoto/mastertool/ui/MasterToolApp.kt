@@ -18,6 +18,8 @@ import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderScreen
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckLayoutState
 import com.kaiharimoto.mastertool.ui.library.DeckLibraryScreen
+import com.kaiharimoto.mastertool.ui.sandbox.SandboxScreen
+import com.kaiharimoto.mastertool.ui.sandbox.SandboxState
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
 import com.kaiharimoto.mastertool.ui.update.UpdateDialog
 import com.kaiharimoto.mastertool.ui.update.UpdateState
@@ -32,6 +34,7 @@ import io.ktor.client.HttpClient
 private sealed interface Screen {
     data object DeckBuilder : Screen
     data object Library : Screen
+    data object Sandbox : Screen
 }
 
 @Composable
@@ -40,6 +43,7 @@ fun MasterToolApp(deps: AppDependencies) {
     val builderState = remember { DeckBuilderState(deps, scope) }
     val layoutState = remember { DeckLayoutState(deps.preferencesRepository, scope) }
     val updateState = remember { UpdateState(deps.updateChecker, deps.updater, scope) }
+    val sandboxState = remember { SandboxState() }
     var screen by remember { mutableStateOf<Screen>(Screen.DeckBuilder) }
 
     DisposableEffect(Unit) {
@@ -74,6 +78,19 @@ fun MasterToolApp(deps: AppDependencies) {
                 layout = layoutState,
                 updateState = updateState,
                 onOpenLibrary = { screen = Screen.Library },
+                onOpenSandbox = {
+                    // Dealt fresh on the way in. A board left over from twenty
+                    // minutes ago is not the question anybody is asking, and the
+                    // deck may not even be the same deck.
+                    sandboxState.open(builderState.deck)
+                    screen = Screen.Sandbox
+                },
+            )
+
+            Screen.Sandbox -> SandboxScreen(
+                state = sandboxState,
+                index = builderState.index,
+                onBack = { screen = Screen.DeckBuilder },
             )
 
             Screen.Library -> DeckLibraryScreen(

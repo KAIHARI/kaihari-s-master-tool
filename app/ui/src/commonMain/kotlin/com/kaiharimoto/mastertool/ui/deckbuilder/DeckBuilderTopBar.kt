@@ -69,6 +69,7 @@ fun DeckBuilderTopBar(
     layout: DeckLayoutState,
     updateState: UpdateState,
     onOpenLibrary: () -> Unit,
+    onOpenSandbox: () -> Unit,
 ) {
     val validation = state.validation
     var menuOpen by remember { mutableStateOf(false) }
@@ -166,6 +167,22 @@ fun DeckBuilderTopBar(
                 Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("Sandbox…")
+                            Text(
+                                "lay the opening out on a board",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    onClick = { menuOpen = false; onOpenSandbox() },
+                )
+
+                HorizontalDivider()
+
                 DropdownMenuItem(
                     text = { Text("New deck") },
                     onClick = { menuOpen = false; state.newDeck() },
