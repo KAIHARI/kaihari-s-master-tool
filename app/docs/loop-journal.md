@@ -551,6 +551,27 @@ what makes them useful inside a field and useless outside one. So they are a
 second, smaller list in `:core` beside the table, and the help sheet renders
 both. The sheet claims to be the whole keyboard story, so it has to be.
 
+## 29. Two small things about looking
+
+The drop mark was a plain bar down the leading edge of the card a drop would
+land before. With the gutter closed the cards touch, so every seam already looks
+like a line — and a plain bar on a seam is indistinguishable from a card's own
+edge, which is the one reading it cannot afford. It now has serifs top and
+bottom, and light spilling right onto the card being displaced.
+
+The browser prototype settled it. The glow alone was not enough; the serifs were
+the difference between a line and a mark. The version that read best of all was
+the cards *parting* to make a gap — rejected, because that means a layout change
+on every pointer move during a drag, which is exactly what the deal animation and
+the spring drag are careful not to do.
+
+And the inspector's art was a fixed 200dp — the same size on a narrow sheet and
+on a 1600dp window, in the one place in the program whose entire purpose is
+looking at a card. It now takes a share of whatever room there is, clamped at
+both ends. Its height comes from the card aspect ratio rather than a second
+hardcoded number; the old 200×292 was very nearly the right ratio and not
+exactly it.
+
 ---
 
 ## Where this stands

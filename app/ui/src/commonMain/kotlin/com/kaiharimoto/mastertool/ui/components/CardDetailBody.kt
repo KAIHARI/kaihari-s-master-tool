@@ -2,13 +2,14 @@ package com.kaiharimoto.mastertool.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -66,74 +67,85 @@ fun CardDetailBody(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            AsyncImage(
-                model = card.imageUrl ?: card.imageUrlSmall,
-                contentDescription = card.name,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .width(200.dp)
-                    .height(292.dp)
-                    .clip(RoundedCornerShape(CARD_CORNER))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .foilSweep(),
-            )
+        // The art was a fixed 200dp -- the same size on a narrow sheet and on a
+        // 1600dp desktop window. This is the one place in the program whose
+        // purpose is looking at a card, so it takes a share of whatever room
+        // there is, clamped at both ends: too small to read on one side, and a
+        // poster rather than a card on the other.
+        BoxWithConstraints {
+            val artWidth = (maxWidth * 0.30f).coerceIn(180.dp, 340.dp)
 
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(card.name, style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    card.type,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                AsyncImage(
+                    model = card.imageUrl ?: card.imageUrlSmall,
+                    contentDescription = card.name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .width(artWidth)
+                        // Derived rather than a second hardcoded number: the old
+                        // 200x292 was very nearly the card's ratio, not exactly.
+                        .aspectRatio(CARD_ASPECT_RATIO)
+                        .clip(RoundedCornerShape(CARD_CORNER))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .foilSweep(),
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (card.category == CardCategory.MONSTER) {
-                        card.level?.let { Fact("Level", it.toString()) }
-                        card.linkValue?.let { Fact("Link", it.toString()) }
-                        Fact("ATK", card.atk?.toString() ?: "—")
-                        if (card.linkValue == null) Fact("DEF", card.def?.toString() ?: "—")
-                    }
-                }
-
-                // Tapping a facet browses the pool by it. These used to be chips
-                // with an empty onClick, which read as interactive and were not.
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    card.race?.let { race ->
-                        AssistChip(
-                            onClick = { onBrowse(CardFilter(races = setOf(race))) },
-                            label = { Text(race) },
-                        )
-                    }
-                    AssistChip(
-                        onClick = { onBrowse(CardFilter(attributes = setOf(card.attribute))) },
-                        label = { Text(card.attribute.name) },
-                    )
-                    card.archetype?.let { archetype ->
-                        AssistChip(
-                            onClick = { onBrowse(CardFilter(archetypes = setOf(archetype))) },
-                            label = { Text(archetype) },
-                        )
-                    }
-                }
-
-                Text(
-                    "${format.name}: ${card.banStatus(format).name.lowercase()
-                        .replace('_', ' ')}  •  $totalCopies of $limit in deck",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                // The reason a card is worth a third copy, stated rather than
-                // left to be felt.
-                if (copiesHome > 0 && home == DeckSection.MAIN && mainDeckSize > 0) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(card.name, style = MaterialTheme.typography.headlineSmall)
                     Text(
-                        "Opening hand: ${percent(openingHandOdds(copiesHome, 5))} going first, " +
-                            "${percent(openingHandOdds(copiesHome, 6))} going second " +
-                            "(in $mainDeckSize cards)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        card.type,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (card.category == CardCategory.MONSTER) {
+                            card.level?.let { Fact("Level", it.toString()) }
+                            card.linkValue?.let { Fact("Link", it.toString()) }
+                            Fact("ATK", card.atk?.toString() ?: "—")
+                            if (card.linkValue == null) Fact("DEF", card.def?.toString() ?: "—")
+                        }
+                    }
+
+                    // Tapping a facet browses the pool by it. These used to be chips
+                    // with an empty onClick, which read as interactive and were not.
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        card.race?.let { race ->
+                            AssistChip(
+                                onClick = { onBrowse(CardFilter(races = setOf(race))) },
+                                label = { Text(race) },
+                            )
+                        }
+                        AssistChip(
+                            onClick = { onBrowse(CardFilter(attributes = setOf(card.attribute))) },
+                            label = { Text(card.attribute.name) },
+                        )
+                        card.archetype?.let { archetype ->
+                            AssistChip(
+                                onClick = { onBrowse(CardFilter(archetypes = setOf(archetype))) },
+                                label = { Text(archetype) },
+                            )
+                        }
+                    }
+
+                    Text(
+                        "${format.name}: ${card.banStatus(format).name.lowercase()
+                            .replace('_', ' ')}  •  $totalCopies of $limit in deck",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    // The reason a card is worth a third copy, stated rather than
+                    // left to be felt.
+                    if (copiesHome > 0 && home == DeckSection.MAIN && mainDeckSize > 0) {
+                        Text(
+                            "Opening hand: ${percent(openingHandOdds(copiesHome, 5))} going first, " +
+                                "${percent(openingHandOdds(copiesHome, 6))} going second " +
+                                "(in $mainDeckSize cards)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
         }
