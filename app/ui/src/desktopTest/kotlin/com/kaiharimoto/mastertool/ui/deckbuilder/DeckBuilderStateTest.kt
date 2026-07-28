@@ -174,7 +174,7 @@ class DeckBuilderStateTest {
 
         state.startRun(trials = 3)
 
-        val shootoutRun = assertNotNull(state.shootoutRun)
+        val run = assertNotNull(state.shootoutRun)
         assertEquals(1, run.nextTrial)
         assertFalse(run.nextIsSided, "game one is the registered list")
         assertFalse(state.deckIsSided, "starting a run registers the list it is about")
@@ -189,7 +189,7 @@ class DeckBuilderStateTest {
 
         state.judgeShootout(playable = true)
 
-        val shootoutRun = assertNotNull(state.shootoutRun)
+        val run = assertNotNull(state.shootoutRun)
         assertEquals(1, run.nextTrial)
         assertEquals(2, run.nextGame)
         assertTrue(run.nextIsSided)
@@ -272,7 +272,7 @@ class DeckBuilderStateTest {
         TestPool.many(40).forEach { state.addCard(it) }
         state.startRun(trials = 1)
 
-        val shootoutRun = assertNotNull(state.shootoutRun)
+        val run = assertNotNull(state.shootoutRun)
         repeat(run.length) { state.judgeShootout(playable = true) }
 
         val finished = assertNotNull(state.shootoutRun)
@@ -291,7 +291,7 @@ class DeckBuilderStateTest {
 
         state.undoTrial()
 
-        val shootoutRun = assertNotNull(state.shootoutRun)
+        val run = assertNotNull(state.shootoutRun)
         assertEquals(2, run.played, "only the third game was part of the trial in progress")
         assertEquals(2, run.nextTrial)
     }
