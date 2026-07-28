@@ -1,8 +1,11 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.Orientation
@@ -49,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -60,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.deck.DeckKeys
 import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.layout.DealAnimation
 import com.kaiharimoto.mastertool.core.layout.GridFit
 import com.kaiharimoto.mastertool.core.layout.GridFitter
 import com.kaiharimoto.mastertool.core.model.Card
@@ -80,6 +85,9 @@ import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.tableSurface
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 import kotlinx.coroutines.delay
+
+/** How long a whole section takes to be dealt onto the table. */
+private const val DEAL_MS = 460
 
 /** How long a revealed card keeps its highlight before settling back. */
 private const val FLASH_MS = 1400L
@@ -178,6 +186,16 @@ private fun DeckSectionPane(
     // What the grid actually settled on, so the header can report it and taking
     // manual control starts from what is already on screen.
     var effectiveColumns by remember { mutableStateOf(preferences.columns) }
+
+    // One animation for the whole pane. Each card works out its own progress
+    // from its index, because forty Animatables to show a quarter-second effect
+    // is forty coroutines for something the arithmetic already knows.
+    val deal = remember { Animatable(1f) }
+    LaunchedEffect(state.dealSerial) {
+        if (state.dealSerial == 0L) return@LaunchedEffect
+        deal.snapTo(0f)
+        deal.animateTo(1f, tween(durationMillis = DEAL_MS, easing = LinearEasing))
+    }
 
     val hover = drag.hover?.takeIf { it.section == section }
     val dropBorder = when {
@@ -315,6 +333,7 @@ private fun DeckSectionPane(
                             siblings = ids,
                             position = stack.firstIndex,
                             columns = fit.columns,
+                            deal = { DealAnimation.progressFor(i, stacks.size, deal.value) },
                         )
                     }
                 } else {
@@ -341,6 +360,7 @@ private fun DeckSectionPane(
                             siblings = ids,
                             position = position,
                             columns = fit.columns,
+                            deal = { DealAnimation.progressFor(position, ids.size, deal.value) },
                             // Sorting a section, or dropping a card into the middle
                             // of one, now slides the cards that moved instead of
                             // redrawing the pane somewhere else.
@@ -381,6 +401,14 @@ private fun DeckCard(
     siblings: List<CardId>,
     position: Int,
     columns: Int,
+    /**
+     * How far into being dealt this card is, 0 to 1.
+     *
+     * A lambda rather than a value: it is read inside `graphicsLayer`, which
+     * runs at draw time, so the deal animates a layer per frame instead of
+     * recomposing forty cards sixty times a second.
+     */
+    deal: () -> Float,
     modifier: Modifier = Modifier,
 ) {
     val card: Card? = state.index.byId(id)
@@ -440,7 +468,16 @@ private fun DeckCard(
         }
     }
 
-    Box(modifier) {
+    Box(
+        modifier.graphicsLayer {
+            val progress = deal()
+            if (progress >= 1f) return@graphicsLayer
+            alpha = progress
+            // Dropped onto its place rather than faded in from nowhere: a card
+            // that arrives by becoming opaque has not come from anywhere.
+            translationY = -DealAnimation.riseFor(progress) * size.height
+        },
+    ) {
         if (drag == null) {
             tile()
         } else {

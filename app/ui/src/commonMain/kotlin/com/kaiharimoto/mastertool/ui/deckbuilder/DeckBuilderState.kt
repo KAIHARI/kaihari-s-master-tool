@@ -182,6 +182,16 @@ class DeckBuilderState(
     var sidingVisible by mutableStateOf(false)
 
     /**
+     * Bumped when a whole decklist arrives, and never by an edit.
+     *
+     * The panes deal their cards in when it changes. Adding one card is not a
+     * deal — re-dealing forty because a forty-first arrived would be a party
+     * trick rather than a response to anything.
+     */
+    var dealSerial by mutableStateOf(0L)
+        private set
+
+    /**
      * The matchup plans carried by the loaded file, keyed as it keys them.
      *
      * Read straight out of the payload rather than kept alongside it, so there
@@ -655,6 +665,7 @@ class DeckBuilderState(
         scope.launch {
             val stored = deps.deckRepository.byId(id) ?: return@launch
             deck = stored.entry.deck
+            dealSerial++
             deckName = stored.entry.name
             deckId = stored.entry.id
             extended = stored.extended
@@ -671,6 +682,7 @@ class DeckBuilderState(
 
             val token = pushUndo(deck)
             deck = parsed.document.deck
+            dealSerial++
             deckName = file.name.substringBeforeLast('.').ifBlank { "Imported Deck" }
             deckId = null
             extended = parsed.document.extended
