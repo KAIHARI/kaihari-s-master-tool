@@ -18,6 +18,13 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,8 +52,8 @@ import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
  * you reach for this, and making it a mode would mean setting it correctly and
  * then trusting that you had.
  *
- * Read-only for now: a plan can arrive in a `.ydkx` and be used here, but it is
- * still written on the desktop.
+ * Plans can be applied and recorded. Recording is a diff rather than a form:
+ * you side by hand, and this keeps what you did.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,10 +71,12 @@ fun SidingPanel(state: DeckBuilderState) {
         ) {
             Text("Siding", style = MaterialTheme.typography.headlineSmall)
 
+            Recorder(state)
+
             if (patterns.isEmpty()) {
                 Text(
-                    "This deck carries no matchup plans. They travel inside a .ydkx " +
-                        "file, so importing one written on the desktop brings them with it.",
+                    "No plans saved yet. Move cards between the Main and Side decks " +
+                        "until the matchup is right, then record what you did.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -165,5 +174,82 @@ private fun Thumbnail(state: DeckBuilderState, id: CardId) {
             contentScale = ContentScale.Crop,
             modifier = Modifier.width(34.dp),
         )
+    }
+}
+
+/**
+ * Records what has been swapped so far.
+ *
+ * The plan is arrived at by doing it — nobody writes a swap down and then
+ * performs it — so this reports the difference between the deck on screen and
+ * the list you registered, and offers to keep it. Everything it needs is
+ * already true before you open this panel.
+ */
+@Composable
+private fun Recorder(state: DeckBuilderState) {
+    val swap = state.pendingSwap
+    var opponent by remember { mutableStateOf("") }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (swap.isEmpty) {
+            Text(
+                "The deck matches the list you registered.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return@Column
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Swapped so far: ${swap.cardsIn.size} in / ${swap.cardsOut.size} out" +
+                    if (swap.isBalanced) "" else "  ⚠ uneven",
+                style = tacticalStyle(),
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { state.resetToRegistered() }) { Text("Undo all") }
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = opponent,
+                onValueChange = { opponent = it },
+                singleLine = true,
+                label = { Text("Against") },
+                placeholder = { Text("Snake-Eye") },
+                modifier = Modifier.weight(1f),
+            )
+
+            // Which half this describes. A toggle rather than two save buttons:
+            // you are on one side of a matchup at a time, and saying which is a
+            // smaller decision than picking between two verbs.
+            FilterChip(
+                selected = state.recordingGoingFirst,
+                onClick = { state.recordingGoingFirst = true },
+                label = { Text("1st") },
+            )
+            FilterChip(
+                selected = !state.recordingGoingFirst,
+                onClick = { state.recordingGoingFirst = false },
+                label = { Text("2nd") },
+            )
+
+            Button(
+                onClick = { state.recordSiding(opponent); opponent = "" },
+                enabled = opponent.isNotBlank(),
+            ) {
+                Text("Record")
+            }
+        }
     }
 }

@@ -210,6 +210,114 @@ class DeckBuilderStateTest {
         assertTrue(written.contains("#ydkx-extended"), written)
     }
 
+    // ---- recording a plan --------------------------------------------------
+
+    @Test
+    fun aFreshlyImportedDeckHasNothingPending() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.importFromFile()
+
+        assertTrue(state.pendingSwap.isEmpty)
+    }
+
+    @Test
+    fun swappingByHandShowsUpAsAPendingPlan() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.importFromFile()
+
+        // Exactly what a player does: move a card out, bring one in.
+        state.moveCard(TestPool.maxx, DeckSection.MAIN, DeckSection.SIDE)
+        state.moveCard(TestPool.droll, DeckSection.SIDE, DeckSection.MAIN)
+
+        assertEquals(listOf(TestPool.droll.id), state.pendingSwap.cardsIn)
+        assertEquals(listOf(TestPool.maxx.id), state.pendingSwap.cardsOut)
+    }
+
+    @Test
+    fun recordingKeepsThePlanAndClearsThePanel() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.importFromFile()
+        state.moveCard(TestPool.maxx, DeckSection.MAIN, DeckSection.SIDE)
+        state.moveCard(TestPool.droll, DeckSection.SIDE, DeckSection.MAIN)
+
+        state.sidingVisible = true
+        state.recordingGoingFirst = false
+        state.recordSiding("Branded Despia")
+
+        val saved = state.sidingPatterns.getValue("Branded Despia")
+        assertEquals(listOf(TestPool.droll.id), saved.goingSecond.cardsIn)
+        assertTrue(saved.goingFirst.isEmpty, "only the half being recorded is written")
+        assertFalse(state.sidingVisible)
+    }
+
+    @Test
+    fun bothHalvesOfAMatchupCanBeRecordedSeparately() = runTest {
+        // Captured in two sittings, which is how it actually happens.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.importFromFile()
+
+        state.moveCard(TestPool.maxx, DeckSection.MAIN, DeckSection.SIDE)
+        state.moveCard(TestPool.droll, DeckSection.SIDE, DeckSection.MAIN)
+        state.recordingGoingFirst = true
+        state.recordSiding("Ryzeal")
+
+        state.resetToRegistered()
+        state.moveCard(TestPool.nibiru, DeckSection.MAIN, DeckSection.SIDE)
+        state.moveCard(TestPool.droll, DeckSection.SIDE, DeckSection.MAIN)
+        state.recordingGoingFirst = false
+        state.recordSiding("Ryzeal")
+
+        val saved = state.sidingPatterns.getValue("Ryzeal")
+        assertEquals(listOf(TestPool.maxx.id), saved.goingFirst.cardsOut)
+        assertEquals(listOf(TestPool.nibiru.id), saved.goingSecond.cardsOut)
+    }
+
+    @Test
+    fun aRecordedPlanCanBeAppliedBack() = runTest {
+        // The point of recording: what was captured has to reproduce what was
+        // done, from the registered list.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.importFromFile()
+        state.moveCard(TestPool.maxx, DeckSection.MAIN, DeckSection.SIDE)
+        state.moveCard(TestPool.droll, DeckSection.SIDE, DeckSection.MAIN)
+        val sided = state.deck
+
+        state.recordSiding("Snake-Eye Mirror")
+        state.resetToRegistered()
+        state.applySiding(state.sidingPatterns.getValue("Snake-Eye Mirror"), goingFirst = true)
+
+        assertEquals(
+            sided.main.sortedBy { it.value },
+            state.deck.main.sortedBy { it.value },
+        )
+    }
+
+    @Test
+    fun recordingNothingRecordsNothing() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.importFromFile()
+
+        state.recordSiding("Nothing Happened")
+
+        assertTrue("Nothing Happened" !in state.sidingPatterns.keys)
+    }
+
+    @Test
+    fun aRecordedPlanTravelsInTheExportedFile() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+        state.moveCard(TestPool.maxx, DeckSection.MAIN, DeckSection.SIDE)
+        state.moveCard(TestPool.droll, DeckSection.SIDE, DeckSection.MAIN)
+        state.recordSiding("Fiendsmith")
+        state.exportToFile()
+
+        val written = requireNonNull(files.exported)
+        assertTrue(written.contains("Fiendsmith"), written)
+        // And the desktop's own keys are still there beside it.
+        assertTrue(written.contains("somethingThisAppDoesNotKnow"), written)
+    }
+
     // ---- the deal ----------------------------------------------------------
 
     @Test

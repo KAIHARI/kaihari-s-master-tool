@@ -195,19 +195,19 @@ fun DeckBuilderTopBar(
                         layout.update { it.copy(stacked = !it.stacked) }
                     },
                 )
-                // Only offered when the loaded file actually carries plans, which
-                // it does only if it came from the desktop tool as a .ydkx.
+                // Always available. A deck with no plans is exactly the deck
+                // you are about to record the first one for.
                 DropdownMenuItem(
                     text = {
                         Text(
-                            if (state.sidingPatterns.isEmpty()) {
-                                "Siding — none in this deck"
-                            } else {
-                                "Siding… (${state.sidingPatterns.size})"
+                            when {
+                                state.sidingPatterns.isNotEmpty() ->
+                                    "Siding… (${state.sidingPatterns.size})"
+                                !state.pendingSwap.isEmpty -> "Siding… (unsaved swap)"
+                                else -> "Siding…"
                             },
                         )
                     },
-                    enabled = state.sidingPatterns.isNotEmpty(),
                     onClick = { menuOpen = false; state.sidingVisible = true },
                 )
                 DropdownMenuItem(

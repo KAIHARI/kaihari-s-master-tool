@@ -16,9 +16,11 @@ import com.kaiharimoto.mastertool.core.deck.DeckValidator
 import com.kaiharimoto.mastertool.core.deck.RejectionReason
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.siding.SidingCodec
+import com.kaiharimoto.mastertool.core.siding.SidingDiff
 import com.kaiharimoto.mastertool.core.siding.SidingEngine
 import com.kaiharimoto.mastertool.core.siding.SidingPattern
 import com.kaiharimoto.mastertool.core.siding.SidingProblem
+import com.kaiharimoto.mastertool.core.siding.SidingSwap
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.Deck
@@ -182,6 +184,27 @@ class DeckBuilderState(
     var sidingVisible by mutableStateOf(false)
 
     /**
+     * The decklist as last opened or saved — the one you registered.
+     *
+     * Everything siding means is relative to this. Without it "what have I
+     * changed" has no answer, because the deck on screen is the only deck there
+     * is.
+     */
+    var registeredDeck by mutableStateOf(Deck.EMPTY)
+        private set
+
+    /**
+     * What has been swapped since then, as a plan.
+     *
+     * Nobody writes a siding plan and then performs it; they move cards between
+     * the Main and Side decks until the matchup feels right, and that *is* the
+     * plan. This is what makes recording one a button rather than a form.
+     */
+    val pendingSwap: SidingSwap by derivedStateOf {
+        SidingDiff.between(registeredDeck, deck)
+    }
+
+    /**
      * Bumped when a whole decklist arrives, and never by an edit.
      *
      * The panes deal their cards in when it changes. Adding one card is not a
@@ -319,6 +342,54 @@ class DeckBuilderState(
     }
 
     // ---- siding ------------------------------------------------------------
+
+    /**
+     * Records what has been swapped so far as a plan for [opponent].
+     *
+     * Written into the payload the file already carries, so it goes back to the
+     * desktop with everything else the desktop put there. Saving under a name
+     * that exists replaces it — the second attempt at a matchup is the one you
+     * meant.
+     */
+    fun recordSiding(opponent: String) {
+        val name = opponent.trim()
+        if (name.isEmpty()) return
+
+        val swap = pendingSwap
+        if (swap.isEmpty) {
+            showToast("Nothing has been swapped yet.")
+            return
+        }
+
+        val existing = sidingPatterns[name]
+        val updated = (existing ?: SidingPattern(deckName = name)).copy(
+            deckName = name,
+            // Whichever half is being recorded keeps the other one, so the two
+            // can be captured in either order and in separate sittings.
+            goingFirst = if (recordingGoingFirst) swap else existing?.goingFirst ?: SidingSwap(),
+            goingSecond = if (recordingGoingFirst) existing?.goingSecond ?: SidingSwap() else swap,
+            // Three cards to recognise the matchup by, taken from what came in.
+            thumbnails = swap.cardsIn.distinct().take(3),
+        )
+
+        extended = SidingCodec.write(extended, sidingPatterns + (name to updated))
+        sidingVisible = false
+        showToast(
+            "Recorded ${swap.cardsIn.size} in / ${swap.cardsOut.size} out for $name, " +
+                if (recordingGoingFirst) "going first." else "going second.",
+        )
+    }
+
+    /** Which half of a matchup the next recording describes. */
+    var recordingGoingFirst by mutableStateOf(true)
+
+    /** Puts the deck back to the list you registered, abandoning a swap. */
+    fun resetToRegistered() {
+        if (deck == registeredDeck) return
+        val token = pushUndo(deck)
+        deck = registeredDeck
+        showToast("Back to the registered decklist.", undo = { undoIfCurrent(token) })
+    }
 
     /**
      * Swaps the deck over for a matchup.
@@ -644,6 +715,7 @@ class DeckBuilderState(
     // ---- persistence -------------------------------------------------------
 
     fun newDeck() {
+        registeredDeck = Deck.EMPTY
         val token = pushUndo(deck)
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
@@ -656,6 +728,9 @@ class DeckBuilderState(
         scope.launch {
             val id = deckId ?: deps.newDeckId().also { deckId = it }
             deps.deckRepository.save(id, deckName.ifBlank { "Untitled Deck" }, deck, extended)
+            // Saving is the other way a list becomes the one you registered,
+            // which is what stops a saved swap reading as a pending one forever.
+            registeredDeck = deck
             showToast("Saved \"$deckName\".")
             onSaved(id)
         }
@@ -665,6 +740,7 @@ class DeckBuilderState(
         scope.launch {
             val stored = deps.deckRepository.byId(id) ?: return@launch
             deck = stored.entry.deck
+            registeredDeck = stored.entry.deck
             dealSerial++
             deckName = stored.entry.name
             deckId = stored.entry.id
@@ -682,6 +758,7 @@ class DeckBuilderState(
 
             val token = pushUndo(deck)
             deck = parsed.document.deck
+            registeredDeck = parsed.document.deck
             dealSerial++
             deckName = file.name.substringBeforeLast('.').ifBlank { "Imported Deck" }
             deckId = null
