@@ -56,6 +56,29 @@ class DeckLayoutState(
         updateSection(section) { it.copy(collapsed = !it.collapsed) }
     }
 
+    /**
+     * Gives one section the whole column by collapsing the other two, and puts
+     * them back when it is already the only one open.
+     *
+     * What "focus the Main deck" can usefully mean once panes collapse: all three
+     * are on screen at once, so there is nothing to scroll to — the useful move is
+     * to give the one being worked on the space.
+     */
+    fun focusSection(section: DeckSection) {
+        val alreadyFocused = DeckSection.entries.all { entry ->
+            preferences[entry].collapsed == (entry != section)
+        }
+
+        update { prefs ->
+            DeckSection.entries.fold(prefs) { acc, entry ->
+                acc.with(
+                    entry,
+                    acc[entry].copy(collapsed = if (alreadyFocused) false else entry != section),
+                )
+            }
+        }
+    }
+
     fun setColumns(section: DeckSection, columns: Int) {
         updateSection(section) { it.copy(columns = columns) }
     }

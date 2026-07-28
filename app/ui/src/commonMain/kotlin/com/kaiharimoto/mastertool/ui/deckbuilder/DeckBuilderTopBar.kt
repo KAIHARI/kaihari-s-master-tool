@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
@@ -71,7 +72,9 @@ fun DeckBuilderTopBar(
             onValueChange = state::rename,
             singleLine = true,
             label = { Text("Deck") },
-            modifier = Modifier.width(240.dp),
+            modifier = Modifier
+                .width(240.dp)
+                .onFocusChanged { state.onTextFieldFocusChanged(it.isFocused) },
         )
 
         Text(

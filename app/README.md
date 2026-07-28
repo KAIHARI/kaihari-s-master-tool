@@ -129,6 +129,8 @@ you can page through the results in, deck statistics with opening-hand odds, a
 deck-check panel that jumps to the card an issue names, a TCG/OCG toggle, deck
 library, YDK/YDKX import, export and share.
 
+On desktop: keyboard shortcuts throughout (press `?` for the list, which is
+generated from the table that implements them) and a hover preview on any card.
+
 Not yet built: siding patterns, shootout mode, the sandbox board simulator,
-PDF export, keyboard shortcuts, and autoscrolling a pane while dragging over its
-edge.
+PDF export, and autoscrolling a pane while dragging over its edge.

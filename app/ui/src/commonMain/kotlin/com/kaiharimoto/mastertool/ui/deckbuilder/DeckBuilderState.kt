@@ -102,6 +102,23 @@ class DeckBuilderState(
 
     var issuesVisible by mutableStateOf(false)
 
+    var helpVisible by mutableStateOf(false)
+
+    /**
+     * Whether any text field in the builder has the caret.
+     *
+     * A count rather than a flag because focus moving from one field to another
+     * reports the two changes in whichever order it likes, and a flag would end
+     * up clear when focus had simply moved next door.
+     */
+    private var focusedTextFields by mutableStateOf(0)
+
+    val textInputFocused: Boolean get() = focusedTextFields > 0
+
+    fun onTextFieldFocusChanged(focused: Boolean) {
+        focusedTextFields = (focusedTextFields + if (focused) 1 else -1).coerceAtLeast(0)
+    }
+
     /** Which section the statistics panel is reporting on. */
     var statsSection by mutableStateOf(DeckSection.MAIN)
 
@@ -511,6 +528,19 @@ class DeckBuilderState(
     }
 
     fun inspect(card: Card) = inspect(listOf(card), 0)
+
+    /** Steps the inspector through the list it was opened on. */
+    fun pageInspection(delta: Int) {
+        val current = inspection ?: return
+        val next = (current.index + delta).coerceIn(0, current.cards.lastIndex)
+        if (next != current.index) inspection = current.copy(index = next)
+    }
+
+    /** Keeps the stored page in step when the inspector is swiped rather than keyed. */
+    fun onInspectionPageChanged(index: Int) {
+        val current = inspection ?: return
+        if (current.index != index) inspection = current.copy(index = index)
+    }
 
     fun copiesInDeck(id: CardId): Int = deck.copiesOf(id)
 

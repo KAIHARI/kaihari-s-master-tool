@@ -57,6 +57,7 @@ import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.prefs.SectionPreferences
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CardTile
+import com.kaiharimoto.mastertool.ui.components.HoverPreview
 import com.kaiharimoto.mastertool.ui.components.accent
 import com.kaiharimoto.mastertool.ui.dnd.DragController
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
@@ -296,22 +297,24 @@ private fun DeckCard(
     }
 
     val tile: @Composable () -> Unit = {
-        CardTile(
-            card = card,
-            format = state.format,
-            copies = copies,
-            highlighted = highlighted,
-            onClick = { state.removeOne(card, section) },
-        ) {
-            // A bar down the leading edge of the card the drop would land before.
-            if (insertionMarker) {
-                Box(
-                    Modifier
-                        .fillMaxHeight()
-                        .width(3.dp)
-                        .align(Alignment.CenterStart)
-                        .background(MasterToolPalette.GoldBright),
-                )
+        HoverPreview(card) {
+            CardTile(
+                card = card,
+                format = state.format,
+                copies = copies,
+                highlighted = highlighted,
+                onClick = { state.removeOne(card, section) },
+            ) {
+                // A bar down the leading edge of the card the drop would land before.
+                if (insertionMarker) {
+                    Box(
+                        Modifier
+                            .fillMaxHeight()
+                            .width(3.dp)
+                            .align(Alignment.CenterStart)
+                            .background(MasterToolPalette.GoldBright),
+                    )
+                }
             }
         }
     }

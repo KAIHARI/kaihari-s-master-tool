@@ -29,12 +29,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.ui.components.CardTile
+import com.kaiharimoto.mastertool.ui.components.HoverPreview
 import com.kaiharimoto.mastertool.ui.dnd.DragController
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
 import com.kaiharimoto.mastertool.ui.dnd.DragSource
@@ -45,6 +49,7 @@ fun SearchPane(
     state: DeckBuilderState,
     layout: DeckLayoutState,
     drag: DragController,
+    searchFocus: FocusRequester,
     onDropped: (DragSession, DropHover?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -67,7 +72,10 @@ fun SearchPane(
         OutlinedTextField(
             value = state.query,
             onValueChange = state::onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(searchFocus)
+                .onFocusChanged { state.onTextFieldFocusChanged(it.isFocused) },
             singleLine = true,
             placeholder = { Text("Search cards") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
@@ -150,15 +158,17 @@ fun SearchPane(
                     onLongPress = { state.inspect(state.results, position) },
                     onDropped = onDropped,
                 ) {
-                    CardTile(
-                        card = card,
-                        format = state.format,
-                        copies = state.copiesInDeck(card.id),
-                        // Cards that cannot be added are dimmed rather than hidden,
-                        // so the pool stays stable while you scan it.
-                        dimmed = state.remaining(card) == 0,
-                        onClick = { state.addCard(card) },
-                    )
+                    HoverPreview(card) {
+                        CardTile(
+                            card = card,
+                            format = state.format,
+                            copies = state.copiesInDeck(card.id),
+                            // Cards that cannot be added are dimmed rather than
+                            // hidden, so the pool stays stable while you scan it.
+                            dimmed = state.remaining(card) == 0,
+                            onClick = { state.addCard(card) },
+                        )
+                    }
                 }
             }
         }

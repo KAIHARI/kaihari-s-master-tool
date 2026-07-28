@@ -22,15 +22,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.core.input.ShortcutAction
+import com.kaiharimoto.mastertool.core.input.ShortcutContext
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.components.CardInspector
 import com.kaiharimoto.mastertool.ui.dnd.DragController
 import com.kaiharimoto.mastertool.ui.dnd.DragOverlay
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
 import com.kaiharimoto.mastertool.ui.dnd.DropHover
+import com.kaiharimoto.mastertool.ui.input.ShortcutHelpSheet
+import com.kaiharimoto.mastertool.ui.input.ShortcutHost
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
 /**
@@ -81,47 +87,80 @@ fun DeckBuilderScreen(
         applyDrop(state, session, landed)
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHost) },
-        containerColor = MaterialTheme.colorScheme.background,
-    ) { padding ->
-        // The dragged card is composed here, outside every pane, so it is not
-        // clipped by the grid it was lifted out of.
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            Column(Modifier.fillMaxSize()) {
-                DeckBuilderTopBar(state, layout, updateState, onOpenLibrary)
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+    val searchFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
 
-                Row(
-                    Modifier
-                        .fillMaxSize()
-                        .onGloballyPositioned { layout.builderWidthPx = it.size.width.toFloat() },
-                ) {
-                    SearchPane(
-                        state = state,
-                        layout = layout,
-                        drag = drag,
-                        onDropped = onDropped,
-                        modifier = Modifier.weight(layout.preferences.searchWeight).fillMaxHeight(),
-                    )
+    val overlayOpen = state.inspection != null || state.filtersVisible ||
+        state.statsVisible || state.issuesVisible || state.helpVisible
 
-                    SearchDeckDivider(onDrag = layout::resizeSearchPane)
-
-                    DeckPanes(
-                        state = state,
-                        layout = layout,
-                        drag = drag,
-                        onDropped = onDropped,
-                        modifier = Modifier
-                            .weight(1f - layout.preferences.searchWeight)
-                            .fillMaxHeight(),
-                    )
-                }
+    ShortcutHost(
+        context = ShortcutContext(
+            textInputFocused = state.textInputFocused,
+            inspectorOpen = state.inspection != null,
+            overlayOpen = overlayOpen,
+        ),
+        onAction = { action ->
+            when (action) {
+                ShortcutAction.SAVE -> state.save()
+                ShortcutAction.UNDO -> state.undo()
+                ShortcutAction.REDO -> state.redo()
+                ShortcutAction.FOCUS_SEARCH -> searchFocus.requestFocus()
+                ShortcutAction.TOGGLE_FILTERS -> state.filtersVisible = !state.filtersVisible
+                ShortcutAction.TOGGLE_STATS -> state.statsVisible = !state.statsVisible
+                ShortcutAction.TOGGLE_ISSUES -> state.issuesVisible = !state.issuesVisible
+                ShortcutAction.TOGGLE_HELP -> state.helpVisible = !state.helpVisible
+                ShortcutAction.DISMISS -> dismissTopLayer(state) { focusManager.clearFocus() }
+                ShortcutAction.FOCUS_MAIN -> layout.focusSection(DeckSection.MAIN)
+                ShortcutAction.FOCUS_EXTRA -> layout.focusSection(DeckSection.EXTRA)
+                ShortcutAction.FOCUS_SIDE -> layout.focusSection(DeckSection.SIDE)
+                ShortcutAction.PREVIOUS_CARD -> state.pageInspection(-1)
+                ShortcutAction.NEXT_CARD -> state.pageInspection(1)
             }
+        },
+    ) {
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHost) },
+            containerColor = MaterialTheme.colorScheme.background,
+        ) { padding ->
+            // The dragged card is composed here, outside every pane, so it is not
+            // clipped by the grid it was lifted out of.
+            Box(Modifier.fillMaxSize().padding(padding)) {
+                Column(Modifier.fillMaxSize()) {
+                    DeckBuilderTopBar(state, layout, updateState, onOpenLibrary)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
-            DragOverlay(drag, state.format)
+                    Row(
+                        Modifier
+                            .fillMaxSize()
+                            .onGloballyPositioned { layout.builderWidthPx = it.size.width.toFloat() },
+                    ) {
+                        SearchPane(
+                            state = state,
+                            layout = layout,
+                            drag = drag,
+                            searchFocus = searchFocus,
+                            onDropped = onDropped,
+                            modifier = Modifier.weight(layout.preferences.searchWeight).fillMaxHeight(),
+                        )
+
+                        SearchDeckDivider(onDrag = layout::resizeSearchPane)
+
+                        DeckPanes(
+                            state = state,
+                            layout = layout,
+                            drag = drag,
+                            onDropped = onDropped,
+                            modifier = Modifier
+                                .weight(1f - layout.preferences.searchWeight)
+                                .fillMaxHeight(),
+                        )
+                    }
+                }
+
+                DragOverlay(drag, state.format)
+            }
         }
-    }
+    } // ShortcutHost
 
     state.inspection?.let { inspection ->
         CardInspector(
@@ -136,6 +175,7 @@ fun DeckBuilderScreen(
                 state.mainStatistics.openingHandOdds(copies, handSize)
             },
             onDismiss = { state.inspection = null },
+            onPageChanged = state::onInspectionPageChanged,
             onSetCount = { card, section, count -> state.setCount(card, section, count) },
             onMove = { card, from, to -> state.moveCard(card, from, to) },
             onBrowse = { filter ->
@@ -178,6 +218,30 @@ fun DeckBuilderScreen(
             },
             onDismiss = { state.issuesVisible = false },
         )
+    }
+
+    if (state.helpVisible) {
+        ShortcutHelpSheet(onDismiss = { state.helpVisible = false })
+    }
+}
+
+/**
+ * What Escape closes, in order.
+ *
+ * One ordered list rather than a handler per surface. The tool this replaces had
+ * Escape implemented in four separate places that did not agree about which one
+ * won, which is the sort of thing that is invisible until the one time it closes
+ * the wrong thing.
+ */
+private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
+    when {
+        state.inspection != null -> state.inspection = null
+        state.helpVisible -> state.helpVisible = false
+        state.filtersVisible -> state.filtersVisible = false
+        state.statsVisible -> state.statsVisible = false
+        state.issuesVisible -> state.issuesVisible = false
+        state.query.isNotEmpty() -> state.onQueryChange("")
+        else -> clearFocus()
     }
 }
 

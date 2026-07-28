@@ -19,6 +19,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +51,7 @@ fun CardInspector(
     mainDeckSize: Int,
     openingHandOdds: (copies: Int, handSize: Int) -> Double,
     onDismiss: () -> Unit,
+    onPageChanged: (Int) -> Unit,
     onSetCount: (Card, DeckSection, Int) -> Unit,
     onMove: (Card, DeckSection, DeckSection) -> Unit,
     onBrowse: (CardFilter) -> Unit,
@@ -62,6 +64,14 @@ fun CardInspector(
         pageCount = { cards.size },
     )
     val scope = rememberCoroutineScope()
+
+    // Two-way, and settled by both sides checking before acting: the arrow keys
+    // move the stored page and the pager follows, a swipe moves the pager and the
+    // stored page follows, and neither can start the other off again.
+    LaunchedEffect(initialIndex) {
+        if (pagerState.currentPage != initialIndex) pagerState.animateScrollToPage(initialIndex)
+    }
+    LaunchedEffect(pagerState.currentPage) { onPageChanged(pagerState.currentPage) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         if (cards.size > 1) {
