@@ -165,3 +165,50 @@ class GridFitterTest {
         repeat(5) { assertEquals(fit(count = 41).columns, fit(count = 41).columns) }
     }
 }
+
+/**
+ * The card-width formula, which two things now share.
+ *
+ * The fitter uses it to decide whether a section fits; the empty pane uses it to
+ * draw slots at the size cards will actually be. If those two ever disagreed it
+ * would show as ghost outlines the first real card does not sit inside.
+ */
+class CardWidthTest {
+
+    @Test
+    fun oneColumnTakesTheWholeWidth() {
+        assertEquals(400f, GridFitter.cardWidth(400f, columns = 1, spacing = 6f))
+    }
+
+    @Test
+    fun gutterIsSharedBetweenTheCards() {
+        // Four cards have three gutters between them, not four.
+        assertEquals(97f, GridFitter.cardWidth(400f, columns = 4, spacing = 4f))
+    }
+
+    @Test
+    fun closingTheGutterGivesTheWidthBack() {
+        assertEquals(100f, GridFitter.cardWidth(400f, columns = 4, spacing = 0f))
+    }
+
+    @Test
+    fun nonsenseIsZeroRatherThanInfinite() {
+        assertEquals(0f, GridFitter.cardWidth(400f, columns = 0, spacing = 4f))
+        assertEquals(0f, GridFitter.cardWidth(400f, columns = -2, spacing = 4f))
+    }
+
+    @Test
+    fun aGutterWiderThanTheSpaceGoesNegativeRatherThanPretending() {
+        // The fitter checks for this and gives up; silently clamping to zero here
+        // would make it think a card of no width fits.
+        assertTrue(GridFitter.cardWidth(10f, columns = 5, spacing = 20f) < 0f)
+    }
+
+    @Test
+    fun theHeightCalculationUsesTheSameWidth() {
+        val width = GridFitter.cardWidth(500f, columns = 5, spacing = 3f)
+        val oneRow = GridFitter.requiredHeight(5, 5, 500f, spacing = 3f, aspectRatio = 0.5f)
+
+        assertEquals(width / 0.5f, oneRow, 0.001f)
+    }
+}

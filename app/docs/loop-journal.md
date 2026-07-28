@@ -356,12 +356,70 @@ index, it cannot be trusted the way the other edits can — so it goes through a
 new `rearrange`, which refuses any order that is not a permutation of what was
 already there.
 
+## 19. Arranging without a mouse
+
+Arrows move a cursor, shift grows it, Ctrl carries what it holds. The design
+decision that made the rest fall out: there is no cursor object. The selection
+*is* the cursor, so the keyboard and the mouse are one feature rather than two
+that have to be kept looking alike, and every drag behaviour already built —
+carrying a group, keeping it selected where it lands — came along for free.
+
+Three pieces underneath, each shaped by refusing to guess. `GridNavigation`
+returns null at an edge rather than clamping, so a caller can tell "there is
+nowhere to go" from "you went nowhere". The focus of a range is *derived* from
+the anchor and the ends rather than stored, because a stored one would be
+another field every selection had to keep right. And `carry` takes a signed
+delta instead of a destination, since an arrow key only knows "one further that
+way" — and one further has to mean one place in the deck, not one index in a
+list the cards have already been lifted out of.
+
+Carrying clamps at the edges rather than refusing, because the key repeats, and
+a clamped move that changes nothing does not go on the undo stack. It is also
+the one deck edit that says nothing at all: a toast per repeat would bury the
+thing being arranged.
+
+## 20. The four-minute compiler, and a lint for it
+
+Two red builds in a row, both from mistakes no amount of care catches by
+reading: an elvis with a bare `0` against a nullable `Long`, and ten tests that
+forgot to be `runTest` so the `TestScope` receiver `builderState()` needs was
+missing. Neither is subtle once a compiler says it. The problem is that the
+first compiler to see this module is the one in CI, four minutes after the push.
+
+So the second half of the fix was `tools/check-test-scopes.py`, which fires on a
+`@Test` that reaches for something only the receiver provides and is not a
+`runTest`. Narrow on purpose — verified by putting the bug back and watching it
+complain, then taking it out again and watching it go quiet. It joins
+`check-imports.py`: two small scripts that between them cover the two ways this
+environment lets a non-compiling change reach a push.
+
+## 21. What an empty pane is for
+
+An empty section was a line of grey text — which is what every other builder
+shows, and is also the first thing anybody sees on a new deck.
+
+It is now the shape of the deck about to be built: one slot for every card the
+section holds, pressed into the same cloth the cards will sit on, at exactly the
+size the cards will be. That last part is why `cardWidth` moved into
+`GridFitter` — the fitter uses it to decide whether a section fits and the empty
+pane uses it to place slots, and two copies of the formula would have shown up
+as ghost outlines the first real card does not sit inside.
+
+Prototyped in the browser first, which earned its keep twice. The slots are
+drawn *inset* even though the real grid has no gutter at all: cards can touch
+because they have art to tell them apart, and empty outlines that touch stop
+being cards and become graph paper — obvious in a screenshot, invisible in the
+code. And the rows fade out downward, because forty hard-edged rectangles is a
+form to fill in rather than a table to work at. The first slot is ringed in the
+section's colour, which is what turns the whole thing from decoration into an
+answer to "where does the next one go".
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **414 tests**, up from 249, plus
-**37 in `:ui`** where there were none.
+`:core` carries the arithmetic for all of it, at **451 tests**, up from 249, plus
+**47 in `:ui`** where there were none.
 
 Still open: the sandbox board, a full shootout mode with an opponent's deck, and
 PDF export of a siding sheet.

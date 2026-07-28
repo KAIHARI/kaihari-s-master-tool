@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.Orientation
@@ -52,7 +53,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -257,13 +262,7 @@ private fun DeckSectionPane(
         if (preferences.collapsed) return@Column
 
         if (ids.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "Tap a card on the left to add it here",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            EmptySection(section, accent)
             return@Column
         }
 
@@ -706,6 +705,115 @@ private fun SectionHeader(
         }
     }
 }
+
+/**
+ * A section with nothing in it.
+ *
+ * This was a line of grey text, which is what an empty pane looks like in every
+ * other builder and is also the first thing anybody sees on a new deck. It is
+ * now the shape of the deck about to be built: one slot for every card the
+ * section holds, pressed into the same cloth the cards will sit on, at exactly
+ * the size the cards will be.
+ *
+ * Two decisions worth writing down. The slots are drawn *inset* even though the
+ * real grid has no gutter at all — cards can touch because they have art to tell
+ * them apart, and empty outlines that touch stop being cards and become graph
+ * paper. And the rows fade out downward, because forty hard-edged rectangles is
+ * a form to fill in rather than a table to work at.
+ *
+ * The first slot is ringed in the section's colour. It is where the next card
+ * lands, and it turns the whole thing from decoration into an answer.
+ */
+@Composable
+private fun EmptySection(section: DeckSection, accent: Color) {
+    // Extra and Side have no minimum, so their capacity is the ceiling. Main's
+    // is the forty a legal deck starts at rather than the sixty it may reach:
+    // the promise being drawn is what is needed, not what is permitted.
+    val capacity = if (section.minSize > 0) section.minSize else section.maxSize
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val fit = with(density) {
+            GridFitter.fit(
+                count = capacity,
+                availableWidth = maxWidth.toPx(),
+                availableHeight = maxHeight.toPx(),
+                spacing = 0f,
+                aspectRatio = CARD_ASPECT_RATIO,
+                minColumns = SectionPreferences.MIN_COLUMNS,
+                maxColumns = SectionPreferences.MAX_COLUMNS,
+            )
+        }
+        val inset = with(density) { 3.dp.toPx() }
+        val corner = with(density) { CARD_CORNER.toPx() }
+        val ring = with(density) { 1.5.dp.toPx() }
+
+        Canvas(Modifier.fillMaxSize()) {
+            val cardWidth = GridFitter.cardWidth(size.width, fit.columns, spacing = 0f)
+            if (cardWidth <= inset * 2) return@Canvas
+            val cardHeight = cardWidth / CARD_ASPECT_RATIO
+
+            repeat(capacity) { index ->
+                val left = (index % fit.columns) * cardWidth + inset
+                val top = (index / fit.columns) * cardHeight + inset
+                val fade = slotFade((top + cardHeight / 2f) / size.height)
+                if (fade <= 0.01f) return@repeat
+
+                val slot = Size(cardWidth - inset * 2, cardHeight - inset * 2)
+                drawRoundRect(
+                    color = Color.Black.copy(alpha = 0.22f * fade),
+                    topLeft = Offset(left, top),
+                    size = slot,
+                    cornerRadius = CornerRadius(corner),
+                )
+                // A hairline of light along the bottom edge, which is what makes
+                // the dark rectangle read as a depression rather than a hole.
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.035f * fade),
+                    topLeft = Offset(left, top + 1f),
+                    size = slot,
+                    cornerRadius = CornerRadius(corner),
+                    style = Stroke(width = 1f),
+                )
+                if (index == 0) {
+                    drawRoundRect(
+                        color = accent.copy(alpha = 0.5f * fade),
+                        topLeft = Offset(left, top),
+                        size = slot,
+                        cornerRadius = CornerRadius(corner),
+                        style = Stroke(width = ring),
+                    )
+                }
+            }
+        }
+
+        Column(
+            Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                "Nothing here yet",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Box(Modifier.size(width = 1.dp, height = 6.dp))
+            Text(
+                "ROOM FOR $capacity",
+                style = tacticalStyle(),
+                color = accent.copy(alpha = 0.9f),
+            )
+        }
+    }
+}
+
+/**
+ * How visible a slot is, given where its middle sits down the pane.
+ *
+ * Full strength through the top third and gone by the bottom, so the grid reads
+ * as trailing off rather than as a form with forty boxes on it.
+ */
+private fun slotFade(position: Float): Float =
+    ((1f - (position - 0.30f) / 0.62f)).coerceIn(0f, 1f)
 
 /** A label inside a menu, styled so it cannot be mistaken for something to press. */
 @Composable

@@ -63,10 +63,21 @@ object GridFitter {
     ): Float {
         if (count <= 0 || columns <= 0) return 0f
 
-        val cardWidth = (availableWidth - spacing * (columns - 1)) / columns
+        val cardWidth = cardWidth(availableWidth, columns, spacing)
         if (cardWidth <= 0f) return Float.MAX_VALUE
 
         val rows = ceil(count.toDouble() / columns).toInt()
         return rows * (cardWidth / aspectRatio) + spacing * (rows - 1)
     }
+
+    /**
+     * How wide one card is once [columns] of them share [availableWidth].
+     *
+     * Pulled out because two things need it and they must agree exactly: this
+     * decides whether a section fits, and the empty pane draws its slots at the
+     * size cards will actually be. A second copy of the formula would show up as
+     * ghost outlines that the first real card does not sit inside.
+     */
+    fun cardWidth(availableWidth: Float, columns: Int, spacing: Float): Float =
+        if (columns <= 0) 0f else (availableWidth - spacing * (columns - 1)) / columns
 }
