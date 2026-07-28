@@ -260,12 +260,47 @@ this app does not understand.
    four-column grid was working with a single row. The app was right and the test
    was wrong, which is the outcome you want from a first test run.
 
+## 13. Recording a plan by doing it
+
+Siding was read-only. The obvious completion is an editor with four lists and a
+card picker; this is the other one.
+
+Nobody writes a swap down and then performs it. They move cards between the Main
+and Side decks until the matchup feels right, and *that* is the plan — so
+recording it is a diff, not a form, and everything it needs is already true
+before you open the panel.
+
+Compared by count and only on the Main deck. Two decks holding the same cards in
+a different order are the same decklist as far as siding goes; the arrangement is
+a separate thing, and a plan recording "moved card seven to slot twelve" would be
+recording the wrong edit. Cards that left the Main deck went to the Side by
+definition, so comparing both would let the two halves contradict each other.
+
+The property that makes it worth anything is tested twice — in `:core` and again
+through the state holder: what the diff produces must be a plan that reproduces
+what was done.
+
+## 14. Shuffle up and look
+
+The statistics panel answers half the ratio question. Opening-hand odds say what
+the numbers are; a test hand says what they feel like, and that is the half that
+changes a list — nobody moves a card because a percentage told them to.
+
+So it asks for the one judgement a player is already making, playable or brick,
+keeps the tally, and reports the rate. Judging deals the next hand immediately,
+because anything that made you press deal again would halve how many hands you
+ever look at. It claims nothing more: no simulation, no win rate, because
+neither would be true.
+
+The shuffle takes a `Random` rather than reaching for the global one, which is
+the only reason any of it is testable.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **381 tests**, up from 249, plus
-**15 in `:ui`** where there were none.
+`:core` carries the arithmetic for all of it, at **402 tests**, up from 249, plus
+**28 in `:ui`** where there were none.
 
-Still open: the siding editor (plans can be used but only written on the
-desktop), shootout mode, the sandbox board, and PDF export.
+Still open: the sandbox board, a full shootout mode with an opponent's deck, and
+PDF export of a siding sheet.

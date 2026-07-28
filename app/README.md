@@ -153,14 +153,19 @@ deck-check panel that jumps to the card an issue names, a TCG/OCG toggle, deck
 library, YDK/YDKX import, export and share.
 
 Cards in a deck pane touch, on a mat, in one of four surfaces. They catch the
-light when you point at one. A pane scrolls while you hold a card over its edge,
-and a long press fills a ring so you can see it arriving.
+light when you point at one, are dealt onto the table when a deck opens, and
+trail your hand on a spring while being carried. Several can be picked up and
+moved together. A pane scrolls while you hold a card over its edge, and a long
+press fills a ring so you can see it arriving.
 
 On desktop: keyboard shortcuts throughout (press `?` for the list, which is
 generated from the table that implements them) and a hover preview on any card.
 
-Siding is built and tested as a domain — patterns are read, applied and written
-back — but has no editor yet, so a pattern can only arrive in a file.
+Siding works end to end. Plans arrive in a `.ydkx`, are applied as one undoable
+edit, and are recorded by doing them — side by hand, then keep what you did.
 
-Not yet built: the siding editor, shootout mode, the sandbox board simulator,
-PDF export, and selecting several cards to carry at once.
+Test hands: shuffle the Main deck, judge each opening as playable or a brick, and
+watch the rate over a run of them.
+
+Not yet built: the sandbox board simulator, a full shootout against an
+opponent's deck, and PDF export of a siding sheet.
