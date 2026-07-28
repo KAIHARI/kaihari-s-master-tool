@@ -519,12 +519,44 @@ decks saved in the same minute then agree with each other, and a recomposition
 triggered by something else entirely does not make the numbers twitch — which
 reads as a glitch rather than as time passing.
 
+## 27. The thing nobody could write down
+
+Deck notes were stored, loaded and shown in the library since the repository was
+written, and nothing in the program could set them. That is worse than a missing
+feature, because `save` defaults the notes column to the empty string — so every
+save from the builder was quietly clearing whatever was in there.
+
+Now the deck carries them, writes them, loads them back, and there is somewhere
+to type them. They are the one thing in this program that is neither a card nor
+a number: why the third copy came out, what to do against the matchup that keeps
+beating you. That is most of what somebody actually knows about their own deck,
+and none of it fits in a decklist.
+
+No save button on the panel — the text goes into the deck and the deck saves
+itself, which is the only behaviour that makes sense for something written in a
+hurry between rounds. The saved snapshot grew a notes field to match, because a
+field the writer sends but the snapshot forgets is a field that reports itself
+saved the moment it changes.
+
+## 28. Writing down the trick
+
+The fastest way to build a deck in this program — type three letters, press
+Enter three times, three copies in the deck without a hand leaving the keyboard
+— was documented in a code comment, which is to say nowhere. The same for Tab
+completing a name.
+
+They cannot go in the shortcut table, because the table resolves keys globally
+and a global binding for Tab or Enter would fire everywhere; that is exactly
+what makes them useful inside a field and useless outside one. So they are a
+second, smaller list in `:core` beside the table, and the help sheet renders
+both. The sheet claims to be the whole keyboard story, so it has to be.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **490 tests**, up from 249, plus
-**56 in `:ui`** where there were none.
+`:core` carries the arithmetic for all of it, at **492 tests**, up from 249, plus
+**59 in `:ui`** where there were none.
 
 Still open: the sandbox board, a full shootout mode with an opponent's deck, and
 PDF export of a siding sheet.

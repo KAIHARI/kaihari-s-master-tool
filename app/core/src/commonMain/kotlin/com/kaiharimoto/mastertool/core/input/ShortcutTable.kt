@@ -137,7 +137,31 @@ data class Shortcut(
  * help sheet renders [all] directly, so it cannot describe a binding that does
  * not exist.
  */
+/**
+ * A key that belongs to one control rather than to the program.
+ *
+ * [ShortcutTable] cannot resolve these — a global binding for Tab or Enter
+ * would fire everywhere, which is exactly what makes them useful inside a text
+ * field and useless outside one. But the help sheet claims to be the whole
+ * keyboard story, so they are written down here beside the table rather than
+ * left as a comment next to the code that handles them.
+ */
+data class LocalKey(val label: String, val description: String)
+
 object ShortcutTable {
+
+    /**
+     * The search box's own keys.
+     *
+     * Enter is the fastest way to build a deck that either this program or the
+     * one it replaces has: type three letters and press it three times, and
+     * there are three copies in the deck without a hand leaving the keyboard.
+     * It was documented in a code comment, which is to say nowhere.
+     */
+    val inTheSearchBox: List<LocalKey> = listOf(
+        LocalKey("Tab", "Finish the card's name"),
+        LocalKey("Enter", "Add the best match and keep what you typed"),
+    )
 
     val all: List<Shortcut> = listOf(
         // Paging the inspector has to beat anything else bound to the arrows.

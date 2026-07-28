@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.core.input.LocalKey
 import com.kaiharimoto.mastertool.core.input.Shortcut
 import com.kaiharimoto.mastertool.core.input.ShortcutScope
 import com.kaiharimoto.mastertool.core.input.ShortcutTable
@@ -32,6 +33,11 @@ import com.kaiharimoto.mastertool.core.input.ShortcutTable
  * Nothing is written out by hand here, so this cannot describe a binding that
  * does not exist or miss one that does — which is the failure mode of every
  * hand-maintained shortcut list, including the one this replaces.
+ *
+ * The last group is the exception that proves it: two keys the search box
+ * handles itself, which the table cannot resolve because a global binding for
+ * Tab or Enter would fire everywhere. They still live in `:core` beside the
+ * table rather than as a comment next to the field.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,12 +59,27 @@ fun ShortcutHelpSheet(onDismiss: () -> Unit) {
             Group("Building a deck", ShortcutTable.all.filter { it.scope == ShortcutScope.BUILDER })
             Group("Inspecting a card", ShortcutTable.all.filter { it.scope == ShortcutScope.INSPECTOR })
 
+            // Not in the table above, because the table resolves keys globally
+            // and these two belong to one field. Listed all the same: this sheet
+            // claims to be the whole keyboard story.
+            LocalGroup("In the search box", ShortcutTable.inTheSearchBox)
+
             Text(
                 "While the cursor is in a text field, only Esc, Ctrl+S and Ctrl+F stay live.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+@Composable
+private fun LocalGroup(title: String, keys: List<LocalKey>) {
+    if (keys.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        keys.forEach { key -> KeyRow(key.label, key.description) }
     }
 }
 
@@ -73,26 +94,28 @@ private fun Group(title: String, shortcuts: List<Shortcut>) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         listed.forEach { shortcut ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Box(
-                    Modifier
-                        .width(140.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        shortcut.helpLabel ?: shortcut.chord.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-                Text(shortcut.description, style = MaterialTheme.typography.bodyMedium)
-            }
+            KeyRow(shortcut.helpLabel ?: shortcut.chord.label, shortcut.description)
         }
+    }
+}
+
+/** One line of the sheet: what to press, and what it does. */
+@Composable
+private fun KeyRow(label: String, description: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Box(
+            Modifier
+                .width(140.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+        }
+        Text(description, style = MaterialTheme.typography.bodyMedium)
     }
 }
