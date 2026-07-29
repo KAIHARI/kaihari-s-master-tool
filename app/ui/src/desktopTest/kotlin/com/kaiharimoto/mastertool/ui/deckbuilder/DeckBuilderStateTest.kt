@@ -513,6 +513,24 @@ class DeckBuilderStateTest {
     }
 
     @Test
+    fun undoingANewDeckBringsTheGapsBackWithTheCards() = runTest {
+        // Undo restores the order the cards were in, and an arrangement without
+        // its gaps is not the arrangement that was there.
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+
+        state.newDeck()
+        assertTrue(state.breaksIn(main).isEmpty)
+
+        requireNonNull(state.toast?.message)
+        state.toast?.undo?.invoke()
+
+        assertEquals(6, state.deck.main.size)
+        assertEquals(setOf(3), state.breaksIn(main).before)
+    }
+
+    @Test
     fun everyGapInASectionCanBeTakenAwayAtOnce() = runTest {
         // What a sort does to the arrangement it replaced. The tidy and sort
         // paths themselves need a card pool to look cards up in, and this

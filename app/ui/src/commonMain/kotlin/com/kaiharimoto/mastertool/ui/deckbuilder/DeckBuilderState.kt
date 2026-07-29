@@ -1437,8 +1437,10 @@ class DeckBuilderState(
     }
 
     /** Undoes an edit only while it is still the most recent one. */
-    private fun undoIfCurrent(token: UndoToken) {
-        if (editSerial == token.serial) undo()
+    private fun undoIfCurrent(token: UndoToken): Boolean {
+        if (editSerial != token.serial) return false
+        undo()
+        return true
     }
 
     private fun stamp(): UndoToken {
@@ -1494,12 +1496,19 @@ class DeckBuilderState(
         releaseOpenDeck()
         registeredDeck = Deck.EMPTY
         val token = pushUndo(deck)
+        // The gaps go with the deck they described, and come back with it. Undo
+        // brings the cards back in the order they were in, and an arrangement
+        // without its gaps is not the arrangement that was there.
+        val hadBreaks = breaks
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
         deckNotes = ""
         extended = null
         breaks = emptyMap()
-        showToast("Started a new deck.", undo = { undoIfCurrent(token) })
+        showToast(
+            "Started a new deck.",
+            undo = { if (undoIfCurrent(token)) breaks = hadBreaks },
+        )
     }
 
     fun save(onSaved: (String) -> Unit = {}) {

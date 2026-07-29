@@ -1237,6 +1237,37 @@ trial, since game one is pre-side for both decks: leaving them sided would
 compare your opening list against their game-two list, which is a match that
 never happens.
 
+## 58. A pass spent looking rather than adding
+
+The zone bug in section 55 was found by reading the board again, not by a test,
+so I spent a round doing only that. Three things came out of it.
+
+**A card the pool has not downloaded was dropping its modifier.** `DeckCard`
+returns early for an unknown card, and the early return did not pass on the
+modifier the grid had given it — so in the first seconds after an import, when
+every card is unknown, a section lost its gaps and its placement animation and
+then had them appear as the pool arrived. Invisible in every test, obvious the
+moment you read the two lines together.
+
+**Undoing "new deck" brought the cards back without their gaps.** Undo restores
+the order, and an arrangement without its gaps is not the arrangement that was
+there. The gaps now go with the deck they described and come back with it.
+
+**Four things I wrote and nothing could reach**: taking back one game in a run, a
+board zone clear, a table-is-empty check, and two sandbox actions with no gesture
+behind them. Unused API is the same risk as duplicated code — a second way to do
+something, kept honest by nobody, waiting to disagree with the way that is
+actually used. Discarding from the hand became a drag onto the graveyard, so the
+method for it *was* the second way; bouncing a card back to the hand has no path
+at all, which is the honest reason to delete it and write it down rather than
+leave it looking supported.
+
+And one piece of hardening with a sweep behind it rather than an argument: no
+number the PDF writer emits can end in a decimal point, checked across every
+value a page coordinate can take. `12.` is not a number, a reader that meets one
+stops drawing the page, and it was reachable only through float error — which is
+exactly the kind of thing that happens once, on somebody else's deck.
+
 ---
 
 ## Where this stands
