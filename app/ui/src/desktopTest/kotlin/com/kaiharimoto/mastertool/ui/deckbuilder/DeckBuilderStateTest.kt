@@ -1805,6 +1805,7 @@ class DeckBuilderStateTest {
             Overlay.SHOOTOUT -> shootoutVisible = true
             Overlay.NOTES -> notesVisible = true
             Overlay.ISSUES -> issuesVisible = true
+            Overlay.HISTORY -> historyVisible = true
         }
     }
 
@@ -2556,6 +2557,52 @@ class DeckBuilderStateTest {
         advanceUntilIdle()
 
         assertEquals(before, state.toast?.id, "an empty deck is not work")
+    }
+
+    @Test
+    fun theHistoryCannotBeOpenedOnADeckThatWasNeverSaved() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+
+        state.showHistory()
+        advanceUntilIdle()
+
+        assertFalse(state.historyVisible)
+        assertTrue(requireNonNull(state.toast?.message).startsWith("Save the deck first"))
+    }
+
+    @Test
+    fun openingTheHistoryWritesWhatIsPendingFirst() = runTest {
+        // The list is read off what is *stored*, so the top of it would claim the
+        // deck as it stands is a second and a half out of date.
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+
+        val extra = TestPool.many(3)
+        extra.forEach { state.addCard(it) }
+        state.showHistory()
+        advanceUntilIdle()
+
+        assertTrue(state.historyVisible)
+        val id = requireNonNull(state.deckId)
+        assertEquals(state.deck, assertNotNull(deps.deckRepository.byId(id)).entry.deck)
+    }
+
+    @Test
+    fun theHistoryClosesLikeEveryOtherSheet() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+        state.showHistory()
+        advanceUntilIdle()
+
+        state.close(Overlay.HISTORY)
+
+        assertFalse(state.isOpen(Overlay.HISTORY))
     }
 
     private fun requireNonNull(value: String?): String =

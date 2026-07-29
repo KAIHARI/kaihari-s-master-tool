@@ -190,6 +190,10 @@ fun DeckBuilderTopBar(
                     onClick = { menuOpen = false; state.newDeck() },
                 )
                 DropdownMenuItem(
+                    text = { Text("Used to be…") },
+                    onClick = { menuOpen = false; state.showHistory() },
+                )
+                DropdownMenuItem(
                     text = {
                         Column {
                             Text("Keep this one…")

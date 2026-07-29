@@ -41,6 +41,8 @@ import com.kaiharimoto.mastertool.ui.dnd.DragOverlay
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
 import com.kaiharimoto.mastertool.ui.dnd.DropHover
 import com.kaiharimoto.mastertool.ui.input.ShortcutHelpSheet
+import com.kaiharimoto.mastertool.ui.AppDependencies
+import com.kaiharimoto.mastertool.ui.library.DeckHistoryHost
 import com.kaiharimoto.mastertool.ui.input.ShortcutHost
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
@@ -56,6 +58,8 @@ import com.kaiharimoto.mastertool.ui.update.UpdateState
 @Composable
 fun DeckBuilderScreen(
     state: DeckBuilderState,
+    /** For the history sheet, which reads the deck's older versions off disk. */
+    deps: AppDependencies,
     layout: DeckLayoutState,
     updateState: UpdateState,
     onOpenLibrary: () -> Unit,
@@ -273,6 +277,30 @@ fun DeckBuilderScreen(
             },
             onDismiss = { state.issuesVisible = false },
         )
+    }
+
+    if (state.historyVisible) {
+        val id = state.deckId
+        // Stamped once, so "3 days ago" holds still under a recomposition that
+        // has nothing to do with time passing.
+        val openedAt = remember(id) { deps.now() }
+
+        if (id != null) {
+            DeckHistoryHost(
+                deps = deps,
+                deckId = id,
+                index = state.index,
+                now = openedAt,
+                onRestored = {
+                    state.historyVisible = false
+                    // Back through the front door: `load` writes anything still
+                    // pending, offers the deck being put down back, and re-reads
+                    // the gaps and the cloth off the restored file.
+                    state.load(id)
+                },
+                onDismiss = { state.historyVisible = false },
+            )
+        }
     }
 
     if (state.helpVisible) {

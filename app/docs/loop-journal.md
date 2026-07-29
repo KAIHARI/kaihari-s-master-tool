@@ -2455,6 +2455,37 @@ a stated property instead of an assumption.
 
 ---
 
+## 97 · A drawer you could put things into and not open
+
+The history shipped reachable from the library, and the builder got "keep this
+one" a push later. Which left the obvious asymmetry: standing in front of the
+deck you could *add* to its history and had to walk to the library to see what
+was in it.
+
+Both callers want the same six things — the versions, the deck they are read
+against, keeping one, naming one, going back to one, reading what changed — and
+none of that is about which screen asked. So the wiring moved into
+`DeckHistoryHost`, the library got shorter, and the builder's menu got one line.
+
+Two details the second caller forced out into the open. The list is read off what
+is *stored*, so `showHistory` writes the pending autosave and opens the sheet
+*after* the write rather than racing it — otherwise the top row would claim the
+deck as it stands is a second and a half out of date, which is the sort of
+nearly-right nobody catches. And restoring from the builder goes back through
+`load` rather than setting the deck directly, so it picks up everything `load`
+learned this week: it writes what is pending, offers the deck being put down
+back, and re-reads the gaps and the cloth off the restored file.
+
+The lamp did not happen. A radial shade across the pane — brighter where the
+light falls, deeper in the far corner — reads beautifully in a prototype and puts
+a 20% black wash over the bottom-right cards, which walks their name straight
+through the 4.5:1 that `CardFrameContrastTest` guarantees. The test would still
+pass, because it tests the palette rather than the palette under a lamp, and that
+is exactly what makes it the wrong trade: a small visual gain that quietly turns
+an existing guarantee into a lie. Closed rather than shipped.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus

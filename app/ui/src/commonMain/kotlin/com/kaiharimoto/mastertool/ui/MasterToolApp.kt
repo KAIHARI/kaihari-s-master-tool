@@ -75,6 +75,7 @@ fun MasterToolApp(deps: AppDependencies) {
         when (screen) {
             Screen.DeckBuilder -> DeckBuilderScreen(
                 state = builderState,
+                deps = deps,
                 layout = layoutState,
                 updateState = updateState,
                 onOpenLibrary = { screen = Screen.Library },

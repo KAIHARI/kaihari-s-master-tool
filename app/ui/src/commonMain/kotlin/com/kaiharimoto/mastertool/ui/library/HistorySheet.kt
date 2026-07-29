@@ -21,6 +21,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import com.kaiharimoto.mastertool.core.data.StoredDeck
+import com.kaiharimoto.mastertool.core.search.CardIndex
+import com.kaiharimoto.mastertool.ui.AppDependencies
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -321,4 +327,83 @@ private fun NameDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/**
+ * Everything a screen needs to show one deck's history.
+ *
+ * Both places that open a history want the same six things — the versions, the
+ * deck they are read against, keeping one, naming one, going back to one, and
+ * reading what changed — and none of that is about *which* screen asked. The
+ * library was the first caller and the builder is the second: you could keep a
+ * version from in front of the deck and then had to walk to the library to see
+ * the ones you had kept, which is a drawer you can put things into and not open.
+ *
+ * A version is drilled into rather than stacked on top: the history closes while
+ * the change is read and comes back afterwards, so there is never a sheet over a
+ * sheet.
+ */
+@Composable
+fun DeckHistoryHost(
+    deps: AppDependencies,
+    deckId: String,
+    index: CardIndex,
+    /** Stamped by the caller when the sheet opened, so "3 days ago" holds still. */
+    now: Long,
+    onRestored: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var stored by remember(deckId) { mutableStateOf<StoredDeck?>(null) }
+    var versions by remember(deckId) { mutableStateOf<List<DeckVersion>>(emptyList()) }
+    var token by remember(deckId) { mutableStateOf(0) }
+    var reading by remember(deckId) { mutableStateOf<DeckVersion?>(null) }
+
+    LaunchedEffect(deckId, token) {
+        stored = deps.deckRepository.byId(deckId)
+        versions = deps.deckRepository.versions(deckId)
+    }
+
+    stored?.let { deck ->
+        val version = reading
+
+        if (version == null) {
+            HistorySheet(
+                deckName = deck.entry.name,
+                versions = versions,
+                current = deck.entry.deck,
+                editedAtEpochMs = deck.entry.updatedAtEpochMs,
+                now = now,
+                onKeepNow = { name ->
+                    scope.launch {
+                        deps.deckRepository.keepNow(deckId, name)
+                        token++
+                    }
+                },
+                onName = { chosen, name ->
+                    scope.launch {
+                        deps.deckRepository.nameVersion(chosen.id, name)
+                        token++
+                    }
+                },
+                onRestore = {
+                    scope.launch {
+                        deps.deckRepository.restore(deckId, it.id)
+                        onRestored()
+                    }
+                },
+                onCompare = { reading = it },
+                onDismiss = onDismiss,
+            )
+        } else {
+            CompareSheet(
+                savedName = "${deck.entry.name}, ${RelativeTime.since(now, version.keptAtEpochMs)}",
+                saved = version.deck,
+                openName = deck.entry.name,
+                open = deck.entry.deck,
+                index = index,
+                onDismiss = { reading = null },
+            )
+        }
+    }
 }

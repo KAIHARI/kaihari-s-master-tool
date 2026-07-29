@@ -94,6 +94,7 @@ enum class Overlay {
     SHOOTOUT,
     NOTES,
     ISSUES,
+    HISTORY,
 }
 
 /** A transient message shown in the snackbar, optionally with an undo action. */
@@ -519,6 +520,9 @@ class DeckBuilderState(
 
     var issuesVisible by mutableStateOf(false)
 
+    /** Opened through [showHistory], which has to write before it can be read. */
+    var historyVisible by mutableStateOf(false)
+
     var showcaseVisible by mutableStateOf(false)
 
     var helpVisible by mutableStateOf(false)
@@ -555,6 +559,7 @@ class DeckBuilderState(
         Overlay.SHOOTOUT -> shootoutVisible
         Overlay.NOTES -> notesVisible
         Overlay.ISSUES -> issuesVisible
+        Overlay.HISTORY -> historyVisible
     }
 
     /**
@@ -581,6 +586,7 @@ class DeckBuilderState(
             Overlay.SHOOTOUT -> shootoutVisible = false
             Overlay.NOTES -> notesVisible = false
             Overlay.ISSUES -> issuesVisible = false
+            Overlay.HISTORY -> historyVisible = false
         }
     }
 
@@ -1921,6 +1927,29 @@ class DeckBuilderState(
             registeredDeck = deck
             showToast("Saved \"$deckName\".")
             onSaved(id)
+        }
+    }
+
+    /**
+     * Opens what this deck used to be.
+     *
+     * The history is read off what is *stored*, so the pending autosave has to
+     * land first — otherwise the top of the list claims the deck as it stands is
+     * a second and a half out of date, which is exactly the sort of nearly-right
+     * nobody would catch. Written here rather than left to the debounce, and the
+     * sheet opens after the write rather than racing it.
+     */
+    fun showHistory() {
+        val id = deckId
+        if (id == null) {
+            showToast("Save the deck first. A deck that has never been saved has no history.")
+            return
+        }
+
+        autosaveJob?.cancel()
+        scope.launch {
+            writeToDisk(id)
+            historyVisible = true
         }
     }
 
