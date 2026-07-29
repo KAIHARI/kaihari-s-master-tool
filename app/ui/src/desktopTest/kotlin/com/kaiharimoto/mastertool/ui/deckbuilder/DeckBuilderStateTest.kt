@@ -938,6 +938,40 @@ class DeckBuilderStateTest {
         assertFalse("Snake-Eye" in state.sidingPatterns, "the imported plans came back with it")
     }
 
+    @Test
+    fun everythingAboutADeckSurvivesBeingSavedAndOpenedAgain() = runTest {
+        // The round trip nothing covered: the gaps, the note on a card and the
+        // cloth all live in the payload, and a deck is opened by a different
+        // path from the one that puts one back. Both go through `reopen` now,
+        // and this is what says so.
+        val state = builderState()
+        TestPool.many(5).forEach { state.addCard(it) }
+        val card = state.deck.main.first()
+        state.toggleBreak(main, 3)
+        state.writeNote(card, "plays through Ash")
+        state.chooseMat(MatChoice.WINE)
+        state.updateNotes("cut the third copy")
+
+        state.save()
+        advanceUntilIdle()
+        val id = requireNonNull(state.deckId)
+        val saved = state.deck
+
+        state.newDeck()
+        advanceUntilIdle()
+        assertEquals(MatChoice.THEME, state.mat, "the new deck is not wearing the old one's cloth")
+
+        state.load(id)
+        advanceUntilIdle()
+
+        assertEquals(saved, state.deck)
+        assertEquals(setOf(3), state.breaksIn(main).before)
+        assertEquals("plays through Ash", state.noteOn(card))
+        assertEquals(MatChoice.WINE, state.mat)
+        assertEquals("cut the third copy", state.deckNotes)
+        assertEquals(SaveStatus.SAVED, state.saveStatus, "reopening is not an edit")
+    }
+
     // ---- what a save has to include ----------------------------------------
 
     @Test

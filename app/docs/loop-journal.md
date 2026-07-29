@@ -2007,6 +2007,13 @@ has been wrong, after the saved snapshot and `newDeck`'s undo. The lesson is not
 "be careful with lists"; it is that a program with a concept it never named will
 keep rediscovering it one field at a time.
 
+So the two remaining places that assign those eight fields — opening a saved deck
+and importing a file — now go through the same door. Four hand-kept lists became
+one named thing, and there is a test that saves a deck with a gap, a note and a
+mat, starts a new one, opens the old one again, and finds all three where they
+were. Opening a deck and putting one back turn out to be the same move, which is
+the sort of thing that is obvious only once the concept has a name.
+
 ---
 
 ## Where this stands

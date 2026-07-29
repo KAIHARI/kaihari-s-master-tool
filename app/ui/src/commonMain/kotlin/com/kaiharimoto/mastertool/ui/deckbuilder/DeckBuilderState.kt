@@ -1609,13 +1609,15 @@ class DeckBuilderState(
     /**
      * Everything that says *which* deck is open, apart from the cards.
      *
-     * Captured as one value so that putting a deck back is one move. Both the
-     * places that replace the open deck wholesale — starting a new one and
-     * importing a file — offer to take it back, and both used to restore the
-     * cards and a hand-kept subset of the rest. That list grew a fourth item the
-     * day the mat arrived and had already been wrong about the payload, so
-     * undoing an import left the imported file's siding plans attached to the
-     * deck it had just put back.
+     * One value, so that opening a deck and putting one back are the same move.
+     * Four places used to assign these eight fields from their own hand-kept
+     * lists — load, import, new, and the two undos — and three of those lists
+     * were wrong: the saved snapshot forgot the payload, `newDeck`'s undo forgot
+     * the mat, and undoing an import handed back your cards carrying the
+     * imported file's siding plans, which is a deck that never existed.
+     *
+     * A ninth thing about a deck is one field here rather than four lists
+     * somebody has to remember to keep in step.
      */
     private data class OpenDeck(
         val name: String,
@@ -1803,15 +1805,25 @@ class DeckBuilderState(
             deck = stored.entry.deck
             registeredDeck = stored.entry.deck
             dealSerial++
-            deckName = stored.entry.name
-            deckNotes = stored.entry.notes
-            deckId = stored.entry.id
-            savedSnapshot =
-                SavedSnapshot(stored.entry.deck, stored.entry.name, stored.entry.notes, stored.extended)
-            extended = stored.extended
-            breaks = ArrangementCodec.read(stored.extended)
-            cardNotes = CardNotesCodec.read(stored.extended)
-            mat = DeckLookCodec.read(stored.extended)
+            // Through the same door the undo path uses, so there is exactly one
+            // place in the program that knows what "the open deck" consists of.
+            reopen(
+                OpenDeck(
+                    name = stored.entry.name,
+                    notes = stored.entry.notes,
+                    id = stored.entry.id,
+                    snapshot = SavedSnapshot(
+                        stored.entry.deck,
+                        stored.entry.name,
+                        stored.entry.notes,
+                        stored.extended,
+                    ),
+                    extended = stored.extended,
+                    breaks = ArrangementCodec.read(stored.extended),
+                    cardNotes = CardNotesCodec.read(stored.extended),
+                    mat = DeckLookCodec.read(stored.extended),
+                ),
+            )
             undoStack.clear()
             redoStack.clear()
             stamp()
@@ -1830,12 +1842,20 @@ class DeckBuilderState(
             deck = parsed.document.deck
             registeredDeck = parsed.document.deck
             dealSerial++
-            deckName = file.name.substringBeforeLast('.').ifBlank { "Imported Deck" }
-            deckNotes = ""
-            extended = parsed.document.extended
-            breaks = ArrangementCodec.read(parsed.document.extended)
-            cardNotes = CardNotesCodec.read(parsed.document.extended)
-            mat = DeckLookCodec.read(parsed.document.extended)
+            // No id and no snapshot: an imported file has never been saved
+            // here, whatever it was called on disk.
+            reopen(
+                OpenDeck(
+                    name = file.name.substringBeforeLast('.').ifBlank { "Imported Deck" },
+                    notes = "",
+                    id = null,
+                    snapshot = null,
+                    extended = parsed.document.extended,
+                    breaks = ArrangementCodec.read(parsed.document.extended),
+                    cardNotes = CardNotesCodec.read(parsed.document.extended),
+                    mat = DeckLookCodec.read(parsed.document.extended),
+                ),
+            )
 
             val warning = parsed.warnings.size
                 .takeIf { it > 0 }
