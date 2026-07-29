@@ -1394,3 +1394,43 @@ noticing the argument no longer meant what the parameter is named. The rule that
 keeps catching things in this repo is that arithmetic in `:core` gets a test and
 arithmetic passed *into* `:core` gets read again whenever the thing feeding it
 changes shape.
+
+---
+
+## 63 · A picture of the deck, which means writing PNG
+
+The arrangement is the thing this program is *for*, and it has never been able to
+leave. A `.ydk` carries the order but nothing opens a `.ydk` except another deck
+builder; the siding sheet goes out as a PDF because a PDF is text. What somebody
+actually wants to post is a picture of their deck, laid out the way they laid it
+out — and every other tool that exports one sorts the list first, which throws
+away the only part that was theirs.
+
+So: `core/export/Png.kt`, and under it `core/export/Deflate.kt`, because a PNG
+without deflate is not a PNG. Same reasoning as the PDF writer, one step further
+along: nothing that compresses resolves here, and `java.util.zip` is not on the
+common source set anyway — `:core` is deliberately free of platform APIs so it
+runs everywhere.
+
+Fixed Huffman codes and a hash-chain match finder, which is the simple half of
+RFC 1951. Dynamic codes would win maybe fifteen per cent more and cost a
+code-length tree, a second pass, and a lot of arithmetic that could be quietly
+wrong in ways no picture would reveal. The filter is where the real win is: a row
+stored as its difference from the row above turns a flat mat into a run of
+zeroes, and 160,000 pixels of one colour come to under six kilobytes.
+
+**How it was checked.** Twenty-one tests in `:core`, and then the part that
+actually settles it — a scratch harness wrote a real 640×420 image, and Python's
+`zlib` inflated it, verified every chunk CRC independently, un-filtered all 420
+scanlines by hand and compared them byte for byte against the pixels that went
+in. Every one matched. Pillow then opened the file and read back the exact colour
+at two positions. A format written from the specification is only as good as a
+decoder that never saw the specification agreeing with it.
+
+Known values are in the tests for the same reason: `crc32("123456789")` and
+`adler32("Wikipedia")` are what every other implementation gets, so a mistake in
+a table shows up here rather than as a file that opens nowhere.
+
+Next: a binary path out of the app — `DeckFileAccess` only speaks strings today,
+which is exactly why the PDF had to be all-ASCII — and then capturing the
+showcase into pixels.
