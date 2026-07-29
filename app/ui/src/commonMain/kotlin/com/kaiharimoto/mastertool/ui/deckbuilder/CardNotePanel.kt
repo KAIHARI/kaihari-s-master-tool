@@ -77,7 +77,11 @@ fun CardNotePanel(state: DeckBuilderState, id: CardId) {
                     value = text,
                     onValueChange = { text = it; state.writeNote(id, it) },
                     modifier = Modifier
-                        .fillMaxWidth()
+                        // Weight, not fillMaxWidth: inside a Row the latter
+                        // measures against the whole row rather than what is
+                        // left of it, so the box would run out past the card
+                        // standing beside it.
+                        .weight(1f)
                         .heightIn(min = 132.dp)
                         // Reported like every other field, so the letters typed
                         // here do not also fire the single-key shortcuts.

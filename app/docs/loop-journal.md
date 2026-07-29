@@ -2051,6 +2051,19 @@ is listed on *both* cards' sheets, under the card's own note, with the other
 card's name — and tapping one opens it. Written from a selection, found from
 either end.
 
+Two things caught by reading it back before CI had finished with it.
+
+Two positions in a deck can hold the same card, so selecting two copies of Ash
+would have opened a pair sheet for a note that can never be written — it takes
+what you type and saves none of it, which is worse than no sheet. It refuses now.
+
+And both note sheets put a text box next to a card in a `Row` and asked the box
+to `fillMaxWidth`. Inside a Row that measures against the whole row rather than
+what is left of it, so the box would have run out past the card standing beside
+it. `weight(1f)` is the answer, and this is the second time in this loop that a
+layout has been wrong in a way only arithmetic about what a modifier *means*
+would catch — there is no screen here to notice it on.
+
 ---
 
 ## Where this stands

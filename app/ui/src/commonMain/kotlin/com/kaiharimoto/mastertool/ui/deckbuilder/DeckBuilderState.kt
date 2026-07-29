@@ -15,6 +15,7 @@ import com.kaiharimoto.mastertool.core.deck.DeckEditor
 import com.kaiharimoto.mastertool.core.deck.DeckLookCodec
 import com.kaiharimoto.mastertool.core.deck.DeckSorter
 import com.kaiharimoto.mastertool.core.deck.MatChoice
+import com.kaiharimoto.mastertool.core.deck.PairKey
 import com.kaiharimoto.mastertool.core.deck.PairNotes
 import com.kaiharimoto.mastertool.core.deck.PairNotesCodec
 import com.kaiharimoto.mastertool.core.deck.DeckTidy
@@ -383,6 +384,10 @@ class DeckBuilderState(
         val section = selection.section ?: return
         val ids = selection.indices.sorted().mapNotNull { deck[section].getOrNull(it) }
         if (ids.size != 2) return
+        // Two positions can hold the same card. A card is not a pair with
+        // itself, so the note could never be written -- and a sheet that opens,
+        // takes what you type and saves none of it is worse than no sheet.
+        if (PairKey.of(ids[0], ids[1]) == null) return
         pairTarget = ids[0] to ids[1]
     }
 

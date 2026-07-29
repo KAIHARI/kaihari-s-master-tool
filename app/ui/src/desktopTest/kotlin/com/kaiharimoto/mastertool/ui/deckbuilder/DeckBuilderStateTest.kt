@@ -1076,6 +1076,21 @@ class DeckBuilderStateTest {
     }
 
     @Test
+    fun twoCopiesOfOneCardAreNotAPair() = runTest {
+        // Two positions, one card. The note could never be written, and a sheet
+        // that opens, takes what you type and saves none of it is worse than no
+        // sheet at all.
+        val state = builderState()
+        repeat(2) { state.addCard(TestPool.ash) }
+        state.select(main, 0)
+        state.toggleSelected(main, 1)
+
+        state.notePickedPair()
+
+        assertNull(state.pairTarget)
+    }
+
+    @Test
     fun threeCardsPickedOutIsNotAPair() = runTest {
         // A note about three cards is a note about the deck, which already has
         // somewhere to live.

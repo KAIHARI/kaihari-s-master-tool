@@ -74,7 +74,11 @@ fun PairNotePanel(state: DeckBuilderState, a: CardId, b: CardId) {
                     value = text,
                     onValueChange = { text = it; state.writePairNote(a, b, it) },
                     modifier = Modifier
-                        .fillMaxWidth()
+                        // Weight, not fillMaxWidth: inside a Row the latter
+                        // measures against the whole row rather than what is
+                        // left of it, so the box would run out past the two
+                        // cards standing beside it.
+                        .weight(1f)
                         .heightIn(min = 132.dp)
                         .onFocusChanged { state.onTextFieldFocusChanged(it.isFocused) },
                     placeholder = { Text("What these two do together…") },
