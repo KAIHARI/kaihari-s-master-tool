@@ -560,6 +560,19 @@ private fun DeckCard(
                     )
                 }
 
+                // A card the one you are holding is noted with. Quieter than
+                // the selection's own border and drawn inside it, so a card
+                // that is both reads as picked out *and* connected rather than
+                // as two competing states.
+                if (id in state.notedWith) {
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .padding(2.dp)
+                            .border(1.5.dp, accent.copy(alpha = 0.75f), RoundedCornerShape(CARD_CORNER)),
+                    )
+                }
+
                 // A card somebody has written on. A folded corner rather than a
                 // badge: it is the mark you would make on the card itself, and
                 // at this size a badge would be a second count to misread.

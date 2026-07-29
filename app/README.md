@@ -228,9 +228,12 @@ are looking at the card rather than only where you wrote it: in the inspector,
 and under the hover preview in the pool as well as the deck. And a note about *two* cards, written from a
 two-card selection and listed on both their sheets — the half of deck building a
 decklist cannot hold at all, because a deck is a handful of two-card openings and
-thirty-odd cards that make them likelier. The original tool wrote an empty
-`notes: { cards: {}, pairs: {} }` into every file it ever exported; this is what
-goes in both halves.
+thirty-odd cards that make them likelier. And pick one of them up in a pane — a
+single card, from the keyboard cursor or the card menu — and the cards it is
+noted with light up around it, which is as close as this gets to drawing a line
+between two cards without drawing a line between two cards that move. The
+original tool wrote an empty `notes: { cards: {}, pairs: {} }` into every file it
+ever exported; this is what goes in both halves.
 
 The deck you were working on is the one that opens next time. A deck saved once
 keeps itself saved — every edit after the first save is written without being

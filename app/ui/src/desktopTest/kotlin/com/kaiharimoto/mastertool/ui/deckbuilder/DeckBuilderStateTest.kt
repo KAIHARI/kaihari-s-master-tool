@@ -1076,6 +1076,46 @@ class DeckBuilderStateTest {
     }
 
     @Test
+    fun pickingUpACardLightsUpWhatItIsNotedWith() = runTest {
+        // A note readable only in the sheet it was typed into is a filing
+        // cabinet. This is the note showing up in the deck.
+        val state = builderState()
+        listOf(TestPool.ash, TestPool.maxx, TestPool.nibiru).forEach { state.addCard(it) }
+        state.writePairNote(TestPool.ash.id, TestPool.nibiru.id, "both")
+
+        state.select(main, state.deck.main.indexOf(TestPool.ash.id))
+
+        assertEquals(setOf(TestPool.nibiru.id), state.notedWith)
+    }
+
+    @Test
+    fun aCardWithNoPairsLightsUpNothing() = runTest {
+        val state = builderState()
+        listOf(TestPool.ash, TestPool.maxx).forEach { state.addCard(it) }
+        state.writePairNote(TestPool.ash.id, TestPool.maxx.id, "both")
+
+        state.select(main, state.deck.main.indexOf(TestPool.maxx.id))
+        assertEquals(setOf(TestPool.ash.id), state.notedWith, "and from the other end")
+
+        state.clearSelection()
+        assertEquals(emptySet(), state.notedWith, "nothing held, nothing lit")
+    }
+
+    @Test
+    fun holdingTwoCardsLightsUpNothing() = runTest {
+        // With two picked out the answer would be about the selection rather
+        // than about a card, and a deck lighting up for a range is noise.
+        val state = builderState()
+        listOf(TestPool.ash, TestPool.maxx, TestPool.nibiru).forEach { state.addCard(it) }
+        state.writePairNote(TestPool.ash.id, TestPool.nibiru.id, "both")
+
+        state.select(main, 0)
+        state.selectThrough(main, 1)
+
+        assertEquals(emptySet(), state.notedWith)
+    }
+
+    @Test
     fun twoCopiesOfOneCardAreNotAPair() = runTest {
         // Two positions, one card. The note could never be written, and a sheet
         // that opens, takes what you type and saves none of it is worse than no

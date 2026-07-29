@@ -370,6 +370,27 @@ class DeckBuilderState(
         pairNotes = pairNotes.with(a, b, text)
     }
 
+    /**
+     * The cards the one card you have picked out is noted with.
+     *
+     * A pair note written into a sheet and only readable there is a filing
+     * cabinet. Pick up a card and the cards it does something with light up in
+     * the deck — which is the whole point of having written the note, and the
+     * closest this program gets to drawing a line between two cards without
+     * drawing a line between two cards that move.
+     *
+     * Only for a single card. With two picked out the answer would be about the
+     * selection rather than about a card, and with none it is a lit-up deck for
+     * no reason.
+     */
+    val notedWith: Set<CardId> by derivedStateOf {
+        val section = selection.section
+        if (section == null || selection.size != 1) return@derivedStateOf emptySet()
+        val id = deck[section].getOrNull(Selections.focusOf(selection))
+            ?: return@derivedStateOf emptySet()
+        pairNotes.about(id).mapTo(HashSet()) { pairNotes.other(it.first, than = id) }
+    }
+
     /** Which two cards the pair editor is open on, if any. */
     var pairTarget by mutableStateOf<Pair<CardId, CardId>?>(null)
 

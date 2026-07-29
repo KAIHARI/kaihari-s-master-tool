@@ -2074,6 +2074,30 @@ fire.
 
 ---
 
+## 87 · Pick up a card and see what it works with
+
+A pair note that can only be read in the sheet it was typed into is a filing
+cabinet. So: hold one card — the keyboard cursor is a one-card selection, and so
+is "Select" from the card menu — and the cards it is noted with take a quiet ring
+in the section's colour.
+
+That is as close as this program is going to get to drawing a line between two
+cards. An actual line was the first idea and it does not survive contact with the
+thing this application is about: the cards *move*. A line between two grid cells
+has to be re-routed every time somebody rearranges the deck, which is constantly,
+and it would have to cross the cards in between. A ring on the partner says the
+same thing, costs nothing to draw, and is right wherever the card happens to be.
+
+Only for a single card, on purpose. With two picked out the answer would be about
+the selection rather than about a card, and a deck lighting up for a range is
+noise. With none it is a lit-up deck for no reason.
+
+The ring is drawn *inside* the selection's own border and thinner, so a card that
+is both picked out and connected reads as both rather than as two states fighting
+over the same edge.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus
