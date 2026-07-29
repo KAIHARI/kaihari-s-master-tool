@@ -3,13 +3,37 @@ package com.kaiharimoto.mastertool.ui.sandbox
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import com.kaiharimoto.mastertool.core.board.Board
+import com.kaiharimoto.mastertool.core.board.DragTrail
 import com.kaiharimoto.mastertool.core.board.BoardLayout
 import com.kaiharimoto.mastertool.core.board.Placement
 import com.kaiharimoto.mastertool.core.board.TableState
 import com.kaiharimoto.mastertool.core.board.ZoneId
+import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.Deck
 import kotlin.random.Random
+import kotlin.time.TimeSource
+
+/**
+ * Milliseconds since the process started, for reading a gesture.
+ *
+ * Monotonic rather than wall-clock: the only thing ever asked of it is the
+ * difference between two moments a few hundred milliseconds apart, and a clock
+ * that can be adjusted underneath that would turn a flick into a hold.
+ */
+private val started = TimeSource.Monotonic.markNow()
+
+private val SystemClock: () -> Long = { started.elapsedNow().inWholeMilliseconds }
+
+/** Where a card being dragged came from, which decides where it goes back to. */
+sealed interface DragOrigin {
+    data class Hand(val index: Int) : DragOrigin
+    data class OnBoard(val zone: ZoneId) : DragOrigin
+}
+
+data class BoardDrag(val origin: DragOrigin, val id: CardId, val faceDown: Boolean = false)
 
 /**
  * A board you can put cards on, and take them back off.
@@ -23,7 +47,7 @@ import kotlin.random.Random
  * which is what [TableState] being one value buys. The original needed a command
  * factory for this; a table is a few dozen cards and copying one is free.
  */
-class SandboxState {
+class SandboxState(private val nowMs: () -> Long = SystemClock) {
 
     var table by mutableStateOf(TableState())
         private set
@@ -35,6 +59,76 @@ class SandboxState {
     /** Which zone the last card landed in, for a moment of confirmation. */
     var justPlaced by mutableStateOf<ZoneId?>(null)
         private set
+
+    // ---- dragging ----------------------------------------------------------
+
+    /** The card in the air, if one is. */
+    var drag by mutableStateOf<BoardDrag?>(null)
+        private set
+
+    /** Where it is, in the board's own coordinates. */
+    var pointer by mutableStateOf(Offset.Zero)
+        private set
+
+    /** The zone the card would land in, for lighting it up before release. */
+    val over: ZoneId? get() = if (drag == null) null else zoneAt(pointer)
+
+    private var trail = DragTrail.EMPTY
+    private val zoneBounds = mutableMapOf<ZoneId, Rect>()
+
+    fun registerZone(zone: ZoneId, bounds: Rect) {
+        zoneBounds[zone] = bounds
+    }
+
+    fun zoneAt(point: Offset): ZoneId? =
+        zoneBounds.entries.firstOrNull { it.value.contains(point) }?.key
+
+    fun startDrag(origin: DragOrigin, id: CardId, at: Offset, faceDown: Boolean = false) {
+        drag = BoardDrag(origin, id, faceDown)
+        pointer = at
+        trail = DragTrail.EMPTY.at(at.x, at.y, nowMs())
+        heldInHand = (origin as? DragOrigin.Hand)?.index
+    }
+
+    fun dragBy(delta: Offset) {
+        if (drag == null) return
+        pointer += delta
+        trail = trail.at(pointer.x, pointer.y, nowMs())
+    }
+
+    /**
+     * Lets go.
+     *
+     * The gesture decides the position — see `DragTrail` — so nothing here has
+     * to ask, and a card that lands the wrong way round is one tap from being
+     * turned. Released over nothing, or over a zone that will not take it, the
+     * card goes back where it came from: a drag that fails should cost what a
+     * drag that was never started cost.
+     */
+    fun endDrag(): Boolean {
+        val active = drag ?: return false
+        val zone = zoneAt(pointer)
+        val placement = trail.placementOnRelease(nowMs())
+        drag = null
+        trail = DragTrail.EMPTY
+        if (zone == null) {
+            heldInHand = null
+            return false
+        }
+
+        val landed = when (val origin = active.origin) {
+            is DragOrigin.Hand -> play(origin.index, zone, placement)
+            is DragOrigin.OnBoard -> move(origin.zone, zone)
+        }
+        heldInHand = null
+        return landed
+    }
+
+    fun cancelDrag() {
+        drag = null
+        trail = DragTrail.EMPTY
+        heldInHand = null
+    }
 
     private var history by mutableStateOf<List<TableState>>(emptyList())
 
@@ -124,3 +218,4 @@ class SandboxState {
         const val UNDO_DEPTH = 50
     }
 }
+

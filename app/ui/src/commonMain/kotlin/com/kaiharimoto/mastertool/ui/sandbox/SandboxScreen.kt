@@ -5,6 +5,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,13 +28,23 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.board.BoardLayout
 import com.kaiharimoto.mastertool.core.board.Placement
@@ -42,6 +53,7 @@ import com.kaiharimoto.mastertool.core.board.ZoneId
 import com.kaiharimoto.mastertool.core.board.ZoneKind
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.search.CardIndex
+import kotlin.math.roundToInt
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
@@ -98,11 +110,17 @@ fun SandboxScreen(
             TextButton(onClick = { state.clearBoard() }) { Text("Sweep") }
         }
 
+        // Everything on the table is registered and hit-tested in this box's own
+        // coordinates rather than the window's, so the board does not have to
+        // know where on screen it happens to be sitting.
+        var origin by remember { mutableStateOf(Offset.Zero) }
+
         BoxWithConstraints(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .tableSurface(accent = colors.accent, mat = colors.mat, corner = 8.dp)
+                .onGloballyPositioned { origin = it.positionInRoot() }
                 .padding(horizontal = 20.dp, vertical = 14.dp),
         ) {
             // Seven zones across is the widest row, and everything else is sized
@@ -115,11 +133,13 @@ fun SandboxScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(ZONE_GAP),
             ) {
-                Half(state, index, zoneWidth, yours = false)
-                ExtraMonsterRow(state, index, zoneWidth)
-                Half(state, index, zoneWidth, yours = true)
-                Hand(state, index, zoneWidth)
+                Half(state, index, zoneWidth, origin, yours = false)
+                ExtraMonsterRow(state, index, zoneWidth, origin)
+                Half(state, index, zoneWidth, origin, yours = true)
+                Hand(state, index, zoneWidth, origin)
             }
+
+            DragGhost(state, index, zoneWidth)
         }
     }
 }
@@ -138,6 +158,7 @@ private fun Half(
     state: SandboxState,
     index: CardIndex,
     zoneWidth: Dp,
+    origin: Offset,
     yours: Boolean,
 ) {
     Column(
@@ -164,7 +185,7 @@ private fun Half(
             val flanked = if (yours) position == 1 else position == 0
             Row(horizontalArrangement = Arrangement.spacedBy(ZONE_GAP)) {
                 if (flanked) Pile(state, BoardLayout.deck, "DECK", zoneWidth) else Gap(zoneWidth)
-                zones.forEach { zone -> Zone(state, index, zone, zoneWidth) }
+                zones.forEach { zone -> Zone(state, index, zone, zoneWidth, origin) }
                 if (flanked) {
                     Pile(state, BoardLayout.graveyard, "GY", zoneWidth)
                 } else {
@@ -182,15 +203,20 @@ private fun Half(
  * players are looking at and the only place on the mat that is nobody's half.
  */
 @Composable
-private fun ExtraMonsterRow(state: SandboxState, index: CardIndex, zoneWidth: Dp) {
+private fun ExtraMonsterRow(
+    state: SandboxState,
+    index: CardIndex,
+    zoneWidth: Dp,
+    origin: Offset,
+) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(ZONE_GAP),
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(vertical = 6.dp),
     ) {
-        Zone(state, index, BoardLayout.extraMonsterRow[0], zoneWidth, shared = true)
+        Zone(state, index, BoardLayout.extraMonsterRow[0], zoneWidth, origin, shared = true)
         Box(Modifier.width(zoneWidth * 3 + ZONE_GAP * 2))
-        Zone(state, index, BoardLayout.extraMonsterRow[1], zoneWidth, shared = true)
+        Zone(state, index, BoardLayout.extraMonsterRow[1], zoneWidth, origin, shared = true)
     }
 }
 
@@ -207,12 +233,18 @@ private fun Zone(
     index: CardIndex,
     zone: ZoneId,
     zoneWidth: Dp,
+    origin: Offset,
     shared: Boolean = false,
 ) {
     val colors = LocalMasterToolColors.current
     val top = state.board[zone].lastOrNull()
     val held = state.heldInHand
+    // Where this zone sits on the table, which both a drop and a drag need.
+    var here by remember { mutableStateOf(Offset.Zero) }
     val edge = when {
+        // Where the card in the air would land, which is the only thing worth
+        // saying while it is still in the air.
+        state.over == zone -> colors.accentBright
         shared -> MasterToolPalette.Warning.copy(alpha = 0.65f)
         // Everywhere the held card could go, lit at once: a board with five open
         // zones should say which five without being poked at.
@@ -233,6 +265,25 @@ private fun Zone(
                     MasterToolPalette.Warning.copy(alpha = 0.10f)
                 } else {
                     Color.Black.copy(alpha = 0.14f)
+                },
+            )
+            .onGloballyPositioned {
+                val bounds = it.boundsInRoot().translate(-origin)
+                here = bounds.topLeft
+                state.registerZone(zone, bounds)
+            }
+            .then(
+                if (top == null) {
+                    Modifier
+                } else {
+                    Modifier.pointerInput(zone, top.id) {
+                        dragging(
+                            state = state,
+                            anchor = { here },
+                            source = DragOrigin.OnBoard(zone),
+                            id = top.id,
+                        )
+                    }
                 },
             )
             .border(1.dp, edge, RoundedCornerShape(3.dp))
@@ -340,7 +391,7 @@ private fun Gap(zoneWidth: Dp) {
  * that is fully readable.
  */
 @Composable
-private fun Hand(state: SandboxState, index: CardIndex, zoneWidth: Dp) {
+private fun Hand(state: SandboxState, index: CardIndex, zoneWidth: Dp, origin: Offset) {
     val cards = state.table.hand
     if (cards.isEmpty()) return
 
@@ -363,6 +414,7 @@ private fun Hand(state: SandboxState, index: CardIndex, zoneWidth: Dp) {
                 label = "lift",
             )
 
+            var here by remember { mutableStateOf(Offset.Zero) }
             Box(Modifier.width(if (position == cards.lastIndex) cardWidth else slot)) {
             Box(
                 Modifier
@@ -377,6 +429,15 @@ private fun Hand(state: SandboxState, index: CardIndex, zoneWidth: Dp) {
                         // Hinged below the card, which is what a hand of cards
                         // held in a fist actually pivots about.
                         transformOrigin = TransformOrigin(0.5f, 1.9f)
+                    }
+                    .onGloballyPositioned { here = it.positionInRoot() - origin }
+                    .pointerInput(id, position) {
+                        dragging(
+                            state = state,
+                            anchor = { here },
+                            source = DragOrigin.Hand(position),
+                            id = id,
+                        )
                     }
                     .clickable { state.hold(if (heldHere) null else position) },
             ) {
@@ -396,6 +457,74 @@ private fun HandCard(id: CardId, index: CardIndex) {
         CardTile(card = card, modifier = Modifier.fillMaxSize(), foil = false)
     }
 }
+
+/**
+ * Picking a card up, carrying it, and letting go.
+ *
+ * The whole point of the board is in the last line: nothing asks which way the
+ * card should face, because the way you let go already said. A quick drop stands
+ * it up, a flick lays it down, a moment's hold sets it face-down.
+ *
+ * Positions are converted into the board's own space once, at the start, and
+ * carried forward by deltas — the alternative is asking every drag event where
+ * on the screen its own composable is, sixty times a second.
+ */
+private suspend fun PointerInputScope.dragging(
+    state: SandboxState,
+    anchor: () -> Offset,
+    source: DragOrigin,
+    id: CardId,
+) {
+    detectDragGestures(
+        // The gesture reports positions relative to this card; the board thinks
+        // in its own space. Converted once, here, and carried forward by deltas.
+        onDragStart = { at -> state.startDrag(source, id, anchor() + at) },
+        onDrag = { change, delta ->
+            change.consume()
+            state.dragBy(delta)
+        },
+        onDragEnd = { state.endDrag() },
+        onDragCancel = { state.cancelDrag() },
+    )
+}
+
+/**
+ * The card in the air.
+ *
+ * Lifted, tilted and shadowed, and drawn last so it passes over everything. It
+ * does not preview the placement the gesture is about to choose: the gesture is
+ * not finished until it is finished, and a card that flickered between upright
+ * and sideways on the way down would be unreadable.
+ */
+@Composable
+private fun DragGhost(state: SandboxState, index: CardIndex, zoneWidth: Dp) {
+    val held = state.drag ?: return
+    val card = index.byId(held.id) ?: return
+
+    Box(
+        Modifier
+            .offset {
+                IntOffset(
+                    (state.pointer.x - (zoneWidth.toPx() / 2f)).roundToInt(),
+                    (state.pointer.y - (zoneWidth.toPx() * 0.7f)).roundToInt(),
+                )
+            }
+            .width(zoneWidth)
+            .aspectRatio(CARD_ASPECT)
+            .graphicsLayer {
+                rotationZ = GHOST_TILT
+                scaleX = GHOST_SCALE
+                scaleY = GHOST_SCALE
+                shadowElevation = 22f
+            },
+    ) {
+        CardTile(card = card, modifier = Modifier.fillMaxSize(), foil = false)
+    }
+}
+
+/** A card off the table is a card held between finger and thumb. */
+private const val GHOST_TILT = -4f
+private const val GHOST_SCALE = 1.08f
 
 /** How far each half tips away from the plane of the screen. */
 private const val FOLD_DEGREES = 11f

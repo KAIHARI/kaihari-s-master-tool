@@ -1,5 +1,7 @@
 package com.kaiharimoto.mastertool.ui.sandbox
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import com.kaiharimoto.mastertool.core.board.BoardLayout
 import com.kaiharimoto.mastertool.core.board.Placement
 import com.kaiharimoto.mastertool.core.model.CardId
@@ -167,5 +169,147 @@ class SandboxStateTest {
 
         assertTrue(state.table.library.isEmpty())
         assertEquals(cards.size, state.table.hand.size)
+    }
+}
+
+/**
+ * Letting go, which is where the whole idea lives.
+ *
+ * The clock is handed in so a flick and a hold are the same three lines apart:
+ * a test that had to actually wait three hundred milliseconds to check a hold
+ * would be a test nobody runs.
+ */
+class SandboxDragTest {
+
+    private val cards = (1..20).map { CardId(900_000 + it) }
+    private val deck = Deck(main = cards, extra = emptyList(), side = emptyList())
+    private val zone = BoardLayout.monsterRow[0]
+    private val elsewhere = BoardLayout.monsterRow[3]
+
+    private var now = 1_000L
+
+    /** The zone sits at 100,100 and is 70 by 100; nothing else is on the table. */
+    private fun laidOut(): SandboxState = SandboxState { now }.also {
+        it.open(deck, Random(9))
+        it.registerZone(zone, Rect(100f, 100f, 170f, 200f))
+        it.registerZone(elsewhere, Rect(400f, 100f, 470f, 200f))
+    }
+
+    private fun SandboxState.carryTo(target: Offset, steps: Int = 6) {
+        val from = pointer
+        repeat(steps) {
+            now += 16
+            dragBy((target - from) / steps.toFloat())
+        }
+    }
+
+    @Test
+    fun aQuickDropStandsTheCardUp() {
+        val state = laidOut()
+        val card = state.table.hand[0]
+
+        state.startDrag(DragOrigin.Hand(0), card, Offset(120f, 500f))
+        state.carryTo(Offset(130f, 150f))
+        now += 16
+        assertTrue(state.endDrag())
+
+        assertEquals(Placement.ATTACK, state.board[zone].single().placement)
+        assertEquals(card, state.board[zone].single().id)
+    }
+
+    @Test
+    fun aFlickLaysItDown() {
+        val state = laidOut()
+
+        state.startDrag(DragOrigin.Hand(0), state.table.hand[0], Offset(120f, 400f))
+        state.carryTo(Offset(105f, 150f))
+        // The flick itself: sideways, fast, right at the end.
+        repeat(3) {
+            now += 16
+            state.dragBy(Offset(20f, 1f))
+        }
+        now += 16
+        assertTrue(state.endDrag())
+
+        assertEquals(Placement.DEFENSE, state.board[zone].single().placement)
+    }
+
+    @Test
+    fun holdingBeforeLettingGoSetsIt() {
+        val state = laidOut()
+
+        state.startDrag(DragOrigin.Hand(0), state.table.hand[0], Offset(120f, 400f))
+        state.carryTo(Offset(130f, 150f))
+        // The hand stops. Nothing is reported while it is still, which is the
+        // whole difficulty -- the silence is the hold.
+        now += 400
+        assertTrue(state.endDrag())
+
+        assertEquals(Placement.SET, state.board[zone].single().placement)
+    }
+
+    @Test
+    fun theZoneUnderTheCardIsKnownBeforeItLands() {
+        val state = laidOut()
+
+        state.startDrag(DragOrigin.Hand(0), state.table.hand[0], Offset(120f, 400f))
+        assertNull(state.over, "nothing under it out here")
+
+        state.carryTo(Offset(130f, 150f))
+        assertEquals(zone, state.over)
+    }
+
+    @Test
+    fun lettingGoOverNothingCostsNothing() {
+        val state = laidOut()
+        val before = state.table
+
+        state.startDrag(DragOrigin.Hand(0), state.table.hand[0], Offset(120f, 400f))
+        state.carryTo(Offset(300f, 600f))
+        now += 16
+        assertFalse(state.endDrag())
+
+        assertEquals(before, state.table, "the card goes back where it came from")
+        assertFalse(state.canUndo, "and there is nothing to undo")
+        assertNull(state.heldInHand)
+    }
+
+    @Test
+    fun aCardAlreadyDownCanBeMoved() {
+        val state = laidOut()
+        state.play(0, zone, Placement.ATTACK)
+        val card = state.board[zone].single().id
+
+        state.startDrag(DragOrigin.OnBoard(zone), card, Offset(130f, 150f))
+        state.carryTo(Offset(430f, 150f))
+        now += 16
+        assertTrue(state.endDrag())
+
+        assertTrue(state.board[zone].isEmpty())
+        assertEquals(card, state.board[elsewhere].single().id)
+    }
+
+    @Test
+    fun aCancelledDragPutsEverythingBack() {
+        val state = laidOut()
+        val before = state.table
+
+        state.startDrag(DragOrigin.Hand(1), state.table.hand[1], Offset(120f, 400f))
+        state.carryTo(Offset(130f, 150f))
+        state.cancelDrag()
+
+        assertEquals(before, state.table)
+        assertNull(state.drag)
+        assertNull(state.heldInHand)
+        assertNull(state.over)
+    }
+
+    @Test
+    fun movementWithNothingInTheAirIsIgnored() {
+        val state = laidOut()
+
+        state.dragBy(Offset(50f, 50f))
+
+        assertEquals(Offset.Zero, state.pointer)
     }
 }
