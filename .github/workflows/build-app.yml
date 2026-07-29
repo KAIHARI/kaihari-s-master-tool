@@ -37,9 +37,16 @@ jobs:
 
       # Android is switched off here so the domain layer is exercised on its own:
       # if this job fails, the problem is in the rules, not in the UI or the SDK.
+      # No --stacktrace. Gradle's internal trace is around 120 lines and it
+      # lands *after* the thing that actually broke, so the compiler's own
+      # `e: file://...` lines and the failing test names end up far out of reach
+      # of anyone reading the end of the log — which is the only way this build
+      # gets diagnosed from an environment that cannot compile :ui. It has never
+      # once helped here and has twice cost a round trip. Gradle still says to
+      # re-run with it when a Gradle-level fault is the real question.
       - name: Run :core tests
         working-directory: app
-        run: ./gradlew :core:jvmTest -Pmastertool.android=false --stacktrace
+        run: ./gradlew :core:jvmTest -Pmastertool.android=false
 
       - name: Upload test report
         if: always()
@@ -66,7 +73,7 @@ jobs:
 
       - name: Build debug APK
         working-directory: app
-        run: ./gradlew :androidApp:assembleDebug --stacktrace
+        run: ./gradlew :androidApp:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -94,7 +101,7 @@ jobs:
       # the Android job does not see means genuinely platform-specific code.
       - name: Build desktop application
         working-directory: app
-        run: ./gradlew :desktopApp:assemble --stacktrace
+        run: ./gradlew :desktopApp:assemble
 
       # The only place :ui tests can run. The module needs Google's Maven to
       # compile at all, so in a restricted environment these are unrunnable --
@@ -102,7 +109,7 @@ jobs:
       # snapshot system rather than something needing a window.
       - name: Run :ui tests
         working-directory: app
-        run: ./gradlew :ui:desktopTest --stacktrace
+        run: ./gradlew :ui:desktopTest
 
       - name: Upload UI test report
         if: always()

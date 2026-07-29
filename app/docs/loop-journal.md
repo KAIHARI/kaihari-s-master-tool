@@ -2326,6 +2326,28 @@ were, by putting the line back and watching it fire.
 
 ---
 
+## 93 · The build was shouting over itself
+
+Two red builds in a row, and both times the *first* thing I did was fetch the end
+of the log and find 120 lines of `org.gradle.internal.execution.steps...`. Every
+step in the workflow ran with `--stacktrace`, and Gradle prints its internal
+trace *after* the thing that actually broke — so the compiler's own
+`e: file://...` lines and the failing test names sit hundreds of lines further
+back than anything a reader reaches.
+
+That is not a small cost here. This module cannot be compiled in this
+environment; reading the end of a CI log is the entire diagnostic path. The flag
+has never once helped and has twice made a ten-minute round trip into a
+twenty-minute one, the second time by forcing me to *infer* the compile error
+from the shape of my own diff rather than read it. The inference happened to be
+right, which is not a system worth keeping.
+
+So it is gone from all four steps. Gradle still tells you to re-run with it if a
+Gradle-level fault is genuinely the question, which — in every failure this
+project has had — it has not been.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus
