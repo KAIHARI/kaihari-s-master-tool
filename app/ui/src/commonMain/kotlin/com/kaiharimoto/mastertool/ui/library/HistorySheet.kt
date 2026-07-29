@@ -363,8 +363,14 @@ fun DeckHistoryHost(
     var reading by remember(deckId) { mutableStateOf<DeckVersion?>(null) }
 
     LaunchedEffect(deckId, token) {
-        stored = deps.deckRepository.byId(deckId)
-        versions = deps.deckRepository.versions(deckId)
+        // Both reads first, then both writes. `stored` is what opens the sheet,
+        // and writing it between the two queries opens a sheet whose list has
+        // not been read yet — which it would report as "nothing yet", to a deck
+        // with a dozen versions in it.
+        val read = deps.deckRepository.byId(deckId)
+        val kept = deps.deckRepository.versions(deckId)
+        stored = read
+        versions = kept
     }
 
     stored?.let { deck ->

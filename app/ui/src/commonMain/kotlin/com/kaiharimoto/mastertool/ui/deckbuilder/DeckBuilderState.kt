@@ -859,11 +859,26 @@ class DeckBuilderState(
     var canRedo by mutableStateOf(false)
         private set
 
+    /**
+     * Whether the cached pool has been read off the disk yet.
+     *
+     * Not the same question as whether it is empty, and the difference matters
+     * more here than almost anywhere: reading thirteen thousand cards out of
+     * SQLite is the largest read this application does, and for as long as it
+     * took, an index that had never been looked at was indistinguishable from a
+     * device that had never downloaded one. So the pane offered to fetch the
+     * card database — to somebody holding a tablet with all of it on it, at a
+     * venue with no signal, which is the case this program is proudest of.
+     */
+    var poolRead by mutableStateOf(false)
+        private set
+
     // ---- lifecycle ---------------------------------------------------------
 
     fun start() {
         scope.launch {
             index = deps.cardRepository.loadFromCache()
+            poolRead = true
             runSearch(immediate = true)
 
             val status = deps.cardRepository.status()

@@ -2730,6 +2730,27 @@ class DeckBuilderStateTest {
         assertEquals(before, cancelling.toast?.id, "dismissing a picker is not news")
     }
 
+    // ---- the pool ----------------------------------------------------------
+
+    @Test
+    fun thePoolIsNotCalledEmptyBeforeItHasBeenRead() = runTest {
+        // The search pane offers to download the card database when the index is
+        // empty, and an index nobody has opened yet is empty in exactly the same
+        // way as one that was never downloaded. Reading thirteen thousand cards
+        // out of SQLite is not instant, so that offer was being made to somebody
+        // already holding all of them.
+        val state = builderState()
+        assertFalse(state.poolRead, "nothing has been read until start() has run")
+
+        state.start()
+        advanceUntilIdle()
+
+        // Still empty afterwards -- this fixture has no cards in it, and that is
+        // the point: the flag is about having looked, not about having found.
+        assertTrue(state.poolRead)
+        assertEquals(0, state.index.size)
+    }
+
     private fun requireNonNull(value: String?): String =
         value ?: error("nothing was exported")
 }

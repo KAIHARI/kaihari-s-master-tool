@@ -2804,3 +2804,34 @@ read, shorter than any sentence about it would take to read.
 *A claim made before the thing was looked at.* That is a review frame, and it
 generalises: this program says a deck is illegal, a run is not significant yet,
 a group is about Snake-Eye. Each of those is worth asking the same question of.
+
+## 107 · The same frame, run over the rest of the program
+
+Section 106 named it — *a claim made before the thing was looked at* — so it got
+pointed at everything else. Two more, and the second one is the worst defect
+found in a while.
+
+**The version history said "nothing yet" to a deck with a dozen versions.** The
+host reads two things: the deck, then its versions. Two suspend calls, two
+assignments, and the first assignment is what opens the sheet. Compose does not
+wait politely between them: writing `stored` invalidates and the sheet composes
+while `versions` is still the empty list it was initialised to. Both reads
+happen first now and both writes after, so the thing that opens the sheet cannot
+be true before the thing it describes is.
+
+**And the pool.** The search pane draws a notice when the index is empty:
+*"No cards downloaded yet. Connect to the internet once to fetch the card
+database."* An index that has not been read yet is empty in precisely the way an
+index that was never downloaded is empty, and there was nothing to tell them
+apart. Reading thirteen thousand cards out of SQLite is the largest read this
+application performs — so for as long as it took, on every single launch, a
+player holding a tablet with the whole database on it was being told to go and
+find some internet. At a venue. Which is the case this program is proudest of
+handling, and it was the case it handled worst, on the way in, every time.
+
+`poolRead` now says whether the cache has been *looked at*, which is a different
+question from whether it is empty, and the pane says "Opening the card
+database…" until it has been. The `:ui` test asserts both halves in one go: false
+at construction, true after `start()`, and the index still empty afterwards —
+because the fixture has no cards in it, and the flag is about having looked
+rather than about having found. That is the distinction the whole defect was.

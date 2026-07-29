@@ -166,6 +166,19 @@ fun SearchPane(
             ActiveFilterBar(state)
         }
 
+        // Before either of the two below, because both of them are claims about
+        // a pool that has been looked at, and until this is true none has been.
+        if (!state.poolRead) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "Opening the card database…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            return@Column
+        }
+
         if (state.index.size == 0 && !state.isSyncing) {
             EmptyPoolNotice(onRetry = { state.refreshCardPool(force = true) })
             return@Column
