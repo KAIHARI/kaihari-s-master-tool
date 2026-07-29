@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.core.ydk
 
 import com.kaiharimoto.mastertool.core.model.Card
+import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.Deck
 import com.kaiharimoto.mastertool.core.model.DeckSection
@@ -146,7 +147,20 @@ object DecklistText {
      * The deck's name goes out as a comment, because a name is not part of a
      * decklist and reading one back in as a card would be absurd.
      */
-    fun write(deck: Deck, name: String, cardName: (CardId) -> String?): String = buildString {
+    fun write(
+        deck: Deck,
+        name: String,
+        cardName: (CardId) -> String?,
+        /**
+         * The gaps, so the piles come out as piles.
+         *
+         * Every other builder's text export is a flat count of sixty cards.
+         * This one can say *these nine are the engine and those six are the
+         * handtraps*, because somebody pushed them apart and said so — and it
+         * costs nothing to read back, since the headings go out as comments.
+         */
+        arrangement: Map<DeckSection, Breaks> = emptyMap(),
+    ): String = buildString {
         if (name.isNotBlank()) appendLine("# ${name.trim()}")
 
         DeckSection.entries.forEach { section ->
@@ -156,12 +170,38 @@ object DecklistText {
             if (isNotEmpty()) appendLine()
             appendLine("${section.displayName} Deck")
 
-            // First appearance, counted. `distinct()` keeps the order the deck
-            // is in, which is the closest a counted list can get to the
-            // arrangement it was written from.
-            ids.distinct().forEach { id ->
-                appendLine("${ids.count { it == id }} ${cardName(id) ?: id.value}")
+            val marks = arrangement[section]?.clampedTo(ids.size)
+            if (marks == null || marks.isEmpty) {
+                counted(ids, cardName)
+                return@forEach
             }
+
+            // Pile by pile, and counted *within* each pile. Two copies in the
+            // engine and one in the handtraps is three copies of the card and
+            // two different decisions, and a flat "3" throws the second one away.
+            marks.groups(ids.size).forEach { range ->
+                marks.nameOf(range.first)?.let { appendLine("$PILE $it") }
+                counted(ids.slice(range), cardName)
+            }
+        }
+    }
+
+    /**
+     * What a pile's name is written behind.
+     *
+     * A comment, so a reader that knows nothing about piles skips it — and one
+     * that cannot be mistaken for a heading, which `# Extra` would have been.
+     * A pile is allowed to be called Extra; the rest of the section is not
+     * allowed to end up in the Extra deck because of it.
+     */
+    private const val PILE = "# -"
+
+    private fun StringBuilder.counted(ids: List<CardId>, cardName: (CardId) -> String?) {
+        // First appearance, counted. `distinct()` keeps the order the deck is in,
+        // which is the closest a counted list gets to the arrangement it came
+        // from.
+        ids.distinct().forEach { id ->
+            appendLine("${ids.count { it == id }} ${cardName(id) ?: id.value}")
         }
     }
 

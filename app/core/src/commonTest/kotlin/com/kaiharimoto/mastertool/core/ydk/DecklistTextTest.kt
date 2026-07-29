@@ -3,6 +3,8 @@ package com.kaiharimoto.mastertool.core.ydk
 import com.kaiharimoto.mastertool.core.TestCards
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
+import com.kaiharimoto.mastertool.core.deck.Breaks
+import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Deck
 import com.kaiharimoto.mastertool.core.search.TextMatching
 import kotlin.test.Test
@@ -408,5 +410,123 @@ class PastedYdkTest {
 
         assertEquals(2, out.deck.main.size, "the note was read as an Extra Deck heading")
         assertTrue(out.deck.extra.isEmpty())
+    }
+}
+
+/**
+ * The piles, in a message.
+ *
+ * Every other builder's text export is a flat count of sixty cards. This one
+ * carries the arrangement's commentary — *these nine are the engine* — because
+ * somebody wrote it down, and carries it as comments so nothing has to
+ * understand them to read the list.
+ */
+class WrittenPilesTest {
+
+    private val pool = TestCards.all.associateBy { it.id }
+    private fun nameOf(id: CardId): String? = pool[id]?.name
+    private fun resolve(name: String): Card? =
+        TestCards.all.firstOrNull { TextMatching.normalize(it.name) == TextMatching.normalize(name) }
+
+    private val ash = TestCards.ashBlossom.id
+    private val maxx = TestCards.maxxC.id
+    private val pot = TestCards.pot.id
+
+    private val deck = Deck(main = List(3) { ash } + List(2) { maxx } + List(2) { pot })
+
+    // Three, then two, then two.
+    private val marks = Breaks(before = setOf(3, 5))
+        .named(0, "The engine")
+        .named(3, "Handtraps")
+
+    private fun written() =
+        DecklistText.write(deck, "Snake-Eye", ::nameOf, mapOf(DeckSection.MAIN to marks))
+
+    @Test
+    fun eachPileIsWrittenBehindItsOwnName() {
+        val out = written()
+
+        assertTrue("# - The engine" in out, out)
+        assertTrue("# - Handtraps" in out, out)
+        assertTrue(out.indexOf("The engine") < out.indexOf("Handtraps"))
+    }
+
+    @Test
+    fun anUnnamedPileIsJustItsCards() {
+        // The third pile has no name. A heading over nothing would be worse than
+        // no heading.
+        val out = written()
+
+        assertEquals(2, out.lines().count { it.startsWith("# - ") })
+    }
+
+    @Test
+    fun andItAllReadsBackAsTheSameDeck() {
+        val back = DecklistText.parse(written(), ::resolve).deck
+
+        assertEquals(
+            deck.main.groupingBy { it }.eachCount(),
+            back.main.groupingBy { it }.eachCount(),
+        )
+    }
+
+    @Test
+    fun copiesAreCountedWithinAPileRatherThanAcrossTheDeck()
+    {
+        // Two in the engine and one in the handtraps is three copies of the card
+        // and *two different decisions*. A flat "3" throws the second one away.
+        val split = Deck(main = List(2) { ash } + List(2) { maxx } + ash)
+        val out = DecklistText.write(
+            split,
+            "Split",
+            ::nameOf,
+            mapOf(DeckSection.MAIN to Breaks(setOf(2)).named(0, "Engine").named(2, "Rest")),
+        )
+
+        assertEquals(2, out.lines().count { it.contains("Ash Blossom") }, out)
+        assertTrue("2 Ash Blossom & Joyous Spring" in out)
+        assertTrue("1 Ash Blossom & Joyous Spring" in out)
+        // And still three of them when it comes back.
+        assertEquals(3, DecklistText.parse(out, ::resolve).deck.copiesOf(ash))
+    }
+
+    @Test
+    fun aPileCalledExtraDoesNotSendTheRestOfTheDeckToTheExtraDeck() {
+        // The sharp one. A pile is allowed to be called Extra; `# Extra` would
+        // have been read straight back as the Extra Deck heading, because
+        // headings are deliberately checked before comments so a pasted `.ydk`
+        // works. Hence the marker that cannot be a heading.
+        val out = DecklistText.write(
+            deck,
+            "Trap",
+            ::nameOf,
+            mapOf(DeckSection.MAIN to Breaks(setOf(3)).named(3, "Extra")),
+        )
+        val back = DecklistText.parse(out, ::resolve).deck
+
+        assertTrue(back.extra.isEmpty(), "the rest of the Main deck went to the Extra deck")
+        assertEquals(7, back.main.size)
+    }
+
+    @Test
+    fun aDeckWithNoGapsIsWrittenExactlyAsBefore() {
+        assertEquals(
+            DecklistText.write(deck, "Snake-Eye", ::nameOf),
+            DecklistText.write(deck, "Snake-Eye", ::nameOf, mapOf(DeckSection.MAIN to Breaks.NONE)),
+        )
+    }
+
+    @Test
+    fun gapsPastTheEndOfTheSectionAreIgnoredRatherThanDrawn() {
+        // Stored breaks are clamped at render time everywhere else, and a stale
+        // one here would print a heading over no cards.
+        val out = DecklistText.write(
+            deck,
+            "Stale",
+            ::nameOf,
+            mapOf(DeckSection.MAIN to Breaks(setOf(99)).named(99, "Nowhere")),
+        )
+
+        assertFalse("Nowhere" in out)
     }
 }

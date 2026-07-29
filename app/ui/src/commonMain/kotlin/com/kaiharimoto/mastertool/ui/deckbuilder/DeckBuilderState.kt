@@ -2487,7 +2487,15 @@ class DeckBuilderState(
      * different API on each of the three.
      */
     val asText: String
-        get() = DecklistText.write(deck, deckName) { index.byId(it)?.name }
+        get() = DecklistText.write(
+            deck = deck,
+            name = deckName,
+            cardName = { index.byId(it)?.name },
+            // The piles go with it. A list in a message is the one place the
+            // arrangement's commentary has ever been able to travel, and this is
+            // the only builder that has any to send.
+            arrangement = breaks,
+        )
 
     /** The same thing, as a file, for somebody who wants it as one. */
     fun exportAsText() {

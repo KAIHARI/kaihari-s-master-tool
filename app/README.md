@@ -285,8 +285,16 @@ A `.ydk` opened in a text editor and pasted straight in works too: `#main`,
 comments they look like, so a downloaded file's Extra deck does not arrive in the
 Main deck.
 
-And back out the same way. The deck goes into a box you copy from — counted,
-headed, in the deck's own order — because a list belongs in a message and every
+And back out the same way, **with the piles**. Every other builder's text export
+is a flat count of sixty cards; this one writes *these nine are the engine and
+those six are the handtraps* into the list, because somebody pushed them apart and
+said so. The headings go out as comments, so nothing has to understand them to
+read the list back — and copies are counted *within* each pile, since two in the
+engine and one in the handtraps is three copies of a card and two different
+decisions. A pile is allowed to be called Extra without the rest of the deck
+ending up in the Extra deck.
+
+The deck goes into a box you copy from — counted, headed, in the deck's own order — because a list belongs in a message and every
 other builder hands you a file. What it writes, it reads: the round trip is the
 test, and a passcode the database has never heard of goes out as its number and
 comes back as the same card in the same section.

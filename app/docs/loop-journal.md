@@ -3440,3 +3440,45 @@ where a card will go, not a gap in the table. Hand-checked before pushing, since
 The drag shadow's 22% black stays black. A shadow is an absence of light and does
 not belong to the cloth. That distinction is the whole of why this took a field
 rather than a find-and-replace.
+
+## 127 · The arrangement, in a message
+
+The text export was a flat count of sixty cards, which is what every builder's
+is. But this program knows something none of them do: somebody pushed those cards
+into piles and, since section 111, wrote down what the piles are *for*.
+
+So the list carries them:
+
+```
+# Snake-Eye Fire King
+Main Deck
+# - The engine
+3 Snake-Eye Ash
+...
+# - Handtraps
+3 Ash Blossom & Joyous Spring
+```
+
+Headings as comments, so a reader that has never heard of a pile skips them and
+gets the same sixty cards. The arrangement's commentary travels into a chat
+message and costs the recipient nothing.
+
+Two things fell out of it.
+
+**Copies are counted within a pile, not across the section.** Two in the engine
+and one in the handtraps is three copies of a card and *two different decisions*,
+and a flat `3 Ash Blossom` throws the second one away. So the writer emits both
+lines, and the reader adds them back to three — the round trip still holds, and it
+now carries strictly more than it did.
+
+**And a pile is allowed to be called Extra.** This is the sharp one, and it comes
+straight out of section 115: headings are checked *before* comments, so that a
+pasted `.ydk`'s `#main` and `!side` are read as the markers they are. Which means
+a pile named `Extra`, written as `# Extra`, would be read straight back as the
+Extra Deck heading and send the rest of the Main deck into the Extra deck. Hence
+`# - ` rather than `# `: a marker that cannot be a heading, and a test named after
+exactly that failure.
+
+Seven tests. The one I would not have written a month ago is the last one, and it
+only exists because a decision made two sections earlier for a completely
+different reason turned out to have a sharp edge pointing this way.
