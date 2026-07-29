@@ -771,6 +771,16 @@ private fun DeckCard(
                 )
             }
 
+            // Only once there are gaps, for the reason picking a group up is:
+            // with none, this pile is the section, and naming it says nothing
+            // the heading above it does not already say.
+            state.pileAt(section, position)?.let { pile ->
+                DropdownMenuItem(
+                    text = { Text(if (pile.name.isBlank()) "Name this pile" else "Rename this pile") },
+                    onClick = { menuOpen = false; state.pileTarget = pile },
+                )
+            }
+
             val elsewhere = if (section == DeckSection.SIDE) card.requiredSection() else DeckSection.SIDE
             DropdownMenuItem(
                 text = { Text("Move one to ${elsewhere.displayName}") },

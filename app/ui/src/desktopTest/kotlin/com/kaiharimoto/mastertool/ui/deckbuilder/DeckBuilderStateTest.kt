@@ -1782,6 +1782,68 @@ class DeckBuilderStateTest {
         assertTrue(state.revealRequest?.flash ?: false)
     }
 
+    // ---- naming a pile -----------------------------------------------------
+
+    @Test
+    fun aPileIsOnlyNameableOnceThereAreGapsToMakeOneWith() = runTest {
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+
+        assertNull(state.pileAt(main, 2), "with no gaps, this pile is the section")
+
+        state.toggleBreak(main, 3)
+
+        val pile = assertNotNull(state.pileAt(main, 4))
+        assertEquals(3, pile.start)
+        assertEquals(3, pile.size)
+    }
+
+    @Test
+    fun whatYouCalledAPileBeatsWhatItIsMadeOf() = runTest {
+        // The derived name says what a pile *is* and can never be wrong, because
+        // nobody wrote it. A typed one says what it is *for*, which is the thing
+        // only its owner knows.
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+
+        state.namePile(main, 3, "The engine")
+
+        assertEquals("The engine", state.groupNames[1])
+    }
+
+    @Test
+    fun andEmptyingItGivesTheReadingBack() = runTest {
+        // Clearing the box is the delete, and what comes back is not nothing --
+        // here it is null only because this fixture's pool knows none of these
+        // cards, which is the same reason a real one would say "Monsters".
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+        state.namePile(main, 3, "The engine")
+
+        state.namePile(main, 3, "  ")
+
+        assertNull(state.groupNames[1])
+    }
+
+    @Test
+    fun aNameFollowsItsOwnPileWhenTheDeckAboveItChanges() = runTest {
+        // The property the whole design turns on. Cut a card out of the first
+        // pile and the second starts one earlier -- a name keyed to the old
+        // number would now be sitting on a card in the first.
+        val state = builderState()
+        val cards = TestPool.many(6)
+        cards.forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+        state.namePile(main, 3, "The engine")
+
+        state.removeAt(cards[0], main, 0)
+
+        assertEquals("The engine", state.groupNames[1])
+        assertEquals(2, assertNotNull(state.pileAt(main, 3)).start)
+    }
+
     // ---- what covers the builder -------------------------------------------
 
     /**
@@ -1809,6 +1871,7 @@ class DeckBuilderStateTest {
             Overlay.ISSUES -> issuesVisible = true
             Overlay.HISTORY -> historyVisible = true
             Overlay.PASTE -> pasteVisible = true
+            Overlay.PILE_NAME -> pileTarget = Pile(main, 0, "", 3)
         }
     }
 

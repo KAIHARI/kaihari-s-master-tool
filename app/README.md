@@ -269,6 +269,17 @@ The tidies draw their own, so "group by type" separates the groups it made. Gaps
 travel with the file in its `#ydkx-extended` payload, and they survive being
 built around: append, cut, drag a card across one, and they stay where they mean.
 
+And a pile can be told what it is for. The program already reads what a pile *is*
+off the cards in it — Snake-Eye, Monsters, Bonfire ×3 — and that reading is never
+wrong because nobody wrote it, and never says the thing that matters either: *the
+engine*, *what beats Ryzeal*, *cut these first*. So a name, optional, on top of a
+reading already there. It is written on the arrangement rather than beside it, so
+it follows its own gap through every edit that moves one — cut a card above it
+and the name arrives with the pile rather than staying on a number that used to
+mean something. Empty it and the reading comes back. It shows over the pile in
+the full-deck view and beside that pile's odds in the statistics, and it rides in
+the file with the gaps.
+
 And then they can be read back. Deck statistics measures each group you pushed
 apart: how often an opening hand holds one of it, how often two, and how many on
 average. Nothing was tagged or named to make that possible — an arrangement made

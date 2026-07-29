@@ -315,6 +315,8 @@ fun DeckBuilderScreen(
         PasteListPanel(state)
     }
 
+    state.pileTarget?.let { PileNamePanel(state, it) }
+
     if (state.notesVisible) {
         DeckNotesPanel(state)
     }

@@ -98,7 +98,21 @@ enum class Overlay {
     ISSUES,
     HISTORY,
     PASTE,
+    PILE_NAME,
 }
+
+/**
+ * A run of cards between two gaps, and what its owner calls it.
+ *
+ * [start] is the position the run begins at, which is how a name is keyed —
+ * see `Breaks`, where a name follows its own gap through every edit.
+ */
+data class Pile(
+    val section: DeckSection,
+    val start: Int,
+    val name: String,
+    val size: Int,
+)
 
 /** A transient message shown in the snackbar, optionally with an undo action. */
 data class Toast(
@@ -479,6 +493,41 @@ class DeckBuilderState(
         )
     }
 
+    /**
+     * The pile a card is in, and what it is currently called.
+     *
+     * Null when the section has no gaps in it: one pile is the section, and a
+     * name on it would say nothing the heading above it does not.
+     */
+    fun pileAt(section: DeckSection, index: Int): Pile? {
+        val marks = breaksIn(section)
+        if (marks.isEmpty) return null
+        val group = marks.groupAt(index, deck[section].size) ?: return null
+        return Pile(section, group.first, marks.nameOf(group.first).orEmpty(), group.count())
+    }
+
+    /**
+     * Writes a name onto the pile starting at [start], or takes it off.
+     *
+     * Names ride in the arrangement rather than beside it, so a name follows its
+     * own gap through every edit that moves it — see `Breaks`. Which also means
+     * this is an edit to the deck's arrangement, so it saves itself like one.
+     */
+    fun namePile(section: DeckSection, start: Int, name: String) {
+        val marks = breaksIn(section)
+        if (marks.isEmpty) return
+        breaks = breaks + (section to marks.named(start, name))
+    }
+
+    /** The pile a name is being written on, or null when nothing is being named. */
+    var pileTarget by mutableStateOf<Pile?>(null)
+
+    /** Opens the pile editor on whatever the cursor is in. */
+    fun namePileAtCursor() {
+        val section = selection.section ?: return
+        pileTarget = pileAt(section, Selections.focusOf(selection))
+    }
+
     /** Takes every gap out of a section, for when the grouping has gone stale. */
     fun clearBreaks(section: DeckSection) {
         if (section !in breaks) return
@@ -564,6 +613,7 @@ class DeckBuilderState(
         Overlay.ISSUES -> issuesVisible
         Overlay.HISTORY -> historyVisible
         Overlay.PASTE -> pasteVisible
+        Overlay.PILE_NAME -> pileTarget != null
     }
 
     /**
@@ -592,6 +642,7 @@ class DeckBuilderState(
             Overlay.ISSUES -> issuesVisible = false
             Overlay.HISTORY -> historyVisible = false
             Overlay.PASTE -> pasteVisible = false
+            Overlay.PILE_NAME -> pileTarget = null
         }
     }
 
@@ -854,7 +905,13 @@ class DeckBuilderState(
      */
     val groupNames: List<String?> by derivedStateOf {
         val cards = deck[statsSection]
-        breaksIn(statsSection).groups(cards.size).map { range ->
+        val marks = breaksIn(statsSection)
+        marks.groups(cards.size).map { range ->
+            // What its owner called it beats what it is made of. The derived
+            // name says what a pile *is*; a typed one says what it is *for*, and
+            // only one of the two is a thing somebody chose to write down.
+            marks.nameOf(range.first)?.let { return@map it }
+
             val known = range.mapNotNull { index.byId(cards[it]) }
             // A name read off half a group is a claim about the other half too.
             // Decks arrive from other programs carrying passcodes this pool has

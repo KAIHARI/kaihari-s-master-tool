@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -70,6 +71,16 @@ private val MARGIN = 22.dp
 
 /** Room set aside for the one line of writing on the screen. */
 private val CAPTION_HEIGHT = 34.dp
+
+/**
+ * The line a named pile is drawn under.
+ *
+ * A fixed height rather than whatever the text measures to, because the fit
+ * below has to know what it costs before it decides how big the cards are — a
+ * label that took its own height would be a label that pushed the last row of
+ * the deck off the bottom of the picture.
+ */
+private val PILE_LABEL = 15.dp
 
 /**
  * Room under the deck for the one control.
@@ -190,8 +201,21 @@ private fun ShowcaseContents(
                 state.breaksIn(section).groups(ids.size).map { it.count() }
             }
             val extraRows = groups.sumOf { (it.size - 1).coerceAtLeast(0) }
+
+            // And a named pile is a line of text above its first row, which is
+            // height the cards do not get. Counted here for the same reason the
+            // group spacing is: the fit has to be told everything that is not a
+            // card before it can say how big a card may be.
+            val labels = blocks.sumOf { (section, ids) ->
+                val marks = state.breaksIn(section)
+                marks.groups(ids.size).count { marks.nameOf(it.first) != null }
+            }
+
             val gaps = with(density) {
-                (BLOCK_GAP * (blocks.size - 1) + CAPTION_HEIGHT + GROUP_SPACE * extraRows).toPx()
+                (
+                    BLOCK_GAP * (blocks.size - 1) + CAPTION_HEIGHT +
+                        GROUP_SPACE * extraRows + PILE_LABEL * labels
+                    ).toPx()
             }
 
             val fit = with(density) {
@@ -287,6 +311,8 @@ private class ShowcaseRow(
     val start: Int,
     val ids: List<CardId>,
     val startsGroup: Boolean,
+    /** Set on a group's first row only, and only when its owner named it. */
+    val name: String?,
 )
 
 /**
@@ -307,6 +333,7 @@ private fun rowsOf(ids: List<CardId>, breaks: Breaks, columns: Int): List<Showca
                         ids = chunk,
                         // Not the very first group: nothing to stand clear of.
                         startsGroup = group > 0 && line == 0,
+                        name = if (line == 0) breaks.nameOf(range.first) else null,
                     ),
                 )
             }
@@ -345,10 +372,26 @@ private fun ShowcaseBlock(
         // piles have been pushed apart anywhere they should be pushed apart
         // here — it is the picture the arrangement was made for.
         rowsOf(ids, state.breaksIn(section), columns).forEach { row ->
+            // What its owner called this pile, over the pile. The whole reason
+            // for pushing nine cards away from six is that they mean something
+            // together, and this is the one view with room to say what.
+            row.name?.let { name ->
+                Text(
+                    name,
+                    style = tacticalStyle(),
+                    color = accent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(top = if (row.startsGroup) GROUP_SPACE else 0.dp)
+                        .height(PILE_LABEL),
+                )
+            }
+
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = if (row.startsGroup) GROUP_SPACE else 0.dp),
+                    .padding(top = if (row.startsGroup && row.name == null) GROUP_SPACE else 0.dp),
             ) {
                 row.ids.forEachIndexed { column, id ->
                     val index = row.start + column

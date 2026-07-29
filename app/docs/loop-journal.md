@@ -2927,3 +2927,52 @@ which is sixty keystrokes' worth of work in one go.
 
 Sixteen tests. All green on the first run except a call to a method I had named
 `defaultSection` and the codebase calls `requiredSection`.
+
+## 111 · What the pile is for, which is the half nobody can read off it
+
+Gaps say *these nine go together*. Section 91 then taught the statistics to read
+each pile back off its cards — Snake-Eye, Monsters, Bonfire ×3 — and made a point
+of that reading never being able to go stale, because nobody wrote it.
+
+Which is also its limit. It can say what a pile *is made of*; it can never say
+what it is *for*. **The engine. What beats Ryzeal. Cut these first.** That is the
+sentence the arrangement was made to hold, and it is the one thing only its owner
+can put there.
+
+So a name, optional, over a reading that is already there. Empty it and the
+reading comes back — which is why there is no delete button: clearing the box is
+the delete, and what returns is not nothing.
+
+The whole design turns on one question: **what is a name attached to?**
+
+Not to a card. Cut the third copy of the starter and the pile is still the
+engine. Not to a set of cards either, which would make a pile stop being itself
+the moment you swapped one out. It is attached to the *gap* — a name is keyed by
+the position its pile starts at, which is zero or a break, and it therefore lives
+inside `Breaks` and goes through every transformation the gaps already go
+through. Insert three cards above it and the name moves down three with its own
+gap. Cut one and it comes back up. Close the gap and the name goes with it,
+because the pile it started no longer exists — it has been folded into the one
+above, and leaving the name behind would put it on a pile nobody named.
+
+Zero is the one special case, and it is a real one rather than an off-by-one:
+zero is not a gap, it is the front of the section, and the front of the section
+does not move when something is put in front of it.
+
+It rides in the file as a *sibling* key — `arrangementNames` next to
+`arrangement` — rather than as a richer shape under the first one, so a file
+written this morning still opens in a build from last week, gaps and all, and a
+name for a pile that no longer starts anywhere is dropped on the way in. The
+gaps are the arrangement; a name is a label on one, and the label never gets to
+argue with the thing it is labelling.
+
+In the full-deck view it is drawn over the pile, in the section's colour, at a
+**fixed** height — because the fit that decides how big the cards are has to be
+told everything that is not a card before it can answer, and a label that took
+its own measured height would be a label that pushed the last row of the deck off
+the bottom of the picture. Same accounting the group spacing has had since it was
+added.
+
+Twenty-one tests across `Breaks`, the codec and the state holder, and the one
+they all circle is the third one: *a name follows its own pile when the deck
+above it changes.*
