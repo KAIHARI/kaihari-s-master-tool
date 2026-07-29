@@ -66,19 +66,30 @@ object DeckTidy {
      * would be data loss dressed as a convenience.
      */
     fun apply(ids: List<CardId>, mode: TidyBy, lookup: (CardId) -> Card?): List<CardId> =
+        arrange(ids, mode, lookup).ids
+
+    /**
+     * The same tidy, with the gaps it leaves between the groups.
+     *
+     * Which is where a tidy stops being a sort and starts being what somebody
+     * does to a pile of cards on a table: the groups are pushed apart, and after
+     * that the arrangement is theirs again — the gaps stay put while cards are
+     * moved around by hand, and any of them can be taken away.
+     */
+    fun arrange(ids: List<CardId>, mode: TidyBy, lookup: (CardId) -> Card?): Arranged =
         when (mode) {
-            TidyBy.COPIES -> Arrangement.gatherCopies(ids)
+            TidyBy.COPIES -> Arrangement.gathered(ids)
 
             // Enum order is the reading order of a decklist, so the ordinal is
             // the comparator and there is nothing to keep in step with it.
-            TidyBy.CATEGORY -> Arrangement.groupBy(ids, compareBy { it.ordinal }) {
+            TidyBy.CATEGORY -> Arrangement.groupedBy(ids, compareBy { it.ordinal }) {
                 lookup(it)?.category
             }
 
             // No comparator, on purpose. See the note above.
-            TidyBy.ARCHETYPE -> Arrangement.groupBy(ids) { lookup(it)?.archetype }
+            TidyBy.ARCHETYPE -> Arrangement.groupedBy(ids) { lookup(it)?.archetype }
 
-            TidyBy.SUMMONING -> Arrangement.groupBy(ids, compareBy { it.ordinal }) { id ->
+            TidyBy.SUMMONING -> Arrangement.groupedBy(ids, compareBy { it.ordinal }) { id ->
                 lookup(id)?.frameType?.let { frame ->
                     SummonFrame.entries.firstOrNull { frame.contains(it.fragment, true) }
                 }

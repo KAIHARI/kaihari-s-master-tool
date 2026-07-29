@@ -131,6 +131,71 @@ class DeckTidyTest {
 
     private fun trap(id: Int, name: String) =
         Card(id = CardId(id), name = name, type = "Trap Card", frameType = "trap")
+    // ---- the gaps a tidy leaves --------------------------------------------
+
+    @Test
+    fun groupingByTypeLeavesAGapBetweenTheGroups() {
+        // The space between the groups is what says there are groups. A tidy
+        // that brings the monsters together and butts them against the spells
+        // has done half the job.
+        val start = listOf(imperm.id, ash.id, pot.id, maxx.id)
+
+        val arranged = DeckTidy.arrange(start, TidyBy.CATEGORY, lookup)
+
+        assertEquals(listOf(ash.id, maxx.id, pot.id, imperm.id), arranged.ids)
+        assertEquals(setOf(2, 3), arranged.breaks.before)
+        assertEquals(
+            listOf(listOf("Ash Blossom & Joyous Spring", "Maxx \"C\""), listOf("Pot of Prosperity"), listOf("Infinite Impermanence")),
+            arranged.breaks.groups(arranged.ids.size).map { range -> names(arranged.ids.slice(range)) },
+        )
+    }
+
+    @Test
+    fun groupingByArchetypeSeparatesTheEngineFromEverythingElse() {
+        val start = listOf(ash.id, kashtira.id, maxx.id, riseheart.id)
+
+        val arranged = DeckTidy.arrange(start, TidyBy.ARCHETYPE, lookup)
+
+        // The Kashtira cards have an archetype and come first in first-appearance
+        // order; the two that have none are not a group and go last.
+        assertEquals(listOf(kashtira.id, riseheart.id, ash.id, maxx.id), arranged.ids)
+        assertEquals(setOf(2), arranged.breaks.before)
+    }
+
+    @Test
+    fun gatheringCopiesDrawsNoGapsAtAll() {
+        // Forty cards would become twenty gaps, which says nothing and looks
+        // like a fault.
+        val start = listOf(ash.id, maxx.id, ash.id, pot.id, maxx.id)
+
+        val arranged = DeckTidy.arrange(start, TidyBy.COPIES, lookup)
+
+        assertEquals(listOf(ash.id, ash.id, maxx.id, maxx.id, pot.id), arranged.ids)
+        assertEquals(Breaks.NONE, arranged.breaks)
+    }
+
+    @Test
+    fun aTidyOfOneCardHasNothingToSeparate() {
+        val arranged = DeckTidy.arrange(listOf(ash.id), TidyBy.CATEGORY, lookup)
+
+        assertEquals(Breaks.NONE, arranged.breaks)
+    }
+
+    @Test
+    fun theOldTidyStillAgreesWithTheNewOne() {
+        // Two ways of asking the same question is how the two come to disagree,
+        // so one is written in terms of the other and this says so.
+        val start = listOf(imperm.id, kashtira.id, pot.id, ash.id, riseheart.id, maxx.id)
+
+        TidyBy.entries.forEach { mode ->
+            assertEquals(
+                DeckTidy.apply(start, mode, lookup),
+                DeckTidy.arrange(start, mode, lookup).ids,
+                mode.name,
+            )
+        }
+    }
+
 }
 
 /**

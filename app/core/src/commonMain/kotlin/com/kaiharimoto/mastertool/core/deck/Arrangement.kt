@@ -39,8 +39,22 @@ object Arrangement {
         ids: List<CardId>,
         groupOrder: Comparator<K>? = null,
         keyOf: (CardId) -> K?,
-    ): List<CardId> {
-        if (ids.size < 2) return ids
+    ): List<CardId> = groupedBy(ids, groupOrder, keyOf).ids
+
+    /**
+     * The same partition, and where the groups meet.
+     *
+     * The gaps are the point. A tidy that brings the monsters together and then
+     * leaves them butted against the spells has done half the job — it is the
+     * space between the groups that says there are groups, which is exactly what
+     * a player does with their hands when they sort a pile on a table.
+     */
+    fun <K : Any> groupedBy(
+        ids: List<CardId>,
+        groupOrder: Comparator<K>? = null,
+        keyOf: (CardId) -> K?,
+    ): Arranged {
+        if (ids.size < 2) return Arranged(ids, Breaks.NONE)
 
         val groups = LinkedHashMap<K, MutableList<CardId>>()
         val unkeyed = ArrayList<CardId>()
@@ -53,9 +67,17 @@ object Arrangement {
         val keys = if (groupOrder == null) groups.keys.toList() else groups.keys.sortedWith(groupOrder)
 
         val out = ArrayList<CardId>(ids.size)
-        keys.forEach { out.addAll(groups.getValue(it)) }
-        out.addAll(unkeyed)
-        return out
+        val lengths = ArrayList<Int>(keys.size + 1)
+        keys.forEach {
+            val group = groups.getValue(it)
+            out.addAll(group)
+            lengths.add(group.size)
+        }
+        if (unkeyed.isNotEmpty()) {
+            out.addAll(unkeyed)
+            lengths.add(unkeyed.size)
+        }
+        return Arranged(out, Breaks.betweenRuns(lengths))
     }
 
     /**
@@ -68,4 +90,12 @@ object Arrangement {
      * it twice would be how the two came to behave differently.
      */
     fun gatherCopies(ids: List<CardId>): List<CardId> = groupBy(ids) { it }
+
+    /**
+     * Gathering copies without drawing a gap around every playset.
+     *
+     * The one tidy whose groups are not worth marking: forty cards would become
+     * twenty gaps, which says nothing and looks like a fault.
+     */
+    fun gathered(ids: List<CardId>): Arranged = Arranged(gatherCopies(ids), Breaks.NONE)
 }
