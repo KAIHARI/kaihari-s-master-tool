@@ -277,8 +277,12 @@ keeps itself saved — every edit after the first save is written without being
 asked, and *edit* includes the things that are about the deck rather than in it:
 a gap moved, a note written on a card, a mat chosen, a siding plan recorded. A
 deck that has never been saved is never written on its own, and the toolbar says
-so. Saved decks show three of their own cards
-in the library rather than only a name, and any of them can be held up against
+so. A saved deck says so in the library when it
+has stopped being legal — a banlist update breaks decks without anybody touching
+them, and the question a shelf of nine raises is which of them broke while you
+were not looking. Nothing is said about the ones that are fine, because nine
+green ticks are nine things to read and nothing to learn. Saved decks show three
+of their own cards in the library rather than only a name, and any of them can be held up against
 the deck you have open: what came out, what went in, three of a card becoming
 two — and, when nothing was cut at all, that the same cards are simply arranged
 differently, which this program is not going to call *no change*.

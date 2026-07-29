@@ -58,6 +58,8 @@ import com.kaiharimoto.mastertool.core.data.StoredDeck
 import com.kaiharimoto.mastertool.core.deck.DeckIdentity
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.deck.DeckLookCodec
+import com.kaiharimoto.mastertool.core.deck.DeckValidator
+import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.model.Deck
 import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.core.search.TextMatching
@@ -88,6 +90,8 @@ fun DeckLibraryScreen(
     /** The deck in the builder, so a saved one can be held up against it. */
     openDeck: Deck,
     openDeckName: String,
+    /** The banlist every saved deck is checked against, which is the builder's. */
+    format: Format,
     onOpenDeck: (String) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -189,6 +193,7 @@ fun DeckLibraryScreen(
                     DeckCard(
                         stored = stored,
                         index = index,
+                        format = format,
                         // Each deck in the library sits on its own cloth, which
                         // is the whole point of the mat belonging to the deck:
                         // three lists you can tell apart before reading a name.
@@ -252,6 +257,7 @@ private fun DeckCard(
     stored: StoredDeck,
     index: CardIndex,
     mat: MatColors,
+    format: Format,
     now: Long,
     onOpen: () -> Unit,
     onRename: (String) -> Unit,
@@ -315,6 +321,24 @@ private fun DeckCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Box(Modifier.weight(1f))
+
+                // Only when there is something wrong. A green "Legal" on all
+                // nine tiles is nine things to read and nothing to learn — the
+                // useful question a shelf of decks raises is which of them broke
+                // while you were not looking, and a banlist update breaks them
+                // without touching them.
+                val validation = remember(deck, format, index) {
+                    DeckValidator.validate(deck, index::byId, format)
+                }
+                if (!validation.isLegal) {
+                    Text(
+                        "${validation.errors.size} ISSUE${if (validation.errors.size == 1) "" else "S"}",
+                        style = tacticalStyle(),
+                        color = MasterToolPalette.Danger,
+                        modifier = Modifier.padding(end = 10.dp),
+                    )
+                }
+
                 // Worth saying now that decks save themselves: "when did I last
                 // touch this" is the question a shelf of them raises, and it
                 // used to have no answer anywhere in the program.

@@ -102,6 +102,7 @@ fun MasterToolApp(deps: AppDependencies) {
                 // on, which is the question the library is usually opened with.
                 openDeck = builderState.deck,
                 openDeckName = builderState.deckName,
+                format = builderState.format,
                 // The pool the builder already has. The library needs it only to
                 // turn three passcodes into three pictures.
                 index = builderState.index,

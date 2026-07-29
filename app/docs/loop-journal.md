@@ -2513,6 +2513,26 @@ no-op, and the read returns the restored deck.
 
 ---
 
+## 99 · Which of these broke while I was not looking
+
+A banlist update makes decks illegal without anybody touching them. The builder
+has always said so about the deck in front of you — the chip in the top bar reads
+"3 issue(s)" and opens the list — and the library, which is where nine decks sit,
+said nothing at all. So the answer to *which of mine are still legal* was to open
+all nine.
+
+Each tile now runs the same validator the builder does, against the same banlist,
+and says so when the answer is bad. Only when it is bad: nine green ticks are
+nine things to read and nothing to learn, and the shelf is scanned rather than
+read.
+
+Nothing new was written to do it. `DeckValidator` is pure, total and already
+tested; the library already had the card pool for the three faces it draws; the
+only thing that had to be handed in was which banlist to check against, and that
+belongs to the builder because the toggle does.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus
