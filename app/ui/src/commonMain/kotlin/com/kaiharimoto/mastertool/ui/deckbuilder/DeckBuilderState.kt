@@ -1054,6 +1054,28 @@ class DeckBuilderState(
     }
 
     /**
+     * Takes a plan back out of the file.
+     *
+     * The one thing recording a plan had no opposite for, and a plan is not a
+     * harmless thing to be stuck with: it goes onto the printed sheet and it can
+     * be applied to the deck with one press. A matchup recorded under the wrong
+     * name, or with the wrong half captured, was permanent.
+     *
+     * Undoable through the toast rather than through the deck's undo stack,
+     * which is for edits to the cards — the same reasoning that keeps gaps off
+     * it.
+     */
+    fun forgetSiding(name: String) {
+        val existing = sidingPatterns[name] ?: return
+        val was = extended
+        extended = SidingCodec.write(extended, sidingPatterns - name)
+        showToast(
+            "Forgot the plan for ${existing.deckName.ifBlank { name }}.",
+            undo = { extended = was },
+        )
+    }
+
+    /**
      * Writes the siding plans out as a sheet to print.
      *
      * It goes through the same text export the deck itself uses, which works

@@ -13,6 +13,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -147,6 +151,16 @@ private fun PatternRow(state: DeckBuilderState, name: String, pattern: SidingPat
             enabled = !pattern.goingSecond.isEmpty,
         ) {
             Text("Going 2nd")
+        }
+
+        // Quieter than the two buttons beside it on purpose: this is the one
+        // action here that takes something away, and the toast can put it back.
+        IconButton(onClick = { state.forgetSiding(name) }) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "Forget the plan for ${pattern.deckName.ifBlank { name }}",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

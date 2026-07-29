@@ -857,6 +857,61 @@ class DeckBuilderStateTest {
         assertTrue(written.contains("somethingThisAppDoesNotKnow"), written)
     }
 
+    @Test
+    fun aPlanRecordedByMistakeCanBeTakenBackOut() = runTest {
+        // Recording had no opposite, and a plan is not harmless to be stuck
+        // with: it prints on the sheet and one press applies it to the deck.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.importFromFile()
+        advanceUntilIdle()
+        assertTrue("Snake-Eye" in state.sidingPatterns)
+
+        state.forgetSiding("Snake-Eye")
+
+        assertFalse("Snake-Eye" in state.sidingPatterns)
+    }
+
+    @Test
+    fun forgettingAPlanCanBeTakenBack() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.importFromFile()
+        advanceUntilIdle()
+
+        state.forgetSiding("Snake-Eye")
+        state.toast?.undo?.invoke()
+
+        assertTrue("Snake-Eye" in state.sidingPatterns)
+    }
+
+    @Test
+    fun forgettingAPlanThatWasNeverThereDoesNothing() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.importFromFile()
+        advanceUntilIdle()
+        val before = state.sidingPatterns
+
+        state.forgetSiding("A deck nobody plays")
+
+        assertEquals(before, state.sidingPatterns)
+    }
+
+    @Test
+    fun aForgottenPlanIsGoneFromTheExportedFileToo() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+        advanceUntilIdle()
+
+        state.forgetSiding("Snake-Eye")
+        state.exportToFile()
+        advanceUntilIdle()
+
+        val written = requireNonNull(files.exported)
+        assertFalse("Snake-Eye" in written, written.takeLast(400))
+        // And the keys this app has never heard of are still in there.
+        assertTrue("somethingThisAppDoesNotKnow" in written)
+    }
+
     // ---- what a save has to include ----------------------------------------
 
     @Test

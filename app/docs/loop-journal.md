@@ -1903,6 +1903,25 @@ builder, the full-deck view, the picture that leaves, and the library tile.
 
 ---
 
+## 82 · Recording a plan had no opposite
+
+You could keep a siding plan and never get rid of one. A matchup recorded under
+the wrong name, or with the wrong half captured, or recorded twice because the
+first attempt was interrupted, stayed in the file forever — and a plan is not a
+harmless thing to be stuck with. It prints on the sheet that goes beside the deck
+box, and one press applies it to the deck.
+
+Found by looking for verbs without opposites rather than by anything failing,
+which is a sweep worth doing more often: *what can this program make that it
+cannot unmake?* Gaps could already be closed, notes cleared, decks deleted, the
+mat put back to the theme's. Plans could only be added.
+
+Undone through the toast rather than the deck's undo stack, for the same reason
+gaps stay off it: that stack is for edits to the cards, and mixing "I cut a card"
+with "I threw away a plan" makes the one you wanted two presses further away.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **790 tests**, up from 249, plus

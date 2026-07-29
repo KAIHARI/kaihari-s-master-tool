@@ -165,7 +165,9 @@ grows it, Ctrl carries what it holds. Typing in the search box completes the
 card's name.
 
 Siding works end to end. Plans arrive in a `.ydkx`, are applied as one undoable
-edit, and are recorded by doing them — side by hand, then keep what you did.
+edit, and are recorded by doing them — side by hand, then keep what you did. One
+recorded by mistake can be taken back out, which matters more than it sounds: a
+plan prints on the sheet and one press applies it to the deck.
 
 Test hands: shuffle the Main deck, judge each opening as playable or a brick, and
 watch the rate over a run of them.
