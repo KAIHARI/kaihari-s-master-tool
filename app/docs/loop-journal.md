@@ -2096,6 +2096,13 @@ The ring is drawn *inside* the selection's own border and thinner, so a card tha
 is both picked out and connected reads as both rather than as two states fighting
 over the same edge.
 
+And `n` writes on whatever is being held. One key rather than two, because it is
+one question — *what do I want to remember about this* — and which sheet answers
+it depends only on whether the cursor is holding one card or two. Three says
+nothing rather than guessing which two were meant. The whole deck could already
+be arranged from the keyboard; now it can be annotated from there too, without a
+hand leaving it.
+
 ---
 
 ## Where this stands

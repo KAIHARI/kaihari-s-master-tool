@@ -1076,6 +1076,39 @@ class DeckBuilderStateTest {
     }
 
     @Test
+    fun oneKeyWritesOnOneCardOrOnTwo() = runTest {
+        // One question -- what do I want to remember about what I am holding --
+        // and which sheet answers it depends only on how many cards are in hand.
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+
+        state.select(main, 1)
+        state.noteAtCursor()
+        assertEquals(state.deck.main[1], state.noteTarget)
+        assertNull(state.pairTarget)
+
+        state.noteTarget = null
+        state.select(main, 1)
+        state.toggleSelected(main, 2)
+        state.noteAtCursor()
+        assertNull(state.noteTarget)
+        assertNotNull(state.pairTarget)
+    }
+
+    @Test
+    fun threeCardsHeldIsNotAQuestionThisCanAnswer() = runTest {
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.select(main, 0)
+        state.selectThrough(main, 2)
+
+        state.noteAtCursor()
+
+        assertNull(state.noteTarget)
+        assertNull(state.pairTarget)
+    }
+
+    @Test
     fun pickingUpACardLightsUpWhatItIsNotedWith() = runTest {
         // A note readable only in the sheet it was typed into is a filing
         // cabinet. This is the note showing up in the deck.

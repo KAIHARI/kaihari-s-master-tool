@@ -106,6 +106,7 @@ internal val CHORD_KEYS: Map<Key, String> = mapOf(
     Key.G to "g",
     Key.H to "h",
     Key.I to "i",
+    Key.N to "n",
     Key.P to "p",
     Key.S to "s",
     Key.V to "v",

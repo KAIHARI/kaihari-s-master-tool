@@ -395,6 +395,23 @@ class DeckBuilderState(
     var pairTarget by mutableStateOf<Pair<CardId, CardId>?>(null)
 
     /**
+     * Writes on what the cursor is holding: one card, or the two of them.
+     *
+     * One key rather than two, because it is one question — what do I want to
+     * remember about this — and which sheet answers it depends only on how many
+     * cards are in hand. Three or more is not a question this can answer, and
+     * says nothing rather than guessing which two were meant.
+     */
+    fun noteAtCursor() {
+        val section = selection.section ?: return
+        when (selection.size) {
+            1 -> noteTarget = deck[section].getOrNull(Selections.focusOf(selection))
+            2 -> notePickedPair()
+            else -> Unit
+        }
+    }
+
+    /**
      * Opens the pair editor on the two cards currently picked out.
      *
      * Two is the whole of it. A note about three cards is a note about the deck,

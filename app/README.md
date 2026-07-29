@@ -168,8 +168,9 @@ away — the whole deck at the largest size it fits at, no controls on top of it
 On desktop: keyboard shortcuts throughout (press `?` for the list, which is
 generated from the table that implements them) and a hover preview on any card.
 The whole deck can be arranged from the keyboard — arrows move a cursor, shift
-grows it, Ctrl carries what it holds. Typing in the search box completes the
-card's name.
+grows it, Ctrl carries what it holds, `g` puts a gap in and `n` writes on what is
+being held: on the card if that is one, on the pair if it is two. Typing in the
+search box completes the card's name.
 
 Siding works end to end. Plans arrive in a `.ydkx`, are applied as one undoable
 edit, and are recorded by doing them — side by hand, then keep what you did. One

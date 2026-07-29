@@ -67,6 +67,9 @@ enum class ShortcutAction {
     /** Put a gap before the card the cursor is on, or take one away. */
     TOGGLE_GAP,
 
+    /** Write on the card the cursor is on, or on the two it is holding. */
+    NOTE_CARD,
+
     /** Move the cards themselves. */
     CARRY_LEFT,
     CARRY_RIGHT,
@@ -229,6 +232,13 @@ object ShortcutTable {
         Shortcut(
             KeyChord("g"), ShortcutAction.TOGGLE_GAP, ShortcutScope.BUILDER,
             "Gap before the selected card",
+        ),
+        Shortcut(
+            // One key for both, because it is one question -- what do I want to
+            // remember about what I am holding -- and the answer only depends on
+            // whether that is one card or two.
+            KeyChord("n"), ShortcutAction.NOTE_CARD, ShortcutScope.BUILDER,
+            "Note the selected card, or the two selected",
         ),
         Shortcut(
             KeyChord("1"), ShortcutAction.FOCUS_MAIN, ShortcutScope.BUILDER,
