@@ -1,5 +1,14 @@
 package com.kaiharimoto.mastertool.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -8,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -28,14 +38,29 @@ import io.ktor.client.HttpClient
 /**
  * Which screen is showing.
  *
- * Two destinations do not justify a navigation library; a sealed type keeps the
- * whole routing story visible in one place.
+ * Three destinations do not justify a navigation library; a sealed type keeps
+ * the whole routing story visible in one place.
  */
 private sealed interface Screen {
     data object DeckBuilder : Screen
     data object Library : Screen
     data object Sandbox : Screen
 }
+
+/** How long an arriving screen takes to settle. */
+private const val SETTLE_MS = 220
+
+/** And a departing one to go, which is shorter so the two do not sit on top of each other. */
+private const val LEAVE_MS = 150
+
+/**
+ * How far back a screen sits at the far end of the crossing.
+ *
+ * A percent and a half. Enough that the frame reads as having come forward and
+ * not so much that anything moves under a finger already on its way to a
+ * control — the screens either side of this are used with a thumb.
+ */
+private const val ARRIVE_SCALE = 0.985f
 
 @Composable
 fun MasterToolApp(deps: AppDependencies) {
@@ -72,46 +97,78 @@ fun MasterToolApp(deps: AppDependencies) {
     // Read from stored settings, so the surface is whatever it was left as
     // rather than whatever the tablet thinks the time of day is.
     MasterToolTheme(layoutState.preferences.theme) {
-        when (screen) {
-            Screen.DeckBuilder -> DeckBuilderScreen(
-                state = builderState,
-                deps = deps,
-                layout = layoutState,
-                updateState = updateState,
-                onOpenLibrary = { screen = Screen.Library },
-                onOpenSandbox = { hand ->
-                    // Dealt fresh on the way in. A board left over from twenty
-                    // minutes ago is not the question anybody is asking, and the
-                    // deck may not even be the same deck. Unless a hand came
-                    // with the request, in which case that hand is the question.
-                    sandboxState.open(builderState.deck, hand.ifEmpty { null })
-                    screen = Screen.Sandbox
-                },
-            )
+        // Screens settle rather than cut. The builder, the shelf and the board
+        // are three views of the same evening's work, and a hard swap between
+        // them is the one place this program still behaved like three programs.
+        //
+        // Deliberately short and deliberately small: opening a deck from the
+        // library deals forty cards onto the table a moment later, and that is
+        // the event. A frame that took half a second to arrive would be an
+        // animation competing with the one that means something.
+        AnimatedContent(
+            targetState = screen,
+            transitionSpec = {
+                (
+                    fadeIn(tween(SETTLE_MS, easing = LinearOutSlowInEasing)) +
+                        scaleIn(
+                            initialScale = ARRIVE_SCALE,
+                            animationSpec = tween(SETTLE_MS, easing = LinearOutSlowInEasing),
+                        )
+                    ) togetherWith (
+                    fadeOut(tween(LEAVE_MS)) +
+                        scaleOut(
+                            targetScale = ARRIVE_SCALE,
+                            animationSpec = tween(LEAVE_MS),
+                        )
+                    )
+            },
+            label = "screen",
+            modifier = Modifier.fillMaxSize(),
+        ) { showing ->
+            // The parameter, never the `screen` it was read from: both copies
+            // are composed at once during the crossing, and reading the live
+            // value would draw the arriving screen twice and animate nothing.
+            when (showing) {
+                Screen.DeckBuilder -> DeckBuilderScreen(
+                    state = builderState,
+                    deps = deps,
+                    layout = layoutState,
+                    updateState = updateState,
+                    onOpenLibrary = { screen = Screen.Library },
+                    onOpenSandbox = { hand ->
+                        // Dealt fresh on the way in. A board left over from twenty
+                        // minutes ago is not the question anybody is asking, and the
+                        // deck may not even be the same deck. Unless a hand came
+                        // with the request, in which case that hand is the question.
+                        sandboxState.open(builderState.deck, hand.ifEmpty { null })
+                        screen = Screen.Sandbox
+                    },
+                )
 
-            Screen.Sandbox -> SandboxScreen(
-                state = sandboxState,
-                index = builderState.index,
-                matChoice = builderState.mat,
-                onBack = { screen = Screen.DeckBuilder },
-            )
+                Screen.Sandbox -> SandboxScreen(
+                    state = sandboxState,
+                    index = builderState.index,
+                    matChoice = builderState.mat,
+                    onBack = { screen = Screen.DeckBuilder },
+                )
 
-            Screen.Library -> DeckLibraryScreen(
-                deps = deps,
-                // So a saved list can be held up against the one being worked
-                // on, which is the question the library is usually opened with.
-                openDeck = builderState.deck,
-                openDeckName = builderState.deckName,
-                format = builderState.format,
-                // The pool the builder already has. The library needs it only to
-                // turn three passcodes into three pictures.
-                index = builderState.index,
-                onOpenDeck = { id ->
-                    builderState.load(id)
-                    screen = Screen.DeckBuilder
-                },
-                onBack = { screen = Screen.DeckBuilder },
-            )
+                Screen.Library -> DeckLibraryScreen(
+                    deps = deps,
+                    // So a saved list can be held up against the one being worked
+                    // on, which is the question the library is usually opened with.
+                    openDeck = builderState.deck,
+                    openDeckName = builderState.deckName,
+                    format = builderState.format,
+                    // The pool the builder already has. The library needs it only to
+                    // turn three passcodes into three pictures.
+                    index = builderState.index,
+                    onOpenDeck = { id ->
+                        builderState.load(id)
+                        screen = Screen.DeckBuilder
+                    },
+                    onBack = { screen = Screen.DeckBuilder },
+                )
+            }
         }
 
         updateState.pendingUpdate?.let { release ->

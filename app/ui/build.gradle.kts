@@ -19,6 +19,10 @@ kotlin {
 
             implementation(compose.runtime)
             implementation(compose.foundation)
+            // Named rather than leant on: `AnimatedContent` arrives transitively
+            // through foundation, and a screen that dissolves into another is
+            // not something to have depend on a transitive staying put.
+            implementation(compose.animation)
             implementation(compose.material3)
             implementation(compose.materialIconsExtended)
             implementation(compose.ui)

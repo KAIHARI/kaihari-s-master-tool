@@ -2706,3 +2706,38 @@ are looking for ran three of it or splashed one is most of what you wanted to
 know before opening it.
 
 Fourteen tests. Thirteen passed first time and the fourteenth was mine.
+
+## 104 · Three programs in a trench coat
+
+`when (screen)` and nothing else. Tap the library and the table is replaced,
+instantly, by a shelf; tap back and the shelf is replaced by the table. Every
+card in this program is dealt, carried on a spring, leaned aside to make room —
+and then the three screens holding all of that swapped like slides.
+
+It is now an `AnimatedContent`: the arriving screen fades up from 98.5% over
+220ms and the departing one goes the same way in 150ms.
+
+Two things decided the numbers, and both were about not competing:
+
+**The deal is the event, not the crossing.** Open a deck from the library and a
+moment later forty cards drop onto the table in a wave. That is the animation
+that means something. A screen that took half a second to arrive would be sitting
+on top of it, and the two would read as a program being pleased with itself. So
+the crossing is short enough to be over before the cards land.
+
+**A percent and a half, not five.** These screens are used with a thumb, and a
+finger already travelling towards a control does not want the control moving away
+from it. At 0.985 on a tablet the frame moves about fifteen pixels — enough to
+read as having come forward, not enough to miss anything.
+
+`compose.animation` is now named in `ui/build.gradle.kts` rather than arriving
+transitively through `compose.foundation`. It was already on the classpath, which
+is exactly the kind of thing that stops being true in a version bump nobody
+connects to a screen that stopped dissolving.
+
+The one hazard in `AnimatedContent` is that its content lambda takes the state as
+a parameter and the enclosing scope still has the live one in view. Read the live
+one and both copies draw the arriving screen, so the crossing animates one thing
+into an identical thing and looks like a flicker. The comment sits on the `when`
+rather than on the parameter, because the `when` is where somebody would make the
+mistake.
