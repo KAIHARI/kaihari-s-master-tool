@@ -2558,6 +2558,32 @@ all, which is what `isYdkx` means and is correct.
 
 ---
 
+## 101 · Undo gave the deck back without its name on the door
+
+Fourth read of the same forty lines, fourth thing found. `newDeck` let go of the
+open deck and *then* recorded what it had let go of — so what it recorded was a
+deck with its id and its snapshot already cleared, because clearing them is what
+letting go means.
+
+Everything visible came back. The cards in their order, the gaps, the notes, the
+cloth. What did not come back was the deck's identity: after undo the toolbar
+read NOT SAVED, and the next save wrote a *second copy* beside the original
+rather than back into it. Two decks called Snake-Eye, one of them a ghost, and
+nothing anywhere said so.
+
+`load` and `importFromFile` both capture before they release. `newDeck` was the
+odd one out, and the fix is moving one line up.
+
+Which is worth sitting with. This region has now been read four times in a day
+and given up something each time — the autosave that was cancelled instead of
+written, the read that raced the write it started, and now this. What they share
+is an *ordering* between two statements that both look like bookkeeping, where
+the wrong order is silent, plausible, and only wrong in a case nobody
+demonstrates by hand. The reason the fourth read still found something is that
+the first three were looking at behaviour and this one was looking at sequence.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **913 tests**, up from 249, plus

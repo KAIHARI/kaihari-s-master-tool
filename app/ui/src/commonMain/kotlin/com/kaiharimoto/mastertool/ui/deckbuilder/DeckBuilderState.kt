@@ -1898,14 +1898,21 @@ class DeckBuilderState(
     }
 
     fun newDeck() {
-        releaseOpenDeck()
-        registeredDeck = Deck.EMPTY
-        val token = pushUndo(deck)
+        // Captured *before* letting go, because letting go is what clears the id
+        // and the snapshot. Taken afterwards this recorded a deck with no
+        // identity, so undoing gave the cards back as a deck that had never been
+        // saved -- and the next save wrote a second copy beside the original
+        // instead of back into it.
+        //
         // Everything that describes the deck goes with it, and comes back with
         // it. Undo brings the cards back in the order they were in, and an
         // arrangement without its gaps -- or its notes, or the cloth it was laid
         // out on -- is not the deck that was there a moment ago.
         val was = openDeck()
+
+        releaseOpenDeck()
+        registeredDeck = Deck.EMPTY
+        val token = pushUndo(deck)
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
         deckNotes = ""

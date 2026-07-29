@@ -2646,6 +2646,48 @@ class DeckBuilderStateTest {
         assertEquals(SaveStatus.SAVED, state.saveStatus)
     }
 
+    @Test
+    fun undoingANewDeckGivesTheSavedDeckBackAsASavedDeck() = runTest {
+        // Not just the cards: the deck's identity. Undoing used to hand back a
+        // list that had never been saved, and the next save wrote a second copy
+        // beside the original rather than back into it.
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(5).forEach { state.addCard(it) }
+        state.rename("Snake-Eye")
+        state.save()
+        advanceUntilIdle()
+        val id = requireNonNull(state.deckId)
+        val saved = state.deck
+
+        state.newDeck()
+        state.toast?.undo?.invoke()
+        advanceUntilIdle()
+
+        assertEquals(saved, state.deck)
+        assertEquals(id, state.deckId, "the same deck, not a nameless copy of it")
+        assertEquals(SaveStatus.SAVED, state.saveStatus)
+    }
+
+    @Test
+    fun undoingANewDeckDoesNotLeaveASecondDeckBehind() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(5).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+
+        state.newDeck()
+        state.toast?.undo?.invoke()
+        advanceUntilIdle()
+
+        state.addCard(TestPool.many(6).last())
+        state.save()
+        advanceUntilIdle()
+
+        assertEquals(1, deps.deckRepository.all().size, "one deck, saved twice")
+    }
+
     private fun requireNonNull(value: String?): String =
         value ?: error("nothing was exported")
 }
