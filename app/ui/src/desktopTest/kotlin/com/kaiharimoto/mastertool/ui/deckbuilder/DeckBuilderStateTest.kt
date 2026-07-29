@@ -244,6 +244,40 @@ class DeckBuilderStateTest {
     }
 
     @Test
+    fun endingARunPutsTheirListBackToo() = runTest {
+        // Loose judging says nothing about which version of anything it is
+        // looking at, so it had better be looking at the one that was loaded.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+        advanceUntilIdle()
+        val registered = state.opponentDeck
+
+        state.startRun(trials = 3)
+        state.judgeShootout(playable = true)
+        state.sideOpponent(state.opponentPlans.getValue("Snake-Eye"), goingFirst = true)
+        state.endRun()
+
+        assertFalse(state.opponentSided)
+        assertEquals(registered, state.opponentDeck)
+    }
+
+    @Test
+    fun aNewRunStartsAgainstTheirRegisteredList() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+        advanceUntilIdle()
+        val registered = state.opponentDeck
+        state.sideOpponent(state.opponentPlans.getValue("Snake-Eye"), goingFirst = true)
+
+        state.startRun(trials = 3)
+
+        assertFalse(state.opponentSided)
+        assertEquals(registered, state.opponentDeck)
+    }
+
+    @Test
     fun puttingTheirListBackWithNothingSidedIsHarmless() = runTest {
         val state = builderState(testDependencies(StubFileAccess(sidedFile)))
         state.loadOpponent()

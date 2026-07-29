@@ -1330,7 +1330,12 @@ Still open, in the order they are worth doing:
 card under the cursor (sections 51-54), and moving one is two taps rather than a
 drag. Picking it up and sliding it is the obvious next gesture.
 
-**Siding for an opponent whose file does not say how.** They side from their own
-plans when the file carries them (section 57). A deck that arrives as a plain
-`.ydk` still sits there unchanged, and the honest fix is somewhere to record what
-you *expect* them to bring in — not to invent it for them.
+**Siding for an opponent whose file does not say how — deliberately not built.**
+They side from their own plans when the file carries them (section 57), and a
+plain `.ydk` still sits there unchanged. Three shapes were considered and all
+three are worse than nothing: cutting from their Main at random dresses a guess
+as a measurement; adding their cards without cutting quietly changes every draw
+probability; and asking the player to author both halves of a plan for a deck
+they do not own is a form nobody would fill in twice. Their deck feeds only what
+you *see* across the table — it does not enter the report at all — so the honest
+answer is to leave it alone until somebody has a better idea than these.

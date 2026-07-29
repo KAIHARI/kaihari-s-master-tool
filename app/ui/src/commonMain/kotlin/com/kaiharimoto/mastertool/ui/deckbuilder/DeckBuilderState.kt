@@ -819,6 +819,10 @@ class DeckBuilderState(
      */
     fun startRun(trials: Int = ShootoutRun.DEFAULT_TRIALS) {
         registeredDeck = deck
+        // Both decks start a run on their registered lists. Beginning against a
+        // deck left sided from a previous run would put a game-two board across
+        // the table for game one and say nothing about it.
+        unsideOpponent()
         val fresh = ShootoutRun(trials = trials.coerceAtLeast(1))
         shootoutRun = fresh
         runBeforeVerdict = null
@@ -859,10 +863,18 @@ class DeckBuilderState(
         yourOpening = HandSimulator.deal(deck.main, hand.goingFirst, Random.Default)
     }
 
-    /** Ends the run and goes back to judging loose openings. */
+    /**
+     * Ends the run and goes back to judging loose openings.
+     *
+     * Their list goes back too. A run abandoned in the middle of a trial leaves
+     * the deck across the table sided, and loose judging says nothing about
+     * which version of anything it is looking at — so it had better be looking
+     * at the one that was loaded.
+     */
     fun endRun() {
         shootoutRun = null
         runBeforeVerdict = null
+        unsideOpponent()
     }
 
     /**
