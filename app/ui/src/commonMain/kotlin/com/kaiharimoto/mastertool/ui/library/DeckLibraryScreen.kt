@@ -63,7 +63,7 @@ import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.model.Deck
 import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.core.siding.SidingCodec
-import com.kaiharimoto.mastertool.core.search.TextMatching
+import com.kaiharimoto.mastertool.core.library.LibrarySearch
 import com.kaiharimoto.mastertool.core.util.RelativeTime
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
@@ -115,13 +115,17 @@ fun DeckLibraryScreen(
         decks = deps.deckRepository.all()
     }
 
-    val shown = remember(decks, query) {
-        val needle = TextMatching.normalize(query)
-        if (needle.isEmpty()) {
-            decks
-        } else {
-            decks.filter { TextMatching.normalize(it.entry.name).contains(needle) }
-        }
+    // A shelf is remembered by its cards at least as often as by its name, so
+    // the same field answers both. See `LibrarySearch` for why a deck *called*
+    // it comes before a deck that merely plays it.
+    val shown = remember(decks, query, index) {
+        LibrarySearch.run(
+            query = query,
+            decks = decks,
+            nameOf = { it.entry.name },
+            deckOf = { it.entry.deck },
+            cardName = { id -> index.byId(id)?.name },
+        )
     }
 
     val colors = LocalMasterToolColors.current
@@ -154,8 +158,8 @@ fun DeckLibraryScreen(
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
-                    label = { Text("Find a deck") },
-                    modifier = Modifier.width(260.dp),
+                    label = { Text("Find a deck, or a card in one") },
+                    modifier = Modifier.width(300.dp),
                 )
                 Box(Modifier.width(12.dp))
                 Text(
@@ -175,7 +179,7 @@ fun DeckLibraryScreen(
                         if (decks.isEmpty()) {
                             "No saved decks yet. Build one and hit Save, or import a .ydk file."
                         } else {
-                            "No deck here is called that."
+                            "No deck here is called that, and none of them plays it."
                         },
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -190,11 +194,15 @@ fun DeckLibraryScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(shown, key = { it.entry.id }) { stored ->
+                items(shown, key = { it.deck.entry.id }) { match ->
+                    val stored = match.deck
                     DeckCard(
                         stored = stored,
                         index = index,
                         format = format,
+                        // Why this deck is on screen, when it is not obvious from
+                        // the name at the top of the tile.
+                        matched = match.cards,
                         // Each deck in the library sits on its own cloth, which
                         // is the whole point of the mat belonging to the deck:
                         // three lists you can tell apart before reading a name.
@@ -259,6 +267,8 @@ private fun DeckCard(
     index: CardIndex,
     mat: MatColors,
     format: Format,
+    /** Cards in this deck that answered the search, best first. */
+    matched: List<LibrarySearch.CardMatch>,
     now: Long,
     onOpen: () -> Unit,
     onRename: (String) -> Unit,
@@ -318,6 +328,24 @@ private fun DeckCard(
                         tint = MasterToolPalette.Danger,
                     )
                 }
+            }
+
+            // Why this tile is on screen. A deck found by a card in it looks,
+            // from the outside, exactly like a deck whose name happened to
+            // match — and the useful part of the answer is the count: whether
+            // the deck you are looking for ran three of it or splashed one.
+            if (matched.isNotEmpty()) {
+                val why = remember(matched) {
+                    val head = matched.take(2).joinToString(" · ") { "${it.copies} × ${it.name}" }
+                    if (matched.size > 2) "$head  +${matched.size - 2} more" else head
+                }
+                Text(
+                    why,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -308,6 +308,14 @@ the deck you have open: what came out, what went in, three of a card becoming
 two — and, when nothing was cut at all, that the same cards are simply arranged
 differently, which this program is not going to call *no change*.
 
+And the shelf is searched by what is *in* the decks, not only by what they are
+called. "Which of these still plays Maxx C", "the one I was testing Droll in" —
+the name is what you typed months ago and the cards are what you have been
+looking at all week. A deck *called* Snake-Eye comes before a deck that merely
+plays a card by that name, and a deck found by its cards says which ones and how
+many, because the useful half of that answer is whether it ran three or splashed
+one.
+
 Shootout: load the deck you are testing against and see both openings at once.
 Judge them loosely, or run it properly — a set number of trials with game one
 off the list you registered and the rest off the sided one, drawn as a score

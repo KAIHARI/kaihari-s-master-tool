@@ -2657,3 +2657,52 @@ That last one is the pattern worth naming: **adding a feature is the most
 reliable way to find out that the ground under it was not solid.** Four of the
 five worst things found in this stretch were found while wiring something new on
 top of them, and none of them by a test that already existed.
+
+## 103 · The shelf could only be asked what things were called
+
+The library's search field matched deck names and nothing else — a
+`contains` against the normalised name, which was the right amount of code the
+day nine decks were three months old.
+
+The question it cannot answer is the one actually asked of a shelf. A deck's
+name is what you typed months ago, once, in a hurry. Its cards are what you have
+been looking at all week. *Which of these still plays Maxx "C"* — after a
+banlist, that is four decks to open one at a time. *The one I was testing Droll
+in* is not a name at all; it is a memory of a card.
+
+So the same field answers both, and `LibrarySearch` in `:core` decides how. Three
+things fell out of writing it:
+
+**A deck called it beats a deck that plays it, regardless of score.** Rank them
+together and a card scoring an exact 1000 will outrank a deck name scoring 900,
+so typing the name of a deck on the shelf puts three other decks above it. Name
+matches sort first as a block, and the card block follows.
+
+**Copies do not reorder decks.** The tempting tiebreak — three copies is more
+the answer than one — turns out to be worse than doing nothing, because doing
+nothing preserves the order the shelf arrived in, and `SELECT * FROM deckEntity
+ORDER BY updatedAtEpochMs DESC` means that order is recency. The deck you touched
+yesterday is a better guess at which one you meant than the deck running one more
+copy. My first test asserted the opposite and its own name said so: *the deck
+with more copies is not promoted over the deck with a better match* — and then
+expected exactly that promotion, in a case where both decks matched at the same
+tier so nothing but copies could have moved them.
+
+**A passcode the pool has not resolved matches nothing.** Not its digits, not a
+partial. An unresolved card means the database has not loaded, and saying "this
+deck contains what you typed" about a card nobody can see is a claim made out of
+an absence.
+
+Every distinct passcode across the whole shelf is scored once rather than once
+per deck: nine decks share most of their handtraps, and the scorer — bounded
+Levenshtein against thirteen thousand names — is the expensive part. Below three
+characters the cards are not searched at all, the same floor the card search uses
+for its text mode, because two letters match most of the pool and a shelf where
+every deck reports forty hits is a shelf with no search on it.
+
+The tile says why it is there: `3 × Ash Blossom & Joyous Spring · 1 × Maxx "C"`,
+two cards and a `+n more`. The count is the useful half — whether the deck you
+are looking for ran three of it or splashed one is most of what you wanted to
+know before opening it.
+
+Fourteen tests. Thirteen passed first time and the fourteenth was mine.
