@@ -39,7 +39,6 @@ import com.kaiharimoto.mastertool.core.deck.Preference
 import com.kaiharimoto.mastertool.core.deck.ShootoutGame
 import com.kaiharimoto.mastertool.core.deck.ShootoutReport
 import com.kaiharimoto.mastertool.core.deck.Testing
-import kotlin.math.roundToInt
 import com.kaiharimoto.mastertool.core.deck.ShootoutRun
 import com.kaiharimoto.mastertool.core.deck.SideVerdict
 import com.kaiharimoto.mastertool.core.model.CardId
@@ -682,10 +681,16 @@ private fun Kept(state: DeckBuilderState) {
     val runs = state.testing
     if (runs.isEmpty()) return
     val each = remember(runs) { Testing.againstEach(runs) }
+    val all = remember(runs) { Testing.everything(runs) }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            "TESTED SO FAR",
+            // The whole of it before the breakdown of it, because "how much
+            // testing has this deck actually had" is the question somebody
+            // opening this asks first, and four rows of matchups is an answer to
+            // a different one.
+            "TESTED SO FAR · ${all.total} HANDS ACROSS ${each.size} " +
+                if (each.size == 1) "MATCHUP" else "MATCHUPS",
             style = tacticalStyle(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -719,5 +724,3 @@ private fun Kept(state: DeckBuilderState) {
         )
     }
 }
-
-private fun percent(rate: Double): String = "${(rate * 100).roundToInt()}%"

@@ -26,7 +26,7 @@ import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
-import kotlin.math.roundToInt
+import com.kaiharimoto.mastertool.ui.components.percent
 
 /**
  * A line written against one card.
@@ -125,7 +125,7 @@ fun CardNotePanel(state: DeckBuilderState, id: CardId) {
                         Text(
                             buildString {
                                 append(state.index.byId(other)?.name ?: other.value.toString())
-                                if (odds != null) append("   ${(odds * 100).roundToInt()}%")
+                                if (odds != null) append("   ${percent(odds)}")
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,

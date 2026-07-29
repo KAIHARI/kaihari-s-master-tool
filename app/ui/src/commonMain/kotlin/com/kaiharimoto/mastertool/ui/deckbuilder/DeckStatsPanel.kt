@@ -32,7 +32,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
-import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.core.deck.Breaks
@@ -458,7 +457,7 @@ private fun TwoCardOpenings(pairs: List<PairOpening>) {
                     }
                 }
                 Text(
-                    "${(pair.odds * 100).roundToInt()}%",
+                    percent(pair.odds),
                     style = tacticalStyle(),
                     color = MaterialTheme.colorScheme.primary,
                 )

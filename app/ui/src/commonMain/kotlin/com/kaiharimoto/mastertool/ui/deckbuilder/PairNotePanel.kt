@@ -25,7 +25,7 @@ import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
-import kotlin.math.roundToInt
+import com.kaiharimoto.mastertool.ui.components.percent
 
 /**
  * What two cards do together.
@@ -67,7 +67,7 @@ fun PairNotePanel(state: DeckBuilderState, a: CardId, b: CardId) {
                     if (odds == null) {
                         "SAVED WITH THE DECK"
                     } else {
-                        "${(odds * 100).roundToInt()}% TO OPEN BOTH"
+                        "${percent(odds)} TO OPEN BOTH"
                     },
                     style = tacticalStyle(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

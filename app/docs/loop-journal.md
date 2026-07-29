@@ -3363,3 +3363,40 @@ and the next.
 So the rule tightens: tests go in the same push as the code they test, not the
 next one. Writing them while waiting for CI feels efficient and puts them in the
 one place that does not survive.
+
+## 125 · Two functions called `percent`, one file apart
+
+The unused-API sweep over everything the last stretch added, and it found two
+things — one of them not what it was looking for.
+
+**`Testing.everything` had no caller outside its tests.** Written because
+`againstEach` needed a sibling and it seemed obviously wanted. Section 102's rule
+says a projection nothing projects comes out; this one earns its keep instead,
+because *how much testing has this deck actually had* is the question somebody
+opening that panel asks before they read four rows of matchups. It is the heading
+above them now: `TESTED SO FAR · 212 HANDS ACROSS 4 MATCHUPS`.
+
+Worth distinguishing while the rule is in hand: `DeckLife.across` and
+`SidingHabits.of` also have no external caller, and they stay without argument.
+They are the general form of two functions that *are* used — `core` and
+`changing`, `alwaysCut` and `alwaysBroughtIn` are written in terms of them. **A
+function whose specialisations are called is not unused; a projection with no
+consumer at all is.** That is the line, and it is not the same line as the one
+`Contrast.READABLE` sits on, where the tests are genuinely the consumer.
+
+**And I had written a second `percent`.** There is an `internal fun percent` in
+`ui.components`, imported by the very file I added a `private fun percent` to the
+bottom of. It compiles — a same-file declaration beats an import — and it
+formats *differently*: mine rounded to whole numbers, the shared one gives a
+decimal for a documented reason. So `percent(x)` in that one file meant something
+other than `percent(x)` everywhere else, silently, and nothing would ever have
+said so.
+
+Gone, along with the three other places I had written `(x * 100).roundToInt()`
+inline. Every percentage in the module goes through one function now, which also
+means the pair odds read *9.8%* rather than *10%* — and 9.8% is the number
+section 116 spent a paragraph on being surprised by.
+
+The frame that caught it: **grep for what you just added, and count callers in
+production separately from callers in tests.** The `percent` collision fell out
+of reading the import list while doing that, not from the counting.
