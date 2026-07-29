@@ -1975,12 +1975,19 @@ The tests include the property worth having: a card is never in both columns. A
 count went up or it went down, and a diff that listed a card as both added and
 removed is one somebody has to reconcile by hand.
 
+And one cross-check, of the kind that has earned its place twice already. There
+are now two answers to "what changed" that a player sees side by side: the siding
+panel's swap and the library's comparison. They were written for different
+questions — one lists a line per copy and only looks at the Main deck, the other
+counts and looks at all three — so a test pins that they never disagree about the
+part they share, and that only the comparison notices when the order moved.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **790 tests**, up from 249, plus
-**206 in `:ui`** where there were none — a module that cannot even be compiled in
+`:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus
+**215 in `:ui`** where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
 Still open, in the order they are worth doing:

@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.core.deck
 
 import com.kaiharimoto.mastertool.core.model.CardId
+import com.kaiharimoto.mastertool.core.siding.SidingDiff
 import com.kaiharimoto.mastertool.core.model.Deck
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import kotlin.test.Test
@@ -144,5 +145,36 @@ class DeckDiffTest {
             after.main.size - before.main.size,
             diff.cardsAdded - diff.cardsRemoved,
         )
+    }
+
+    @Test
+    fun theMainDeckAgreesWithWhatSidingSaysAboutTheSameTwoDecks() {
+        // Two answers to "what changed" that a player sees side by side: the
+        // siding panel's swap and the library's comparison. They were written
+        // for different questions -- one lists a line per copy and only looks at
+        // the Main deck, the other counts and looks at all three -- so it is
+        // worth pinning that they never disagree about the part they share.
+        val before = deck(ash, ash, ash, maxx, pot)
+        val after = deck(ash, maxx, maxx, pot, pot)
+
+        val diff = DeckDiff.between(before, after)
+        val swap = SidingDiff.between(before, after)
+
+        assertEquals(swap.cardsIn.size, diff[main].cardsAdded)
+        assertEquals(swap.cardsOut.size, diff[main].cardsRemoved)
+        assertEquals(swap.cardsIn.toSet(), diff[main].added.map { it.id }.toSet())
+        assertEquals(swap.cardsOut.toSet(), diff[main].removed.map { it.id }.toSet())
+    }
+
+    @Test
+    fun theTwoAgreeThatReorderingIsNotASwap() {
+        val before = deck(ash, maxx, pot)
+        val after = deck(pot, ash, maxx)
+
+        assertTrue(SidingDiff.between(before, after).isEmpty)
+        assertTrue(DeckDiff.between(before, after)[main].isEmpty)
+        // And the one difference between them, which is the point of both: only
+        // the comparison notices that the order moved.
+        assertFalse(DeckDiff.between(before, after).sameOrder)
     }
 }
