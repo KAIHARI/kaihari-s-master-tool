@@ -160,7 +160,14 @@ object DecklistSheet {
         // nudging the single digits across is the whole of it.
         val count = line.count ?: 0
         page.text(x + if (count >= 10) 0f else 5f, y, count.toString(), size = 9.5f, bold = true)
-        page.text(x + 18f, y, line.text, size = 9.5f)
+
+        // Cut rather than shrunk, and the only place in this writer that is
+        // true: a column of names set at one size and one of them at nine
+        // points because it is long reads as a mistake, where a name ending in
+        // three dots reads as a long name. "Number 41: Bagooska the Terribly
+        // Tired Tapir" is forty-four characters and the column holds forty-one.
+        val name = Pdf.fit(line.text, NAME_COLUMN, largest = LINE_SIZE, smallest = LINE_SIZE)
+        page.text(x + 18f, y, name.text, size = LINE_SIZE)
     }
 
     private fun lines(deck: Deck, cardOf: (CardId) -> Card?): List<Line> = buildList {
@@ -215,10 +222,15 @@ object DecklistSheet {
     private const val MARGIN = 36f
     private const val WIDTH = Pdf.PAGE_WIDTH - MARGIN * 2
     private const val GUTTER = 16f
+
+    private const val LINE_SIZE = 9.5f
     private const val COLUMN = WIDTH / 2
 
     /** From the left edge of the name to where the format and counts begin. */
     private const val NAME_ROOM = WIDTH - 160f
+
+    /** What is left of a column once the count has had its 18 points. */
+    private const val NAME_COLUMN = COLUMN - GUTTER - 18f
     private const val ROW = 12.5f
     private const val HEAD_HEIGHT = 26f
     private const val FIELDS_HEIGHT = 40f

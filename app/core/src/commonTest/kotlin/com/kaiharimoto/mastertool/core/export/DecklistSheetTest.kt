@@ -172,3 +172,33 @@ class DecklistSheetTest {
         assertTrue("Utopia \\(Assault Mode\\) \\\\ Ray" in out, "the name was not escaped")
     }
 }
+
+class LongCardNameTest {
+
+    private val bagooska = TestCards.monster(
+        id = 44508094,
+        name = "Number 41: Bagooska the Terribly Tired Tapir",
+        frameType = "xyz",
+        type = "XYZ Monster",
+    )
+
+    @Test
+    fun aNameTooLongForTheColumnIsCutRatherThanRunIntoTheNextOne() {
+        val deck = Deck(main = List(3) { bagooska.id })
+        val pdf = DecklistSheet.render("Bagooska", deck, "TCG") { bagooska }
+        val text = pdf.decodeToString()
+
+        assertTrue("Number 41: Bagooska" in text, "the start of it is there")
+        assertFalse("Terribly Tired Tapir" in text, "and the end of it is not")
+        assertTrue("..." in text, "cut, and saying so")
+    }
+
+    @Test
+    fun aNameThatFitsIsPrintedWhole() {
+        val ash = TestCards.ashBlossom
+        val deck = Deck(main = List(3) { ash.id })
+        val pdf = DecklistSheet.render("Snake-Eye", deck, "TCG") { ash }
+
+        assertTrue(ash.name in pdf.decodeToString())
+    }
+}
