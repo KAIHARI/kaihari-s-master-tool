@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.layout.DealAnimation
 import com.kaiharimoto.mastertool.core.layout.GridFitter
+import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
@@ -45,6 +46,14 @@ import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 
 /** Space between the three blocks, and around the whole thing. */
 private val BLOCK_GAP = 14.dp
+
+/**
+ * How far a group stands clear of the one above it.
+ *
+ * Smaller than the space between sections, which is the right order: a gap
+ * inside the Main deck is a quieter statement than the end of the Main deck.
+ */
+private val GROUP_SPACE = 7.dp
 private val MARGIN = 22.dp
 
 /** Room set aside for the one line of writing on the screen. */
@@ -153,6 +162,37 @@ fun DeckShowcase(state: DeckBuilderState, onDismiss: () -> Unit) {
     }
 }
 
+/** One line of cards, and whether a gap falls above it. */
+private class ShowcaseRow(
+    val start: Int,
+    val ids: List<CardId>,
+    val startsGroup: Boolean,
+)
+
+/**
+ * Breaks a section into the rows it is drawn as.
+ *
+ * Each group is laid out on its own rows rather than flowing on from the last —
+ * a gap that only moved cards along by one place would say nothing at this size,
+ * and a group that starts where the eye starts is the whole point of having
+ * separated it.
+ */
+private fun rowsOf(ids: List<CardId>, breaks: Breaks, columns: Int): List<ShowcaseRow> =
+    buildList {
+        breaks.groups(ids.size).forEachIndexed { group, range ->
+            ids.slice(range).chunked(columns).forEachIndexed { line, chunk ->
+                add(
+                    ShowcaseRow(
+                        start = range.first + line * columns,
+                        ids = chunk,
+                        // Not the very first group: nothing to stand clear of.
+                        startsGroup = group > 0 && line == 0,
+                    ),
+                )
+            }
+        }
+    }
+
 @Composable
 private fun ShowcaseBlock(
     state: DeckBuilderState,
@@ -179,10 +219,19 @@ private fun ShowcaseBlock(
         // Laid out by hand rather than with a lazy grid: everything is on screen
         // by construction here, so there is nothing to virtualise and a plain
         // Column of Rows keeps the reveal in one place.
-        ids.chunked(columns).forEachIndexed { row, rowIds ->
-            Row(Modifier.fillMaxWidth()) {
-                rowIds.forEachIndexed { column, id ->
-                    val index = row * columns + column
+        //
+        // A group starts its own row and stands a little clear of the one above.
+        // This is the view of a deck as a thing rather than as a list, so if the
+        // piles have been pushed apart anywhere they should be pushed apart
+        // here — it is the picture the arrangement was made for.
+        rowsOf(ids, state.breaksIn(section), columns).forEach { row ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = if (row.startsGroup) GROUP_SPACE else 0.dp),
+            ) {
+                row.ids.forEachIndexed { column, id ->
+                    val index = row.start + column
                     val card = state.index.byId(id)
 
                     Box(
