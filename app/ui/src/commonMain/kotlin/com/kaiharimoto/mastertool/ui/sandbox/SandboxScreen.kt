@@ -202,11 +202,46 @@ private fun Half(
                 // simulated, and drawing its graveyard would be drawing a
                 // graveyard nothing could ever put a card into.
                 Flank(state, index, zoneWidth, origin, yours, position, left = true)
-                zones.forEach { zone -> Zone(state, index, zone, zoneWidth, origin) }
+                zones.forEach { zone ->
+                    if (yours) {
+                        Zone(state, index, zone, zoneWidth, origin)
+                    } else {
+                        // The far half is the other side of the table, not a
+                        // second board: there is one set of zone ids and it is
+                        // yours. Drawing these as real zones made a card played
+                        // in front of you appear across from you as well, and
+                        // registered every drop target twice.
+                        AcrossTheTable(zoneWidth)
+                    }
+                }
                 Flank(state, index, zoneWidth, origin, yours, position, left = false)
             }
         }
     }
+}
+
+/**
+ * A zone on the other side of the table.
+ *
+ * An outline and nothing else. It is there because a mat has two halves and the
+ * fold needs something to fold, and it is inert because there is no opponent to
+ * simulate — a zone you could drop into but that belonged to nobody would be a
+ * worse lie than an empty rectangle.
+ */
+@Composable
+private fun AcrossTheTable(zoneWidth: Dp) {
+    Box(
+        Modifier
+            .width(zoneWidth)
+            .aspectRatio(CARD_ASPECT)
+            .clip(RoundedCornerShape(3.dp))
+            .background(Color.Black.copy(alpha = 0.10f))
+            .border(
+                1.dp,
+                LocalMasterToolColors.current.mat.weft.copy(alpha = 0.40f),
+                RoundedCornerShape(3.dp),
+            ),
+    )
 }
 
 /**

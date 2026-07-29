@@ -212,10 +212,11 @@ way it faces: drop it and it stands up in attack, flick it sideways and it lies
 down in defence, hold it a moment first and it goes face-down. All four stacks
 open — deck, Extra deck, graveyard, banished — and a card taken out of one is
 picked up the same way a card in your hand is. Drop something on the graveyard
-and it goes there. Undo puts the whole table back, hand and deck included.
+and it goes there, and make a token when the turn needs one. Undo puts the whole
+table back, hand and deck included.
 
 A hand you like in the test panel or the shootout is one button from being a
 board with that hand already in it.
 
-Not yet built: siding for the *opponent* between games, counters and tokens on
-the board, and PDF export of a siding sheet.
+Not yet built: siding for the *opponent* between games, a second board across the
+table, and PDF export of a siding sheet.

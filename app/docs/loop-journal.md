@@ -1146,6 +1146,31 @@ spell row — which pushed the banished pile up to the toolbar. That is the righ
 trade: it is the stack a player looks at least often, and it still says how many
 are in it without being opened.
 
+## 55. Tokens, and a board that was showing your cards twice
+
+Tokens because plenty of decks make them and a board that cannot show one cannot
+show the turn. A token has no passcode and no art, so it is drawn as a plate —
+not a card, not a card back, because it is neither and either would be saying
+something untrue about what is in that zone.
+
+It is picked up and put down like everything else, which is the return on having
+exactly one idea of "held": the same tap places it and the same gesture decides
+which way it faces, and a defence token needed nothing built for it. Sent to a
+graveyard or bounced to the hand it stops existing, which is the rule and also
+the only sensible reading — a graveyard with a token in it is a graveyard that
+would let you bring the token back.
+
+Then a defect found by reading the board again rather than by a test. The far
+half was drawing the *same zone ids* as the near half, because there is one set
+and it is yours: a card played in front of you appeared across from you as well,
+and every drop target was registered twice with whichever bounds composed last.
+
+The far half is now an outline and nothing else. It is there because a mat has
+two halves and the fold needs something to fold, and it is inert because there is
+no opponent to simulate — a zone you could drop into that belonged to nobody
+would be a worse lie than an empty rectangle. The honest version, a second set of
+zones with a second player behind them, is a real feature and not this one.
+
 ---
 
 ## Where this stands
@@ -1165,9 +1190,10 @@ which version dealt each hand (sections 43-45). The deck across the table never
 changes — which is the half of a real match still missing, and the reason their
 turn-two board looks the same in game three as in game one.
 
-**The rest of the board.** It deals, lays cards out, turns them, sends them to
-the graveyard and undoes all of it (sections 46-50). Still missing: counters and
-tokens, the field spell zone, and a second board across the table.
+**A board across the table.** Yours deals, lays cards out, turns them, makes
+tokens, opens every stack and undoes all of it (sections 46-50, 55). The far half
+is an outline: one set of zone ids exists and it is yours. A second set with a
+second player behind it is the feature that half is waiting for.
 
 **PDF export of a siding sheet.** The original's actual deliverable. Needs a PDF
 writer that resolves from Maven Central; spike before committing to it.
