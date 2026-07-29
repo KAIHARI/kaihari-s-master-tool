@@ -1841,6 +1841,35 @@ class DeckBuilderState(
     }
 
     /**
+     * Keeps the deck exactly as it stands, under a name.
+     *
+     * The automatic rule keeps a copy of what a deck was whenever you come back
+     * to it after a break, which is the right default and cannot know which
+     * moments mattered. Only somebody about to register a decklist knows that,
+     * and this is where they are when they know it — in front of the deck,
+     * rather than three taps away in the library.
+     *
+     * Written to disk first, because what gets kept is what is stored: with the
+     * autosave still pending, a copy taken now would be the deck as it was a
+     * second and a half ago, which is exactly the sort of nearly-right that
+     * nobody would ever catch.
+     */
+    fun keepThisOne(name: String?) {
+        val id = deckId
+        if (id == null) {
+            showToast("Save the deck first. A deck that has never been saved has nowhere to keep this.")
+            return
+        }
+
+        autosaveJob?.cancel()
+        scope.launch {
+            writeToDisk(id)
+            deps.deckRepository.keepNow(id, name)
+            showToast(if (name == null) "Kept this one." else "Kept as \"$name\".")
+        }
+    }
+
+    /**
      * How long an edit sits before it is written down.
      *
      * Long enough that arranging a pane by hand is one write rather than forty,

@@ -2237,6 +2237,93 @@ class DeckBuilderStateTest {
         }
     }
 
+    // ---- keeping a version -------------------------------------------------
+
+    @Test
+    fun keepingOneOnADeckThatWasNeverSavedSaysSo() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(40).forEach { state.addCard(it) }
+
+        state.keepThisOne("regionals")
+        advanceUntilIdle()
+
+        assertTrue(
+            requireNonNull(state.toast?.message).startsWith("Save the deck first"),
+            "there is nowhere to keep it, and the program does not save a deck by itself",
+        )
+        assertNull(state.deckId)
+    }
+
+    @Test
+    fun keepingOneRecordsTheDeckUnderItsName() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+
+        state.keepThisOne("regionals")
+        advanceUntilIdle()
+
+        val kept = deps.deckRepository.versions(requireNonNull(state.deckId)).single()
+        assertEquals("regionals", kept.name)
+        assertEquals(state.deck, kept.deck)
+    }
+
+    @Test
+    fun whatIsKeptIsWhatIsOnScreenNotWhatWasLastWritten() = runTest {
+        // The autosave sits for a second and a half. Without writing first, the
+        // version kept here would be the deck as it was before the last few
+        // cards went in -- nearly right, and nobody would ever catch it.
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+
+        val extra = TestPool.many(3)
+        extra.forEach { state.addCard(it) }
+        state.keepThisOne("regionals")
+        advanceUntilIdle()
+
+        val id = requireNonNull(state.deckId)
+        assertEquals(state.deck, deps.deckRepository.versions(id).single().deck)
+        assertEquals(43, deps.deckRepository.versions(id).single().deck.main.size)
+    }
+
+    @Test
+    fun aVersionCanBeKeptWithoutBeingNamed() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+
+        state.keepThisOne(null)
+        advanceUntilIdle()
+
+        assertNull(deps.deckRepository.versions(requireNonNull(state.deckId)).single().name)
+    }
+
+    @Test
+    fun keepingTwiceOverWithoutEditingIsOneVersion() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+
+        state.keepThisOne("regionals")
+        advanceUntilIdle()
+        state.keepThisOne("the one I actually played")
+        advanceUntilIdle()
+
+        val kept = deps.deckRepository.versions(requireNonNull(state.deckId))
+        assertEquals(1, kept.size, "one moment, one version")
+        assertEquals("the one I actually played", kept.single().name)
+    }
+
     private fun requireNonNull(value: String?): String =
         value ?: error("nothing was exported")
 }

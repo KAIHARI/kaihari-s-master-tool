@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -73,6 +74,7 @@ fun DeckBuilderTopBar(
 ) {
     val validation = state.validation
     var menuOpen by remember { mutableStateOf(false) }
+    var keeping by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
@@ -186,6 +188,19 @@ fun DeckBuilderTopBar(
                 DropdownMenuItem(
                     text = { Text("New deck") },
                     onClick = { menuOpen = false; state.newDeck() },
+                )
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("Keep this one…")
+                            Text(
+                                "so the list you registered survives being edited",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    onClick = { menuOpen = false; keeping = true },
                 )
                 DropdownMenuItem(
                     text = { Text("Import…") },
@@ -389,6 +404,48 @@ fun DeckBuilderTopBar(
             }
         }
     }
+
+    if (keeping) KeepThisOneDialog(
+        onDismiss = { keeping = false },
+        onConfirm = { keeping = false; state.keepThisOne(it) },
+    )
+}
+
+/**
+ * What to call the version being kept.
+ *
+ * A name is optional and worth asking for anyway: an unnamed version is exactly
+ * what the automatic rule already produces, so somebody reaching for this menu
+ * item has a reason in mind, and the reason is usually the name.
+ */
+@Composable
+private fun KeepThisOneDialog(onDismiss: () -> Unit, onConfirm: (String?) -> Unit) {
+    var text by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Keep this one") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "The deck as it stands is kept, and editing from here cannot " +
+                        "take it away. Named versions are never thinned out.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    label = { Text("What to call it") },
+                    placeholder = { Text("Regionals, Manchester") },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text.trim().ifEmpty { null }) }) { Text("Keep it") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /**

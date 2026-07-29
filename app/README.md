@@ -245,7 +245,8 @@ sitting, not one per keystroke — and the library draws them as a line down the
 page, each one saying what came out and what went in to get from there to here.
 Go back to one and the deck you are leaving is kept on the way past, which is why
 that button asks nothing first. Name one and it is never let go of: *this is the
-list I registered* is the thing only you know. The rest thin themselves out, and
+list I registered* is the thing only you know, so it can also be said from the
+builder's menu, in front of the deck, which is where you are when you know it. The rest thin themselves out, and
 what goes is never the oldest — it is whichever version sits closest in time to
 the ones either side of it, so an evening's worth collapses to one and both ends
 of the deck's life stay put.
