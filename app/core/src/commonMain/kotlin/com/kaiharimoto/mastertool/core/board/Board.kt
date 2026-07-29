@@ -113,6 +113,18 @@ data class Board(private val contents: Map<ZoneId, List<PlacedCard>> = emptyMap(
     /** Takes the top card off a zone. */
     fun lift(zone: ZoneId): Board = withZone(zone, this[zone].dropLast(1))
 
+    /**
+     * Takes one card out of the middle of a pile.
+     *
+     * Which is most of what happens to a graveyard: nothing in this game
+     * retrieves the card on top, it retrieves the one you want.
+     */
+    fun removeAt(zone: ZoneId, index: Int): Board? {
+        val existing = this[zone]
+        if (index !in existing.indices) return null
+        return withZone(zone, existing.filterIndexed { i, _ -> i != index })
+    }
+
     fun clear(zone: ZoneId): Board = withZone(zone, emptyList())
 
     private fun withZone(zone: ZoneId, cards: List<PlacedCard>): Board =

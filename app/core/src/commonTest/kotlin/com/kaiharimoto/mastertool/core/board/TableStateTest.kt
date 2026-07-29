@@ -149,4 +149,125 @@ class TableStateTest {
         val everywhere = after.hand + after.library + after.board.cards.map { it.id }
         assertEquals(cards.sortedBy { it.value }, everywhere.sortedBy { it.value })
     }
+
+    // ---- the Extra deck, and the piles --------------------------------------
+
+    private val extra = listOf(CardId(700_001), CardId(700_002), CardId(700_003))
+
+    @Test
+    fun aMonsterComesOutOfTheExtraDeck() {
+        val table = TableState(library = cards, extra = extra).draw(3)
+
+        val summoned = assertNotNull(table.summon(1, zone, Placement.ATTACK))
+
+        assertEquals(extra[1], summoned.board[zone].single().id)
+        assertEquals(listOf(extra[0], extra[2]), summoned.extra, "and only that one leaves")
+        assertEquals(table.hand, summoned.hand, "the hand is not where it came from")
+    }
+
+    @Test
+    fun summoningAnExtraDeckMonsterThatIsNotThereIsRefused() {
+        val table = TableState(extra = extra)
+
+        assertNull(table.summon(7, zone, Placement.ATTACK))
+        assertNull(TableState().summon(0, zone, Placement.ATTACK))
+    }
+
+    @Test
+    fun summoningIntoAFullZoneIsRefusedAndKeepsTheExtraDeckIntact() {
+        val table = assertNotNull(TableState(extra = extra).summon(0, zone, Placement.ATTACK))
+
+        assertNull(table.summon(0, zone, Placement.ATTACK))
+        assertEquals(2, table.extra.size)
+    }
+
+    @Test
+    fun aSearcherTakesTheCardItWantedAndLeavesTheRestInOrder() {
+        val table = TableState(library = cards)
+
+        val searched = assertNotNull(table.searchLibrary(4))
+
+        assertEquals(listOf(cards[4]), searched.hand)
+        assertEquals(cards.filterIndexed { i, _ -> i != 4 }, searched.library)
+    }
+
+    @Test
+    fun searchingDoesNotDisturbWhatIsOnTop() {
+        // The trap: a search that shuffled would quietly ruin anything set up
+        // on top of the deck, and nothing on screen would say it had.
+        val table = TableState(library = cards)
+        val onTop = table.library.last()
+
+        val searched = assertNotNull(table.searchLibrary(0))
+
+        assertEquals(onTop, searched.library.last())
+        assertEquals(listOf(onTop), searched.draw().hand.takeLast(1))
+    }
+
+    @Test
+    fun aCardIsRetrievedFromTheMiddleOfAGraveyard() {
+        var table = TableState(library = cards).draw(3)
+        repeat(3) { table = assertNotNull(table.sendFromHand(0, BoardLayout.graveyard)) }
+        val wanted = table.board[BoardLayout.graveyard][1]
+
+        val retrieved = assertNotNull(table.retrieve(BoardLayout.graveyard, 1))
+
+        assertEquals(listOf(wanted.id), retrieved.hand)
+        assertEquals(2, retrieved.board[BoardLayout.graveyard].size)
+        assertTrue(retrieved.board[BoardLayout.graveyard].none { it == wanted })
+    }
+
+    @Test
+    fun aCardIsRaisedOutOfTheGraveyardStraightOntoTheBoard() {
+        var table = TableState(library = cards).draw(2)
+        repeat(2) { table = assertNotNull(table.sendFromHand(0, BoardLayout.graveyard)) }
+        val wanted = table.board[BoardLayout.graveyard][0]
+
+        val raised = assertNotNull(
+            table.raise(BoardLayout.graveyard, 0, zone, Placement.DEFENSE),
+        )
+
+        assertEquals(wanted.id, raised.board[zone].single().id)
+        assertEquals(Placement.DEFENSE, raised.board[zone].single().placement)
+        assertEquals(1, raised.board[BoardLayout.graveyard].size)
+        assertTrue(raised.hand.isEmpty(), "it does not pass through the hand")
+    }
+
+    @Test
+    fun raisingIntoAFullZoneLeavesTheGraveyardAlone() {
+        var table = TableState(library = cards).draw(2)
+        table = assertNotNull(table.play(0, zone, Placement.ATTACK))
+        table = assertNotNull(table.sendFromHand(0, BoardLayout.graveyard))
+
+        assertNull(table.raise(BoardLayout.graveyard, 0, zone, Placement.ATTACK))
+    }
+
+    @Test
+    fun raisingAPileOntoItselfIsRefused() {
+        var table = TableState(library = cards).draw(1)
+        table = assertNotNull(table.sendFromHand(0, BoardLayout.graveyard))
+
+        assertNull(table.raise(BoardLayout.graveyard, 0, BoardLayout.graveyard, Placement.ATTACK))
+    }
+
+    @Test
+    fun retrievingWhatIsNotThereIsRefused() {
+        assertNull(TableState().retrieve(BoardLayout.graveyard, 0))
+        assertNull(TableState().raise(BoardLayout.graveyard, 0, zone, Placement.ATTACK))
+        assertNull(TableState().searchLibrary(0))
+    }
+
+    @Test
+    fun theExtraDeckIsStillAccountedForAfterASummon() {
+        val deck = Deck(main = cards, extra = extra, side = emptyList())
+        val start = TableState.from(deck, Random(5))
+
+        val after = assertNotNull(start.summon(0, zone, Placement.ATTACK))
+
+        val everywhere = after.hand + after.library + after.extra + after.board.cards.map { it.id }
+        assertEquals(
+            (cards + extra).sortedBy { it.value },
+            everywhere.sortedBy { it.value },
+        )
+    }
 }

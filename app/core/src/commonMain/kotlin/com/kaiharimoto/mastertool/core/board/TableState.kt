@@ -61,6 +61,51 @@ data class TableState(
         return copy(board = placed, hand = hand.withoutIndex(handIndex))
     }
 
+    /**
+     * Out of the Extra deck and onto the board.
+     *
+     * The other half of the sandbox, and the half a modern board is made of: a
+     * turn that ends in five monsters ends in five monsters that were never in
+     * the hand. Without this the board can only ever show an opening, not what
+     * the opening builds.
+     *
+     * The Extra deck is a set, not a stack — you summon the one you want — so it
+     * is taken by index and never by "the top".
+     */
+    fun summon(extraIndex: Int, zone: ZoneId, placement: Placement): TableState? {
+        val card = extra.getOrNull(extraIndex) ?: return null
+        val placed = board.place(zone, PlacedCard(card, placement)) ?: return null
+        return copy(board = placed, extra = extra.withoutIndex(extraIndex))
+    }
+
+    /**
+     * Out of the deck and into the hand: what a searcher does.
+     *
+     * By index rather than by name, because the caller is looking at the list.
+     * The rest of the deck keeps its order — a search does not shuffle, and
+     * pretending otherwise would quietly ruin anything set up on top.
+     */
+    fun searchLibrary(index: Int): TableState? {
+        val card = library.getOrNull(index) ?: return null
+        return copy(hand = hand + card, library = library.withoutIndex(index))
+    }
+
+    /** Out of a pile and back into the hand, one card from anywhere in it. */
+    fun retrieve(from: ZoneId, index: Int): TableState? {
+        val card = board[from].getOrNull(index) ?: return null
+        val lifted = board.removeAt(from, index) ?: return null
+        return copy(board = lifted, hand = hand + card.id)
+    }
+
+    /** Out of a pile and back onto the board: a revival, which decks do constantly. */
+    fun raise(from: ZoneId, index: Int, to: ZoneId, placement: Placement): TableState? {
+        if (from == to) return null
+        val card = board[from].getOrNull(index) ?: return null
+        val lifted = board.removeAt(from, index) ?: return null
+        val placed = lifted.place(to, PlacedCard(card.id, placement)) ?: return null
+        return copy(board = placed)
+    }
+
     /** Back off the board and into the hand, for a bounce or a misplacement. */
     fun toHand(zone: ZoneId): TableState? {
         val card = board[zone].lastOrNull() ?: return null
