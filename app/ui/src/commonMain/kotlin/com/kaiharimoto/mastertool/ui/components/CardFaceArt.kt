@@ -168,6 +168,10 @@ private fun ArtWindow(card: Card, base: Color, dark: Color) {
     val shapes = remember(seed) { CardFace.shapes(seed) }
 
     Canvas(Modifier.fillMaxSize()) {
+        // A pane can be dragged closed, and a gradient whose start and end are
+        // the same point is not a gradient. Nothing to draw here anyway.
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
+
         // The wash runs across the window at the card's own angle, worked out
         // from the corner-to-corner distance so no card gets a gradient that
         // stops short of its own edge.
@@ -220,6 +224,9 @@ private val LEGIBLE = 52.dp
 
 // Band heights, in ninety-sixths of the card's width — the size a deck pane
 // draws one at, and the size the proportions were looked at.
-private const val NAME_BAND = 21f
+// 3 of padding plus two lines at 8.8 is 20.6, and the rest is margin: Android
+// adds font padding of its own, and a name band a fraction too short clips the
+// descenders off the second line of every long name in the deck.
+private const val NAME_BAND = 23f
 private const val PIP_BAND = 6f
 private const val FOOT_BAND = 12f
