@@ -585,4 +585,41 @@ class SandboxPileTest {
         assertEquals(Placement.DEFENSE, state.board[zone].single().placement)
         assertTrue(state.board[zone].single().token, "and is still a token")
     }
+
+    @Test
+    fun theirSideOfTheTableTakesCardsToo() {
+        // The question a board is almost always opened to ask: they have this,
+        // can I break it. It cannot be asked at all if their half is scenery.
+        val state = open()
+        val theirs = BoardLayout.theirMonsterRow[0]
+
+        assertTrue(state.play(0, theirs, Placement.ATTACK))
+
+        assertEquals(1, state.board[theirs].size)
+        assertTrue(state.board[zone].isEmpty(), "and it is not on your half as well")
+    }
+
+    @Test
+    fun aTokenGoesOnTheirSideOfTheTable() {
+        // Which is most of what mocking their board is: something is there and
+        // what it is called does not matter yet.
+        val state = open()
+        val theirs = BoardLayout.theirMonsterRow[2]
+
+        state.hold(DragOrigin.Token)
+        assertTrue(state.placeHeld(theirs, Placement.DEFENSE))
+
+        assertTrue(state.board[theirs].single().token)
+    }
+
+    @Test
+    fun sweepingTakesBothHalvesOfTheTable() {
+        val state = open()
+        state.play(0, zone, Placement.ATTACK)
+        state.play(0, BoardLayout.theirMonsterRow[0], Placement.ATTACK)
+
+        state.clearBoard()
+
+        assertTrue(state.board.isEmpty)
+    }
 }

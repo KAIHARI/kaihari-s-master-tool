@@ -41,7 +41,18 @@ enum class ZoneKind {
         }
 }
 
-data class ZoneId(val kind: ZoneKind, val index: Int = 0)
+/**
+ * One place on the mat.
+ *
+ * [mine] is what makes the far half of the table a real half rather than a
+ * picture of one. A single player laying a board out is almost always asking the
+ * same question — *they have this, can I break it* — and that question cannot be
+ * asked at all if the other side of the mat is scenery.
+ *
+ * Defaulted to yours, because everything about your own half was written before
+ * theirs existed and the ids for it should not have to say so.
+ */
+data class ZoneId(val kind: ZoneKind, val index: Int = 0, val mine: Boolean = true)
 
 /**
  * How a card sits.
@@ -185,6 +196,16 @@ object BoardLayout {
     val spellTrapRow: List<ZoneId> = row(ZoneKind.SPELL_TRAP, SPELL_TRAP_ZONES)
     val extraMonsterRow: List<ZoneId> = row(ZoneKind.EXTRA_MONSTER, EXTRA_MONSTER_ZONES)
 
+    /**
+     * The rows across the table.
+     *
+     * The shared zones are not among them: they belong to neither player, which
+     * is what makes them the crease the board folds on.
+     */
+    val theirMonsterRow: List<ZoneId> = row(ZoneKind.MONSTER, MONSTER_ZONES, mine = false)
+    val theirSpellTrapRow: List<ZoneId> = row(ZoneKind.SPELL_TRAP, SPELL_TRAP_ZONES, mine = false)
+    val theirField = ZoneId(ZoneKind.FIELD, mine = false)
+
     val field = ZoneId(ZoneKind.FIELD)
     val graveyard = ZoneId(ZoneKind.GRAVEYARD)
     val banished = ZoneId(ZoneKind.BANISHED)
@@ -194,5 +215,6 @@ object BoardLayout {
     /** The piles down the side, top to bottom. */
     val piles: List<ZoneId> = listOf(deck, extraDeck, graveyard, banished)
 
-    private fun row(kind: ZoneKind, count: Int) = (0 until count).map { ZoneId(kind, it) }
+    private fun row(kind: ZoneKind, count: Int, mine: Boolean = true) =
+        (0 until count).map { ZoneId(kind, it, mine) }
 }

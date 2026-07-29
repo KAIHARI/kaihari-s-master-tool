@@ -121,6 +121,34 @@ class BoardTest {
             "the zones in a row are distinct",
         )
     }
+
+    @Test
+    fun theTwoHalvesOfTheMatAreDifferentPlaces() {
+        // The bug this exists to stop: one set of ids drawn twice put every card
+        // played in front of you across from you as well.
+        assertTrue(BoardLayout.monsterRow.none { it in BoardLayout.theirMonsterRow })
+        assertTrue(BoardLayout.spellTrapRow.none { it in BoardLayout.theirSpellTrapRow })
+        assertTrue(BoardLayout.field != BoardLayout.theirField)
+    }
+
+    @Test
+    fun aCardOnOneSideIsNotOnTheOther() {
+        val mine = BoardLayout.monsterRow[0]
+        val theirs = BoardLayout.theirMonsterRow[0]
+
+        val board = assertNotNull(Board.EMPTY.place(mine, ash))
+
+        assertEquals(listOf(ash), board[mine])
+        assertTrue(board[theirs].isEmpty())
+        assertNotNull(board.place(theirs, maxx), "their zone is free")
+    }
+
+    @Test
+    fun theSharedZonesBelongToNeitherHalf() {
+        // Which is what makes them the crease the board folds on.
+        assertTrue(BoardLayout.extraMonsterRow.all { it.mine })
+        assertEquals(2, BoardLayout.extraMonsterRow.toSet().size)
+    }
 }
 
 class DropGestureTest {
@@ -184,4 +212,5 @@ class DropGestureTest {
             DropGesture.placement(0f, 0f, DropGesture.HOLD_MS - 1),
         )
     }
+
 }
