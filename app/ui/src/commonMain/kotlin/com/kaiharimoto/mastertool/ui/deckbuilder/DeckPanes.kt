@@ -338,6 +338,13 @@ private fun DeckSectionPane(
                 verticalArrangement = Arrangement.spacedBy(spacing),
             ) {
                 if (layout.preferences.stacked) {
+                    // The gaps, moved onto the seams that still exist once the
+                    // copies are one tile. Without this, turning the density
+                    // down looked like it had thrown the arrangement away.
+                    val stackGaps = DeckGrouping
+                        .breaksOverStacks(state.breaksIn(section), stacks, ids.size)
+                        .before
+
                     // Stacks have no positional identity, so dragging one has
                     // nothing coherent to mean; the stepper does that job instead.
                     items(stacks.size, key = { "${section.name}-stack-${stacks[it].id.value}" }) { i ->
@@ -356,6 +363,7 @@ private fun DeckSectionPane(
                             position = stack.firstIndex,
                             columns = fit.columns,
                             deal = { DealAnimation.progressFor(i, stacks.size, deal.value) },
+                            modifier = if (i in stackGaps) Modifier.groupStart(accent) else Modifier,
                         )
                     }
                 } else {

@@ -1566,3 +1566,26 @@ Prototyped first as eight rectangles in a browser, at four seam positions —
 middle of a row, one in from the edge, on the row boundary, and appending to a
 part-full last row. The drift bug was visible there in about a second, which is
 roughly a nine-minute round trip through CI that did not have to happen.
+
+---
+
+## 68 · The stacked view had thrown the gaps away
+
+Turning a pane's density down collapses the copies: three Ash Blossom become one
+tile with a 3 on it. The gaps were not drawn in that view at all, which said —
+without meaning to — that changing how densely a deck is displayed discards the
+arrangement. It does not, and the file proves it, but the screen disagreed.
+
+A stack sits where its first copy sat, so a gap falls before the first stack that
+begins at or after it. What that leaves is one genuinely undecided case: a gap
+*inside* a run of copies, drawn between the second and third Ash. Once those
+three are one tile it has no seam of its own.
+
+I wrote the test first saying it should be dropped — rounding it to a boundary
+nobody drew felt like inventing something. Then the implementation disagreed with
+the test, which is the useful kind of argument to have, and the implementation
+was right: a mark that vanishes when the density is turned down reads exactly
+like the arrangement being lost, which is the thing this was fixing. So it moves
+forward to the next seam there is, and two gaps landing on the same seam become
+one. A gap inside the *last* run has nothing after it at all and is not drawn,
+which is the rule `Breaks` already applies at the end of a section.

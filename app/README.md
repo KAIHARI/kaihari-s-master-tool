@@ -177,11 +177,18 @@ Search finds cards by name, forgivingly, and completes the name as you type it.
 When nothing is *called* what you typed, it tells you so and shows the cards
 that *say* it instead.
 
+Cards make room. Carry one over a pane and the two either side of where it would
+land lean apart, so you see the slot before you let go rather than a line saying
+where it would be — near the edge of a row the notch keeps its width and loses
+its tail, because a row that drifted would push its last card off the pane.
+
 Gaps: push the piles apart. A deck's order is yours and nothing sorts it without
 being asked, but an order alone cannot say *these nine are the engine and those
 six are the handtraps* — so put a gap between them from a card's long-press menu
 or with `g`. In a pane the gap is a mark, so every card stays the same size; in
-the full-deck view the groups separate onto their own rows.
+the full-deck view the groups separate onto their own rows. Turn the density down
+and the copies collapse into stacks — the gaps come with them, onto the seams
+that still exist.
 
 The tidies draw their own, so "group by type" separates the groups it made. Gaps
 travel with the file in its `#ydkx-extended` payload, and they survive being
