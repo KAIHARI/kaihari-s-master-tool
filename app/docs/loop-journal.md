@@ -2769,3 +2769,38 @@ The state it keys off — `showing != screen` — is a snapshot read inside the
 retained composition, so the outgoing copy is invalidated and recomposes into its
 blocked state the instant the target changes, rather than waiting for a
 recomposition it has no other reason to have.
+
+## 106 · The rule was already written down, on the function I copied
+
+Two commits after adding the library search, the second-caller sweep found it:
+`LibrarySearch.run` was being called from inside composition, in a
+`remember(decks, query, index)`, on every keystroke.
+
+The card search does not do that, and says why on the line where it does not:
+
+> Scoring 13,000 names with a bounded Levenshtein is far too much work for the
+> frame thread, and `scope` is the composition's.
+
+The library search is *the same scorer*. Fewer names — a few hundred distinct
+cards across a shelf rather than the whole pool — but the same reason, and the
+frame thread is not a place where a smaller amount of the wrong work becomes the
+right work. It is a `LaunchedEffect` onto `computeDispatcher` now, which is
+exactly the shape the pool search has.
+
+It is *not* debounced, and that is a deliberate difference rather than an
+omission: a few hundred names is three percent of the pool, each keystroke
+cancels the last, and the shelf is what you are staring at while you type. The
+comment says which of the two rules it is following and which it is not, because
+the next person to compare them will otherwise assume one of them is a mistake.
+
+The rewrite turned up something else, older than any of this. `decks` started as
+an empty list, so for the frame between opening the library and the database
+answering, the screen said **"No saved decks yet. Build one and hit Save."** to a
+player with nine of them. An empty shelf and an unread shelf are not the same
+thing and the screen only had one way to say them. Both are nullable now, and
+the screen says nothing at all until it knows something — the wait is a SQLite
+read, shorter than any sentence about it would take to read.
+
+*A claim made before the thing was looked at.* That is a review frame, and it
+generalises: this program says a deck is illegal, a run is not significant yet,
+a group is about Snake-Eye. Each of those is worth asking the same question of.

@@ -77,6 +77,7 @@ import com.kaiharimoto.mastertool.ui.theme.tableSurface
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 import com.kaiharimoto.mastertool.ui.theme.wellSurface
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Saved decks.
@@ -97,7 +98,10 @@ fun DeckLibraryScreen(
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var decks by remember { mutableStateOf<List<StoredDeck>>(emptyList()) }
+    // Null until the database has answered. An empty list and an unread shelf
+    // are not the same thing, and "no saved decks yet" is a claim: it was being
+    // made for one frame on the way in, before anything had been looked at.
+    var decks by remember { mutableStateOf<List<StoredDeck>?>(null) }
     var reloadToken by remember { mutableStateOf(0) }
     var comparing by remember { mutableStateOf<StoredDeck?>(null) }
 
@@ -118,17 +122,33 @@ fun DeckLibraryScreen(
     // A shelf is remembered by its cards at least as often as by its name, so
     // the same field answers both. See `LibrarySearch` for why a deck *called*
     // it comes before a deck that merely plays it.
-    val shown = remember(decks, query, index) {
-        LibrarySearch.run(
-            query = query,
-            decks = decks,
-            nameOf = { it.entry.name },
-            deckOf = { it.entry.deck },
-            cardName = { id -> index.byId(id)?.name },
-        )
+    //
+    // Off the frame thread, for the reason the card search is: this is the same
+    // bounded Levenshtein, and scoring names is not work to do while a finger is
+    // waiting on a key. Not debounced, unlike that one — a shelf's worth of
+    // distinct cards is a few hundred names against the pool's thirteen
+    // thousand, and each keystroke cancels the last, so the field can afford to
+    // answer every one of them.
+    var shown by remember { mutableStateOf<List<LibrarySearch.Match<StoredDeck>>?>(null) }
+    LaunchedEffect(decks, query, index) {
+        val shelf = decks ?: return@LaunchedEffect
+        shown = withContext(deps.computeDispatcher) {
+            LibrarySearch.run(
+                query = query,
+                decks = shelf,
+                nameOf = { it.entry.name },
+                deckOf = { it.entry.deck },
+                cardName = { id -> index.byId(id)?.name },
+            )
+        }
     }
 
     val colors = LocalMasterToolColors.current
+
+    // Read out of the delegates once: a `by remember` var cannot be smart cast,
+    // and everything below wants to ask whether these have arrived.
+    val shelf = decks
+    val found = shown
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         // The same cloth the deck panes are drawn on. Saved decks sitting on the
@@ -163,20 +183,25 @@ fun DeckLibraryScreen(
                 )
                 Box(Modifier.width(12.dp))
                 Text(
-                    if (shown.size == decks.size) {
-                        "${decks.size} saved"
-                    } else {
-                        "${shown.size} of ${decks.size}"
+                    when {
+                        shelf == null || found == null -> ""
+                        found.size == shelf.size -> "${shelf.size} saved"
+                        else -> "${found.size} of ${shelf.size}"
                     },
                     style = tacticalStyle(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            if (shown.isEmpty()) {
+            // Nothing is said until there is something true to say. The wait is
+            // a database read and a debounce, both short enough that a sentence
+            // about it would be on screen for less time than it takes to read.
+            if (shelf == null || found == null) return@Column
+
+            if (found.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        if (decks.isEmpty()) {
+                        if (shelf.isEmpty()) {
                             "No saved decks yet. Build one and hit Save, or import a .ydk file."
                         } else {
                             "No deck here is called that, and none of them plays it."
@@ -194,7 +219,7 @@ fun DeckLibraryScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(shown, key = { it.deck.entry.id }) { match ->
+                items(found, key = { it.deck.entry.id }) { match ->
                     val stored = match.deck
                     DeckCard(
                         stored = stored,
