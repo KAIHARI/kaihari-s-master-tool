@@ -5,6 +5,68 @@ builder that feels like arranging real cards on a table rather than editing a li
 
 Each entry says what changed, why, and how it was verified. Newest last.
 
+## What is in here
+
+Grouped by what the entries are about, because *summarise what you built* is a
+question this file should be able to answer without being read end to end.
+Numbers are section numbers.
+
+**The table, and the cards on it.** Zero gutter, and a resize that zooms rather
+than reflows (1, 9, 62). The prismatic foil (2). A card with no picture drawn
+rather than labelled — frames, attribute tint, contrast solved numerically
+(24, 86, 94). What scales with a card and what does not (88). Cloths: the mat
+belongs to the deck rather than to the program (77, 78, 81), and every hollow in
+one belongs to it too (126). Screens that settle rather than cut (104, 105).
+Menus wearing the card's own edge (113). Four themes looked at side by side (120).
+
+**The arrangement, which is the point.** Gaps, because that is what hands do to a
+pile (51, 52, 68). Cards making room for the one you are carrying (67). Picking a
+whole pile up (92). Tidying, which is not sorting (18, 33). Saying what a pile is
+*for* (111, 112). The arrangement as the least durable thing in the program, until
+it was not (79, 80).
+
+**Reading the deck back.** The gaps turn out to be measurable (66, 91). What a
+pile is about, read off its own cards (91). How often a noted *pair* opens, and why
+that is not the product of two single-card answers (116, 117). What eight siding
+plans say about the deck rather than about the matchups (118). Which cards have
+never left it (119).
+
+**Files.** YDK and YDKX, with a payload merged and never re-encoded (8, 30). A
+decklist as *text*, in and out, including a pasted `.ydk` body (110, 114, 115) —
+and the piles travelling with it (127). Notes on a card, on a pair, on a deck
+(70, 71, 72, 87). An import that can be undone (85).
+
+**Siding.** Plans applied as one undoable edit (7), recorded by doing it (13, 82),
+the templates that were not a feature (38), their side of the table siding too
+(57, 59), and the sheet a venue actually needs (56, 69).
+
+**Testing a list.** Shuffle up and look (14). What a shootout actually is
+(31, 39, 43) — trials rather than hands, which side of the die roll (41), the
+record that survives siding (44), read at a glance (45), and kept between sittings
+so three evenings of fifteen hands stop being three shrugs (121, 123).
+
+**The board.** The one rule a sandbox has to know (46), the fold prototyped twice
+before a line of Compose (47), the way you let go deciding which way a card faces
+(48), the half that was never in your hand (49), tokens (55), play-it-out (50).
+
+**The shelf.** A library searched by name *and* by what is in the decks (35, 103).
+Which decks stopped being legal while you were not looking (99). What a deck used
+to be (89, 96, 97, 101), and what changed since last week (84).
+
+**Pictures and paper.** A PNG of the arrangement, which meant writing PNG
+(63, 65, 73, 75). The decklist a judge reads (69). The full-deck view (22).
+
+**The machinery this was built with.** Testing a module that does not compile here
+(12). Six lints, each written the day after the mistake it catches (20, 53, 80,
+122). A build that was shouting over itself (93). "I looked at it" turned into
+something that runs (83).
+
+**Reviews, and what they found.** Passes spent looking rather than adding
+(29, 58, 61, 107). Things the program said about data it had not read yet
+(106, 108, 109) — one frame, three defects in an afternoon. Projections nothing
+projected (74, 76, 102, 125). Verbs with no opposite (82, 95). A prototype
+overruling the reasoning (60, 113, 120). The container rolling back, twice (124).
+
 ## Why this file exists
 
 `androidx.*` is served only from Google's Maven, which is unreachable from the environment
@@ -3482,3 +3544,35 @@ exactly that failure.
 Seven tests. The one I would not have written a month ago is the last one, and it
 only exists because a decision made two sections earlier for a completely
 different reason turned out to have a sharp edge pointing this way.
+
+## 128 · A file nobody can read end to end is a file nobody reads
+
+A truth pass over `README.md`, which this repo treats as its densest document and
+which has been edited in almost every recent commit. Everything checks: six
+scripts under `tools/` and six kinds of mistake listed beside them, the 1200x800
+window floor, seven mats against four themes making the twenty-eight combinations
+the contrast test claims to walk, and the migration invariant — five tables, two
+`.sqm` files, the three that predate them being the original version-1 schema.
+No change. Second review in a row that found nothing, which is worth saying
+plainly rather than quietly not mentioning.
+
+What it did find is that this journal had grown past the point of being useful.
+A hundred and twenty-eight entries in commit order, each one about whatever was in
+front of me that hour, is a record of *how* rather than an answer to *what* — and
+the one question it is going to be asked is the second kind.
+
+So there is an index at the top now, grouped by subject rather than by time: the
+table and the cards, the arrangement, reading the deck back, files, siding,
+testing a list, the board, the shelf, pictures and paper, the machinery this was
+built with, and the reviews. Every entry number lands in exactly one group.
+
+Two things I noticed while writing it, which is the real value of having done it:
+
+**The arrangement is the spine.** Gaps, pile names, group odds, the showcase, the
+PNG, the payload, the text export, the tidies that draw their own — eleven entries
+across four months of subject matter, all of them the same idea getting further
+from where it started. Nothing else in the program has that many entries pointing
+at it.
+
+**And the reviews found more than the features did.** The group with the most
+entries after the arrangement is the one about looking at what was already there.
