@@ -90,20 +90,29 @@ class BreaksTest {
     fun draggingACardPastAGapMovesTheGapNotTheGroups() {
         // Nine cards, gap before the fourth. The first card is dragged to the
         // end: everything before the gap shuffles up by one, so the gap does.
-        assertEquals(setOf(2), Breaks(setOf(3)).afterMove(from = 0, to = 9).before)
+        assertEquals(setOf(2), Breaks(setOf(3)).afterShift(from = 0, to = 8).before)
     }
 
     @Test
     fun draggingWithinAGroupLeavesTheGapsAlone() {
-        assertEquals(setOf(5), Breaks(setOf(5)).afterMove(from = 0, to = 3).before)
-        assertEquals(setOf(5), Breaks(setOf(5)).afterMove(from = 7, to = 9).before)
+        assertEquals(setOf(5), Breaks(setOf(5)).afterShift(from = 0, to = 3).before)
+        assertEquals(setOf(5), Breaks(setOf(5)).afterShift(from = 9, to = 7).before)
     }
 
     @Test
     fun draggingNowhereChangesNothing() {
         val breaks = Breaks(setOf(3, 7))
 
-        assertEquals(breaks, breaks.afterMove(from = 4, to = 4))
+        assertEquals(breaks, breaks.afterShift(from = 4, to = 4))
+    }
+
+    @Test
+    fun draggingAcrossAGapMovesTheCardBetweenTheGroups() {
+        // Six cards, gap before the fourth: three and three. The first card is
+        // dragged into the second group, so it becomes two and four.
+        val moved = Breaks(setOf(3)).afterShift(from = 0, to = 4)
+
+        assertEquals(listOf(2, 4), moved.groups(6).map { it.count() })
     }
 
     @Test

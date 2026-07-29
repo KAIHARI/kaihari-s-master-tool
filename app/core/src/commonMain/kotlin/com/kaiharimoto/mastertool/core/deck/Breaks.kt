@@ -78,12 +78,16 @@ data class Breaks(val before: Set<Int> = emptySet()) {
     fun afterRemove(at: Int): Breaks =
         Breaks(before.mapTo(HashSet()) { if (it > at) it - 1 else it })
 
-    /** A card dragged from one position to another, which is a remove and an insert. */
-    fun afterMove(from: Int, to: Int): Breaks {
-        if (from == to) return this
-        val landing = if (to > from) to - 1 else to
-        return afterRemove(from).afterInsert(landing)
-    }
+    /**
+     * A card that was at [from] and is now at [to].
+     *
+     * Which is a remove and an insert, and reads correctly across a gap without
+     * anything extra: drag a card from the first group into the second and the
+     * first loses one while the second gains one, because the gap is a position
+     * and the cards moved past it.
+     */
+    fun afterShift(from: Int, to: Int): Breaks =
+        if (from == to) this else afterRemove(from).afterInsert(to)
 
     companion object {
         val NONE = Breaks()
