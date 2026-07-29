@@ -12,6 +12,15 @@ It is not a compiler and does not try to be. It knows the failure that actually
 happens when a shared symbol is introduced or moved: a file uses a top-level
 declaration from another package in the same build and never imports it.
 
+It does **not** know library names. A missing `import androidx.compose.runtime.
+remember` is invisible here, and generalising to catch it was tried and taken
+back out: learning name-to-package from the codebase's own import lines is the
+trick `check-modifiers.py` uses, but unscoped it collides with Kotlin's `get`
+and `set` accessors, with every property called `size` or `key`, and with member
+names generally -- forty-four reports, none of them real. `check-modifiers`
+works because `Modifier.x` is one syntactic position where the answer is not
+ambiguous. There is no such position for names in general.
+
     python3 tools/check-imports.py
 
 To stay useful it has to stay quiet, so it deliberately ignores:
@@ -40,13 +49,17 @@ ROOTS = ["core/src/commonMain/kotlin", "ui/src/commonMain/kotlin"]
 
 PACKAGE = re.compile(r"^package\s+([\w.]+)", re.M)
 
+
 # Top-level declarations only — anchored at column zero, because an indented
-# `val` is a member or a local and neither is imported by name.
+# `val` is a member or a local and neither is imported by name. `private` is
+# deliberately absent: a private top-level name is file-scoped, so putting one
+# in the shared map makes every other file's use of that name -- including
+# Kotlin's own `Set` -- look like a missing import.
 DECLARATION = re.compile(
     r"^(?:@\w+(?:\([^)]*\))?\s*)*"
     r"(?:public\s+|internal\s+)?"
     r"(?:expect\s+|actual\s+)?"
-    r"(?:(?:data|value|sealed|abstract|open|enum|annotation)\s+)*"
+    r"(?:(?:data|value|sealed|abstract|open|enum|annotation|const)\s+)*"
     r"(?:class|interface|object|fun|val|var)\s+"
     r"(?:<[^>]+>\s+)?"
     r"(?:[\w.]+\.)?"            # an extension receiver, e.g. `fun Modifier.foil`
@@ -130,6 +143,7 @@ def main() -> int:
             if f"{home}.{name}" in imports or home in wildcards:
                 continue
             problems.append(f"{path}: uses {name}, needs `import {home}.{name}`")
+
 
     for problem in problems:
         print(problem)

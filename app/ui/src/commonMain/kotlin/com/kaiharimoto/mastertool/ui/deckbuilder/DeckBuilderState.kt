@@ -36,6 +36,8 @@ import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.deck.SaveTracking
 import com.kaiharimoto.mastertool.core.deck.SavedSnapshot
 import com.kaiharimoto.mastertool.core.deck.ShootoutRun
+import com.kaiharimoto.mastertool.core.deck.TestingRecord
+import com.kaiharimoto.mastertool.core.deck.TestingCodec
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.export.DecklistSheet
 import com.kaiharimoto.mastertool.core.export.SidingSheet
@@ -842,6 +844,17 @@ class DeckBuilderState(
      * anything against this".
      */
     var shootoutRun by mutableStateOf<ShootoutRun?>(null)
+
+    /**
+     * When the run in progress was started, which is also how it is identified
+     * on disk.
+     *
+     * A finished run is written into the deck's payload and an *unfinished* one
+     * is taken back out, so undoing the last verdict of a finished run undoes
+     * the keeping too. Both paths key off this, which is why it is a stamp
+     * rather than a flag: two runs in one sitting are two records.
+     */
+    private var runStartedAt by mutableStateOf<Long?>(null)
         private set
 
     private var runBeforeVerdict by mutableStateOf<ShootoutRun?>(null)
@@ -1153,6 +1166,34 @@ class DeckBuilderState(
      * instead of an imagined one — which is the difference between "does this
      * open" and "does this open against the thing everybody is playing".
      */
+    /** Everything this deck has been tested against, read off its own payload. */
+    val testing: List<TestingRecord> get() = TestingCodec.read(extended)
+
+    /**
+     * Writes the finished run into the deck, or takes it back out if it is no
+     * longer finished.
+     *
+     * Keyed on the run's own start stamp, so this is an upsert rather than an
+     * append — judging the last hand, undoing it and judging it again leaves one
+     * record rather than three.
+     */
+    private fun keepRunIfFinished(run: ShootoutRun) {
+        val stamp = runStartedAt ?: return
+        val others = testing.filterNot { it.atEpochMs == stamp }
+        val kept = if (!run.finished) {
+            others
+        } else {
+            val report = run.report()
+            others + TestingRecord(
+                matchup = opponentName,
+                preSide = report.preSide,
+                postSide = report.postSide,
+                atEpochMs = stamp,
+            )
+        }
+        extended = TestingCodec.write(extended, kept)
+    }
+
     fun judgeShootout(playable: Boolean) {
         // Recorded against the side that hand was actually dealt for, not
         // whichever chip is selected now -- they are the same until somebody
@@ -1165,6 +1206,9 @@ class DeckBuilderState(
             // What the deck on the table actually is, not what the run asked for.
             val next = current.record(wentFirst, sided = deckIsSided, playable = playable)
             shootoutRun = next
+            // Every verdict, not only the last one: this is what makes undoing
+            // the last verdict of a finished run take the record back out.
+            keepRunIfFinished(next)
             // A finished run stops dealing. The last hand stays on the table to
             // be looked at, and the report is the thing worth reading now.
             if (!next.finished) {
@@ -1220,6 +1264,9 @@ class DeckBuilderState(
         if (previousRun != null) {
             shootoutRun = previousRun
             runBeforeVerdict = null
+            // Which takes the record back out if the run was finished a moment
+            // ago and is not any more.
+            keepRunIfFinished(previousRun)
             return
         }
         matchup = matchupBeforeVerdict ?: return
@@ -1245,6 +1292,10 @@ class DeckBuilderState(
         unsideOpponent()
         val fresh = ShootoutRun(trials = trials.coerceAtLeast(1))
         shootoutRun = fresh
+        // Stamped once, here. Everything a run writes to the deck is keyed on
+        // it, and two runs in one sitting are two records rather than one that
+        // keeps being overwritten.
+        runStartedAt = deps.now()
         runBeforeVerdict = null
         matchup = MatchupRecord()
         matchupBeforeVerdict = null

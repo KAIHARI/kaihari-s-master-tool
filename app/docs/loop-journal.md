@@ -3278,3 +3278,44 @@ Two of my twelve expectations were wrong again, and both the same way: a run is
 ten hands off the registered list *and* ten off the sided one, and I kept
 counting one half. The test that passed had it right, which is how the two that
 failed were obviously mine.
+
+## 122 · The checker that was supposed to catch this, and did not
+
+Wiring the kept runs into the panel, I left out three imports — `remember`,
+`TextOverflow`, `roundToInt` — and `check-imports.py` reported nothing. Which is
+the one thing that script exists to stop.
+
+Reading it: `ROOTS` is this project's own source, so it only ever knew *project*
+symbols. A missing `androidx.compose.runtime.remember` was always invisible to
+it, and the four-missing-imports incident that produced `check-modifiers.py` was
+the same blind spot showing up in a place narrow enough to fix.
+
+So I tried to widen it the way `check-modifiers` works: learn name-to-package
+from the codebase's own import lines, and flag any name used without one.
+
+**Forty-four reports and not one of them real.** `get` and `set`, because they
+are Kotlin's accessor keywords and every `val x get() = …` in the codebase looks
+like a use of Ktor's `get`. `size`, `key`, `height`, `lerp` — property names that
+happen to collide with an imported extension. Filtering out anything the file
+ever writes after a dot took it from 47 to 44.
+
+It has been taken back out. `check-modifiers` works because `Modifier.x` is *one
+syntactic position* where the answer is unambiguous; there is no equivalent
+position for names at large, and its own docstring already says the rule: a
+checker nobody trusts gets ignored. The limitation is written into the docstring
+and the README instead, which is worth more than a noisy script.
+
+Two real things came out of the attempt, both blind spots in the pass that does
+work:
+
+**`const val` was invisible.** The declaration pattern allowed `data`, `sealed`,
+`enum` and the rest but not `const`, so `CARD_ASPECT_RATIO` and every constant
+like it could be used across packages with no import and nothing would say. Fixed
+and verified the way the others were: hide the import, watch it fire, put it
+back.
+
+**And `private` must stay out of it.** Adding it seemed obviously right and is
+obviously wrong — a private top-level name is file-scoped, so putting `private
+class Set` into the shared map makes every `Set<…>` in the codebase look like a
+missing import. Five reports, instantly. That one is a comment in the regex now,
+because the next person to read it will have the same idea I did.

@@ -170,9 +170,16 @@ an orphaned property accessor, a test in the wrong source set or a Row child
 asking for the whole row's width all cost a CI round trip instead of a red
 squiggle. Each was written the day after making the
 mistake, and each was verified by putting the mistake back and watching it fire.
-None has a hardcoded list of Compose names: the modifier check reads the mapping
-out of the codebase's own import lines, so it learns a new one the first time it
-is used correctly.
+The modifier check reads its
+mapping out of the codebase's own import lines, so it learns a new name the first
+time one is used correctly — and that trick does **not** generalise. Widening the
+import check the same way was tried and taken back out: unscoped, it collides
+with Kotlin's `get` and `set` accessors, with every property called `size` or
+`key`, and with member names in general. Forty-four reports, none of them real.
+`Modifier.x` works because it is one syntactic position where the answer is
+unambiguous, and there is no such position for names at large. So a missing
+library import is still something only CI can tell you, and that is written down
+rather than half-fixed.
 
 **Anything that can be a number lives in `:core`.** Foil angles, autoscroll
 ramps, grid geometry, siding. `androidx` is served only from Google's Maven, so

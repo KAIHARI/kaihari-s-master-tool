@@ -19,7 +19,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -36,6 +38,8 @@ import com.kaiharimoto.mastertool.core.deck.OpeningHand
 import com.kaiharimoto.mastertool.core.deck.Preference
 import com.kaiharimoto.mastertool.core.deck.ShootoutGame
 import com.kaiharimoto.mastertool.core.deck.ShootoutReport
+import com.kaiharimoto.mastertool.core.deck.Testing
+import kotlin.math.roundToInt
 import com.kaiharimoto.mastertool.core.deck.ShootoutRun
 import com.kaiharimoto.mastertool.core.deck.SideVerdict
 import com.kaiharimoto.mastertool.core.model.CardId
@@ -174,6 +178,7 @@ fun ShootoutPanel(state: DeckBuilderState, onPlayItOut: (List<CardId>) -> Unit =
             if (run == null) {
                 Record(state)
                 StartRun(state)
+                Kept(state)
             } else {
                 RunSheet(run, run.report())
             }
@@ -662,3 +667,57 @@ private fun Side(
         }
     }
 }
+
+/**
+ * Runs this deck has already been through, added up per opponent.
+ *
+ * The reason keeping them was worth doing. A run refuses to say anything until
+ * there are enough hands, and forty hands is more than anybody deals at one
+ * sitting — so three evenings of fifteen used to be three separate shrugs. Added
+ * up they are one answer, and it is an answer about the deck rather than about
+ * the evening.
+ */
+@Composable
+private fun Kept(state: DeckBuilderState) {
+    val runs = state.testing
+    if (runs.isEmpty()) return
+    val each = remember(runs) { Testing.againstEach(runs) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            "TESTED SO FAR",
+            style = tacticalStyle(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        each.entries.sortedByDescending { it.value.total }.forEach { (against, report) ->
+            val before = report.preSide.brickRate
+            val after = report.postSide.brickRate
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    against.ifBlank { "Untitled" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    if (before == null || after == null) {
+                        "${report.total} HANDS"
+                    } else {
+                        "${report.total} HANDS · ${percent(before)} → ${percent(after)} BRICKS"
+                    },
+                    style = tacticalStyle(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Text(
+            "Every run against the same deck, added together. Kept in the deck " +
+                "file, so it survives closing the app.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun percent(rate: Double): String = "${(rate * 100).roundToInt()}%"
