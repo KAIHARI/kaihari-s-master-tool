@@ -680,6 +680,18 @@ private fun SectionHeader(
             },
         )
 
+        // What the gaps add up to. Only when there are any, and only as the
+        // numbers -- naming the groups would mean asking for names, and the
+        // whole point of a gap is that it says enough without one.
+        val gaps = state.breaksIn(section)
+        if (!gaps.isEmpty) {
+            Text(
+                "  " + gaps.groups(count).joinToString(" · ") { it.count().toString() },
+                style = tacticalStyle(),
+                color = accent,
+            )
+        }
+
         Box(Modifier.weight(1f))
 
         // Says the pane is in selection mode, says how many, and gets out of it.

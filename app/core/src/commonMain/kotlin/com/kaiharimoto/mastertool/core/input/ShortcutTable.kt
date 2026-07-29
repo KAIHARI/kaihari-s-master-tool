@@ -64,6 +64,9 @@ enum class ShortcutAction {
     EXTEND_UP,
     EXTEND_DOWN,
 
+    /** Put a gap before the card the cursor is on, or take one away. */
+    TOGGLE_GAP,
+
     /** Move the cards themselves. */
     CARRY_LEFT,
     CARRY_RIGHT,
@@ -222,6 +225,10 @@ object ShortcutTable {
         Shortcut(
             KeyChord("p"), ShortcutAction.TOGGLE_SIDING, ShortcutScope.BUILDER,
             "Siding plans",
+        ),
+        Shortcut(
+            KeyChord("g"), ShortcutAction.TOGGLE_GAP, ShortcutScope.BUILDER,
+            "Gap before the selected card",
         ),
         Shortcut(
             KeyChord("1"), ShortcutAction.FOCUS_MAIN, ShortcutScope.BUILDER,

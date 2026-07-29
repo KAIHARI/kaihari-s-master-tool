@@ -389,6 +389,41 @@ class DeckBuilderStateTest {
     }
 
     @Test
+    fun theCursorIsWhereAGapGoesFromTheKeyboard() = runTest {
+        // The selection is the cursor, as it is for every other keyboard move,
+        // so this needs no separate notion of where I am.
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.select(main, 4)
+
+        state.toggleGapAtCursor()
+
+        assertEquals(setOf(4), state.breaksIn(main).before)
+    }
+
+    @Test
+    fun withSeveralCardsPickedUpTheGapGoesAtTheEndThatMoves() = runTest {
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.select(main, 1)
+        state.selectThrough(main, 3)
+
+        state.toggleGapAtCursor()
+
+        assertEquals(setOf(3), state.breaksIn(main).before)
+    }
+
+    @Test
+    fun aGapFromTheKeyboardWithNothingSelectedDoesNothing() = runTest {
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+
+        state.toggleGapAtCursor()
+
+        assertTrue(state.breaksIn(main).isEmpty)
+    }
+
+    @Test
     fun everyGapInASectionCanBeTakenAwayAtOnce() = runTest {
         // What a sort does to the arrangement it replaced. The tidy and sort
         // paths themselves need a card pool to look cards up in, and this

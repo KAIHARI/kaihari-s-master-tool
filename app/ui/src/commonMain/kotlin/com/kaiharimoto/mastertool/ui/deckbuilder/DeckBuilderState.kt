@@ -244,6 +244,19 @@ class DeckBuilderState(
     private val payload: JsonObject?
         get() = ArrangementCodec.write(extended, breaks).takeIf { it.isNotEmpty() }
 
+    /**
+     * Puts a gap before the card the cursor is on.
+     *
+     * The selection *is* the cursor here, as it is for every other keyboard
+     * move, so this needs no separate notion of "where I am" — and with several
+     * cards picked up it uses the end that moves, which is the one under the
+     * hand.
+     */
+    fun toggleGapAtCursor() {
+        val section = selection.section ?: return
+        toggleBreak(section, Selections.focusOf(selection))
+    }
+
     /** Takes every gap out of a section, for when the grouping has gone stale. */
     fun clearBreaks(section: DeckSection) {
         if (section !in breaks) return
