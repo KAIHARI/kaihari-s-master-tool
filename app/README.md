@@ -142,9 +142,11 @@ install.** SQLDelight derives the schema version from the number of `.sqm` files
 and both driver factories hand `MasterToolDatabase.Schema` to the driver. Adding
 a table to a `.sq` file alone leaves the version unchanged, so no migration runs
 and the first query throws — on every device that already has the app, and on
-none of the ones used for testing. `MigrationTest` upgrades a real old database
-and compares it against a freshly created one; add a case to it whenever the
-schema changes.
+none of the ones used for testing. `MigrationTest` upgrades a real version 1
+database and compares the whole result against a freshly created one, so a table
+added without its `.sqm` fails by name. It needs no new case per change — but the
+version 1 snapshot inside it is a record of what is on somebody's tablet, not a
+copy of the current files, so it must never be edited to make a failure go away.
 
 ## Status
 

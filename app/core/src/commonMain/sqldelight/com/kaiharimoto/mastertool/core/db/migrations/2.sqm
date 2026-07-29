@@ -1,0 +1,23 @@
+-- 2 -> 3: a deck's older versions.
+--
+-- Required, not optional, for the reason spelled out in `1.sqm` and now checked
+-- by `MigrationTest`: without this file the schema version stays at 2, nothing
+-- runs on a device that already has the app, and the first read of the history
+-- throws there while every fresh install works perfectly.
+--
+-- Nothing to backfill. A deck with no versions has simply not been put down and
+-- picked back up yet, which is true of every deck at this moment.
+
+CREATE TABLE deckVersionEntity (
+    id                TEXT    NOT NULL PRIMARY KEY,
+    deckId            TEXT    NOT NULL,
+    name              TEXT,
+    main              TEXT    NOT NULL DEFAULT '',
+    extra             TEXT    NOT NULL DEFAULT '',
+    side              TEXT    NOT NULL DEFAULT '',
+    notes             TEXT    NOT NULL DEFAULT '',
+    extendedJson      TEXT,
+    keptAtEpochMs     INTEGER NOT NULL
+);
+
+CREATE INDEX deckVersionEntity_deck ON deckVersionEntity(deckId, keptAtEpochMs);

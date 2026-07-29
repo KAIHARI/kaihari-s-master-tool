@@ -1,0 +1,47 @@
+-- What a deck used to be.
+--
+-- A deck that has been saved once keeps itself saved from then on, so without
+-- this there is no yesterday: cut a card from the list you registered and the
+-- sixty you registered stop existing. One row is one whole deck, stored the same
+-- way `deckEntity` stores one, because a version has to be openable on its own
+-- and a diff against the current deck reads every section of it.
+--
+-- No foreign key. SQLite only enforces them with `PRAGMA foreign_keys = ON`,
+-- which neither driver factory sets, so a declared one would look like a
+-- guarantee and be decoration. Deleting a deck deletes its versions in the
+-- repository, where it can be seen happening.
+
+CREATE TABLE deckVersionEntity (
+    id                TEXT    NOT NULL PRIMARY KEY,
+    deckId            TEXT    NOT NULL,
+    -- Null unless somebody named this one. A named version is never thinned out.
+    name              TEXT,
+    main              TEXT    NOT NULL DEFAULT '',
+    extra             TEXT    NOT NULL DEFAULT '',
+    side              TEXT    NOT NULL DEFAULT '',
+    notes             TEXT    NOT NULL DEFAULT '',
+    extendedJson      TEXT,
+    keptAtEpochMs     INTEGER NOT NULL
+);
+
+CREATE INDEX deckVersionEntity_deck ON deckVersionEntity(deckId, keptAtEpochMs);
+
+selectForDeck:
+SELECT * FROM deckVersionEntity WHERE deckId = ? ORDER BY keptAtEpochMs DESC;
+
+selectById:
+SELECT * FROM deckVersionEntity WHERE id = ?;
+
+insert:
+INSERT OR REPLACE INTO deckVersionEntity(
+    id, deckId, name, main, extra, side, notes, extendedJson, keptAtEpochMs
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+setName:
+UPDATE deckVersionEntity SET name = ? WHERE id = ?;
+
+deleteById:
+DELETE FROM deckVersionEntity WHERE id = ?;
+
+deleteForDeck:
+DELETE FROM deckVersionEntity WHERE deckId = ?;

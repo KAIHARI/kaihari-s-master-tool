@@ -1,7 +1,10 @@
 package com.kaiharimoto.mastertool.core.data
 
 import com.kaiharimoto.mastertool.core.db.DeckEntity
+import com.kaiharimoto.mastertool.core.db.DeckVersionEntity
 import com.kaiharimoto.mastertool.core.db.MasterToolDatabase
+import com.kaiharimoto.mastertool.core.deck.DeckHistory
+import com.kaiharimoto.mastertool.core.deck.VersionMark
 import com.kaiharimoto.mastertool.core.model.Deck
 import com.kaiharimoto.mastertool.core.model.DeckEntry
 import com.kaiharimoto.mastertool.core.ydk.YdkCodec
@@ -18,6 +21,27 @@ data class StoredDeck(
     val extended: JsonObject? = null,
 ) {
     fun toDocument(): YdkDocument = YdkDocument(entry.deck, createdBy = null, extended = extended)
+}
+
+/**
+ * A deck as it stood before you changed it.
+ *
+ * Whole, not a diff: it has to be openable on its own, and comparing it against
+ * what you have open reads every section anyway.
+ */
+data class DeckVersion(
+    val id: String,
+    val deckId: String,
+    /** What it was named, if it was named on purpose. Named versions are kept. */
+    val name: String?,
+    val keptAtEpochMs: Long,
+    val deck: Deck,
+    val notes: String,
+    val extended: JsonObject? = null,
+) {
+    val mark: VersionMark get() = VersionMark(id, keptAtEpochMs, name)
+
+    fun toDocument(): YdkDocument = YdkDocument(deck, createdBy = null, extended = extended)
 }
 
 /**
@@ -53,29 +77,124 @@ class DeckRepository(
         val existing = database.deckQueries.selectById(id).executeAsOneOrNull()
         val createdAt = existing?.createdAtEpochMs ?: now
 
+        val main = CardMapper.joinIds(deck.main)
+        val extra = CardMapper.joinIds(deck.extra)
+        val side = CardMapper.joinIds(deck.side)
+        val extendedJson = extended?.let { json.encodeToString(JsonObject.serializer(), it) }
+
+        val changed = existing == null ||
+            existing.main != main ||
+            existing.extra != extra ||
+            existing.side != side ||
+            existing.notes != notes ||
+            existing.extendedJson != extendedJson
+
+        // A save that changes nothing is not an edit, so it neither keeps a copy
+        // of what is already there nor claims the deck was touched. Letting it
+        // move the stamp would also restart the clock below, and the next real
+        // edit would go unrecorded.
+        val updatedAt = if (changed) now else existing.updatedAtEpochMs
+
+        if (changed && existing != null && DeckHistory.keepsACopy(existing.updatedAtEpochMs, now)) {
+            keep(existing)
+        }
+
         database.deckQueries.upsert(
             id = id,
             name = name,
-            main = CardMapper.joinIds(deck.main),
-            extra = CardMapper.joinIds(deck.extra),
-            side = CardMapper.joinIds(deck.side),
+            main = main,
+            extra = extra,
+            side = side,
             notes = notes,
-            extendedJson = extended?.let { json.encodeToString(JsonObject.serializer(), it) },
+            extendedJson = extendedJson,
             createdAtEpochMs = createdAt,
-            updatedAtEpochMs = now,
+            updatedAtEpochMs = updatedAt,
         )
 
         StoredDeck(
-            DeckEntry(id, name, deck, createdAt, now, notes),
+            DeckEntry(id, name, deck, createdAt, updatedAt, notes),
             extended,
         )
     }
+
+    /** Every version of a deck, most recent first. */
+    suspend fun versions(deckId: String): List<DeckVersion> = withContext(ioDispatcher) {
+        database.deckVersionQueries.selectForDeck(deckId).executeAsList().map(::toVersion)
+    }
+
+    suspend fun version(id: String): DeckVersion? = withContext(ioDispatcher) {
+        database.deckVersionQueries.selectById(id).executeAsOneOrNull()?.let(::toVersion)
+    }
+
+    /**
+     * Names a version, or takes the name away again.
+     *
+     * A named one is never thinned out, so this is how somebody says *keep this*
+     * about the list they registered — and un-naming it is how they take that
+     * back, rather than having to delete the version to stop it being held.
+     */
+    suspend fun nameVersion(id: String, name: String?) = withContext(ioDispatcher) {
+        database.deckVersionQueries.setName(name?.trim()?.takeIf(String::isNotEmpty), id)
+    }
+
+    suspend fun deleteVersion(id: String) = withContext(ioDispatcher) {
+        database.deckVersionQueries.deleteById(id)
+    }
+
+    /**
+     * Keeps the stored deck as a version before it is written over.
+     *
+     * Stamped with when the deck actually last stood that way rather than with
+     * now, which is both more truthful and what makes the id derivable: one deck
+     * cannot have stood two ways at one instant, so `deck@stamp` is unique
+     * without a generator — and `INSERT OR REPLACE` makes a repeat harmless
+     * rather than a crash.
+     */
+    private fun keep(row: DeckEntity) {
+        database.deckVersionQueries.insert(
+            id = "${row.id}@${row.updatedAtEpochMs}",
+            deckId = row.id,
+            name = null,
+            main = row.main,
+            extra = row.extra,
+            side = row.side,
+            notes = row.notes,
+            extendedJson = row.extendedJson,
+            keptAtEpochMs = row.updatedAtEpochMs,
+        )
+
+        DeckHistory
+            .surplus(database.deckVersionQueries.selectForDeck(row.id).executeAsList().map(::toMark))
+            .forEach { database.deckVersionQueries.deleteById(it.id) }
+    }
+
+    private fun toMark(row: DeckVersionEntity) = VersionMark(row.id, row.keptAtEpochMs, row.name)
+
+    private fun toVersion(row: DeckVersionEntity) = DeckVersion(
+        id = row.id,
+        deckId = row.deckId,
+        name = row.name,
+        keptAtEpochMs = row.keptAtEpochMs,
+        deck = Deck(
+            main = CardMapper.splitIds(row.main),
+            extra = CardMapper.splitIds(row.extra),
+            side = CardMapper.splitIds(row.side),
+        ),
+        notes = row.notes,
+        extended = row.extendedJson?.let { raw ->
+            runCatching { json.parseToJsonElement(raw) as? JsonObject }.getOrNull()
+        },
+    )
 
     /** Saves the result of importing a `.ydk` / `.ydkx` file. */
     suspend fun saveImported(id: String, name: String, document: YdkDocument): StoredDeck =
         save(id, name, document.deck, document.extended)
 
     suspend fun delete(id: String) = withContext(ioDispatcher) {
+        // Explicitly, because the table declares no foreign key: SQLite only
+        // enforces those with a pragma neither driver factory sets, so one there
+        // would look like a guarantee and be decoration.
+        database.deckVersionQueries.deleteForDeck(id)
         database.deckQueries.deleteById(id)
     }
 
