@@ -90,6 +90,17 @@ data class TableState(
         return copy(hand = hand + card, library = library.withoutIndex(index))
     }
 
+    /**
+     * Puts a token in a zone.
+     *
+     * It comes from nowhere, which is exactly right — nothing leaves the hand,
+     * the deck or the Extra deck, because a token was never in any of them.
+     */
+    fun makeToken(zone: ZoneId, placement: Placement = Placement.ATTACK): TableState? {
+        val placed = board.place(zone, PlacedCard.token(placement)) ?: return null
+        return copy(board = placed)
+    }
+
     /** Out of a pile and back into the hand, one card from anywhere in it. */
     fun retrieve(from: ZoneId, index: Int): TableState? {
         val card = board[from].getOrNull(index) ?: return null
@@ -106,10 +117,17 @@ data class TableState(
         return copy(board = placed)
     }
 
-    /** Back off the board and into the hand, for a bounce or a misplacement. */
+    /**
+     * Back off the board and into the hand, for a bounce or a misplacement.
+     *
+     * A token bounced to the hand stops existing instead, for the same reason it
+     * cannot go to a graveyard: there is no card to hold.
+     */
     fun toHand(zone: ZoneId): TableState? {
         val card = board[zone].lastOrNull() ?: return null
-        return copy(board = board.lift(zone), hand = hand + card.id)
+        val lifted = board.lift(zone)
+        if (card.token) return copy(board = lifted)
+        return copy(board = lifted, hand = hand + card.id)
     }
 
     private fun List<CardId>.withoutIndex(index: Int): List<CardId> =

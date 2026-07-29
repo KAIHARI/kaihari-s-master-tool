@@ -536,4 +536,53 @@ class SandboxPileTest {
         state.turn(BoardLayout.field)
         assertEquals(Placement.DEFENSE, state.board[BoardLayout.field].single().placement)
     }
+
+    @Test
+    fun aTokenIsHeldAndPlacedLikeAnythingElse() {
+        // Nothing extra had to be built for it, which is the point of there
+        // being one idea of "picked up".
+        val state = open()
+        val handSize = state.table.hand.size
+
+        state.hold(DragOrigin.Token)
+        assertTrue(state.placeHeld(zone, Placement.DEFENSE))
+
+        assertTrue(state.board[zone].single().token)
+        assertEquals(Placement.DEFENSE, state.board[zone].single().placement)
+        assertEquals(handSize, state.table.hand.size, "it came from nowhere")
+        assertNull(state.held)
+    }
+
+    @Test
+    fun aTokenSentAwayLeavesNothingBehind() {
+        val state = open()
+        state.makeToken(zone)
+
+        state.sendToGraveyard(zone)
+
+        assertTrue(state.board.isEmpty)
+        assertTrue(state.contentsOf(Pile.GRAVEYARD).isEmpty())
+    }
+
+    @Test
+    fun makingATokenCanBeUndone() {
+        val state = open()
+
+        state.makeToken(zone)
+        assertTrue(state.canUndo)
+        state.undo()
+
+        assertTrue(state.board.isEmpty)
+    }
+
+    @Test
+    fun aTokenTurnsWhereItLies() {
+        val state = open()
+        state.makeToken(zone)
+
+        state.turn(zone)
+
+        assertEquals(Placement.DEFENSE, state.board[zone].single().placement)
+        assertTrue(state.board[zone].single().token, "and is still a token")
+    }
 }

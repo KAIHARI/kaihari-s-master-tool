@@ -32,6 +32,13 @@ enum class ZoneKind {
             MONSTER, SPELL_TRAP, FIELD, EXTRA_MONSTER -> 1
             GRAVEYARD, BANISHED, DECK, EXTRA_DECK -> Int.MAX_VALUE
         }
+
+    /** A stack of cards rather than a place one card sits. */
+    val isPile: Boolean
+        get() = when (this) {
+            MONSTER, SPELL_TRAP, FIELD, EXTRA_MONSTER -> false
+            GRAVEYARD, BANISHED, DECK, EXTRA_DECK -> true
+        }
 }
 
 data class ZoneId(val kind: ZoneKind, val index: Int = 0)
@@ -58,7 +65,27 @@ enum class Placement {
     }
 }
 
-data class PlacedCard(val id: CardId, val placement: Placement = Placement.ATTACK)
+/**
+ * A card on the board, or something standing in for one.
+ *
+ * [token] because plenty of decks make them and a board that cannot show one
+ * cannot show the turn. A token has no passcode and no art — it is a thing on
+ * the table that occupies a zone — so it carries a reserved id rather than a
+ * real one, and everything that looks a card up has to notice.
+ */
+data class PlacedCard(
+    val id: CardId,
+    val placement: Placement = Placement.ATTACK,
+    val token: Boolean = false,
+) {
+    companion object {
+        /** Not a passcode any card has, and never looked up. */
+        val TOKEN_ID = CardId(0)
+
+        fun token(placement: Placement = Placement.ATTACK): PlacedCard =
+            PlacedCard(TOKEN_ID, placement, token = true)
+    }
+}
 
 /**
  * A board, as a value.
@@ -95,11 +122,18 @@ data class Board(private val contents: Map<ZoneId, List<PlacedCard>> = emptyMap(
         return withZone(zone, existing + card)
     }
 
-    /** Moves the top card of one zone to another, if it fits. */
+    /**
+     * Moves the top card of one zone to another, if it fits.
+     *
+     * A token sent to a pile simply stops existing, which is the rule and also
+     * the only sensible thing: a graveyard with a token in it is a graveyard
+     * that would let you bring the token back.
+     */
     fun move(from: ZoneId, to: ZoneId): Board? {
         if (from == to) return this
         val card = this[from].lastOrNull() ?: return null
         val lifted = withZone(from, this[from].dropLast(1))
+        if (card.token && to.kind.isPile) return lifted
         return lifted.place(to, card)
     }
 

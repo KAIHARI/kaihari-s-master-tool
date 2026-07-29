@@ -306,4 +306,71 @@ class TableStateTest {
         assertEquals(listOf(stranger), table.hand)
         assertEquals(cards.size, table.library.size)
     }
+
+    // ---- tokens -------------------------------------------------------------
+
+    @Test
+    fun aTokenComesFromNowhere() {
+        val before = table()
+
+        val after = assertNotNull(before.makeToken(zone, Placement.DEFENSE))
+
+        assertTrue(after.board[zone].single().token)
+        assertEquals(Placement.DEFENSE, after.board[zone].single().placement)
+        assertEquals(before.hand, after.hand, "nothing left the hand")
+        assertEquals(before.library, after.library, "nor the deck")
+    }
+
+    @Test
+    fun aTokenTakesUpAZoneLikeAnythingElse() {
+        val table = assertNotNull(table().makeToken(zone))
+
+        assertNull(table.makeToken(zone), "the zone is occupied")
+        assertNull(table.play(0, zone, Placement.ATTACK))
+    }
+
+    @Test
+    fun aTokenSentToTheGraveyardStopsExisting() {
+        // A graveyard with a token in it is a graveyard that would let you bring
+        // the token back.
+        val start = assertNotNull(table().makeToken(zone))
+
+        val after = assertNotNull(start.copy(board = assertNotNull(start.board.move(zone, BoardLayout.graveyard))))
+
+        assertTrue(after.board.isEmpty)
+        assertTrue(after.board[BoardLayout.graveyard].isEmpty())
+    }
+
+    @Test
+    fun aTokenBouncedToTheHandStopsExistingToo() {
+        val before = table()
+        val start = assertNotNull(before.makeToken(zone))
+
+        val after = assertNotNull(start.toHand(zone))
+
+        assertEquals(before.hand, after.hand, "there is no card to hold")
+        assertTrue(after.board.isEmpty)
+    }
+
+    @Test
+    fun aTokenMovedToAnotherZoneIsStillThere() {
+        // Only piles make it vanish. Sliding it along the row does not.
+        val start = assertNotNull(table().makeToken(zone, Placement.DEFENSE))
+        val elsewhere = BoardLayout.monsterRow[2]
+
+        val moved = assertNotNull(start.board.move(zone, elsewhere))
+
+        assertTrue(moved[elsewhere].single().token)
+        assertEquals(Placement.DEFENSE, moved[elsewhere].single().placement)
+    }
+
+    @Test
+    fun aRealCardIsStillKeptWhenItLeavesTheBoard() {
+        val before = table()
+        val played = assertNotNull(before.play(0, zone, Placement.ATTACK))
+
+        val bounced = assertNotNull(played.toHand(zone))
+
+        assertEquals(before.hand.size, bounced.hand.size, "a card is not a token")
+    }
 }

@@ -44,6 +44,9 @@ sealed interface DragOrigin {
 
     /** A pile on the board — graveyard, banished — by position in it. */
     data class Pile(val zone: ZoneId, val index: Int) : DragOrigin
+
+    /** Nowhere: a token, which was never in the hand or the deck. */
+    data object Token : DragOrigin
 }
 
 /** The four stacks that are worth looking through rather than only counting. */
@@ -190,6 +193,7 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
             is DragOrigin.OnBoard -> move(origin.zone, zone)
             is DragOrigin.Extra -> summon(origin.index, zone, placement)
             is DragOrigin.Pile -> raise(origin.zone, origin.index, zone, placement)
+            DragOrigin.Token -> makeToken(zone, placement)
         }
 
     private var history by mutableStateOf<List<TableState>>(emptyList())
@@ -323,6 +327,21 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
 
     fun summon(extraIndex: Int, zone: ZoneId, placement: Placement): Boolean {
         val next = table.summon(extraIndex, zone, placement) ?: return false
+        push()
+        table = next
+        justPlaced = zone
+        return true
+    }
+
+    /**
+     * Puts a token down.
+     *
+     * Held like anything else, so the same tap or drag places it and the same
+     * gesture decides which way it faces — a defence token is a real thing to
+     * want and nothing extra had to be built for it.
+     */
+    fun makeToken(zone: ZoneId, placement: Placement = Placement.ATTACK): Boolean {
+        val next = table.makeToken(zone, placement) ?: return false
         push()
         table = next
         justPlaced = zone

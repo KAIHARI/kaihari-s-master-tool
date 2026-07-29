@@ -111,6 +111,13 @@ fun SandboxScreen(
             // The one stack with no room on the mat, which is also the one a
             // player looks at least often. Still one tap away, and it says how
             // many are in it without being opened.
+            TextButton(
+                onClick = {
+                    state.hold(if (state.held == DragOrigin.Token) null else DragOrigin.Token)
+                },
+            ) {
+                Text(if (state.held == DragOrigin.Token) "Token — pick a zone" else "Token")
+            }
             TextButton(onClick = { state.openPile = Pile.BANISHED }) {
                 Text("Banished ${state.contentsOf(Pile.BANISHED).size}")
             }
@@ -371,7 +378,9 @@ private fun LaidCard(placed: PlacedCard, index: CardIndex, zoneWidth: Dp) {
             .aspectRatio(CARD_ASPECT)
             .graphicsLayer { rotationZ = angle },
     ) {
-        if (placed.placement == Placement.SET) {
+        if (placed.token) {
+            TokenFace(Modifier.fillMaxSize())
+        } else if (placed.placement == Placement.SET) {
             CardBack(Modifier.fillMaxSize())
         } else {
             val card = index.byId(placed.id)
@@ -381,6 +390,28 @@ private fun LaidCard(placed: PlacedCard, index: CardIndex, zoneWidth: Dp) {
                 CardTile(card = card, modifier = Modifier.fillMaxSize(), foil = false)
             }
         }
+    }
+}
+
+/**
+ * A token: a plate, not a card.
+ *
+ * Deliberately unlike both a card and a card back, because it is neither — it
+ * has no art to show and no face to hide, and drawing it as either would be
+ * saying something untrue about what is sitting in that zone.
+ */
+@Composable
+private fun TokenFace(modifier: Modifier = Modifier) {
+    val colors = LocalMasterToolColors.current
+
+    Box(
+        modifier
+            .clip(RoundedCornerShape(3.dp))
+            .background(colors.accent.copy(alpha = 0.20f))
+            .border(1.dp, colors.accentBright.copy(alpha = 0.65f), RoundedCornerShape(3.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("TOKEN", style = tacticalStyle(), color = colors.accentBright)
     }
 }
 
