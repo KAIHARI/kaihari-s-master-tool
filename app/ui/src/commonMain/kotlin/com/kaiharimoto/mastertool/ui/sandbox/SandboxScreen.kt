@@ -108,6 +108,12 @@ fun SandboxScreen(
             TextButton(onClick = { state.redeal() }, enabled = state.canRedeal) {
                 Text("Shuffle up")
             }
+            // The one stack with no room on the mat, which is also the one a
+            // player looks at least often. Still one tap away, and it says how
+            // many are in it without being opened.
+            TextButton(onClick = { state.openPile = Pile.BANISHED }) {
+                Text("Banished ${state.contentsOf(Pile.BANISHED).size}")
+            }
             TextButton(onClick = { state.undo() }, enabled = state.canUndo) { Text("Undo") }
             TextButton(onClick = { state.clearBoard() }) { Text("Sweep") }
         }
@@ -188,9 +194,9 @@ private fun Half(
                 // Only your half has stacks. The deck across the table is not
                 // simulated, and drawing its graveyard would be drawing a
                 // graveyard nothing could ever put a card into.
-                Flank(state, zoneWidth, origin, yours, position, left = true)
+                Flank(state, index, zoneWidth, origin, yours, position, left = true)
                 zones.forEach { zone -> Zone(state, index, zone, zoneWidth, origin) }
-                Flank(state, zoneWidth, origin, yours, position, left = false)
+                Flank(state, index, zoneWidth, origin, yours, position, left = false)
             }
         }
     }
@@ -206,6 +212,7 @@ private fun Half(
 @Composable
 private fun Flank(
     state: SandboxState,
+    index: CardIndex,
     zoneWidth: Dp,
     origin: Offset,
     yours: Boolean,
@@ -217,10 +224,17 @@ private fun Flank(
         return
     }
 
+    // The field spell zone is a zone, not a stack -- a card sits in it and can
+    // be turned like any other. It goes where it goes on a mat: the far left of
+    // the spell row.
+    if (row == 1 && left) {
+        Zone(state, index, BoardLayout.field, zoneWidth, origin)
+        return
+    }
+
     val pile = when {
         row == 0 && left -> Pile.EXTRA
         row == 0 -> Pile.GRAVEYARD
-        left -> Pile.BANISHED
         else -> Pile.DECK
     }
     PileSlot(state, pile, zoneWidth, origin)

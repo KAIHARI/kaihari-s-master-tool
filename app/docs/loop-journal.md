@@ -1126,6 +1126,26 @@ worth having, none of them clever. The environment cannot give me a compiler, so
 the answer is to keep taking the specific mistakes it lets through and closing
 them one at a time.
 
+## 54. The seam a test was already watching
+
+The gap shortcut went in and CI came back red on one test:
+`everyBoundChordHasAKeyThatCanProduceIt`. `:core` says which chords exist and
+`:ui` turns a key event into one, and nothing but that test makes the two agree —
+a binding whose key is missing from the map is not a compile error, it is a
+shortcut that silently does nothing when you press it.
+
+It was written earlier in this loop for exactly this and it earned its keep the
+first time somebody added a binding. Worth recording because it is the pattern
+the whole loop keeps arriving at: the environment cannot give me a compiler for
+half the code, so the answer is a small guard for each specific way that lets a
+mistake through.
+
+The board also got its field spell zone, which had been in the model since the
+first day and never drawn. It goes where it goes on a mat — the far left of the
+spell row — which pushed the banished pile up to the toolbar. That is the right
+trade: it is the stack a player looks at least often, and it still says how many
+are in it without being opened.
+
 ---
 
 ## Where this stands
@@ -1136,9 +1156,9 @@ the environment this was written in.
 
 Still open, in the order they are worth doing:
 
-**Gaps by keyboard and by drag.** They are placed from the long-press menu
-(sections 51-52). Dragging a gap along, and a shortcut for the card under the
-cursor, are both natural and neither is built.
+**Dragging a gap along.** They are placed from a card's menu or with `g` on the
+one under the cursor (sections 51-54), and the header says what the groups came
+to. Picking a gap up and moving it is the obvious next gesture and is not built.
 
 **Siding for the opponent, between games.** A run sides *your* deck and records
 which version dealt each hand (sections 43-45). The deck across the table never

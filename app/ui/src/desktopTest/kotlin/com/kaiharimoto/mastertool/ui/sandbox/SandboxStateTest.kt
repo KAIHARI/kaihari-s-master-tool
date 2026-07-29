@@ -520,4 +520,20 @@ class SandboxPileTest {
         assertEquals(card, state.contentsOf(Pile.GRAVEYARD).single())
         assertTrue(state.board[zone].isEmpty())
     }
+
+    @Test
+    fun theFieldSpellZoneIsAZoneLikeAnyOther() {
+        // A card sits in it, one at a time, and turns like the rest -- which is
+        // why it is drawn as a zone on the mat and not as a stack beside it.
+        val state = open()
+        val card = state.table.hand[0]
+
+        assertTrue(state.play(0, BoardLayout.field, Placement.ATTACK))
+
+        assertEquals(card, state.board[BoardLayout.field].single().id)
+        assertFalse(state.play(0, BoardLayout.field, Placement.ATTACK), "one at a time")
+
+        state.turn(BoardLayout.field)
+        assertEquals(Placement.DEFENSE, state.board[BoardLayout.field].single().placement)
+    }
 }
