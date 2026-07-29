@@ -259,6 +259,11 @@ checked rather than taken: nothing is watching sixty lines go past, and every
 line that was never a card at all still has a nearest neighbour among thirteen
 thousand.
 
+A `.ydk` opened in a text editor and pasted straight in works too: `#main`,
+`#extra` and `!side` are read as the headings they are rather than as the
+comments they look like, so a downloaded file's Extra deck does not arrive in the
+Main deck.
+
 And back out the same way. The deck goes into a box you copy from — counted,
 headed, in the deck's own order — because a list belongs in a message and every
 other builder hands you a file. What it writes, it reads: the round trip is the

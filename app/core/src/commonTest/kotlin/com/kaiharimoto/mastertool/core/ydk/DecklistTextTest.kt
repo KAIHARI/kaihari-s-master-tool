@@ -135,9 +135,9 @@ class DecklistTextTest {
             type = "Spell Card",
             frameType = "spell",
         )
-        val out = DecklistText.parse("2 Extra Foolish Burial") {
+        val out = DecklistText.parse("2 Extra Foolish Burial", exactly = {
             if (TextMatching.normalize(it) == TextMatching.normalize(foolish.name)) foolish else null
-        }
+        })
 
         assertEquals(2, out.deck.main.size, "it was read as an Extra Deck heading")
     }
@@ -363,5 +363,50 @@ class DecklistWritingTest {
         )
 
         assertTrue(out.indexOf("Pot of Prosperity") < out.indexOf("Ash Blossom"), out)
+    }
+}
+
+/**
+ * A `.ydk` file opened in a text editor and pasted straight in, which is one of
+ * the commonest shapes a decklist is handed over in.
+ */
+class PastedYdkTest {
+
+    private fun resolve(name: String): Card? =
+        TestCards.all.firstOrNull { TextMatching.normalize(it.name) == TextMatching.normalize(name) }
+
+    @Test
+    fun theFormatsOwnSectionMarkersAreHeadingsRatherThanComments() {
+        // `#main`, `#extra` and `!side` start with the characters this treats as
+        // comments everywhere else. Skipped, the Extra deck arrives in the Main.
+        val out = DecklistText.parse(
+            """
+            #created by ...
+            #main
+            ${TestCards.ashBlossom.id.value}
+            ${TestCards.ashBlossom.id.value}
+            #extra
+            ${TestCards.accesscode.id.value}
+            !side
+            ${TestCards.pot.id.value}
+            """.trimIndent(),
+            ::resolve,
+        )
+
+        assertEquals(List(2) { TestCards.ashBlossom.id }, out.deck.main)
+        assertEquals(listOf(TestCards.accesscode.id), out.deck.extra)
+        assertEquals(listOf(TestCards.pot.id), out.deck.side)
+        assertTrue(out.missing.isEmpty())
+    }
+
+    @Test
+    fun andACommentThatMerelyStartsWithAHeadingWordIsStillAComment() {
+        val out = DecklistText.parse(
+            "#extra copies to cut before the event\n2 Pot of Prosperity",
+            ::resolve,
+        )
+
+        assertEquals(2, out.deck.main.size, "the note was read as an Extra Deck heading")
+        assertTrue(out.deck.extra.isEmpty())
     }
 }

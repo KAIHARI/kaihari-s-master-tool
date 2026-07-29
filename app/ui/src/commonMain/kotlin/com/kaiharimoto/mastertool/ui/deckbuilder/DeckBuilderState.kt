@@ -2287,7 +2287,7 @@ class DeckBuilderState(
             // exact. That is sixty times the work the search box does per
             // keystroke, and the search box already refuses to do it here.
             val parsed = withContext(deps.computeDispatcher) {
-                DecklistText.parse(text, ::resolvePasted)
+                DecklistText.parse(text, exactly = index::byName, orNearly = ::resolvePasted)
             }
             apply(parsed)
         }

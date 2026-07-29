@@ -34,13 +34,26 @@ object DecklistText {
     }
 
     /**
-     * Reads [text] into a deck, resolving each named line with [resolve].
+     * Reads [text] into a deck.
      *
-     * [resolve] is handed the name as written; matching it to a card is the
-     * caller's business, because how forgiving that should be is a question
-     * about the card pool rather than about the text.
+     * Two resolvers, because the two questions this asks are not the same one.
+     * [exactly] is *is this line, whole and unsplit, the name of a card* — which
+     * is only ever asked to tell `8-Claws Scorpion` from a count and a name, and
+     * wants a dictionary lookup rather than a search. [orNearly] is *what did
+     * they mean by this*, asked once a line has been taken apart, and is where
+     * forgiveness belongs.
+     *
+     * Keeping them apart is worth a parameter twice over. A pool scan per line
+     * before anything is even split is sixty scans of thirteen thousand names
+     * for a list that was spelled correctly — and a fuzzy match against a whole
+     * *unsplit* line is a match against text with a number on the front of it,
+     * which is not a question anybody meant to ask.
      */
-    fun parse(text: String, resolve: (String) -> Card?): Parsed {
+    fun parse(
+        text: String,
+        exactly: (String) -> Card?,
+        orNearly: (String) -> Card? = exactly,
+    ): Parsed {
         val main = ArrayList<CardId>()
         val extra = ArrayList<CardId>()
         val side = ArrayList<CardId>()
@@ -52,13 +65,19 @@ object DecklistText {
 
         for (raw in text.lineSequence()) {
             val line = raw.trim().removeSuffix(",").trim()
-            if (line.isEmpty() || isComment(line)) continue
+            if (line.isEmpty()) continue
 
+            // Headings before comments, because the YDK format's own section
+            // markers are `#main`, `#extra` and `!side` — and a `.ydk` opened in
+            // a text editor and pasted straight in is one of the commonest
+            // shapes this will ever be handed. Read as comments, its Extra deck
+            // would arrive in the Main deck.
             val header = headerFor(line)
             if (header != null) {
                 section = header
                 continue
             }
+            if (isComment(line)) continue
 
             // The whole line first, before it is taken apart. "8-Claws Scorpion"
             // and "7 Completed" are cards whose names begin with a number and a
@@ -82,7 +101,7 @@ object DecklistText {
                 continue
             }
 
-            val whole = resolve(line)
+            val whole = exactly(line)
             val copies: Int
             val card: Card
             if (whole != null) {
@@ -90,7 +109,7 @@ object DecklistText {
                 card = whole
             } else {
                 val (count, name) = split(line)
-                val found = resolve(name)
+                val found = orNearly(name)
                 if (found == null) {
                     missing += Missing(name, count)
                     continue
@@ -199,7 +218,7 @@ object DecklistText {
      * has the cards themselves to work out.
      */
     private fun headerFor(line: String): DeckSection? {
-        val cleaned = line.trim().trimEnd(':').trim()
+        val cleaned = line.trim().trimStart('#', '!').trim().trimEnd(':').trim()
             .removeSurrounding("[", "]")
             .removeSurrounding("*")
             .trim()

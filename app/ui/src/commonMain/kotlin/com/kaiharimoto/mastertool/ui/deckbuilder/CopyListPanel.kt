@@ -62,8 +62,17 @@ fun CopyListPanel(state: DeckBuilderState) {
             }
 
             Text(
-                "Counted, headed and in the deck's own order. This program reads " +
-                    "it straight back, and so does everything else that takes a list.",
+                // Names come out of the pool, so a pool that has not been read
+                // yet writes sixty passcodes. Which is a valid decklist and
+                // reads straight back in — and is not what anybody wants to put
+                // in a message.
+                if (state.poolRead) {
+                    "Counted, headed and in the deck's own order. This program reads " +
+                        "it straight back, and so does everything else that takes a list."
+                } else {
+                    "The card database is still opening, so this is coming out as " +
+                        "passcodes. Give it a moment and it will come out as names."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

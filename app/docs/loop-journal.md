@@ -3062,3 +3062,33 @@ A box to copy out of rather than a clipboard button, for the reason the paste
 field is a field: the copy gesture is one every platform already has, and
 reaching for the clipboard programmatically is three different APIs. Plus
 `Save as .txt`, through the same three-outcome write path as everything else.
+
+## 115 · Two questions that were sharing one answer
+
+A sweep over the paste reader, an hour after writing it, with the *largest
+plausible input* frame — sixty lines rather than the four in a test.
+
+**Every line was scanning the whole pool before it was even split.** The
+whole-line check exists to tell `8-Claws Scorpion` from a count and a name, and
+it was going through the same forgiving resolver as everything else — so a
+correctly spelled sixty-card list cost sixty bounded-Levenshtein passes over
+thirteen thousand names before a single line was taken apart. Seconds, for a list
+with nothing wrong with it.
+
+They are two different questions and they now take two different resolvers.
+*Is this line, whole and unsplit, the name of a card* is a dictionary lookup.
+*What did they mean by this* is a search, and it is only asked once a line has
+been split. Separating them is worth the parameter twice over: a fuzzy match
+against an unsplit line is a fuzzy match against text with a number on the front
+of it, which is not a question anybody meant to ask.
+
+**And a pasted `.ydk` was landing in one section.** The format's own markers are
+`#main`, `#extra` and `!side` — which start with exactly the characters this
+treats as comments everywhere else, so they were being skipped and a downloaded
+file's Extra deck arrived in the Main deck. Headings are checked before comments
+now. A comment that merely *starts* with a heading word — `#extra copies to cut
+before the event` — is still a comment, because a heading is one word plus the
+decoration people put round it and nothing else, which was already the rule.
+
+Pasting the contents of a `.ydk` is probably the single commonest way a list will
+ever arrive here, and it was the one shape that quietly did the wrong thing.
