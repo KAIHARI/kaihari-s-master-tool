@@ -50,11 +50,13 @@ class CardNotesTest {
     }
 
     @Test
-    fun tidyingKeepsOnlyTheCardsStillInTheDeck() {
+    fun aNoteIsNeverSweptForBelongingToACardThatLeft() {
+        // There is no tidy, on purpose: taking the last copy out and putting it
+        // back happens constantly while building, and autosave *is* writing the
+        // file, so there is no later moment at which sweeping would be safe.
         val notes = CardNotes.NONE.with(ash, "a").with(maxx, "b")
 
-        assertEquals(setOf(ash), notes.keepingOnly(setOf(ash)).byCard.keys)
-        assertEquals(notes, notes.keepingOnly(setOf(ash, maxx)), "nothing to do is the same object")
+        assertEquals(setOf(ash, maxx), notes.byCard.keys)
     }
 }
 

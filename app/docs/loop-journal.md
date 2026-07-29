@@ -1350,15 +1350,20 @@ program agreeing with something it had just refused.
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **679 tests**, up from 249, plus
-**184 in `:ui`** where there were none — a module that cannot even be compiled in
+`:core` carries the arithmetic for all of it, at **767 tests**, up from 249, plus
+the `:ui` suite where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
 Still open, in the order they are worth doing:
 
-**Dragging a gap along.** A gap is placed from a card's menu or with `g` on the
-card under the cursor (sections 51-54), and moving one is two taps rather than a
-drag. Picking it up and sliding it is the obvious next gesture.
+**Dragging a gap along — closed, not built.** A gap is placed from a card's menu
+or with `g` on the card under the cursor, and moving one is two taps. I went
+looking for the drag three times and every version needs a hit target: the mark
+is two and a half points wide, so grabbing it means claiming a strip of the card
+beside it, which takes the leading edge of a card away from the gesture that
+picks the *card* up. Long press is taken by the card menu. Two taps already
+works, and a gesture that makes an existing one worse is not an improvement. It
+goes here rather than in the backlog until somebody has a better idea than these.
 
 **Siding for an opponent whose file does not say how — deliberately not built.**
 They side from their own plans when the file carries them (section 57), and a
@@ -1724,3 +1729,22 @@ chain semantics fall — which matters more than usual here, because this is a
 module that cannot be compiled or run in the environment it was written in, and
 "I reasoned it through" is a weaker guarantee than "there is no ordering left to
 get wrong".
+
+---
+
+## 74 · A function that turned out to be a wrong idea
+
+`CardNotes.keepingOnly` dropped notes about cards the deck no longer holds,
+written to be called when the file was saved. Nothing called it, which in this
+repository has always meant the same thing: the API disagrees with the program.
+
+It is not that the call site was missing. There is no moment at which it is the
+right thing to do. Autosave *is* writing the file — constantly, seconds after
+every edit — so "sweep on save" and "sweep whenever a card is cut" are the same
+policy wearing a different hat, and the class documentation already said why that
+policy is wrong. Removed, with the reasoning moved into the class where it now
+explains an absence rather than a function.
+
+That makes five: `ShootoutRun.undoGame`, `Board.clear`, `TableState.isEmpty`,
+`SandboxState.returnToHand`/`discard`, and now this. Every one was a plausible
+method nobody needed, and every one was found by noticing nothing called it.

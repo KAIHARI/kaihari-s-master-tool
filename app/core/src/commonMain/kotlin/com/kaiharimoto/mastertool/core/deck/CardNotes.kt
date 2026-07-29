@@ -20,6 +20,13 @@ import kotlinx.serialization.json.contentOrNull
  * is the opposite choice from [Breaks], and for the opposite reason — a gap is
  * about the layout, a note is about the card.
  *
+ * Nothing ever sweeps them. A note about a card no longer in the deck is a few
+ * bytes; a note that did not survive taking the last copy out and putting it back
+ * is a note nobody would trust, and that happens constantly while building. There
+ * was a `keepingOnly` here to be called when the file was written, and it was
+ * removed once it became clear there is no moment at which it is the right thing
+ * to do -- autosave *is* writing the file, all the time.
+ *
  * The original tool wrote `notes: { cards: {}, pairs: {} }` into every file it
  * ever exported and never put anything in either. This fills in the first half.
  */
