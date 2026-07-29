@@ -2741,3 +2741,31 @@ one and both copies draw the arriving screen, so the crossing animates one thing
 into an identical thing and looks like a flicker. The comment sits on the `when`
 rather than on the parameter, because the `when` is where somebody would make the
 mistake.
+
+## 105 · And the screen you just left still took your taps
+
+Written the same hour as the crossing, because the crossing is what created it.
+
+For 150 milliseconds after leaving a screen, that screen is still composed, still
+drawn, and — this is the part — still hit-testable. The arriving screen is on top
+of it, but a screen has no obligation to have something clickable under wherever
+your finger happens to be, and a press that nothing on top claims falls through
+to what is underneath. So a double-tap on a deck tile opens the deck and then,
+150ms later, opens it again. Leave the builder for the library and a tap landing
+in the gap still adds a card to a deck nobody is looking at any more.
+
+None of this was reachable before, because before, screens swapped between two
+frames. **Adding the animation added the window.** Which is the same lesson as
+section 102's, from the other end: this time the new thing did not uncover a
+defect underneath it, it created one directly above it.
+
+The fix could have gone at each route out — five callbacks, five `if the screen
+is still mine` guards. It is at the boundary instead: the departing copy gets a
+`Modifier` that consumes every pointer event on the initial pass, which travels
+parent to child, so nothing below it ever sees a down it would act on. Five
+routes out are five things to remember; the controls behind them are hundreds.
+
+The state it keys off — `showing != screen` — is a snapshot read inside the
+retained composition, so the outgoing copy is invalidated and recomposes into its
+blocked state the instant the target changes, rather than waiting for a
+recomposition it has no other reason to have.

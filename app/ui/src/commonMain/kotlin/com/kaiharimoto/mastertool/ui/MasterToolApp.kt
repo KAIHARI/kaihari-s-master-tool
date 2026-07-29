@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -18,6 +19,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -61,6 +64,22 @@ private const val LEAVE_MS = 150
  * control — the screens either side of this are used with a thumb.
  */
 private const val ARRIVE_SCALE = 0.985f
+
+/**
+ * Swallows every pointer event before anything underneath sees one.
+ *
+ * Consumed on the initial pass, which travels parent to child, so a gesture
+ * detector below never gets a down it is willing to act on. Cheaper and more
+ * complete than disabling controls one at a time, and it lasts exactly as long
+ * as the composition it is attached to.
+ */
+private fun Modifier.ignoresInput(): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+        }
+    }
+}
 
 @Composable
 fun MasterToolApp(deps: AppDependencies) {
@@ -125,49 +144,65 @@ fun MasterToolApp(deps: AppDependencies) {
             label = "screen",
             modifier = Modifier.fillMaxSize(),
         ) { showing ->
+            // A screen on its way out is still drawn, and still takes input, for
+            // as long as it takes to fade. The arriving one is on top but has no
+            // reason to have anything under the finger to swallow a press, so a
+            // second tap where a deck tile just was would open a second deck —
+            // and the builder, on its way to the library, would still add cards
+            // to a deck nobody is looking at. Before there was a crossing there
+            // was no window for any of it.
+            //
+            // Blocked here rather than guarded at each route out, because the
+            // routes out are five and the controls behind them are hundreds.
+            val stale = showing != screen
+
             // The parameter, never the `screen` it was read from: both copies
             // are composed at once during the crossing, and reading the live
             // value would draw the arriving screen twice and animate nothing.
-            when (showing) {
-                Screen.DeckBuilder -> DeckBuilderScreen(
-                    state = builderState,
-                    deps = deps,
-                    layout = layoutState,
-                    updateState = updateState,
-                    onOpenLibrary = { screen = Screen.Library },
-                    onOpenSandbox = { hand ->
-                        // Dealt fresh on the way in. A board left over from twenty
-                        // minutes ago is not the question anybody is asking, and the
-                        // deck may not even be the same deck. Unless a hand came
-                        // with the request, in which case that hand is the question.
-                        sandboxState.open(builderState.deck, hand.ifEmpty { null })
-                        screen = Screen.Sandbox
-                    },
-                )
+            Box(Modifier.fillMaxSize().then(if (stale) Modifier.ignoresInput() else Modifier)) {
+                when (showing) {
+                    Screen.DeckBuilder -> DeckBuilderScreen(
+                        state = builderState,
+                        deps = deps,
+                        layout = layoutState,
+                        updateState = updateState,
+                        onOpenLibrary = { screen = Screen.Library },
+                        onOpenSandbox = { hand ->
+                            // Dealt fresh on the way in. A board left over from
+                            // twenty minutes ago is not the question anybody is
+                            // asking, and the deck may not even be the same deck.
+                            // Unless a hand came with the request, in which case
+                            // that hand is the question.
+                            sandboxState.open(builderState.deck, hand.ifEmpty { null })
+                            screen = Screen.Sandbox
+                        },
+                    )
 
-                Screen.Sandbox -> SandboxScreen(
-                    state = sandboxState,
-                    index = builderState.index,
-                    matChoice = builderState.mat,
-                    onBack = { screen = Screen.DeckBuilder },
-                )
+                    Screen.Sandbox -> SandboxScreen(
+                        state = sandboxState,
+                        index = builderState.index,
+                        matChoice = builderState.mat,
+                        onBack = { screen = Screen.DeckBuilder },
+                    )
 
-                Screen.Library -> DeckLibraryScreen(
-                    deps = deps,
-                    // So a saved list can be held up against the one being worked
-                    // on, which is the question the library is usually opened with.
-                    openDeck = builderState.deck,
-                    openDeckName = builderState.deckName,
-                    format = builderState.format,
-                    // The pool the builder already has. The library needs it only to
-                    // turn three passcodes into three pictures.
-                    index = builderState.index,
-                    onOpenDeck = { id ->
-                        builderState.load(id)
-                        screen = Screen.DeckBuilder
-                    },
-                    onBack = { screen = Screen.DeckBuilder },
-                )
+                    Screen.Library -> DeckLibraryScreen(
+                        deps = deps,
+                        // So a saved list can be held up against the one being
+                        // worked on, which is the question the library is
+                        // usually opened with.
+                        openDeck = builderState.deck,
+                        openDeckName = builderState.deckName,
+                        format = builderState.format,
+                        // The pool the builder already has. The library needs it
+                        // only to turn three passcodes into three pictures.
+                        index = builderState.index,
+                        onOpenDeck = { id ->
+                            builderState.load(id)
+                            screen = Screen.DeckBuilder
+                        },
+                        onBack = { screen = Screen.DeckBuilder },
+                    )
+                }
             }
         }
 
