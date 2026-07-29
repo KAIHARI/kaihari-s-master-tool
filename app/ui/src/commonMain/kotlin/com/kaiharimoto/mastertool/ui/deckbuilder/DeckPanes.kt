@@ -793,6 +793,25 @@ private fun SectionHeader(
                         )
                     }
 
+                    // Only when there are any. A menu entry for taking away
+                    // something nobody has put there is a menu entry that
+                    // teaches you nothing and takes up a line forever.
+                    if (!state.breaksIn(section).isEmpty) {
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text("Close every gap")
+                                    Text(
+                                        "the cards stay where they are",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            },
+                            onClick = { menuOpen = false; state.clearBreaks(section) },
+                        )
+                    }
+
                     HorizontalDivider(Modifier.padding(vertical = 4.dp))
                     MenuHeading("Sort — replaces your order")
                     SortMode.entries.filter { it != SortMode.MANUAL }.forEach { mode ->
