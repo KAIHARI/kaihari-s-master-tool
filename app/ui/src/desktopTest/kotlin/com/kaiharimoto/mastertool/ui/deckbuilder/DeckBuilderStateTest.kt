@@ -166,6 +166,95 @@ class DeckBuilderStateTest {
         assertEquals(setOf(0, 1), state.selection.indices)
     }
 
+    // ---- the deck across the table ------------------------------------------
+
+    @Test
+    fun anOpponentFileBringsItsOwnSidingPlansWithIt() = runTest {
+        // A list downloaded from somebody who plays the deck often arrives with
+        // what they actually side, which beats guessing and is already there.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.loadOpponent()
+        advanceUntilIdle()
+
+        assertEquals(setOf("Snake-Eye"), state.opponentPlans.keys)
+        assertFalse(state.opponentSided)
+    }
+
+    @Test
+    fun aPlainOpponentFileOffersNothingRatherThanSomethingInvented() = runTest {
+        val plain = ImportedFile("meta.ydk", "#main\n14558127\n23434538\n#extra\n!side\n")
+        val state = builderState(testDependencies(StubFileAccess(plain)))
+        state.loadOpponent()
+        advanceUntilIdle()
+
+        assertTrue(state.opponentPlans.isEmpty())
+    }
+
+    @Test
+    fun theirDeckChangesWhenTheySide() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.loadOpponent()
+        advanceUntilIdle()
+        val before = state.opponentDeck
+
+        state.sideOpponent(state.opponentPlans.getValue("Snake-Eye"), goingFirst = true)
+
+        assertTrue(state.opponentSided)
+        assertTrue(state.opponentDeck != before, "their list is not the one it was")
+    }
+
+    @Test
+    fun theirHandIsDealtAgainWhenTheirDeckChanges() = runTest {
+        // The same trap that made your own side re-deal: a hand already on the
+        // table came off the list they were playing a moment ago.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.loadOpponent()
+        advanceUntilIdle()
+        val side = requireNotNull(state.theirOpening).goingFirst
+
+        state.sideOpponent(state.opponentPlans.getValue("Snake-Eye"), goingFirst = true)
+
+        assertEquals(side, state.theirOpening?.goingFirst, "same side of the die roll")
+        assertTrue(
+            state.theirOpening!!.cards.all { it in state.opponentDeck.main },
+            "dealt from the list they are actually playing",
+        )
+    }
+
+    @Test
+    fun theirListGoesBackForGameOneOfTheNextTrial() = runTest {
+        // Leaving them sided would compare your opening list against their
+        // game-two list, which is a match that never happens.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(40).forEach { state.addCard(it) }
+        state.loadOpponent()
+        advanceUntilIdle()
+        val registered = state.opponentDeck
+
+        state.startRun(trials = 3)
+        state.judgeShootout(playable = true)
+        state.sideOpponent(state.opponentPlans.getValue("Snake-Eye"), goingFirst = true)
+        assertTrue(state.opponentSided)
+
+        // Game two judged, so the next deal is game one of trial two.
+        state.judgeShootout(playable = true)
+
+        assertFalse(state.opponentSided)
+        assertEquals(registered, state.opponentDeck)
+    }
+
+    @Test
+    fun puttingTheirListBackWithNothingSidedIsHarmless() = runTest {
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        state.loadOpponent()
+        advanceUntilIdle()
+        val before = state.opponentDeck
+
+        state.unsideOpponent()
+
+        assertEquals(before, state.opponentDeck)
+    }
+
     // ---- shootout runs -----------------------------------------------------
 
     @Test

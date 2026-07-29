@@ -264,7 +264,62 @@ private fun RunPrompt(state: DeckBuilderState, run: ShootoutRun) {
             else -> Unit
         }
     }
+
+    if (run.nextIsSided) TheySideToo(state)
 }
+
+/**
+ * What the deck across the table does between games.
+ *
+ * Only offered when their own file carries the answer. A `.ydkx` written by the
+ * desktop tool keeps that deck's siding plans in it, so a list downloaded from
+ * somebody who plays the deck often arrives with what they actually side — which
+ * is a far better answer than a guess, and it is already in the file.
+ *
+ * When the file says nothing, this says nothing. Inventing their fifteen would
+ * be putting a made-up board across the table and then drawing conclusions from
+ * how your hand fared against it.
+ */
+@Composable
+private fun TheySideToo(state: DeckBuilderState) {
+    if (state.opponentPlans.isEmpty()) return
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (state.opponentSided) "THEY SIDED" else "THEY SIDE",
+            style = tacticalStyle(),
+            color = if (state.opponentSided) {
+                MasterToolPalette.Success
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+
+        if (state.opponentSided) {
+            TextButton(onClick = { state.unsideOpponent() }) { Text("Put their list back") }
+            return@Row
+        }
+
+        state.opponentPlans.values.take(MAX_OPPONENT_PLANS).forEach { plan ->
+            TextButton(
+                onClick = {
+                    // Against you, so the half of their plan that matters is the
+                    // one for the side of the die roll they are on -- which is
+                    // the opposite of yours.
+                    state.sideOpponent(plan, goingFirst = !state.youGoFirst)
+                },
+            ) {
+                Text(plan.deckName.ifBlank { "their plan" })
+            }
+        }
+    }
+}
+
+/** Enough to choose from without the row becoming a menu. */
+private const val MAX_OPPONENT_PLANS = 4
 
 /**
  * The run as a score sheet.

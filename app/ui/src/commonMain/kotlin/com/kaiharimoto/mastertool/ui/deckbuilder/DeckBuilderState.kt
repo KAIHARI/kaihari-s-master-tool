@@ -416,6 +416,26 @@ class DeckBuilderState(
     var opponentName by mutableStateOf("")
         private set
 
+    /**
+     * The plans the opponent's own file carries, if it carries any.
+     *
+     * A `.ydkx` written by the desktop tool keeps that deck's siding plans in
+     * it, which means a list downloaded from somebody who plays the deck often
+     * arrives with what they side — against you, among others. That is a far
+     * better answer to "what does their game two look like" than guessing, and
+     * it costs nothing: it is already in the file.
+     *
+     * Empty for a plain `.ydk`, and for a `.ydkx` nobody recorded anything in.
+     */
+    var opponentPlans by mutableStateOf<Map<String, SidingPattern>>(emptyMap())
+        private set
+
+    /** Whether their deck is currently the list they registered. */
+    var opponentSided by mutableStateOf(false)
+        private set
+
+    private var opponentRegistered by mutableStateOf(Deck.EMPTY)
+
     var yourOpening by mutableStateOf<OpeningHand?>(null)
         private set
 
@@ -681,6 +701,9 @@ class DeckBuilderState(
             val file = deps.fileAccess.importDeck() ?: return@launch
             val parsed = YdkCodec.parse(file.content)
             opponentDeck = parsed.document.deck
+            opponentRegistered = parsed.document.deck
+            opponentPlans = SidingCodec.read(parsed.document.extended)
+            opponentSided = false
             opponentName = file.name.substringBeforeLast('.').ifBlank { "Opponent" }
             matchup = MatchupRecord()
             // A run is a run against one deck. Carrying it across to another
@@ -724,13 +747,51 @@ class DeckBuilderState(
             shootoutRun = next
             // A finished run stops dealing. The last hand stays on the table to
             // be looked at, and the report is the thing worth reading now.
-            if (!next.finished) dealShootout(next.suggestedFirst)
+            if (!next.finished) {
+                // Game one is pre-side for both decks, not just yours. Leaving
+                // them sided into the next trial would compare your opening
+                // list against their game-two list, which is a match that never
+                // happens.
+                if (!next.nextIsSided) unsideOpponent()
+                dealShootout(next.suggestedFirst)
+            }
             return
         }
 
         matchupBeforeVerdict = matchup
         matchup = matchup.judged(wentFirst, playable)
         dealShootout(youGoFirst)
+    }
+
+    /**
+     * Sides the deck across the table, using a plan its own file carries.
+     *
+     * Their hand is dealt again straight away, because a hand already on the
+     * table came off the list they were playing a moment ago — the same trap
+     * that made your own side re-deal, and it would be just as invisible.
+     */
+    fun sideOpponent(pattern: SidingPattern, goingFirst: Boolean) {
+        val result = SidingEngine.apply(opponentDeck, pattern, goingFirst)
+        opponentDeck = result.deck
+        opponentSided = true
+        theirOpening = theirOpening?.let {
+            HandSimulator.deal(opponentDeck.main, it.goingFirst, Random.Default)
+        }
+        val trouble = result.problems.size
+            .takeIf { it > 0 }
+            ?.let { " ($it card${if (it == 1) "" else "s"} could not be swapped)" }
+            .orEmpty()
+        showToast("They sided for ${pattern.deckName}$trouble.")
+    }
+
+    /** Puts their registered list back, for the start of the next trial. */
+    fun unsideOpponent() {
+        if (!opponentSided) return
+        opponentDeck = opponentRegistered
+        opponentSided = false
+        theirOpening = theirOpening?.let {
+            HandSimulator.deal(opponentDeck.main, it.goingFirst, Random.Default)
+        }
     }
 
     /** Puts the count right after a misclick. The hand itself is long gone. */
