@@ -3208,3 +3208,38 @@ been asked. That is a rule of thumb worth keeping: **before adding a thing to
 store, look at what is already stored.** The siding plans were a matchup diary
 and turned out to describe a deck; the version history was an undo of last resort
 and turned out to describe what a deck *is*.
+
+## 120 · Looking at the whole thing for the first time
+
+Every visual decision in this loop has been made from prototypes of one part —
+a card, a menu, a palette — and from reasoning about the rest. The app itself
+has never been on a screen anybody could look at, here or anywhere.
+
+So: the whole builder, rebuilt as HTML from the actual constants. The real frame
+palette out of `CardFrames.kt`, the real `AttributeTint` of 0.26, the real mat
+weave and vignette, zero gutter and a three-point corner in the deck panes and a
+four-point gap in the pool, ten columns, forty cards.
+
+**The first render was wrong and the mistake was mine.** I gave the name band 24%
+of the card's height and the art window 46%. The real numbers are in units of the
+card's *width* — `NAME_BAND = 23f` out of `96f` — and a card is 59:86, so the name
+band is 16.4% of the height and the art gets about 71%. My mock had built a
+different card and I was about to draw conclusions from it. Worth writing down
+because it is the exact failure mode a prototype is supposed to prevent: a
+picture is only evidence if it is a picture *of the thing*.
+
+Corrected, the design holds up. Forty cards at zero gutter genuinely read as one
+arrangement rather than as a table of rows, and the pool's four-point gap beside
+it reads as a box you draw from — the two treatments together say more than
+either does alone. The attribute tint does its job: a screen of Effect-monster
+orange still has warm and cold and dark in it.
+
+One thing I went looking for turned out to be already handled. The level pips are
+drawn near-white, and the Synchro frame is near-white — a pip nobody can count.
+The code rings each pip in that frame's own contrast-checked ink, with a comment
+saying *gold on the gold Normal frame is a star nobody can count*. Somebody had
+already asked the question.
+
+No change came out of this section, and that is the finding. Recorded rather than
+skipped, because a review that only gets written up when it finds something is a
+review nobody can trust the silence of.
