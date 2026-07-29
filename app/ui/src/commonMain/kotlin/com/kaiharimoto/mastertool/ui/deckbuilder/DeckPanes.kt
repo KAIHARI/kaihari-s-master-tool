@@ -578,8 +578,16 @@ private fun DeckCard(
                 // at this size a badge would be a second count to misread.
                 if (state.noteOn(id) != null) {
                     Canvas(Modifier.matchParentSize()) {
-                        val fold = 13.dp.toPx()
-                        val inset = 2.dp.toPx()
+                        // A fraction of the card rather than a fixed size, in
+                        // the same ninety-sixths the face and the badges use.
+                        // A shape that covers area has to shrink when the card
+                        // does; an *edge* -- the printed border, the selection
+                        // ring, this fold's own crease -- does not, because a
+                        // hairline reads as a hairline at any size and a
+                        // proportional one reads as a smudge.
+                        val unit = size.width / 96.dp.toPx()
+                        val fold = 13.dp.toPx() * unit
+                        val inset = 2.dp.toPx() * unit
                         val right = size.width - inset
                         drawPath(
                             Path().apply {

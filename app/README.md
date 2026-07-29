@@ -99,6 +99,14 @@ what gets written back to `.ydk`, so a sort that only reordered the display woul
 leave the file disagreeing with the deck from then on. Being an edit also means
 undo puts it back.
 
+**A shape drawn on a card scales with it; an edge does not.** The face, the
+badges and the note fold are all fractions of the card's own width, so turning
+the density up shrinks what is written on a card along with the card — at twenty
+columns a fixed 22dp badge covered over half of one. Borders, creases and the
+card's printed edge stay put: a hairline reads as a hairline at any size, and a
+proportional one reads as a smudge. Below 52dp nothing is written on a card at
+all, because at that size it is a swatch and a badge is a disc over the art.
+
 **Cards touch, and a resize zooms them.** The gutter is zero by default: a gap is
 what makes forty cards read as forty tiles in a piece of software rather than as
 one arrangement on a table. What keeps them legible at zero is the card's own
