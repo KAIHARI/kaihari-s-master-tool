@@ -2560,11 +2560,30 @@ all, which is what `isYdkx` means and is correct.
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus
-**215 in `:ui`** where there were none — a module that cannot even be compiled in
-the environment this was written in.
+`:core` carries the arithmetic for all of it, at **913 tests**, up from 249, plus
+**258 in `:ui`** where there were none — a module that cannot even be compiled in
+the environment this was written in. Six scripts under `tools/` stand in for the
+compiler that is not here, and each of them exists because of a specific mistake
+that cost a ten-minute round trip.
 
 Still open, in the order they are worth doing:
+
+**Every card composes a `BoxWithConstraints` — a known, deliberate cost.** The
+drawn face needs its own width to size the name and the footer, and that means a
+subcomposition per visible card: roughly a hundred of them with three panes and a
+pool full of results. It has not been measured and there is no way to measure it
+here. The fix — measure at a fixed size, scale with a layer — is a page of blind
+Compose whose failure mode is every card rendering at the wrong size, which is
+exactly the sort of thing CI cannot see and a screenshot would have caught in a
+second. So it is written down rather than attempted, and it is the first place to
+look if the tablet ever feels heavy.
+
+**A lamp over the pane — closed, not built.** A radial shade, brighter where the
+light falls and deeper in the far corner, reads beautifully in a prototype and
+lays a 20% black wash over the bottom-right cards. That walks their names through
+the 4.5:1 `CardFrameContrastTest` guarantees — and the test would still pass,
+because it checks the palette rather than the palette under a lamp. A small
+visual gain that turns an existing guarantee into a lie is the wrong trade.
 
 **Dragging a gap along — closed, not built.** A gap is placed from a card's menu
 or with `g` on the card under the cursor, and moving one is two taps. I went
