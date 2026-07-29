@@ -259,6 +259,12 @@ checked rather than taken: nothing is watching sixty lines go past, and every
 line that was never a card at all still has a nearest neighbour among thirteen
 thousand.
 
+And back out the same way. The deck goes into a box you copy from — counted,
+headed, in the deck's own order — because a list belongs in a message and every
+other builder hands you a file. What it writes, it reads: the round trip is the
+test, and a passcode the database has never heard of goes out as its number and
+comes back as the same card in the same section.
+
 Search finds cards by name, forgivingly, and completes the name as you type it.
 When nothing is *called* what you typed, it tells you so and shows the cards
 that *say* it instead.

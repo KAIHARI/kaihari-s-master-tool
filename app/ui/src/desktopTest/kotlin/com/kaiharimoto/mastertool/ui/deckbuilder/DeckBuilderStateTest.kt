@@ -1871,6 +1871,7 @@ class DeckBuilderStateTest {
             Overlay.ISSUES -> issuesVisible = true
             Overlay.HISTORY -> historyVisible = true
             Overlay.PASTE -> pasteVisible = true
+            Overlay.COPY -> copyVisible = true
             Overlay.PILE_NAME -> pileTarget = Pile(main, 0, "", 3)
         }
     }

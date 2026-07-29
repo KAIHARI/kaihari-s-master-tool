@@ -3030,3 +3030,35 @@ would be quietly deciding the contrast of all four themes — including the ligh
 one — from a file nobody would think to check. Contrast in this program is
 checked at build time by `CardFrameContrastTest`; a wrapper that stepped outside
 that would be a guarantee with a hole in it.
+
+## 114 · And back out the same way
+
+Reading a pasted list was half a feature. The half that gets used more is the
+other one: somebody asks what you played and the answer belongs in the message,
+not in a file attached to it.
+
+`DecklistText.write`, and the tests for it are all one test wearing different
+hats — **what it writes, it reads back**. That property is what makes the writer
+worth trusting, and it is also what forced the two decisions in it:
+
+**A counted list cannot promise the arrangement back.** Three copies gathered
+onto one line were not necessarily next to each other, and no amount of care
+changes that. So the round trip is asserted as *multisets*, and the test says so
+in a comment rather than quietly comparing sorted lists and calling it equality.
+What is kept is first appearance, so whatever an engine starts on still leads its
+section — the closest a counted list gets to an arrangement it was written from.
+
+**And a passcode needs no database.** A card the pool has never heard of used to
+be a hole in the trip: it went out as a number and came back as a name nothing
+was called. The reader takes an all-digit line as a passcode directly now, which
+makes the trip total — every card in the deck goes out and comes back, named or
+not. Its section survives too, because the headings are written even though most
+pasted lists in the wild have none.
+
+The deck's own name goes out as a `#` comment, which the reader skips. A name is
+not part of a decklist and reading one back as a card would be absurd.
+
+A box to copy out of rather than a clipboard button, for the reason the paste
+field is a field: the copy gesture is one every platform already has, and
+reaching for the clipboard programmatically is three different APIs. Plus
+`Save as .txt`, through the same three-outcome write path as everything else.

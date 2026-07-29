@@ -3,6 +3,7 @@ package com.kaiharimoto.mastertool.core.ydk
 import com.kaiharimoto.mastertool.core.TestCards
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
+import com.kaiharimoto.mastertool.core.model.Deck
 import com.kaiharimoto.mastertool.core.search.TextMatching
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -236,5 +237,131 @@ class DecklistTextTest {
 
         assertTrue(out.deck.isEmpty)
         assertEquals(1, out.missing.size)
+    }
+}
+
+/**
+ * The other half: writing the text people paste to each other.
+ *
+ * Every test here is really the same test — that the writer and the reader agree
+ * — because a decklist that survives a round trip is the only kind worth handing
+ * to somebody.
+ */
+class DecklistWritingTest {
+
+    private val pool = TestCards.all.associateBy { it.id }
+    private fun nameOf(id: CardId): String? = pool[id]?.name
+    private fun resolve(name: String): Card? =
+        TestCards.all.firstOrNull { TextMatching.normalize(it.name) == TextMatching.normalize(name) }
+
+    private val ash = TestCards.ashBlossom.id
+    private val maxx = TestCards.maxxC.id
+    private val pot = TestCards.pot.id
+    private val accesscode = TestCards.accesscode.id
+
+    private val deck = Deck(
+        main = List(3) { ash } + List(2) { maxx } + List(2) { pot },
+        extra = List(2) { accesscode },
+        side = List(3) { pot },
+    )
+
+    private fun written(d: Deck = deck, name: String = "Snake-Eye") =
+        DecklistText.write(d, name, ::nameOf)
+
+    private fun List<CardId>.tally(): Map<CardId, Int> = groupingBy { it }.eachCount()
+
+    @Test
+    fun itReadsBackAsTheSameDeck() {
+        val there = written()
+        val back = DecklistText.parse(there, ::resolve).deck
+
+        // As multisets: a counted list cannot promise the arrangement back, and
+        // pretending otherwise is what this test exists to not do.
+        assertEquals(deck.main.tally(), back.main.tally())
+        assertEquals(deck.extra.tally(), back.extra.tally())
+        assertEquals(deck.side.tally(), back.side.tally())
+    }
+
+    @Test
+    fun theSectionsAreNamedTheWayItReadsThemBack() {
+        val out = written()
+
+        assertTrue("Main Deck" in out)
+        assertTrue("Extra Deck" in out)
+        assertTrue("Side Deck" in out)
+    }
+
+    @Test
+    fun copiesAreCountedRatherThanRepeated() {
+        val out = written()
+
+        assertTrue("3 Ash Blossom & Joyous Spring" in out, out)
+        assertEquals(1, out.lines().count { it.contains("Ash Blossom") })
+    }
+
+    @Test
+    fun theDeckNameGoesOutAsAComment() {
+        // A name is not part of a decklist, and reading one back in as a card
+        // would be absurd.
+        val out = written()
+
+        assertTrue(out.startsWith("# Snake-Eye"))
+        assertTrue(DecklistText.parse(out, ::resolve).missing.isEmpty())
+    }
+
+    @Test
+    fun aDeckWithNoNameStillWrites() {
+        val out = written(name = "  ")
+
+        assertFalse(out.startsWith("#"))
+        assertTrue("Main Deck" in out)
+    }
+
+    @Test
+    fun anEmptySectionIsLeftOutRatherThanWrittenEmpty() {
+        val out = written(Deck(main = List(3) { ash }))
+
+        assertTrue("Main Deck" in out)
+        assertFalse("Extra Deck" in out)
+        assertFalse("Side Deck" in out)
+    }
+
+    @Test
+    fun anEmptyDeckIsEmptyText() {
+        assertEquals("", written(Deck(), name = ""))
+    }
+
+    @Test
+    fun aPasscodeThePoolHasNeverHeardOfSurvivesTheRoundTrip() {
+        // This is what makes the trip total. A card with no name is written as
+        // its number, and a number needs no database to be read back.
+        val stranger = CardId(99999999)
+        val out = DecklistText.write(Deck(main = List(2) { stranger }), "Odd", ::nameOf)
+
+        assertTrue("2 99999999" in out, out)
+        assertEquals(List(2) { stranger }, DecklistText.parse(out, ::resolve).deck.main)
+    }
+
+    @Test
+    fun aStrangerInTheExtraDeckStaysInTheExtraDeck() {
+        // Without the heading there would be nothing to say where it goes: a
+        // passcode alone cannot say what frame it has.
+        val stranger = CardId(99999999)
+        val out = DecklistText.write(Deck(extra = listOf(stranger)), "Odd", ::nameOf)
+
+        assertEquals(listOf(stranger), DecklistText.parse(out, ::resolve).deck.extra)
+    }
+
+    @Test
+    fun theOrderOfFirstAppearanceIsKept() {
+        // As close as a counted list gets to an arrangement: whatever the engine
+        // starts on still leads its section.
+        val out = DecklistText.write(
+            Deck(main = listOf(pot, ash, pot, ash, ash)),
+            "Order",
+            ::nameOf,
+        )
+
+        assertTrue(out.indexOf("Pot of Prosperity") < out.indexOf("Ash Blossom"), out)
     }
 }

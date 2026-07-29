@@ -66,6 +66,22 @@ object DecklistText {
             // asking whether the line is already a card is the only thing that
             // tells the two apart. "3 8-Claws Scorpion" still splits, because
             // the whole of it is not a card.
+            // A line of nothing but digits is a passcode, and a passcode needs
+            // no database to be understood. This is what makes the round trip
+            // total: a card the pool has never heard of is written back out as
+            // its number, and read back in as the same card in the same place.
+            val (bareCount, bareName) = split(line)
+            val passcode = bareName.takeIf { it.length >= 5 && it.all(Char::isDigit) }?.toIntOrNull()
+            if (passcode != null) {
+                val into = when (section ?: DeckSection.MAIN) {
+                    DeckSection.MAIN -> main
+                    DeckSection.EXTRA -> extra
+                    DeckSection.SIDE -> side
+                }
+                repeat(bareCount) { into += CardId(passcode) }
+                continue
+            }
+
             val whole = resolve(line)
             val copies: Int
             val card: Card
@@ -96,6 +112,38 @@ object DecklistText {
         }
 
         return Parsed(Deck(main = main, extra = extra, side = side), missing)
+    }
+
+    /**
+     * Writes [deck] out as the text people actually paste to each other.
+     *
+     * The inverse of [parse], and tested against it: anything this writes, that
+     * reads back as the same deck. Not as the same *arrangement* — a text list
+     * counts copies, which is what everyone means by one, and three copies
+     * gathered onto one line is three copies that were not necessarily next to
+     * each other. Order is by first appearance, so the card an engine starts on
+     * still leads its section.
+     *
+     * The deck's name goes out as a comment, because a name is not part of a
+     * decklist and reading one back in as a card would be absurd.
+     */
+    fun write(deck: Deck, name: String, cardName: (CardId) -> String?): String = buildString {
+        if (name.isNotBlank()) appendLine("# ${name.trim()}")
+
+        DeckSection.entries.forEach { section ->
+            val ids = deck[section]
+            if (ids.isEmpty()) return@forEach
+
+            if (isNotEmpty()) appendLine()
+            appendLine("${section.displayName} Deck")
+
+            // First appearance, counted. `distinct()` keeps the order the deck
+            // is in, which is the closest a counted list can get to the
+            // arrangement it was written from.
+            ids.distinct().forEach { id ->
+                appendLine("${ids.count { it == id }} ${cardName(id) ?: id.value}")
+            }
+        }
     }
 
     /**

@@ -218,6 +218,10 @@ fun DeckBuilderTopBar(
                     onClick = { menuOpen = false; state.pasteVisible = true },
                 )
                 DropdownMenuItem(
+                    text = { Text("Copy the list…") },
+                    onClick = { menuOpen = false; state.copyVisible = true },
+                )
+                DropdownMenuItem(
                     text = { Text("Export…") },
                     onClick = { menuOpen = false; state.exportToFile() },
                 )

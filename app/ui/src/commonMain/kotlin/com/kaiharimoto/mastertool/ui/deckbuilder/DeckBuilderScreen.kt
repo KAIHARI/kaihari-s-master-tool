@@ -316,6 +316,10 @@ fun DeckBuilderScreen(
         PasteListPanel(state)
     }
 
+    if (state.copyVisible) {
+        CopyListPanel(state)
+    }
+
     state.pileTarget?.let { PileNamePanel(state, it) }
 
     if (state.notesVisible) {

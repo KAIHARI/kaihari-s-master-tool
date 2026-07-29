@@ -98,6 +98,7 @@ enum class Overlay {
     ISSUES,
     HISTORY,
     PASTE,
+    COPY,
     PILE_NAME,
 }
 
@@ -613,6 +614,7 @@ class DeckBuilderState(
         Overlay.ISSUES -> issuesVisible
         Overlay.HISTORY -> historyVisible
         Overlay.PASTE -> pasteVisible
+        Overlay.COPY -> copyVisible
         Overlay.PILE_NAME -> pileTarget != null
     }
 
@@ -642,6 +644,7 @@ class DeckBuilderState(
             Overlay.ISSUES -> issuesVisible = false
             Overlay.HISTORY -> historyVisible = false
             Overlay.PASTE -> pasteVisible = false
+            Overlay.COPY -> copyVisible = false
             Overlay.PILE_NAME -> pileTarget = null
         }
     }
@@ -704,6 +707,9 @@ class DeckBuilderState(
 
     /** The field a decklist gets pasted into. */
     var pasteVisible by mutableStateOf(false)
+
+    /** The field the deck is put in front of you to be copied out of. */
+    var copyVisible by mutableStateOf(false)
 
     var testHandVisible by mutableStateOf(false)
 
@@ -2360,6 +2366,27 @@ class DeckBuilderState(
             val extension = if (carried != null) "ydkx" else "ydk"
             val name = "${deckName.ifBlank { "deck" }}.$extension"
             if (told(deps.fileAccess.exportDeck(name, text), name)) {
+                showToast("Exported $name.")
+            }
+        }
+    }
+
+    /**
+     * The deck as the text people paste to each other.
+     *
+     * Held rather than written: the panel puts it in front of you to copy, which
+     * is the same reasoning the paste field is built on — the copy gesture is
+     * one every platform already has, and reaching for the clipboard is a
+     * different API on each of the three.
+     */
+    val asText: String
+        get() = DecklistText.write(deck, deckName) { index.byId(it)?.name }
+
+    /** The same thing, as a file, for somebody who wants it as one. */
+    fun exportAsText() {
+        scope.launch {
+            val name = "${deckName.ifBlank { "deck" }}.txt"
+            if (told(deps.fileAccess.exportDeck(name, asText), name)) {
                 showToast("Exported $name.")
             }
         }
