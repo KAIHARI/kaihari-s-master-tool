@@ -2375,6 +2375,41 @@ stars needed, for exactly the same reason.
 
 ---
 
+## 95 · The one verb that took your work with no way back
+
+Found by reading the restore wiring and following what `onOpenDeck` actually
+does. Opening a saved deck from the library calls `load`, and `load` did two
+silent things.
+
+**It cancelled a pending autosave rather than writing it.** Edit a saved deck,
+go straight to the library, open something else, and the last second and a half
+of work is gone — no message, and the deck on disk quietly disagrees with what
+was on screen a moment ago.
+
+**And it replaced a never-saved deck outright.** What makes this one clear rather
+than arguable is that `newDeck` has always offered that deck back — it captures
+`openDeck()` and puts it in the toast. `load` does exactly the same thing to
+exactly the same work and offered nothing. The program already knew this
+mattered; one of the two doors just had no handle on the inside.
+
+Both fixed: pending changes are written before the deck is let go of, and a
+never-saved deck comes back from the toast with its name, its gaps, its notes and
+its cloth, still unsaved, exactly as it was. Only when there is something to lose
+— a saved deck is on disk either way, and an empty one is not work, so neither
+raises a word.
+
+The frame that found it is worth keeping: **follow a new call all the way down
+and ask what the thing at the bottom does to what was already there.** The
+restore path was new; `load` was not, and had been quietly doing this since the
+library was written.
+
+And the sixth lint paid for itself the same hour it was written. Two of the tests
+for this reached for `state.toast = null`, and `toast` has a private setter too.
+It caught both before the push — which is the entire point of it, and the first
+time one of these scripts has caught a mistake it was not written for.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus

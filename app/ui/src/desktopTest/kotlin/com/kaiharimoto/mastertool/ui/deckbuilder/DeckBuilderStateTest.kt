@@ -2458,6 +2458,104 @@ class DeckBuilderStateTest {
         assertEquals(before, state.selection)
     }
 
+    // ---- putting one deck down to pick another up --------------------------
+
+    @Test
+    fun openingADeckWritesWhatWasStillPendingOnTheLastOne() = runTest {
+        // The autosave sits for a second and a half. Going straight to the
+        // library used to cancel it, which lost the edit without saying so.
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(5).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+        val first = requireNonNull(state.deckId)
+
+        state.removeOne(TestPool.many(5).first(), main)
+        val edited = state.deck
+
+        state.newDeck()
+        TestPool.many(3).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+        val second = requireNonNull(state.deckId)
+
+        state.load(first)
+        advanceUntilIdle()
+
+        assertEquals(edited, state.deck, "the pending edit reached the disk")
+        assertEquals(edited, assertNotNull(deps.deckRepository.byId(first)).entry.deck)
+        assertNotNull(deps.deckRepository.byId(second))
+    }
+
+    @Test
+    fun openingADeckOffersBackTheOneThatWasNeverSaved() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+        val saved = requireNonNull(state.deckId)
+
+        state.newDeck()
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.rename("Work in progress")
+        state.chooseMat(MatChoice.WINE)
+        val unsaved = state.deck
+
+        state.load(saved)
+        advanceUntilIdle()
+        assertEquals(4, state.deck.main.size, "the saved deck opened")
+
+        assertNotNull(state.toast?.undo, "there was something to lose").invoke()
+
+        assertEquals(unsaved, state.deck)
+        assertEquals("Work in progress", state.deckName)
+        assertEquals(MatChoice.WINE, state.mat, "and everything that came with it")
+        assertNull(state.deckId, "still never saved, which is what it was")
+    }
+
+    @Test
+    fun openingADeckSaysNothingWhenThereIsNothingToLose() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+        val first = requireNonNull(state.deckId)
+
+        state.newDeck()
+        TestPool.many(3).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+
+        // `toast` cannot be cleared from here and should not be: what is being
+        // asked is whether opening raised a *new* one, which the id answers.
+        val before = state.toast?.id
+        state.load(first)
+        advanceUntilIdle()
+
+        assertEquals(before, state.toast?.id, "a saved deck is on disk either way")
+    }
+
+    @Test
+    fun openingADeckOverAnEmptyOneSaysNothing() = runTest {
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+        val first = requireNonNull(state.deckId)
+
+        state.newDeck()
+        val before = state.toast?.id
+
+        state.load(first)
+        advanceUntilIdle()
+
+        assertEquals(before, state.toast?.id, "an empty deck is not work")
+    }
+
     private fun requireNonNull(value: String?): String =
         value ?: error("nothing was exported")
 }

@@ -1981,9 +1981,31 @@ class DeckBuilderState(
         savedSnapshot = SavedSnapshot(written, name, notes, carried)
     }
 
+    /**
+     * Opens a saved deck, and does not quietly eat the one being put down.
+     *
+     * Two things were wrong here and both were silent. A pending autosave was
+     * *cancelled* rather than written, so editing a saved deck and going
+     * straight to the library lost the last second and a half of it. And a deck
+     * that had never been saved was replaced outright — `newDeck` has always
+     * offered to put that back, and this, which does exactly the same thing to
+     * exactly the same work, offered nothing.
+     */
     fun load(id: String) {
         scope.launch {
             val stored = deps.deckRepository.byId(id) ?: return@launch
+
+            // Written, not dropped. The deck being let go of is saved, so the
+            // edit that is still sitting in the debounce belongs on disk.
+            autosaveJob?.cancel()
+            deckId?.takeIf { saveStatus == SaveStatus.UNSAVED_CHANGES }?.let { writeToDisk(it) }
+
+            // Only worth offering back when there is something to lose: a saved
+            // deck is on disk either way, and a toast about it would be noise.
+            val was = openDeck()
+            val losing = was.id == null && !deck.isEmpty
+            val hadDeck = deck
+
             releaseOpenDeck()
             deck = stored.entry.deck
             registeredDeck = stored.entry.deck
@@ -2011,6 +2033,24 @@ class DeckBuilderState(
             undoStack.clear()
             redoStack.clear()
             stamp()
+
+            if (losing) {
+                showToast(
+                    "Opened \"${stored.entry.name}\". The deck you had was never saved.",
+                    // Not through the undo stack: that has just been cleared, and
+                    // what is being offered back is the deck rather than its
+                    // history. Putting it back leaves it unsaved, exactly as it
+                    // was, and the toolbar goes on saying so.
+                    undo = {
+                        deck = hadDeck
+                        registeredDeck = hadDeck
+                        reopen(was)
+                        undoStack.clear()
+                        redoStack.clear()
+                        stamp()
+                    },
+                )
+            }
         }
     }
 
