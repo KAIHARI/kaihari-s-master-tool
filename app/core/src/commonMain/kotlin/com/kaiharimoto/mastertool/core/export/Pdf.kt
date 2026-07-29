@@ -168,7 +168,12 @@ object Pdf {
         if (rounded == rounded.toInt().toFloat()) return rounded.toInt().toString()
         val whole = rounded.toInt()
         val fraction = kotlin.math.abs(kotlin.math.round((rounded - whole) * 100f).toInt())
+        val digits = fraction.toString().padStart(2, '0').trimEnd('0')
         val sign = if (rounded < 0 && whole == 0) "-" else ""
-        return "$sign$whole.${fraction.toString().padStart(2, '0').trimEnd('0')}"
+        // "12." is not a number, and a reader that meets one stops drawing the
+        // page. Reachable only through float error, which is exactly the kind of
+        // thing that would happen once, on somebody else's deck.
+        if (digits.isEmpty()) return "$sign$whole"
+        return "$sign$whole.$digits"
     }
 }

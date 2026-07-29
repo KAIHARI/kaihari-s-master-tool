@@ -113,6 +113,19 @@ class PdfTest {
     }
 
     @Test
+    fun noNumberEverEndsInADecimalPoint() {
+        // "12." is not a number and a reader that meets one stops drawing the
+        // page, so it is worth being sure across the range that can occur.
+        var value = -900f
+        while (value <= 900f) {
+            val written = Pdf.number(value)
+            assertTrue(!written.endsWith("."), "$value became $written")
+            assertTrue("E" !in written && "e" !in written, "$value became $written")
+            value += 0.01f
+        }
+    }
+
+    @Test
     fun drawingFromTheTopPutsTheFirstRowNearTheTopOfThePage() {
         // The one thing a caller has to be able to trust: y grows downwards,
         // and PDF's own axis does not.
