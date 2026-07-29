@@ -2461,9 +2461,11 @@ class DeckBuilderStateTest {
     // ---- putting one deck down to pick another up --------------------------
 
     @Test
-    fun openingADeckWritesWhatWasStillPendingOnTheLastOne() = runTest {
-        // The autosave sits for a second and a half. Going straight to the
-        // library used to cancel it, which lost the edit without saying so.
+    fun puttingADeckDownWritesWhatWasStillPendingOnIt() = runTest {
+        // The autosave sits for a second and a half, and every path that swaps
+        // the open deck used to cancel it rather than write it. This one goes
+        // through `newDeck`, which was the first to prove it: the edit was gone
+        // before `load` was ever reached.
         val deps = testDependencies()
         val state = builderState(deps)
         TestPool.many(5).forEach { state.addCard(it) }

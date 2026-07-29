@@ -2384,7 +2384,8 @@ silent things.
 **It cancelled a pending autosave rather than writing it.** Edit a saved deck,
 go straight to the library, open something else, and the last second and a half
 of work is gone — no message, and the deck on disk quietly disagrees with what
-was on screen a moment ago.
+was on screen a moment ago. This half turned out to be bigger than `load`: see
+below.
 
 **And it replaced a never-saved deck outright.** What makes this one clear rather
 than arguable is that `newDeck` has always offered that deck back — it captures
@@ -2407,6 +2408,25 @@ And the sixth lint paid for itself the same hour it was written. Two of the test
 for this reached for `state.toast = null`, and `toast` has a private setter too.
 It caught both before the push — which is the entire point of it, and the first
 time one of these scripts has caught a mistake it was not written for.
+
+### The test failed, and it was right to
+
+CI came back with one failure out of 253, and — for the first time — the log said
+so in plain words two lines from the end, because `--stacktrace` had just been
+taken out. That change paid for itself within one build.
+
+The test that failed was the one about writing the pending save. It failed
+because it reaches `load` by way of `newDeck`, and `newDeck` had already thrown
+the pending edit away. Which is the actual shape of the defect: it was never
+`load`'s. `releaseOpenDeck` is the one place all three swap paths — new deck,
+open deck, import — go through to let go of the old deck's id, and it cancelled
+the autosave rather than writing it. All three lost the last second and a half.
+
+So the flush lives there, at the choke point, and reads everything it needs
+*before* the caller replaces it — the write has to be of the deck as it was when
+it was let go of, not of whatever arrived in its place. The fix I had written was
+correct and in the wrong place, and a test I wrote to prove the small version
+found the large one.
 
 ---
 

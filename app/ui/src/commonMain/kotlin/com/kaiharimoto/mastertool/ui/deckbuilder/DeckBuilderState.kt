@@ -1855,9 +1855,37 @@ class DeckBuilderState(
      * three callers say why they are calling it.
      */
     private fun releaseOpenDeck() {
-        autosaveJob?.cancel()
+        flushPendingSave()
         deckId = null
         savedSnapshot = null
+    }
+
+    /**
+     * Writes whatever is still sitting in the autosave debounce.
+     *
+     * The edit that has not landed yet is an edit to a deck that is *saved*, so
+     * it belongs on disk — and every path that swaps the open deck used to
+     * simply cancel it. Edit a saved deck, start a new one or open another, and
+     * the last second and a half went nowhere and said nothing.
+     *
+     * Everything is read here rather than inside the coroutine, because the
+     * caller is about to replace all of it: the write has to be of the deck as
+     * it was when it was let go of, not of whatever arrived in its place.
+     */
+    private fun flushPendingSave() {
+        autosaveJob?.cancel()
+
+        val id = deckId ?: return
+        if (saveStatus != SaveStatus.UNSAVED_CHANGES) return
+
+        val written = deck
+        val name = deckName.ifBlank { "Untitled Deck" }
+        val notes = deckNotes
+        val carried = payload
+
+        // No snapshot update: the deck this belonged to is being closed, and
+        // `releaseOpenDeck` clears the snapshot on the next line anyway.
+        scope.launch { deps.deckRepository.save(id, name, written, carried, notes) }
     }
 
     fun newDeck() {
@@ -1984,21 +2012,16 @@ class DeckBuilderState(
     /**
      * Opens a saved deck, and does not quietly eat the one being put down.
      *
-     * Two things were wrong here and both were silent. A pending autosave was
-     * *cancelled* rather than written, so editing a saved deck and going
-     * straight to the library lost the last second and a half of it. And a deck
-     * that had never been saved was replaced outright — `newDeck` has always
-     * offered to put that back, and this, which does exactly the same thing to
-     * exactly the same work, offered nothing.
+     * A deck that had never been saved used to be replaced outright. `newDeck`
+     * has always offered that deck back; this, which does exactly the same thing
+     * to exactly the same work, offered nothing.
+     *
+     * The pending-autosave half of the problem turned out to belong to all three
+     * swap paths rather than this one, and is handled in `releaseOpenDeck`.
      */
     fun load(id: String) {
         scope.launch {
             val stored = deps.deckRepository.byId(id) ?: return@launch
-
-            // Written, not dropped. The deck being let go of is saved, so the
-            // edit that is still sitting in the debounce belongs on disk.
-            autosaveJob?.cancel()
-            deckId?.takeIf { saveStatus == SaveStatus.UNSAVED_CHANGES }?.let { writeToDisk(it) }
 
             // Only worth offering back when there is something to lose: a saved
             // deck is on disk either way, and a toast about it would be noise.
