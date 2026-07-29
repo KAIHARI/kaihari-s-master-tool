@@ -2533,6 +2533,31 @@ belongs to the builder because the toggle does.
 
 ---
 
+## 100 · A label that was true when it was written
+
+The library tile said "Includes siding data" whenever a deck had an
+`#ydkx-extended` payload. When that line was written the payload only ever held
+siding, so the two meant the same thing and the shortcut was free.
+
+Then this loop put the gaps in the payload, and the card notes, and the pair
+notes, and the mat. Which means a deck built in this app and given a wine cloth
+has been announcing siding data it does not have — and the tile that says so is
+the one place a player would look to find the deck they can side with.
+
+Nothing broke. No test could have caught it, because the claim was about meaning
+rather than behaviour, and the meaning drifted underneath a line nobody had
+reason to re-read. It now counts the plans — `SidingCodec.read(...).size`, the
+same reader the siding panel uses — and says how many, or nothing.
+
+Worth naming as a class: **a shortcut that is only true because two things
+currently coincide.** Every feature added to the payload this loop widened the
+gap between "has a payload" and "has siding", and the line that conflated them
+sat there getting quietly more wrong. Swept the rest of the codebase for the same
+equivalence — three hits, all of them genuinely about whether a payload exists at
+all, which is what `isYdkx` means and is correct.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus

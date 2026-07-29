@@ -62,6 +62,7 @@ import com.kaiharimoto.mastertool.core.deck.DeckValidator
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.model.Deck
 import com.kaiharimoto.mastertool.core.search.CardIndex
+import com.kaiharimoto.mastertool.core.siding.SidingCodec
 import com.kaiharimoto.mastertool.core.search.TextMatching
 import com.kaiharimoto.mastertool.core.util.RelativeTime
 import com.kaiharimoto.mastertool.ui.AppDependencies
@@ -361,10 +362,15 @@ private fun DeckCard(
                 )
             }
 
-            if (stored.extended != null) {
-                // Signals that this deck carries desktop-authored YDKX data.
+            // The plans themselves, counted, rather than "there is a payload".
+            // When this was written the payload only ever held siding, so the
+            // two meant the same thing; it now also carries the gaps, the card
+            // notes and the cloth, so a deck built here and given a mat was
+            // announcing siding data it did not have.
+            val plans = remember(stored.extended) { SidingCodec.read(stored.extended).size }
+            if (plans > 0) {
                 Text(
-                    "Includes siding data",
+                    "$plans siding plan${if (plans == 1) "" else "s"}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
