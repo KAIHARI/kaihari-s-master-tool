@@ -106,6 +106,19 @@ what gets written back to `.ydk`, so a sort that only reordered the display woul
 leave the file disagreeing with the deck from then on. Being an edit also means
 undo puts it back.
 
+**Nothing is said about a thing that has not been looked at.** The card pool
+lives in SQLite and reading thirteen thousand cards out of it is the largest read
+this app performs — and an index that has not been read yet is empty in exactly
+the way an index that was never downloaded is empty. So the search pane offered
+to fetch the card database, and the deck check reported every passcode in a legal
+deck as one the database had never heard of, to somebody holding a tablet with
+all of it on it. Legality is now *absent* rather than false until there is
+something to reach a verdict with, the shelf is unread rather than empty until
+the query returns, and the version list is not called empty by a sheet that
+opened between two of its own queries. The pattern behind all three: the default
+value of a collection is empty, and empty is exactly the value that makes the
+wrong sentence sound reasonable.
+
 **Writing a file has three outcomes, not two.** Written, cancelled, failed.
 Somebody who dismissed a picker knows they dismissed it and is told nothing;
 somebody whose disk was full or whose folder was read-only believed they had a

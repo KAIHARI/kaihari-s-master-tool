@@ -248,9 +248,9 @@ fun DeckBuilderScreen(
         )
     }
 
-    if (state.statsVisible) {
+    state.statistics?.takeIf { state.statsVisible }?.let { statistics ->
         DeckStatsPanel(
-            statistics = state.statistics,
+            statistics = statistics,
             section = state.statsSection,
             breaks = state.breaksIn(state.statsSection),
             groupNames = state.groupNames,

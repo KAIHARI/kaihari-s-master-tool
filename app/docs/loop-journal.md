@@ -2870,3 +2870,14 @@ The frame is worth keeping. Everything a program says about a thing it loads
 asynchronously has a moment before the load where the sentence is still there
 and the thing behind it is not, and the default value of a collection — empty —
 is exactly the value that makes the wrong sentence sound reasonable.
+
+## 109 · And measuring one, for the same reason
+
+`statistics` went the same way as `validation` in the commit after it, because
+leaving one of them waiting and not the other is a difference a later reader
+would have to work out was deliberate — and it would not have been.
+
+A deck measured through an index nobody has opened is forty cards of which none
+is a monster, none is a spell and none is a trap, with opening-hand odds
+underneath. Not alarming, the way sixty red errors are, which is precisely why it
+was the one that would have been left in.

@@ -824,8 +824,13 @@ class DeckBuilderState(
         if (!poolRead) null else DeckValidator.validate(deck, index::byId, format)
     }
 
-    val statistics: DeckStatistics by derivedStateOf {
-        DeckStatistics.of(deck, index::byId, statsSection)
+    /**
+     * Null until the pool has been read, for the reason [validation] is: a deck
+     * measured through an index nobody has opened is forty cards of which none
+     * is a monster, none a spell and none a trap.
+     */
+    val statistics: DeckStatistics? by derivedStateOf {
+        if (!poolRead) null else DeckStatistics.of(deck, index::byId, statsSection)
     }
 
     /**
