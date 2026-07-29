@@ -2128,6 +2128,76 @@ gives 17 at 92px, the same numbers as before in every case but one.
 
 ---
 
+## 89 · A deck that saves itself has no yesterday
+
+Autosave is a straight improvement with exactly one cost, and it took until now
+to see it: every edit is permanent the instant it happens. Open the list you took
+to a regional, cut a card, and the sixty you registered no longer exist anywhere.
+That is the worst thing this application can do to somebody's work, and it was
+introduced by a feature nobody would want reverted — so the fix belongs beside it
+rather than in a backlog.
+
+**When a copy is kept.** Not per save; autosave writes constantly and a timeline
+of every keystroke is not a record. A copy is kept when the deck is about to
+change after standing still for six hours, so what is kept is *the deck as it
+stood at the end of the last time you worked on it*. One version per sitting.
+
+**What is let go of.** Deliberately not the oldest — a history that drops its far
+end quietly becomes "the last few days" no matter how long you have had the deck.
+Dropped instead is whichever version sits closest in time to the ones either side
+of it: the one whose absence opens the smallest hole. Repeated until the count
+fits. Five versions from one evening collapse to one and three from months apart
+all survive. Ties go to the earlier index, which sounds like it would erode the
+old end and does not: removing one widens its neighbours' spans, so the next
+choice moves elsewhere. That is checked rather than argued — 0..10 thinned to
+five keeps 0, 4, 6, 8, 10.
+
+**Going back keeps the present on the way past**, which is why the button asks
+nothing first: the thing that undoes an afternoon also undoes itself. And it is
+an ordinary edit of the deck rather than a second kind of open document, so the
+deck keeps its id, its name and its place in the library, and autosave and export
+carry on not knowing it happened.
+
+There is no delete. Versions thin themselves, and a named one stops being kept
+the moment it stops being named — so a delete button would be a third way to say
+something already sayable, standing next to the one control here that changes a
+deck. `deleteVersion` was written, tested, and then removed when the sheet turned
+out not to want it. Seventh removal by that rule.
+
+### The guard that was documented and never written
+
+Adding a table meant reading `README.md:145`, which says `MigrationTest` upgrades
+a real old database and compares it against a fresh one. It does not exist.
+`core/build.gradle.kts` points at it too, as the reason `verifyMigrations` is off.
+Two places asserting a safeguard that was never written — and the failure it
+describes is invisible on every device used for testing, because a fresh install
+is correct whether or not the migration exists.
+
+So it was written first, and then verified the way the four lint scripts were:
+`DeckVersion.sq` was added *without* `2.sqm`, and the test went red naming
+`deckVersionEntity` in its message. Then the migration, and green. The version 1
+schema in it is transcribed from `3fec0b9` and carries a note not to edit it —
+it is a record of what is on somebody's tablet, not a copy of the current files,
+and editing it to make a failure go away is the one thing that would make it
+useless.
+
+The JDBC driver it needed was already declared in `jvmTest` and the source set did
+not exist. Which meant `DeckRepository` had never been tested at all — sixteen
+tests later it has been, and two of them are about `updatedAtEpochMs` not moving
+on a save that changes nothing: it would otherwise restart the clock above, and
+the real edit right after a no-op save would go unrecorded.
+
+### And the sheet
+
+Prototyped in HTML first, as everything visual here is. The first version put four
+buttons on every row — *what changed*, *go back*, *keep*, *let it go* — sixteen
+buttons on screen, and the timeline that was the point of it disappeared behind
+them. What survived: the row itself opens the comparison, one star keeps it, one
+button goes back to it, and delete does not exist. A named version is a filled
+node with the name beside it, which is the thing you scan a history for.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus

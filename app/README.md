@@ -238,6 +238,18 @@ between two cards without drawing a line between two cards that move. The
 original tool wrote an empty `notes: { cards: {}, pairs: {} }` into every file it
 ever exported; this is what goes in both halves.
 
+And what it used to be. A deck that saves itself has no yesterday: cut a card
+from the list you registered and the sixty you registered stop existing. So
+coming back to a deck after a break keeps a copy of how you left it — one per
+sitting, not one per keystroke — and the library draws them as a line down the
+page, each one saying what came out and what went in to get from there to here.
+Go back to one and the deck you are leaving is kept on the way past, which is why
+that button asks nothing first. Name one and it is never let go of: *this is the
+list I registered* is the thing only you know. The rest thin themselves out, and
+what goes is never the oldest — it is whichever version sits closest in time to
+the ones either side of it, so an evening's worth collapses to one and both ends
+of the deck's life stay put.
+
 The deck you were working on is the one that opens next time. A deck saved once
 keeps itself saved — every edit after the first save is written without being
 asked, and *edit* includes the things that are about the deck rather than in it:

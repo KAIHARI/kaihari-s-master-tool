@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.kaiharimoto.mastertool.core.data.DeckVersion
 import com.kaiharimoto.mastertool.core.data.StoredDeck
 import com.kaiharimoto.mastertool.core.deck.DeckIdentity
 import com.kaiharimoto.mastertool.core.model.Card
@@ -94,6 +95,19 @@ fun DeckLibraryScreen(
     var decks by remember { mutableStateOf<List<StoredDeck>>(emptyList()) }
     var reloadToken by remember { mutableStateOf(0) }
     var comparing by remember { mutableStateOf<StoredDeck?>(null) }
+
+    // The deck whose history is open, the versions of it, and — while one is
+    // being read — which version. A version is drilled into rather than stacked
+    // on top: the history closes while you read the change and comes back when
+    // you are done, so there is never a sheet over a sheet.
+    var historyOf by remember { mutableStateOf<StoredDeck?>(null) }
+    var versions by remember { mutableStateOf<List<DeckVersion>>(emptyList()) }
+    var versionToken by remember { mutableStateOf(0) }
+    var reading by remember { mutableStateOf<DeckVersion?>(null) }
+
+    LaunchedEffect(historyOf, versionToken) {
+        versions = historyOf?.let { deps.deckRepository.versions(it.entry.id) }.orEmpty()
+    }
 
     // Stamped when the screen opens. A clock read during composition would make
     // "3 minutes ago" change under a recomposition triggered by something else
@@ -206,6 +220,7 @@ fun DeckLibraryScreen(
                             }
                         },
                         onCompare = { comparing = stored },
+                        onHistory = { historyOf = stored; reading = null },
                     )
                 }
             }
@@ -222,6 +237,54 @@ fun DeckLibraryScreen(
             onDismiss = { comparing = null },
         )
     }
+
+    historyOf?.let { stored ->
+        val version = reading
+
+        if (version == null) {
+            HistorySheet(
+                deckName = stored.entry.name,
+                versions = versions,
+                current = stored.entry.deck,
+                editedAtEpochMs = stored.entry.updatedAtEpochMs,
+                now = openedAt,
+                onKeepNow = { name ->
+                    scope.launch {
+                        deps.deckRepository.keepNow(stored.entry.id, name)
+                        versionToken++
+                    }
+                },
+                onName = { chosen, name ->
+                    scope.launch {
+                        deps.deckRepository.nameVersion(chosen.id, name)
+                        versionToken++
+                    }
+                },
+                onRestore = {
+                    scope.launch {
+                        deps.deckRepository.restore(stored.entry.id, it.id)
+                        historyOf = null
+                        reloadToken++
+                        // Straight into the builder with it, because going back
+                        // to a version and then having to find the deck again
+                        // would be two steps for one intention.
+                        onOpenDeck(stored.entry.id)
+                    }
+                },
+                onCompare = { reading = it },
+                onDismiss = { historyOf = null },
+            )
+        } else {
+            CompareSheet(
+                savedName = "${stored.entry.name}, ${RelativeTime.since(openedAt, version.keptAtEpochMs)}",
+                saved = version.deck,
+                openName = stored.entry.name,
+                open = stored.entry.deck,
+                index = index,
+                onDismiss = { reading = null },
+            )
+        }
+    }
 }
 
 @Composable
@@ -234,6 +297,7 @@ private fun DeckCard(
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
     onCompare: () -> Unit,
+    onHistory: () -> Unit,
 ) {
     val deck = stored.entry.deck
     var renaming by remember { mutableStateOf(false) }
@@ -325,6 +389,7 @@ private fun DeckCard(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = onOpen) { Text("Open") }
                 TextButton(onClick = onCompare) { Text("What changed…") }
+                TextButton(onClick = onHistory) { Text("Used to be…") }
             }
         }
     }
