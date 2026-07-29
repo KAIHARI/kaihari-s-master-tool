@@ -2016,6 +2016,32 @@ the sort of thing that is obvious only once the concept has a name.
 
 ---
 
+## 86 · The other half of the placeholder
+
+`notes: { cards: {}, pairs: {} }` has been in every file the original tool ever
+exported, and it never put anything in either. Section 70 filled in the first
+half. This is the second, and with it the placeholder is finally what it always
+said it was.
+
+A pair note is the half of deck building a decklist cannot hold at all. A deck is
+not forty cards; it is a handful of two-card openings and thirty-odd cards that
+make them more likely — and *Poplar plus any Level 1 is Apollousa* is the sort of
+thing you work out once, rely on for a month, and cannot reconstruct after three
+weeks away from the deck.
+
+The key is normalised so a pair reads the same from either end, because two ways
+to say one thing would mean a note written from one card being invisible from the
+other. A card paired with itself is not a pair and is refused rather than stored.
+
+The codec is deliberately a *second* codec rather than an extension of the card
+one. They share an object under `notes` and each owns one key and preserves
+everything else it finds there — which is the payload rule the whole file
+follows, applied one level further in, to two codecs that now have to live
+together. The test that matters is that they compose in either order and produce
+the same object: neither can destroy the half it does not understand.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus
