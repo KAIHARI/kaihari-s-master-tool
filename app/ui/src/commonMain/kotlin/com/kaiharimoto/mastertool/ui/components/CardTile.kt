@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -73,7 +76,7 @@ fun CardTile(
     val shape = RoundedCornerShape(CARD_CORNER)
     val banStatus = card.banStatus(format)
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .aspectRatio(CARD_ASPECT_RATIO)
             .clip(shape)
@@ -96,7 +99,15 @@ fun CardTile(
         // It used to be the name in the middle of the surface colour, which is
         // legible and is not a card: forty of them touching read as a wall of
         // labels, in exactly the situation this program says it is for.
-        CardFaceArt(card, Modifier.fillMaxSize())
+        // Measured once here and handed to everything drawn on the card, so the
+        // badges are a fraction of it rather than a fixed size. At twenty
+        // columns a card is about forty points wide and a 22dp badge covered
+        // over half of it -- the density control made the card smaller and left
+        // the writing on it exactly where it was.
+        val unit = maxWidth / 96f
+        val annotated = maxWidth >= LEGIBLE
+
+        CardFaceAt(card, maxWidth, Modifier.fillMaxSize())
 
         AsyncImage(
             model = card.imageUrlSmall ?: card.imageUrl,
@@ -120,12 +131,14 @@ fun CardTile(
                 .background(Color.White.copy(alpha = 0.16f)),
         )
 
-        if (banStatus != BanStatus.UNLIMITED) {
-            BanBadge(banStatus, Modifier.align(Alignment.TopStart).padding(3.dp))
+        // Not below the size the face stops writing its own name at: a badge
+        // there is a coloured disc over half the art rather than a number.
+        if (annotated && banStatus != BanStatus.UNLIMITED) {
+            BanBadge(banStatus, unit, Modifier.align(Alignment.TopStart).padding(unit * 3))
         }
 
-        if (copies > 0) {
-            CopyBadge(copies, Modifier.align(Alignment.TopEnd).padding(3.dp))
+        if (annotated && copies > 0) {
+            CopyBadge(copies, unit, Modifier.align(Alignment.TopEnd).padding(unit * 3))
         }
 
         overlay()
@@ -133,7 +146,7 @@ fun CardTile(
 }
 
 @Composable
-private fun BanBadge(status: BanStatus, modifier: Modifier = Modifier) {
+private fun BanBadge(status: BanStatus, unit: Dp, modifier: Modifier = Modifier) {
     val (label, color) = when (status) {
         BanStatus.FORBIDDEN -> "0" to MasterToolPalette.Danger
         BanStatus.LIMITED -> "1" to MasterToolPalette.Warning
@@ -143,32 +156,38 @@ private fun BanBadge(status: BanStatus, modifier: Modifier = Modifier) {
 
     Box(
         modifier = modifier
-            .size(20.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .size(unit * 20)
+            .clip(CircleShape)
             .background(color),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             color = MasterToolPalette.Ink,
-            style = tacticalStyle().copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+            style = tacticalStyle().copy(
+                fontSize = (12 * unit.value).sp,
+                fontWeight = FontWeight.Bold,
+            ),
         )
     }
 }
 
 @Composable
-private fun CopyBadge(copies: Int, modifier: Modifier = Modifier) {
+private fun CopyBadge(copies: Int, unit: Dp, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .size(22.dp)
-            .clip(RoundedCornerShape(4.dp))
+            .size(unit * 22)
+            .clip(RoundedCornerShape(unit * 4))
             .background(MaterialTheme.colorScheme.primary),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = copies.toString(),
             color = MasterToolPalette.Ink,
-            style = tacticalStyle().copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+            style = tacticalStyle().copy(
+                fontSize = (13 * unit.value).sp,
+                fontWeight = FontWeight.Bold,
+            ),
         )
     }
 }

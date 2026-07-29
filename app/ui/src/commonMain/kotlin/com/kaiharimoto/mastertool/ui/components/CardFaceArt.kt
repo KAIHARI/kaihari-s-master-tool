@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kaiharimoto.mastertool.core.model.Card
@@ -55,11 +56,23 @@ import kotlin.math.sin
  */
 @Composable
 fun CardFaceArt(card: Card, modifier: Modifier = Modifier) {
+    BoxWithConstraints(modifier) { CardFaceAt(card, maxWidth, Modifier.fillMaxSize()) }
+}
+
+/**
+ * The same face, for a caller that has already measured.
+ *
+ * `CardTile` measures once and scales its badges by the same number, so the
+ * card and everything drawn on it change size together — and one measurement
+ * per card rather than two.
+ */
+@Composable
+fun CardFaceAt(card: Card, width: Dp, modifier: Modifier = Modifier) {
     val kind = remember(card.frameType) { CardFace.kindOf(card.frameType) }
     val frame = CardFrames.of(kind)
     val pips = CardFace.pips(card.level)
 
-    BoxWithConstraints(
+    Box(
         modifier.background(
             Brush.linearGradient(
                 0f to frame.light,
@@ -73,17 +86,17 @@ fun CardFaceArt(card: Card, modifier: Modifier = Modifier) {
         // One number drives every band, so a card in the pool at 70dp and the
         // same card in the showcase at 130dp are the same drawing rather than
         // two designs that happen to share a palette.
-        val unit = maxWidth / 96f
+        val unit = width / 96f
 
         // Below this there is no room for a name, and 3sp of it is not a name
         // but a smear. A siding sheet's thumbnails are 34dp wide, and at that
         // size the frame colour on its own still says monster, spell or trap --
         // which is the whole of what a swatch that small can say.
-        if (maxWidth < LEGIBLE) {
+        if (width < LEGIBLE) {
             Box(Modifier.fillMaxSize().padding(unit * 3)) {
                 ArtWindow(card, frame.base, frame.dark, CardFrames.attribute(card.attribute))
             }
-            return@BoxWithConstraints
+            return@Box
         }
 
         Column(Modifier.fillMaxSize()) {
@@ -238,8 +251,14 @@ private fun rightFoot(card: Card, kind: FrameKind): String = when {
     else -> card.def?.toString() ?: "?"
 }
 
-/** Narrower than this and the card is a swatch rather than a face. */
-private val LEGIBLE = 52.dp
+/**
+ * Narrower than this and the card is a swatch rather than a face.
+ *
+ * The same threshold the tile uses to decide whether to badge a card at all:
+ * below it there is no room to write on, and a badge would be a coloured disc
+ * covering half the art rather than a number anybody reads.
+ */
+val LEGIBLE = 52.dp
 
 // Band heights, in ninety-sixths of the card's width — the size a deck pane
 // draws one at, and the size the proportions were looked at.
