@@ -25,12 +25,23 @@ data class ImportedFile(val name: String, val content: String)
  * being decoded and re-encoded on the way out. The two string helpers below keep
  * every existing caller reading the way it did.
  */
+/**
+ * What became of a write.
+ *
+ * Three states rather than a Boolean, because the two ways of not writing want
+ * opposite things said about them. Somebody who cancelled a picker knows they
+ * cancelled and does not need telling; somebody whose disk was full, or whose
+ * folder was read-only, or whose permission had been revoked, believes they have
+ * a decklist and does not — and that is the one this program owes a sentence.
+ */
+enum class WriteOutcome { WRITTEN, CANCELLED, FAILED }
+
 interface DeckFileAccess {
     /** Opens a picker. Returns null when the user cancels. */
     suspend fun importDeck(): ImportedFile?
 
     /** Writes [bytes] out, letting the user choose where. */
-    suspend fun export(suggestedName: String, bytes: ByteArray, mimeType: String): Boolean
+    suspend fun export(suggestedName: String, bytes: ByteArray, mimeType: String): WriteOutcome
 
     /**
      * Hands the file to the platform share sheet, where one exists.
@@ -43,7 +54,7 @@ interface DeckFileAccess {
     suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String): Boolean
 }
 
-suspend fun DeckFileAccess.exportDeck(suggestedName: String, content: String): Boolean =
+suspend fun DeckFileAccess.exportDeck(suggestedName: String, content: String): WriteOutcome =
     export(suggestedName, content.encodeToByteArray(), mimeTypeFor(suggestedName))
 
 suspend fun DeckFileAccess.shareDeck(suggestedName: String, content: String): Boolean =

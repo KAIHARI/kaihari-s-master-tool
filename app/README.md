@@ -106,6 +106,12 @@ what gets written back to `.ydk`, so a sort that only reordered the display woul
 leave the file disagreeing with the deck from then on. Being an edit also means
 undo puts it back.
 
+**Writing a file has three outcomes, not two.** Written, cancelled, failed.
+Somebody who dismissed a picker knows they dismissed it and is told nothing;
+somebody whose disk was full or whose folder was read-only believed they had a
+decklist and did not, and that is the one case worth a sentence. A Boolean
+conflated the two and the callers went quiet on both.
+
 **A shape drawn on a card scales with it; an edge does not.** The face, the
 badges and the note fold are all fractions of the card's own width, so turning
 the density up shrinks what is written on a card along with the card — at twenty

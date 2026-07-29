@@ -9,7 +9,9 @@ import com.kaiharimoto.mastertool.core.deck.MatChoice
 import com.kaiharimoto.mastertool.core.export.Png
 import com.kaiharimoto.mastertool.core.layout.GridStep
 import com.kaiharimoto.mastertool.core.model.DeckSection
+import com.kaiharimoto.mastertool.ui.DeckFileAccess
 import com.kaiharimoto.mastertool.ui.ImportedFile
+import com.kaiharimoto.mastertool.ui.WriteOutcome
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -2701,6 +2703,31 @@ class DeckBuilderStateTest {
         advanceUntilIdle()
 
         assertEquals("Shared Snake-Eye.ydk.", requireNonNull(state.toast?.message))
+    }
+
+    @Test
+    fun aWriteThatFailedSaysSoAndACancelledOneDoesNot() = runTest {
+        // The two ways of not writing want opposite things said about them.
+        val failing = object : DeckFileAccess by NoFileAccess {
+            override suspend fun export(name: String, bytes: ByteArray, mimeType: String) =
+                WriteOutcome.FAILED
+        }
+        val state = builderState(testDependencies(failing))
+        TestPool.many(5).forEach { state.addCard(it) }
+        state.rename("Snake-Eye")
+
+        state.exportToFile()
+        advanceUntilIdle()
+        assertEquals("Could not write Snake-Eye.ydk.", requireNonNull(state.toast?.message))
+
+        val cancelling = builderState()
+        TestPool.many(5).forEach { cancelling.addCard(it) }
+        val before = cancelling.toast?.id
+
+        cancelling.exportToFile()
+        advanceUntilIdle()
+
+        assertEquals(before, cancelling.toast?.id, "dismissing a picker is not news")
     }
 
     private fun requireNonNull(value: String?): String =

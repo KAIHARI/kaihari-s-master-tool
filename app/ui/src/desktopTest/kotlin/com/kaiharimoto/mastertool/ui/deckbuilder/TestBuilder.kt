@@ -15,6 +15,7 @@ import com.kaiharimoto.mastertool.core.update.UpdateChecker
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.DeckFileAccess
 import com.kaiharimoto.mastertool.ui.ImportedFile
+import com.kaiharimoto.mastertool.ui.WriteOutcome
 import com.kaiharimoto.mastertool.ui.update.AppUpdater
 import com.kaiharimoto.mastertool.ui.update.InstallOutcome
 import io.ktor.client.HttpClient
@@ -91,7 +92,8 @@ internal fun TestScope.builderState(
 
 internal object NoFileAccess : DeckFileAccess {
     override suspend fun importDeck(): ImportedFile? = null
-    override suspend fun export(suggestedName: String, bytes: ByteArray, mimeType: String) = false
+    override suspend fun export(suggestedName: String, bytes: ByteArray, mimeType: String) =
+        WriteOutcome.CANCELLED
     override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) = true
 }
 
@@ -113,11 +115,11 @@ internal class StubFileAccess(private val file: ImportedFile) : DeckFileAccess {
         suggestedName: String,
         bytes: ByteArray,
         mimeType: String,
-    ): Boolean {
+    ): WriteOutcome {
         exportedBytes = bytes
         exportedName = suggestedName
         exportedType = mimeType
-        return true
+        return WriteOutcome.WRITTEN
     }
 
     override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) = true

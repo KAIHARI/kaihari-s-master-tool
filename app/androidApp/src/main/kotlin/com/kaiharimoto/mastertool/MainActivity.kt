@@ -11,6 +11,7 @@ import androidx.core.content.FileProvider
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.DeckFileAccess
 import com.kaiharimoto.mastertool.ui.ImportedFile
+import com.kaiharimoto.mastertool.ui.WriteOutcome
 import com.kaiharimoto.mastertool.ui.MasterToolApp
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +22,7 @@ import java.util.UUID
 class MainActivity : ComponentActivity(), DeckFileAccess {
 
     private var pendingImport: CompletableDeferred<ImportedFile?>? = null
-    private var pendingExport: CompletableDeferred<Boolean>? = null
+    private var pendingExport: CompletableDeferred<WriteOutcome>? = null
     private var pendingExportContent: ByteArray? = null
 
     private val openDocument =
@@ -42,14 +43,17 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
             pendingExport = null
             pendingExportContent = null
 
-            val written = if (uri != null && content != null) {
+            // A null uri is the picker being dismissed; anything else that goes
+            // wrong from here is a write that did not happen, and the two are
+            // owed different sentences.
+            val outcome = when {
+                uri == null || content == null -> WriteOutcome.CANCELLED
                 runCatching {
                     contentResolver.openOutputStream(uri)?.use { it.write(content) }
-                }.isSuccess
-            } else {
-                false
+                }.isSuccess -> WriteOutcome.WRITTEN
+                else -> WriteOutcome.FAILED
             }
-            deferred?.complete(written)
+            deferred?.complete(outcome)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,10 +94,12 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
         suggestedName: String,
         bytes: ByteArray,
         mimeType: String,
-    ): Boolean {
-        pendingExport?.complete(false)
+    ): WriteOutcome {
+        // A second export launched over the first abandons it rather than
+        // failing it: nothing was written and nobody asked for it to be.
+        pendingExport?.complete(WriteOutcome.CANCELLED)
 
-        val deferred = CompletableDeferred<Boolean>()
+        val deferred = CompletableDeferred<WriteOutcome>()
         pendingExport = deferred
         pendingExportContent = bytes
         createDocument.launch(suggestedName)

@@ -2,6 +2,7 @@ package com.kaiharimoto.mastertool.desktop
 
 import com.kaiharimoto.mastertool.ui.DeckFileAccess
 import com.kaiharimoto.mastertool.ui.ImportedFile
+import com.kaiharimoto.mastertool.ui.WriteOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.awt.Desktop
@@ -37,20 +38,24 @@ class DesktopDeckFileAccess : DeckFileAccess {
         suggestedName: String,
         bytes: ByteArray,
         mimeType: String,
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): WriteOutcome = withContext(Dispatchers.IO) {
         val chooser = JFileChooser().apply {
             dialogTitle = "Export"
             selectedFile = File(suggestedName)
         }
 
         if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {
-            return@withContext false
+            return@withContext WriteOutcome.CANCELLED
         }
 
-        val target = chooser.selectedFile ?: return@withContext false
+        val target = chooser.selectedFile ?: return@withContext WriteOutcome.CANCELLED
         // Bytes, not text: a deck file and a picture of one leave by the same
         // door, and writing a PNG through a character encoder destroys it.
-        runCatching { target.writeBytes(bytes) }.isSuccess
+        if (runCatching { target.writeBytes(bytes) }.isSuccess) {
+            WriteOutcome.WRITTEN
+        } else {
+            WriteOutcome.FAILED
+        }
     }
 
     /**

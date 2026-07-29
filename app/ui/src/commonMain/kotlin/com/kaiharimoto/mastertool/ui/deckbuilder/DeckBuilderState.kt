@@ -58,6 +58,7 @@ import com.kaiharimoto.mastertool.core.search.NameCompletion
 import com.kaiharimoto.mastertool.core.ydk.YdkCodec
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.exportDeck
+import com.kaiharimoto.mastertool.ui.WriteOutcome
 import com.kaiharimoto.mastertool.ui.shareDeck
 import kotlinx.coroutines.CoroutineScope
 import kotlin.random.Random
@@ -1250,8 +1251,10 @@ class DeckBuilderState(
         scope.launch {
             val name = deckName.ifBlank { "Untitled Deck" }
             val sheet = SidingSheet.render(name, patterns) { index.byId(it)?.name }
-            val written = deps.fileAccess.export("$name siding.pdf", sheet, "application/pdf")
-            if (written) showToast("Siding sheet written for ${patterns.size} matchups.")
+            val file = "$name siding.pdf"
+            if (told(deps.fileAccess.export(file, sheet, "application/pdf"), file)) {
+                showToast("Siding sheet written for ${patterns.size} matchups.")
+            }
         }
     }
 
@@ -1271,8 +1274,10 @@ class DeckBuilderState(
         scope.launch {
             val name = deckName.ifBlank { "Untitled Deck" }
             val sheet = DecklistSheet.render(name, deck, format.name) { index.byId(it) }
-            val written = deps.fileAccess.export("$name decklist.pdf", sheet, "application/pdf")
-            if (written) showToast("Decklist written for ${deck.totalCards} cards.")
+            val file = "$name decklist.pdf"
+            if (told(deps.fileAccess.export(file, sheet, "application/pdf"), file)) {
+                showToast("Decklist written for ${deck.totalCards} cards.")
+            }
         }
     }
 
@@ -2166,13 +2171,26 @@ class DeckBuilderState(
         }
     }
 
+    /**
+     * Whether a write happened, having already said so when one failed.
+     *
+     * Cancelling a picker is not worth a word — somebody who dismissed a dialog
+     * knows they dismissed it. A write that was asked for and did not happen is
+     * the opposite: a full disk, a read-only folder, a permission since revoked,
+     * and a player who believes they have a decklist and does not.
+     */
+    private fun told(outcome: WriteOutcome, name: String): Boolean {
+        if (outcome == WriteOutcome.FAILED) showToast("Could not write $name.")
+        return outcome == WriteOutcome.WRITTEN
+    }
+
     fun exportToFile() {
         scope.launch {
             val carried = payload
             val text = YdkCodec.write(deck, createdBy = "kai's master tool", extended = carried)
             val extension = if (carried != null) "ydkx" else "ydk"
             val name = "${deckName.ifBlank { "deck" }}.$extension"
-            if (deps.fileAccess.exportDeck(name, text)) {
+            if (told(deps.fileAccess.exportDeck(name, text), name)) {
                 showToast("Exported $name.")
             }
         }
@@ -2214,7 +2232,9 @@ class DeckBuilderState(
 
         scope.launch {
             val name = "${deckName.ifBlank { "deck" }}.png"
-            if (deps.fileAccess.export(name, png, "image/png")) showToast("Saved $name.")
+            if (told(deps.fileAccess.export(name, png, "image/png"), name)) {
+                showToast("Saved $name.")
+            }
         }
     }
 
