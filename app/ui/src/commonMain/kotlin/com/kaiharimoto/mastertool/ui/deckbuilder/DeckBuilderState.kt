@@ -5,6 +5,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.kaiharimoto.mastertool.core.data.SyncResult
+import com.kaiharimoto.mastertool.core.deck.ArrangementCodec
+import com.kaiharimoto.mastertool.core.deck.BreakTracking
+import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.deck.DeckEdit
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
 import com.kaiharimoto.mastertool.core.deck.DeckSorter
@@ -152,8 +155,13 @@ class DeckBuilderState(
             val openingsChanged = value.main != currentDeck.main
             // A swap keeps the same sixty cards; anything else is deck building.
             val sameCards = SidingDiff.isSwap(currentDeck, value)
+            val was = currentDeck
             currentDeck = value
             selection = Selection.EMPTY
+            // Read off the edit rather than reported by it -- see BreakTracking.
+            breaks = DeckSection.entries.associateWith { section ->
+                BreakTracking.follow(breaks[section] ?: Breaks.NONE, was[section], value[section])
+            }.filterValues { !it.isEmpty }
             if (openingsChanged) {
                 forgetHandRecords(keepRun = sameCards)
                 if (shootoutRun != null) redealYours()
@@ -194,6 +202,52 @@ class DeckBuilderState(
      * rather than removing a copy from the deck.
      */
     var selection by mutableStateOf(Selection.EMPTY)
+
+    /**
+     * Where the player has pushed the piles apart, per section.
+     *
+     * Absent means no gaps, which is the state of every deck nobody has arranged
+     * — so this is empty far more often than not and costs nothing when it is.
+     */
+    var breaks by mutableStateOf<Map<DeckSection, Breaks>>(emptyMap())
+        private set
+
+    fun breaksIn(section: DeckSection): Breaks =
+        (breaks[section] ?: Breaks.NONE).clampedTo(deck[section].size)
+
+    /**
+     * Puts a gap before a card, or takes one away.
+     *
+     * Not undoable, and deliberately so. Undo in this program is for edits to
+     * the deck, and a stack that mixed "I cut a card" with "I moved a line"
+     * would make the one you wanted two presses further away every time you
+     * adjusted the layout.
+     */
+    fun toggleBreak(section: DeckSection, index: Int) {
+        if (index !in 1 until deck[section].size) return
+        val next = breaksIn(section).toggledAt(index)
+        breaks = if (next.isEmpty) breaks - section else breaks + (section to next)
+    }
+
+    /**
+     * The payload as it goes to disk: whatever the file carried, plus the gaps.
+     *
+     * Computed at the moment of writing rather than kept in step with every
+     * toggle, because there is exactly one thing that has to be true — what is
+     * written matches what is on screen — and one place is easier to keep true
+     * than twenty.
+     *
+     * Null when there would be nothing in it, so a plain `.ydk` that nobody has
+     * arranged stays a plain `.ydk`.
+     */
+    private val payload: JsonObject?
+        get() = ArrangementCodec.write(extended, breaks).takeIf { it.isNotEmpty() }
+
+    /** Takes every gap out of a section, for when the grouping has gone stale. */
+    fun clearBreaks(section: DeckSection) {
+        if (section !in breaks) return
+        breaks = breaks - section
+    }
         private set
 
     var deckName by mutableStateOf("Untitled Deck")
@@ -1165,6 +1219,9 @@ class DeckBuilderState(
 
         val token = pushUndo(deck)
         deck = deck.with(section, sorted)
+        // A sort decides the whole order from one property, so any gaps in the
+        // arrangement it replaced were about an arrangement that is gone.
+        clearBreaks(section)
         showToast(
             "Sorted ${section.displayName} Deck by ${mode.displayName.lowercase()}.",
             undo = { undoIfCurrent(token) },
@@ -1185,7 +1242,8 @@ class DeckBuilderState(
      */
     fun tidySection(section: DeckSection, mode: TidyBy) {
         val current = deck[section]
-        val tidied = DeckTidy.apply(current, mode, index::byId)
+        val arranged = DeckTidy.arrange(current, mode, index::byId)
+        val tidied = arranged.ids
         if (tidied == current) {
             showToast("${section.displayName} Deck is already tidy.")
             return
@@ -1195,6 +1253,15 @@ class DeckBuilderState(
             is DeckEdit.Applied -> {
                 val token = pushUndo(deck)
                 deck = edit.deck
+                // The gaps the tidy drew, replacing whatever was there: it just
+                // decided the grouping, so the old grouping is not about this
+                // arrangement any more. Set after the deck, because assigning a
+                // deck is what walks the existing gaps along.
+                breaks = if (arranged.breaks.isEmpty) {
+                    breaks - section
+                } else {
+                    breaks + (section to arranged.breaks)
+                }
                 showToast(
                     "${mode.label} in the ${section.displayName} Deck.",
                     undo = { undoIfCurrent(token) },
@@ -1332,6 +1399,7 @@ class DeckBuilderState(
         deckName = "Untitled Deck"
         deckNotes = ""
         extended = null
+        breaks = emptyMap()
         showToast("Started a new deck.", undo = { undoIfCurrent(token) })
     }
 
@@ -1397,7 +1465,7 @@ class DeckBuilderState(
         val name = deckName.ifBlank { "Untitled Deck" }
         val written = deck
         val notes = deckNotes
-        deps.deckRepository.save(id, name, written, extended, notes)
+        deps.deckRepository.save(id, name, written, payload, notes)
         savedSnapshot = SavedSnapshot(written, name, notes)
     }
 
@@ -1413,6 +1481,7 @@ class DeckBuilderState(
             deckId = stored.entry.id
             savedSnapshot = SavedSnapshot(stored.entry.deck, stored.entry.name, stored.entry.notes)
             extended = stored.extended
+            breaks = ArrangementCodec.read(stored.extended)
             undoStack.clear()
             redoStack.clear()
             stamp()
@@ -1433,6 +1502,7 @@ class DeckBuilderState(
             deckName = file.name.substringBeforeLast('.').ifBlank { "Imported Deck" }
             deckNotes = ""
             extended = parsed.document.extended
+            breaks = ArrangementCodec.read(parsed.document.extended)
 
             val warning = parsed.warnings.size
                 .takeIf { it > 0 }
@@ -1444,8 +1514,9 @@ class DeckBuilderState(
 
     fun exportToFile() {
         scope.launch {
-            val text = YdkCodec.write(deck, createdBy = "kai's master tool", extended = extended)
-            val extension = if (extended != null) "ydkx" else "ydk"
+            val carried = payload
+            val text = YdkCodec.write(deck, createdBy = "kai's master tool", extended = carried)
+            val extension = if (carried != null) "ydkx" else "ydk"
             val name = "${deckName.ifBlank { "deck" }}.$extension"
             if (deps.fileAccess.exportDeck(name, text)) {
                 showToast("Exported $name.")
@@ -1455,8 +1526,9 @@ class DeckBuilderState(
 
     fun shareDeck() {
         scope.launch {
-            val text = YdkCodec.write(deck, createdBy = "kai's master tool", extended = extended)
-            val extension = if (extended != null) "ydkx" else "ydk"
+            val carried = payload
+            val text = YdkCodec.write(deck, createdBy = "kai's master tool", extended = carried)
+            val extension = if (carried != null) "ydkx" else "ydk"
             deps.fileAccess.shareDeck("${deckName.ifBlank { "deck" }}.$extension", text)
         }
     }

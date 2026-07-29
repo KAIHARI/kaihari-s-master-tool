@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.layout.GridStep
@@ -308,6 +309,143 @@ class DeckBuilderStateTest {
 
         assertEquals(0, assertNotNull(state.shootoutRun).played)
         assertFalse(state.canUndoVerdict, "one step only")
+    }
+
+    // ---- gaps in the arrangement --------------------------------------------
+
+    @Test
+    fun aGapIsPutInAndTakenAwayAgain() = runTest {
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+
+        state.toggleBreak(main, 3)
+        assertEquals(setOf(3), state.breaksIn(main).before)
+
+        state.toggleBreak(main, 3)
+        assertTrue(state.breaksIn(main).isEmpty)
+    }
+
+    @Test
+    fun aGapCannotBeDrawnAtEitherEndOfASection() = runTest {
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+
+        state.toggleBreak(main, 0)
+        state.toggleBreak(main, 4)
+        state.toggleBreak(main, 9)
+
+        assertTrue(state.breaksIn(main).isEmpty)
+    }
+
+    @Test
+    fun addingACardNeverDisturbsAGap() = runTest {
+        // Which is most of what happens to a deck being built, so it had better
+        // be the case that costs nothing.
+        val state = builderState()
+        val cards = TestPool.many(8)
+        cards.take(6).forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+
+        state.addCard(cards[6])
+
+        assertEquals(setOf(3), state.breaksIn(main).before)
+    }
+
+    @Test
+    fun cuttingACardFromTheFirstGroupPullsTheGapBack() = runTest {
+        val state = builderState()
+        val cards = TestPool.many(6)
+        cards.forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+
+        state.removeOne(cards[0], main)
+
+        assertEquals(setOf(2), state.breaksIn(main).before)
+    }
+
+    @Test
+    fun undoingAnEditWalksTheGapBackToo() = runTest {
+        val state = builderState()
+        val cards = TestPool.many(6)
+        cards.forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+
+        state.removeOne(cards[0], main)
+        state.undo()
+
+        assertEquals(setOf(3), state.breaksIn(main).before)
+    }
+
+    @Test
+    fun aGapBeyondTheEndOfASectionIsNotShown() = runTest {
+        val state = builderState()
+        val cards = TestPool.many(6)
+        cards.forEach { state.addCard(it) }
+        state.toggleBreak(main, 5)
+
+        cards.drop(1).forEach { state.removeOne(it, main) }
+
+        assertTrue(state.breaksIn(main).isEmpty)
+    }
+
+    @Test
+    fun tidyingByTypeDrawsTheGapsItGrouped() = runTest {
+        val state = builderState()
+        // Four monsters and a trap, deliberately interleaved.
+        listOf(TestPool.ash, TestPool.imperm, TestPool.maxx, TestPool.nibiru)
+            .forEach { state.addCard(it) }
+
+        state.tidySection(main, TidyBy.CATEGORY)
+
+        assertEquals(setOf(3), state.breaksIn(main).before, "monsters, then the trap")
+    }
+
+    @Test
+    fun sortingThrowsTheGapsAwayWithTheArrangement() = runTest {
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+
+        state.sortSection(main, SortMode.NAME)
+
+        assertTrue(
+            state.breaksIn(main).isEmpty,
+            "a sort decides the whole order, so the old grouping is not about it",
+        )
+    }
+
+    @Test
+    fun aDeckWithNoGapsCarriesNothingAboutThem() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        TestPool.many(4).forEach { state.addCard(it) }
+
+        state.exportToFile()
+        advanceUntilIdle()
+
+        val written = requireNonNull(files.exported)
+        assertTrue("arrangement" !in written, written)
+    }
+
+    @Test
+    fun theGapsGoOutWithTheFileAndComeBackWithIt() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+
+        state.exportToFile()
+        advanceUntilIdle()
+
+        val written = requireNonNull(files.exported)
+        assertTrue("arrangement" in written, written)
+
+        // Straight back in through the front door.
+        val reopened = builderState(testDependencies(StubFileAccess(ImportedFile("d.ydkx", written))))
+        reopened.importFromFile()
+        advanceUntilIdle()
+
+        assertEquals(Breaks(setOf(3)), reopened.breaksIn(main))
     }
 
     // ---- siding ------------------------------------------------------------
