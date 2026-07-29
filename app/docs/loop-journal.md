@@ -1346,34 +1346,6 @@ one end and not the other. It fires only on a drop that was accepted — a refus
 drop is a card going back where it came from, and a buzz there would be the
 program agreeing with something it had just refused.
 
----
-
-## Where this stands
-
-`:core` carries the arithmetic for all of it, at **775 tests**, up from 249, plus
-the `:ui` suite where there were none — a module that cannot even be compiled in
-the environment this was written in.
-
-Still open, in the order they are worth doing:
-
-**Dragging a gap along — closed, not built.** A gap is placed from a card's menu
-or with `g` on the card under the cursor, and moving one is two taps. I went
-looking for the drag three times and every version needs a hit target: the mark
-is two and a half points wide, so grabbing it means claiming a strip of the card
-beside it, which takes the leading edge of a card away from the gesture that
-picks the *card* up. Long press is taken by the card menu. Two taps already
-works, and a gesture that makes an existing one worse is not an improvement. It
-goes here rather than in the backlog until somebody has a better idea than these.
-
-**Siding for an opponent whose file does not say how — deliberately not built.**
-They side from their own plans when the file carries them (section 57), and a
-plain `.ydk` still sits there unchanged. Three shapes were considered and all
-three are worse than nothing: cutting from their Main at random dresses a guess
-as a measurement; adding their cards without cutting quietly changes every draw
-probability; and asking the player to author both halves of a plan for a deck
-they do not own is a form nobody would fill in twice. Their deck feeds only what
-you *see* across the table — it does not enter the report at all — so the honest
-answer is to leave it alone until somebody has a better idea than these.
 
 ---
 
@@ -1892,3 +1864,42 @@ three things where the third had just been added. Undo restores the cards, but a
 deck is not only its cards: the gaps, the notes and the cloth are what made it
 that deck rather than a list of passcodes. There is a test now that takes back a
 new deck and checks all three.
+
+---
+
+## Where this stands
+
+`:core` carries the arithmetic for all of it, at **790 tests**, up from 249, plus
+**206 in `:ui`** where there were none — a module that cannot even be compiled in
+the environment this was written in.
+
+Still open, in the order they are worth doing:
+
+**Dragging a gap along — closed, not built.** A gap is placed from a card's menu
+or with `g` on the card under the cursor, and moving one is two taps. I went
+looking for the drag three times and every version needs a hit target: the mark
+is two and a half points wide, so grabbing it means claiming a strip of the card
+beside it, which takes the leading edge of a card away from the gesture that
+picks the *card* up. Long press is taken by the card menu. Two taps already
+works, and a gesture that makes an existing one worse is not an improvement. It
+goes here rather than in the backlog until somebody has a better idea than these.
+
+**Siding for an opponent whose file does not say how — deliberately not built.**
+They side from their own plans when the file carries them (section 57), and a
+plain `.ydk` still sits there unchanged. Three shapes were considered and all
+three are worse than nothing: cutting from their Main at random dresses a guess
+as a measurement; adding their cards without cutting quietly changes every draw
+probability; and asking the player to author both halves of a plan for a deck
+they do not own is a form nobody would fill in twice. Their deck feeds only what
+you *see* across the table — it does not enter the report at all — so the honest
+answer is to leave it alone until somebody has a better idea than these.
+
+**A picture of the deck, a decklist for a judge, and a mat that belongs to the
+deck** all arrived after that list was first written, and each one turned up a
+defect in something already there — the showcase sized for the wrong number of
+rows, the capture recording everything except the table, the compressor
+allocating eighty-seven megabytes, and the arrangement never being saved at all.
+That last one is the pattern worth naming: **adding a feature is the most
+reliable way to find out that the ground under it was not solid.** Four of the
+five worst things found in this stretch were found while wiring something new on
+top of them, and none of them by a test that already existed.
