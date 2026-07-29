@@ -1922,6 +1922,33 @@ with "I threw away a plan" makes the one you wanted two presses further away.
 
 ---
 
+## 83 · Turning "I looked at it" into something that runs
+
+The same mistake was made twice in one afternoon and caught both times by
+rendering a picture and looking: the showcase's caption, and then its save tab,
+were coloured for the theme rather than for the cloth they sit on — which was
+fine until a deck could bring its own mat and be lighter than the application.
+Both would have shipped as writing the colour of the surface underneath it.
+
+Looking works, once. `Contrast` in `:core` is the relative-luminance formula
+every accessibility guideline uses, and a test in `:ui` walks all twenty-eight
+combinations of seven mats and four themes, asserting that the ink clears 4.5:1
+against its cloth, the quiet ink clears 3:1, the two inks are actually different,
+and — the one that is really an assumption made visible — that the ink and the
+cloth never run the same way, because the save tab picks its backing by asking
+which of them is light.
+
+Nobody is going to open twenty-eight screens one at a time, which is the whole
+argument for the test. Everything passes today with room: the tightest is the
+bone mat's quiet ink at 4.65:1 against a 3:1 floor.
+
+Worth saying what this is not. It is not an accessibility audit — nothing here
+checks the chrome, the chips, the card tiles or anything drawn over card art. It
+checks the one surface a *deck* can change, which is the one the program grew a
+new way to get wrong.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **790 tests**, up from 249, plus
