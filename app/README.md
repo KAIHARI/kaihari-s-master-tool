@@ -80,12 +80,6 @@ public** keystore — Android rejects an update whose signature changed. See
 Fusion Monster reads as a Pendulum monster but is summoned from the Extra Deck.
 The frame carries the summoning mechanic; the type string does not.
 
-**The `#ydkx-extended` block is preserved verbatim.** `.ydkx` files are plain YDK
-text plus a JSON payload holding siding patterns and notes. The app does not
-implement siding yet, so it round-trips that payload untouched rather than
-dropping it — editing a deck on the tablet must not destroy work done on the
-desktop tool.
-
 **Alternate artwork passcodes resolve to the same card.** Deck files exported by
 other tools frequently reference an alternate printing, whose passcode differs
 from the one a database calls canonical. Every known passcode is indexed.
@@ -116,11 +110,13 @@ towards you makes it bigger, it does not re-deal it.
 in are paired by position. Appending would be shorter and would quietly destroy
 an arrangement its owner chose, which is the thing this application is for.
 
-**The `#ydkx-extended` payload is merged, never re-encoded.** `SidingCodec` edits
-the keys it understands inside the object that was on disk. The desktop tool also
-writes a background gradient, a category, tags and the opponent's decklist in
-there; decoding a pattern into a data class and encoding it back would delete all
-of it, one level deeper than the promise above.
+**The `#ydkx-extended` payload is merged, never re-encoded.** `.ydkx` files are
+plain YDK text plus a JSON payload. This app reads and writes three things in it
+— siding patterns, notes, and where the gaps in an arrangement fall — by editing
+those keys *inside the object that was on disk*. The desktop tool also writes a
+background gradient, a category, tags and the opponent's decklist there; decoding
+into a data class and encoding back would delete all of it. Editing a deck on the
+tablet must not destroy work done on the desktop.
 
 **Anything that can be a number lives in `:core`.** Foil angles, autoscroll
 ramps, grid geometry, siding. `androidx` is served only from Google's Maven, so
@@ -186,6 +182,7 @@ being asked, but an order alone cannot say *these nine are the engine and those
 six are the handtraps* — so put a gap between them from a card's long-press menu
 or with `g`. In a pane the gap is a mark, so every card stays the same size; in
 the full-deck view the groups separate onto their own rows.
+
 The tidies draw their own, so "group by type" separates the groups it made. Gaps
 travel with the file in its `#ydkx-extended` payload, and they survive being
 built around: append, cut, drag a card across one, and they stay where they mean.
@@ -225,13 +222,15 @@ out on the left and in on the right, with a count on each side so an uneven swap
 cannot slip past. It is written directly rather than through a library — the
 whole file is ASCII, which is what lets it ride the same export the deck does.
 
-Between games the deck across the table sides too, when its own file says how —
-a `.ydkx` carries that deck's plans, so a downloaded list often arrives with what
-its players actually bring in.
-
 The mat has two halves. Lay out the board you are trying to break on the far
 side — cards, tokens, face-downs, all by the same gesture — and then see what
 your opening does about it.
 
-Not yet built: dragging a gap along rather than replacing it, and a way to record
-what you expect an opponent to side when their file does not say.
+Between games of a shootout the deck across the table sides too, when its own
+file says how: a `.ydkx` carries that deck's plans, so a downloaded list often
+arrives with what its players actually bring in.
+
+Not yet built: dragging a gap along rather than replacing it. Recording what you
+*expect* an opponent to side, when their file does not say, is deliberately left
+out — every shape it could take dresses a guess as a measurement, and their deck
+feeds only what you see across the table, never the report.
