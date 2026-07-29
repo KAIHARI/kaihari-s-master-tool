@@ -103,6 +103,7 @@ internal val CHORD_KEYS: Map<Key, String> = mapOf(
     Key.Two to "2",
     Key.Three to "3",
     Key.F to "f",
+    Key.G to "g",
     Key.H to "h",
     Key.I to "i",
     Key.P to "p",
