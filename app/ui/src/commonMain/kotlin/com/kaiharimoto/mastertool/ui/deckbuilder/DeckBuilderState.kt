@@ -1655,6 +1655,28 @@ class DeckBuilderState(
         }
     }
 
+    /**
+     * Writes out a picture of the deck.
+     *
+     * Takes the encoded bytes rather than producing them, because what a deck
+     * looks like is not something this holder knows — the picture is whatever
+     * the showcase drew, captured from the same draw pass that put it on screen.
+     * That is the point of exporting it at all: every other tool renders a
+     * decklist from the list, sorted, and hands back a picture of a deck nobody
+     * arranged.
+     */
+    fun exportPicture(png: ByteArray?) {
+        if (png == null || png.isEmpty()) {
+            showToast("Could not read the screen to make a picture.")
+            return
+        }
+
+        scope.launch {
+            val name = "${deckName.ifBlank { "deck" }}.png"
+            if (deps.fileAccess.export(name, png, "image/png")) showToast("Saved $name.")
+        }
+    }
+
     // ---- helpers -----------------------------------------------------------
 
     /** Opens the inspector on [index] of [cards], which it can then page through. */

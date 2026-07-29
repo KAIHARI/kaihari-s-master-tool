@@ -3,10 +3,12 @@ package com.kaiharimoto.mastertool.ui.deckbuilder
 import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.deck.TidyBy
+import com.kaiharimoto.mastertool.core.export.Png
 import com.kaiharimoto.mastertool.core.layout.GridStep
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.ImportedFile
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -852,6 +854,39 @@ class DeckBuilderStateTest {
         assertTrue(written.contains("Fiendsmith"), written)
         // And the desktop's own keys are still there beside it.
         assertTrue(written.contains("somethingThisAppDoesNotKnow"), written)
+    }
+
+    // ---- a picture of the deck ---------------------------------------------
+
+    @Test
+    fun aPictureIsWrittenOutUnderTheDecksName() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+
+        val png = Png.encode(IntArray(4) { -1 }, 2, 2)
+        state.exportPicture(png)
+        advanceUntilIdle()
+
+        assertContentEquals(png, files.exportedBytes, "the bytes must arrive untouched")
+        assertEquals("image/png", files.exportedType)
+        assertTrue(requireNonNull(files.exportedName).endsWith(".png"))
+    }
+
+    @Test
+    fun aScreenThatCouldNotBeReadWritesNothing() = runTest {
+        // The capture returns null before the first frame is drawn, and on any
+        // surface a platform declines to read back. A file of no bytes called
+        // deck.png is worse than being told it did not work.
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+
+        state.exportPicture(null)
+        state.exportPicture(ByteArray(0))
+        advanceUntilIdle()
+
+        assertEquals(null, files.exportedBytes)
     }
 
     // ---- test hands --------------------------------------------------------

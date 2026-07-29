@@ -1460,3 +1460,36 @@ what makes "string length" and "byte offset" the same number in the
 cross-reference table. Only the *reason given for it* was wrong, and a comment
 that explains a constraint by pointing at something that has since moved is worse
 than no comment.
+
+---
+
+## 65 · The deck leaves as a picture
+
+`V` already draws the thing worth showing somebody: the deck at the largest size
+it fits at, in the arrangement its owner made, with the gaps where they put them.
+It could not leave the screen.
+
+Now it can. `ScreenCapture` records the showcase into a graphics layer Compose
+was going to allocate anyway, reads the layer back as a bitmap, and hands the
+pixels to the PNG writer. Not a screenshot in the operating-system sense — no
+permission, no other window, nothing outside the composable it wraps. The same
+draw pass, kept.
+
+Two things fell out of the shape of it. The save control is *outside* the
+captured box, because a save button in the corner of somebody's decklist is not
+a thing anybody wants to post — which is also the honest way to keep the
+showcase's promise of no controls on top of the deck: it is not on top of it, it
+is beside it, and it fades back when nothing is pointing at it. And
+`exportPicture` takes the encoded bytes rather than producing them, because what
+a deck looks like is not something a state holder knows.
+
+The whole reason this is worth having: every other builder can export a picture
+of a decklist, and every one of them sorts it first. What comes out is a picture
+of a deck nobody arranged.
+
+Capture and read-back are Compose API that cannot be compiled here, so they are
+alone in one small file — if CI disagrees about a name it will say which line.
+Everything either side of that line is tested: the PNG writer in `:core`, and
+`exportPicture` in `:ui`, including the case where the screen could not be read
+at all, because a file of no bytes called `deck.png` is worse than being told it
+did not work.

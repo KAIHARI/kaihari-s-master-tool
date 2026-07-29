@@ -2,10 +2,15 @@ package com.kaiharimoto.mastertool.ui.deckbuilder
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,7 +27,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,9 +47,11 @@ import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CARD_CORNER
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.accent
+import com.kaiharimoto.mastertool.ui.components.rememberScreenCapture
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.tableSurface
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
+import kotlinx.coroutines.launch
 
 /** Space between the three blocks, and around the whole thing. */
 private val BLOCK_GAP = 14.dp
@@ -94,11 +103,12 @@ fun DeckShowcase(state: DeckBuilderState, onDismiss: () -> Unit) {
     }
 
     val total = blocks.sumOf { it.second.size }
+    val capture = rememberScreenCapture()
+    val scope = rememberCoroutineScope()
 
     Box(
         Modifier
             .fillMaxSize()
-            .tableSurface(colors.accent, colors.mat)
             // No ripple and no indication: this is a backdrop that happens to be
             // dismissable, not a button the size of the screen.
             .clickable(
@@ -107,6 +117,35 @@ fun DeckShowcase(state: DeckBuilderState, onDismiss: () -> Unit) {
                 onClick = onDismiss,
             ),
     ) {
+        // The picture is exactly what this box draws, which is why the one
+        // control on the screen is outside it: a save button in the corner of
+        // somebody's decklist is not a thing anybody wants to post.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .tableSurface(colors.accent, colors.mat)
+                .then(capture.modifier),
+        ) {
+            ShowcaseContents(state, blocks, total, reveal)
+        }
+
+        if (blocks.isNotEmpty()) {
+            SavePicture(
+                onClick = { scope.launch { state.exportPicture(capture.png()) } },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(MARGIN),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShowcaseContents(
+    state: DeckBuilderState,
+    blocks: List<Pair<DeckSection, List<CardId>>>,
+    total: Int,
+    reveal: Animatable<Float, *>,
+) {
+    Box(Modifier.fillMaxSize()) {
         if (blocks.isEmpty()) {
             Text(
                 "Nothing to show yet.",
@@ -171,6 +210,39 @@ fun DeckShowcase(state: DeckBuilderState, onDismiss: () -> Unit) {
                 Caption(state, total)
             }
         }
+    }
+}
+
+/**
+ * The only control on the screen, and it keeps out of the picture.
+ *
+ * Faint on purpose. The showcase exists to have nothing on top of the deck, and
+ * a button that asserted itself would undo that — but a picture nobody can find
+ * how to save is not a feature. So it sits quiet in the corner and comes up when
+ * a pointer finds it.
+ */
+@Composable
+private fun SavePicture(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = LocalMasterToolColors.current
+    val interactions = remember { MutableInteractionSource() }
+    val hovered by interactions.collectIsHoveredAsState()
+    val pressed by interactions.collectIsPressedAsState()
+    val lit by animateFloatAsState(if (hovered || pressed) 1f else 0.4f)
+
+    Box(
+        modifier
+            .clip(RoundedCornerShape(3.dp))
+            .border(1.dp, colors.accent.copy(alpha = 0.5f * lit), RoundedCornerShape(3.dp))
+            .background(Color.Black.copy(alpha = 0.3f * lit))
+            .hoverable(interactions)
+            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    ) {
+        Text(
+            "SAVE A PICTURE",
+            style = tacticalStyle(),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = lit),
+        )
     }
 }
 
