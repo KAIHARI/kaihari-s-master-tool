@@ -78,11 +78,12 @@ fun MasterToolApp(deps: AppDependencies) {
                 layout = layoutState,
                 updateState = updateState,
                 onOpenLibrary = { screen = Screen.Library },
-                onOpenSandbox = {
+                onOpenSandbox = { hand ->
                     // Dealt fresh on the way in. A board left over from twenty
                     // minutes ago is not the question anybody is asking, and the
-                    // deck may not even be the same deck.
-                    sandboxState.open(builderState.deck)
+                    // deck may not even be the same deck. Unless a hand came
+                    // with the request, in which case that hand is the question.
+                    sandboxState.open(builderState.deck, hand.ifEmpty { null })
                     screen = Screen.Sandbox
                 },
             )

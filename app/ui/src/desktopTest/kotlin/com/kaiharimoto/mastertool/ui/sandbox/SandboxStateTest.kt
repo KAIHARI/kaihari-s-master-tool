@@ -447,4 +447,34 @@ class SandboxPileTest {
         assertEquals(extra, state.table.extra)
         assertNull(state.held, "and nothing is left picked up")
     }
+
+    @Test
+    fun aBoardCanBeOpenedAroundAHandYouAlreadyHave() {
+        val state = SandboxState()
+        val hand = listOf(main[0], main[1], main[2])
+
+        state.open(deck, hand, Random(3))
+
+        assertEquals(hand, state.table.hand)
+        assertEquals(main.size - hand.size, state.table.library.size)
+        assertFalse(state.canUndo, "it is a fresh table, not an edit to one")
+    }
+
+    @Test
+    fun shufflingUpDealsAgainFromTheSameList() {
+        val state = open()
+        state.play(0, zone, Placement.ATTACK)
+
+        assertTrue(state.canRedeal)
+        state.redeal()
+
+        assertTrue(state.board.isEmpty)
+        assertEquals(5, state.table.hand.size)
+        assertFalse(state.canUndo, "and there is no going back to the last table")
+    }
+
+    @Test
+    fun anEmptyTableHasNothingToShuffle() {
+        assertFalse(SandboxState().canRedeal)
+    }
 }

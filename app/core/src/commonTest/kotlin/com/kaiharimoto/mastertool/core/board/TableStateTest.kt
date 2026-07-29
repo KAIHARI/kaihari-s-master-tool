@@ -270,4 +270,40 @@ class TableStateTest {
             everywhere.sortedBy { it.value },
         )
     }
+
+    @Test
+    fun aDeckCanBeLaidOutAroundAHandYouAlreadyHave() {
+        val deck = Deck(main = cards, extra = extra, side = emptyList())
+        val hand = listOf(cards[0], cards[5], cards[9])
+
+        val table = TableState.holding(deck, hand, Random(6))
+
+        assertEquals(hand, table.hand, "in the order it was already in")
+        assertEquals(cards.size - hand.size, table.library.size)
+        assertTrue(hand.none { it in table.library }, "and not still in the deck as well")
+        assertEquals(extra, table.extra)
+    }
+
+    @Test
+    fun onlyOneCopyLeavesTheDeckPerCopyInHand() {
+        // Three of a card in the list, one of them in hand: the other two are
+        // still in there, and a naive removeAll would take all three.
+        val ash = CardId(14558127)
+        val deck = Deck(main = List(3) { ash } + cards, extra = emptyList(), side = emptyList())
+
+        val table = TableState.holding(deck, listOf(ash), Random(1))
+
+        assertEquals(2, table.library.count { it == ash })
+    }
+
+    @Test
+    fun aHandCardThatIsNotInTheDeckIsStillDealt() {
+        val deck = Deck(main = cards, extra = emptyList(), side = emptyList())
+        val stranger = CardId(111_111)
+
+        val table = TableState.holding(deck, listOf(stranger), Random(1))
+
+        assertEquals(listOf(stranger), table.hand)
+        assertEquals(cards.size, table.library.size)
+    }
 }

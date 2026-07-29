@@ -59,7 +59,7 @@ fun DeckBuilderScreen(
     layout: DeckLayoutState,
     updateState: UpdateState,
     onOpenLibrary: () -> Unit,
-    onOpenSandbox: () -> Unit,
+    onOpenSandbox: (List<CardId>) -> Unit,
 ) {
     val snackbarHost = remember { SnackbarHostState() }
     val density = LocalDensity.current
@@ -157,7 +157,13 @@ fun DeckBuilderScreen(
             // clipped by the grid it was lifted out of.
             Box(Modifier.fillMaxSize().padding(padding)) {
                 Column(Modifier.fillMaxSize()) {
-                    DeckBuilderTopBar(state, layout, updateState, onOpenLibrary, onOpenSandbox)
+                    DeckBuilderTopBar(
+                        state = state,
+                        layout = layout,
+                        updateState = updateState,
+                        onOpenLibrary = onOpenLibrary,
+                        onOpenSandbox = { onOpenSandbox(emptyList()) },
+                    )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
                     Row(
@@ -198,7 +204,7 @@ fun DeckBuilderScreen(
 
     if (state.sidingVisible) SidingPanel(state)
 
-    if (state.testHandVisible) TestHandPanel(state)
+    if (state.testHandVisible) TestHandPanel(state, onOpenSandbox)
 
     state.inspection?.let { inspection ->
         CardInspector(
@@ -272,7 +278,7 @@ fun DeckBuilderScreen(
     }
 
     if (state.shootoutVisible) {
-        ShootoutPanel(state)
+        ShootoutPanel(state, onOpenSandbox)
     }
 
     // Not a sheet. A sheet would leave the builder showing around the edges,

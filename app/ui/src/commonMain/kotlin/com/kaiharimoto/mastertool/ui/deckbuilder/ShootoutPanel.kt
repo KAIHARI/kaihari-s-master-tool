@@ -38,6 +38,7 @@ import com.kaiharimoto.mastertool.core.deck.ShootoutGame
 import com.kaiharimoto.mastertool.core.deck.ShootoutReport
 import com.kaiharimoto.mastertool.core.deck.ShootoutRun
 import com.kaiharimoto.mastertool.core.deck.SideVerdict
+import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.HoverPreview
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
@@ -65,7 +66,7 @@ import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
  * two numbers: whether the side deck is doing any work at all.
  */
 @Composable
-fun ShootoutPanel(state: DeckBuilderState) {
+fun ShootoutPanel(state: DeckBuilderState, onPlayItOut: (List<CardId>) -> Unit = {}) {
     MasterToolSheet(onDismiss = { state.shootoutVisible = false }) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
@@ -147,6 +148,17 @@ fun ShootoutPanel(state: DeckBuilderState) {
                 }
                 if (run != null && run.played > 0) {
                     TextButton(onClick = { state.undoTrial() }) { Text("Undo this trial") }
+                }
+                state.yourOpening?.let { opening ->
+                    // The hand in front of you, on a board. Half of judging an
+                    // opening against a real deck is finding out whether it
+                    // actually assembles into anything.
+                    TextButton(
+                        onClick = {
+                            state.shootoutVisible = false
+                            onPlayItOut(opening.cards)
+                        },
+                    ) { Text("Play it out") }
                 }
                 TextButton(onClick = { state.loadOpponent() }) { Text("Change opponent…") }
 

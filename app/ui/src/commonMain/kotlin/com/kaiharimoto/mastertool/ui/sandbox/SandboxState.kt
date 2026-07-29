@@ -179,17 +179,45 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
 
     private var history by mutableStateOf<List<TableState>>(emptyList())
 
+    /**
+     * The list this table was dealt from, so it can be dealt again.
+     *
+     * Kept here rather than asked for again, because "shuffle up and go again"
+     * is the most common thing to want on a board and walking back to the deck
+     * builder to ask for it would be absurd.
+     */
+    private var dealtFrom by mutableStateOf(Deck.EMPTY)
+
+    val canRedeal: Boolean get() = dealtFrom.main.isNotEmpty()
+
+    /** Shuffles up and deals again from the same list. */
+    fun redeal() {
+        if (!canRedeal) return
+        open(dealtFrom)
+    }
+
     val canUndo: Boolean get() = history.isNotEmpty()
 
     val board: Board get() = table.board
 
-    /** Shuffles a decklist out and draws an opening hand. */
-    fun open(deck: Deck, random: Random = Random.Default) {
+    /**
+     * Shuffles a decklist out onto the table.
+     *
+     * [hand] is the opening to lay it out around, for the moment a test hand
+     * turns out to be interesting and the question stops being "would I keep
+     * this" and becomes "what does it do". Null deals a fresh one.
+     */
+    fun open(deck: Deck, hand: List<CardId>? = null, random: Random = Random.Default) {
+        dealtFrom = deck
         history = emptyList()
         held = null
         openPile = null
         justPlaced = null
-        table = TableState.from(deck, random)
+        table = if (hand == null) {
+            TableState.from(deck, random)
+        } else {
+            TableState.holding(deck, hand, random)
+        }
     }
 
     fun draw() = change { it.draw() }

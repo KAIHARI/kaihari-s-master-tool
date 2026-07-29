@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.core.deck.HandSimulator
+import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.HoverPreview
 import com.kaiharimoto.mastertool.ui.components.percent
@@ -41,7 +42,7 @@ import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TestHandPanel(state: DeckBuilderState) {
+fun TestHandPanel(state: DeckBuilderState, onPlayItOut: (List<CardId>) -> Unit = {}) {
     val hand = state.testHand
 
     MasterToolSheet(onDismiss = { state.testHandVisible = false }) {
@@ -108,6 +109,18 @@ fun TestHandPanel(state: DeckBuilderState) {
                     Text("Reshuffle")
                 }
                 TextButton(onClick = { state.drawOneMore() }) { Text("Draw one") }
+                hand?.let { opening ->
+                    // The point at which the question changes. "Would I keep
+                    // this" is answered by looking; "what does it actually do"
+                    // is only answered by playing it, and that used to mean
+                    // shuffling until the same five came up again.
+                    TextButton(
+                        onClick = {
+                            state.testHandVisible = false
+                            onPlayItOut(opening.cards)
+                        },
+                    ) { Text("Play it out") }
+                }
 
                 Box(Modifier.weight(1f))
 

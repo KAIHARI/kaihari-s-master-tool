@@ -105,6 +105,9 @@ fun SandboxScreen(
             TextButton(onClick = { state.draw() }, enabled = state.table.library.isNotEmpty()) {
                 Text("Draw")
             }
+            TextButton(onClick = { state.redeal() }, enabled = state.canRedeal) {
+                Text("Shuffle up")
+            }
             TextButton(onClick = { state.undo() }, enabled = state.canUndo) { Text("Undo") }
             TextButton(onClick = { state.clearBoard() }) { Text("Sweep") }
         }

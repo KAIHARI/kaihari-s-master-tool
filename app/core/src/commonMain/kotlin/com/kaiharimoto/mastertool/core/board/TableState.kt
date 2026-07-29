@@ -128,5 +128,23 @@ data class TableState(
         fun from(deck: Deck, random: Random, handSize: Int = OPENING_HAND): TableState =
             TableState(library = deck.main.shuffled(random), extra = deck.extra)
                 .draw(handSize)
+
+        /**
+         * Lays a deck out around a hand somebody already has.
+         *
+         * For the moment a test hand turns out to be interesting and the
+         * question stops being "would I keep this" and becomes "what does it
+         * actually do" — which is a question you can only answer by playing it,
+         * and which used to mean shuffling until the same five came up again.
+         *
+         * A card in [hand] that is not in the deck is still dealt. It came from
+         * somewhere real, and a hand that silently lost a card would be a worse
+         * answer than one that is slightly generous.
+         */
+        fun holding(deck: Deck, hand: List<CardId>, random: Random): TableState {
+            val rest = deck.main.toMutableList()
+            hand.forEach { rest.remove(it) }
+            return TableState(hand = hand, library = rest.shuffled(random), extra = deck.extra)
+        }
     }
 }
