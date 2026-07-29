@@ -1885,3 +1885,10 @@ Found by reading, again, and prompted by the mat: I went to check that choosing
 one would persist, found it would not, and found that gaps had never persisted
 either. Adding a feature is a good way to discover that the ground under it was
 not solid.
+
+**And the same omission one line further on.** `newDeck` puts the gaps and the
+card notes back if you take it back, and did not put the mat back — a list of
+three things where the third had just been added. Undo restores the cards, but a
+deck is not only its cards: the gaps, the notes and the cloth are what made it
+that deck rather than a list of passcodes. There is a test now that takes back a
+new deck and checks all three.

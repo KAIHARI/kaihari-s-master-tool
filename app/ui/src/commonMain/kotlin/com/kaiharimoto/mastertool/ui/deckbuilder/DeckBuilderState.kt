@@ -1598,11 +1598,13 @@ class DeckBuilderState(
         releaseOpenDeck()
         registeredDeck = Deck.EMPTY
         val token = pushUndo(deck)
-        // The gaps go with the deck they described, and come back with it. Undo
-        // brings the cards back in the order they were in, and an arrangement
-        // without its gaps is not the arrangement that was there.
+        // Everything that describes the deck goes with it, and comes back with
+        // it. Undo brings the cards back in the order they were in, and an
+        // arrangement without its gaps -- or its notes, or the cloth it was laid
+        // out on -- is not the deck that was there a moment ago.
         val hadBreaks = breaks
         val hadNotes = cardNotes
+        val hadMat = mat
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
         deckNotes = ""
@@ -1616,6 +1618,7 @@ class DeckBuilderState(
                 if (undoIfCurrent(token)) {
                     breaks = hadBreaks
                     cardNotes = hadNotes
+                    mat = hadMat
                 }
             },
         )

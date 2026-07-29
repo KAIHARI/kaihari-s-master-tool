@@ -952,6 +952,25 @@ class DeckBuilderStateTest {
         assertEquals(MatChoice.THEME, state.mat)
     }
 
+    @Test
+    fun takingBackANewDeckBringsBackEverythingThatDescribedTheOldOne() = runTest {
+        // Undo restores the cards; a deck is not only its cards. The gaps, the
+        // notes and the cloth were what made it that deck rather than a list.
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+        val card = state.deck.main.first()
+        state.toggleBreak(main, 2)
+        state.writeNote(card, "kept")
+        state.chooseMat(MatChoice.BAIZE)
+
+        state.newDeck()
+        state.toast?.undo?.invoke()
+
+        assertEquals(setOf(2), state.breaksIn(main).before)
+        assertEquals("kept", state.noteOn(card))
+        assertEquals(MatChoice.BAIZE, state.mat)
+    }
+
     // ---- a word on a card --------------------------------------------------
 
     @Test
