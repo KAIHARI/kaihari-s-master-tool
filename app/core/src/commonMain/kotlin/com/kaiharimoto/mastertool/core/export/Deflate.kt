@@ -64,7 +64,12 @@ internal object Deflate {
         bits.bits(1, 2) // fixed Huffman
 
         val heads = IntArray(HASH_SIZE) { -1 }
-        val chain = IntArray(data.size) { -1 }
+        // One slot per position *within the window*, not per byte of input. A
+        // picture of a deck is twenty megabytes of scanlines, and a chain the
+        // length of the input would be another eighty-seven -- allocated on a
+        // tablet, to export a file. Nothing further back than the window is ever
+        // followed, so positions older than that may safely alias.
+        val chain = IntArray(WINDOW) { -1 }
 
         var at = 0
         while (at < data.size) {
@@ -105,7 +110,7 @@ internal object Deflate {
 
     private fun insert(data: ByteArray, at: Int, heads: IntArray, chain: IntArray) {
         val slot = hash(data, at)
-        chain[at] = heads[slot]
+        chain[at and WINDOW_MASK] = heads[slot]
         heads[slot] = at
     }
 
@@ -132,7 +137,9 @@ internal object Deflate {
                 // the chain on flat colour is very long.
                 if (length >= limit) break
             }
-            candidate = chain[candidate]
+            // Safe to alias here: the loop above has already stopped following
+            // anything further back than the window.
+            candidate = chain[candidate and WINDOW_MASK]
         }
 
         return if (bestLength >= MIN_MATCH) Match(bestLength, bestDistance) else null
@@ -142,6 +149,10 @@ internal object Deflate {
     private const val MIN_MATCH = 3
     private const val MAX_MATCH = 258
     private const val MAX_DISTANCE = 32768
+
+    /** The window, as a power of two so the wrap is a mask rather than a modulo. */
+    private const val WINDOW = 32768
+    private const val WINDOW_MASK = WINDOW - 1
 
     /**
      * How far back to look before settling for what has been found.
@@ -258,6 +269,9 @@ internal class ByteWriter(capacity: Int = 1024) {
         byte((value ushr 8) and 0xFF)
         byte(value and 0xFF)
     }
+
+    /** The byte already written at [index], which a back-reference reads. */
+    fun at(index: Int): Int = buffer[index].toInt() and 0xFF
 
     fun toByteArray(): ByteArray = buffer.copyOf(size)
 }

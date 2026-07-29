@@ -257,3 +257,106 @@ class DeflateTest {
             (this[offset + 2].toInt() and 0xFF shl 8) or
             (this[offset + 3].toInt() and 0xFF)
 }
+
+/**
+ * The compressor against a decompressor that has never seen it.
+ *
+ * [InflateForTest] reads RFC 1951 independently, so agreement between the two is
+ * evidence about the specification rather than about a shared assumption. This
+ * replaces a hand-run check against Python's `zlib`, which was worth exactly as
+ * much as somebody remembering to run it again.
+ */
+class DeflateRoundTripTest {
+
+    private fun roundTrip(data: ByteArray) {
+        val out = InflateForTest.zlib(Deflate.zlib(data))
+        assertContentEquals(data, out)
+    }
+
+    @Test
+    fun textComesBackOutTheWayItWentIn() {
+        roundTrip("the arrangement is the deck".encodeToByteArray())
+    }
+
+    @Test
+    fun everyByteValueSurvivesTheRoundTrip() {
+        // 144 is where the literal table changes from eight bits to nine.
+        roundTrip(ByteArray(256) { it.toByte() })
+    }
+
+    @Test
+    fun anythingShorterThanAReferenceSurvives() {
+        listOf("", "a", "ab", "abc", "aaaa").forEach {
+            roundTrip(it.encodeToByteArray())
+        }
+    }
+
+    @Test
+    fun aRunLongerThanTheLongestReferenceSurvives() {
+        // Several maximum-length references in a row, and each one reaching into
+        // what it is itself writing.
+        roundTrip(ByteArray(5000))
+    }
+
+    @Test
+    fun repetitionSurvivesAndIsShorterForIt() {
+        val data = "arrange".repeat(2000).encodeToByteArray()
+
+        val compressed = Deflate.zlib(data)
+        assertTrue(compressed.size < data.size / 20)
+        assertContentEquals(data, InflateForTest.zlib(compressed))
+    }
+
+    @Test
+    fun somethingBiggerThanTheWindowSurvives() {
+        // The match table holds one slot per position *within* the window rather
+        // than per byte of input, so positions older than the window alias onto
+        // newer ones. This is the input that would find that wrong: a block
+        // repeated from far enough back that it must not be referenced.
+        val block = ByteArray(4096) { (it * 31 % 251).toByte() }
+        val middle = Random(3).nextBytes(60_000)
+
+        roundTrip(block + middle + block)
+    }
+
+    @Test
+    fun aPictureSizedInputSurvives() {
+        // Filtered scanlines: mostly zeroes with card-shaped noise in them, which
+        // is what a deck picture actually looks like by the time it reaches here.
+        val random = Random(11)
+        val data = ByteArray(400_000) { index ->
+            if ((index / 1600) % 7 == 0) random.nextInt(256).toByte() else 0
+        }
+
+        val compressed = Deflate.zlib(data)
+        assertTrue(compressed.size < data.size / 3, "came to ${compressed.size} bytes")
+        assertContentEquals(data, InflateForTest.zlib(compressed))
+    }
+
+    @Test
+    fun aWholePngComesApartAgain() {
+        // The layer above, end to end: encode a picture, pull the IDAT out of it
+        // and inflate that, and the scanlines are the ones that went in.
+        val pixels = IntArray(64 * 40) { 0xFF16203A.toInt() + (it % 5) }
+        val png = Png.encode(pixels, 64, 40)
+
+        val idat = idatOf(png)
+        assertContentEquals(Png.filtered(pixels, 64, 40), InflateForTest.zlib(idat))
+    }
+
+    private fun idatOf(png: ByteArray): ByteArray {
+        var at = 8
+        val out = ArrayList<Byte>()
+        while (at < png.size) {
+            val length = (png[at].toInt() and 0xFF shl 24) or
+                (png[at + 1].toInt() and 0xFF shl 16) or
+                (png[at + 2].toInt() and 0xFF shl 8) or
+                (png[at + 3].toInt() and 0xFF)
+            if (png.copyOfRange(at + 4, at + 8).decodeToString() == "IDAT") {
+                png.copyOfRange(at + 8, at + 8 + length).forEach(out::add)
+            }
+            at += 12 + length
+        }
+        return out.toByteArray()
+    }
+}

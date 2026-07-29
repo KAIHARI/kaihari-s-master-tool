@@ -1350,7 +1350,7 @@ program agreeing with something it had just refused.
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **767 tests**, up from 249, plus
+`:core` carries the arithmetic for all of it, at **775 tests**, up from 249, plus
 the `:ui` suite where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
@@ -1748,3 +1748,32 @@ explains an absence rather than a function.
 That makes five: `ShootoutRun.undoGame`, `Board.clear`, `TableState.isEmpty`,
 `SandboxState.returnToHand`/`discard`, and now this. Every one was a plausible
 method nobody needed, and every one was found by noticing nothing called it.
+
+---
+
+## 75 · Eighty-seven megabytes to save a picture, and a proof that lasts
+
+Two things about the compressor, both found by reading it again rather than by
+anything failing.
+
+**The match table was as long as the input.** One slot per byte, and a picture of
+a deck at tablet resolution is about twenty-two megabytes of filtered scanlines —
+so exporting one would allocate another eighty-seven megabytes of `Int`s, on a
+tablet, to write a file. Nothing further back than the 32K window is ever
+followed, so the table only ever needed to be a window long; positions older than
+that alias onto newer ones and are unreachable by construction. 87 MB down to
+128 KB, and the test that would find it wrong is the one that repeats a block
+from further back than the window.
+
+**The proof was a thing I did once.** Deflate was checked against Python's `zlib`
+by hand — every chunk, every scanline, every pixel of a 6.4 MB image, exact — and
+that check was worth precisely as much as somebody remembering to run it again.
+So `InflateForTest` now reads RFC 1951 back, independently, in `:core`: fixed
+Huffman only, its own copy of the length and distance tables so a mistake in
+either cannot be shared, and an error rather than a branch for anything the
+writer does not emit. Agreement between the two is evidence about the
+specification instead of about a shared assumption, and it runs on every push.
+
+The by-hand check still happened, and it still mattered — it is how I knew the
+windowed table was right before writing a test for it. What changed is that it no
+longer has to happen again.
