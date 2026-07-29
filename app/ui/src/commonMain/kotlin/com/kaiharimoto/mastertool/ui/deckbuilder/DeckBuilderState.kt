@@ -28,6 +28,7 @@ import com.kaiharimoto.mastertool.core.deck.SaveTracking
 import com.kaiharimoto.mastertool.core.deck.SavedSnapshot
 import com.kaiharimoto.mastertool.core.deck.ShootoutRun
 import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.export.SidingSheet
 import com.kaiharimoto.mastertool.core.siding.SidingCodec
 import com.kaiharimoto.mastertool.core.siding.SidingDiff
 import com.kaiharimoto.mastertool.core.siding.SidingEngine
@@ -863,6 +864,30 @@ class DeckBuilderState(
             "Recorded ${swap.cardsIn.size} in / ${swap.cardsOut.size} out for $name, " +
                 if (recordingGoingFirst) "going first." else "going second.",
         )
+    }
+
+    /**
+     * Writes the siding plans out as a sheet to print.
+     *
+     * It goes through the same text export the deck itself uses, which works
+     * because the writer emits nothing outside ASCII — a promise it makes for
+     * the sake of its own cross-reference table and which happens to mean the
+     * bytes survive a round trip through a string untouched. No platform code
+     * had to learn about binary files.
+     */
+    fun exportSidingSheet() {
+        val patterns = sidingPatterns.values.toList()
+        if (patterns.isEmpty()) {
+            showToast("No siding plans recorded for this deck yet.")
+            return
+        }
+
+        scope.launch {
+            val name = deckName.ifBlank { "Untitled Deck" }
+            val sheet = SidingSheet.render(name, patterns) { index.byId(it)?.name }
+            val written = deps.fileAccess.exportDeck("$name siding.pdf", sheet.decodeToString())
+            if (written) showToast("Siding sheet written for ${patterns.size} matchups.")
+        }
     }
 
     /** Which half of a matchup the next recording describes. */

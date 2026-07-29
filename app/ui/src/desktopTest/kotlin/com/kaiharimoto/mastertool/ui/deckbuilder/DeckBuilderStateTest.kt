@@ -571,6 +571,37 @@ class DeckBuilderStateTest {
         assertTrue(written.contains("#ydkx-extended"), written)
     }
 
+    @Test
+    fun theSidingSheetGoesOutAsARealPdf() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+
+        state.exportSidingSheet()
+        advanceUntilIdle()
+
+        val written = requireNonNull(files.exported)
+        assertTrue(written.startsWith("%PDF"), written.take(40))
+        assertTrue(written.trimEnd().endsWith("%%EOF"))
+        assertTrue("Snake-Eye" in written, "the matchup the file carries")
+        assertTrue(
+            written.all { it.code in 0..127 },
+            "it rides the text export, which only works while nothing is binary",
+        )
+    }
+
+    @Test
+    fun aDeckWithNoPlansWritesNoSheet() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        TestPool.many(4).forEach { state.addCard(it) }
+
+        state.exportSidingSheet()
+        advanceUntilIdle()
+
+        assertEquals(null, files.exported, "a file saying nothing is worse than no file")
+    }
+
     // ---- recording a plan --------------------------------------------------
 
     @Test

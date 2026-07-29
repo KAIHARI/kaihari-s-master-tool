@@ -64,7 +64,19 @@ fun SidingPanel(state: DeckBuilderState) {
             Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Siding", style = MaterialTheme.typography.headlineSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Siding", style = MaterialTheme.typography.headlineSmall)
+
+                Box(Modifier.weight(1f))
+
+                // The thing the original tool actually delivered: a piece of
+                // paper that goes beside the deck box, not another screen.
+                if (patterns.isNotEmpty()) {
+                    TextButton(onClick = { state.exportSidingSheet() }) {
+                        Text("Print sheet…")
+                    }
+                }
+            }
 
             Recorder(state)
 
