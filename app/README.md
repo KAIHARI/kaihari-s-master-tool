@@ -91,6 +91,13 @@ cannot disagree with each other.
 **A failed card-pool refresh never clears the cache.** An outdated pool beats no
 pool at a venue with no signal.
 
+**The desktop window has a floor.** 1200x800 points, in points rather than
+pixels so a 2x display does not halve it. The top bar is one row of fixed
+controls and a Row does not fold when it runs out of width — it clips — so
+dragged narrower than that the window quietly cut the save control and the menu
+off its own right edge. The panes below could always give ground: each goes down
+to three columns and any of them closes.
+
 **Landscape-locked on Android.** Removes rotation recreation entirely, which is
 why the app uses plain remembered state holders instead of ViewModels.
 

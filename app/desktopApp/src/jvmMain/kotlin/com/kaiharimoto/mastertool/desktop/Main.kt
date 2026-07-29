@@ -1,7 +1,9 @@
 package com.kaiharimoto.mastertool.desktop
 
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -18,6 +20,7 @@ import com.kaiharimoto.mastertool.core.update.UpdateChecker
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.MasterToolApp
 import kotlinx.coroutines.Dispatchers
+import java.awt.Dimension
 import java.io.File
 import java.util.UUID
 
@@ -44,9 +47,34 @@ fun main() = application {
         title = "kai's master tool",
         state = rememberWindowState(size = DpSize(1600.dp, 1000.dp)),
     ) {
+        // A floor, because there is nothing under it. The top bar is a single
+        // row of fixed controls -- the wordmark, the deck name, the counts, the
+        // legality chip, both formats, undo, redo, statistics, save, the library
+        // and the menu -- and a Row does not fold when it runs out of width, it
+        // clips. Dragged narrow, the window silently cut the menu and the save
+        // control off its own right edge.
+        //
+        // In points rather than pixels: on a 2x display a raw 1200 is 600 points
+        // and the floor would be under the problem rather than over it.
+        val density = LocalDensity.current
+        LaunchedEffect(density) {
+            window.minimumSize = with(density) {
+                Dimension(MINIMUM.width.roundToPx(), MINIMUM.height.roundToPx())
+            }
+        }
+
         MasterToolApp(deps)
     }
 }
+
+/**
+ * The narrowest this is still the program rather than a clipped picture of it.
+ *
+ * Wide enough for the top bar, which is the widest fixed thing here; the panes
+ * below it were already able to give ground, since each one can be taken down to
+ * three columns and any of them can be closed.
+ */
+private val MINIMUM = DpSize(1200.dp, 800.dp)
 
 private fun buildDependencies(): AppDependencies {
     val updater = DesktopAppUpdater()
