@@ -389,29 +389,35 @@ class DeckBuilderStateTest {
     }
 
     @Test
-    fun tidyingByTypeDrawsTheGapsItGrouped() = runTest {
+    fun everyGapInASectionCanBeTakenAwayAtOnce() = runTest {
+        // What a sort does to the arrangement it replaced. The tidy and sort
+        // paths themselves need a card pool to look cards up in, and this
+        // fixture deliberately has none -- that half is held down in :core,
+        // where DeckTidy.arrange is asked directly what gaps it draws.
         val state = builderState()
-        // Four monsters and a trap, deliberately interleaved.
-        listOf(TestPool.ash, TestPool.imperm, TestPool.maxx, TestPool.nibiru)
-            .forEach { state.addCard(it) }
+        TestPool.many(8).forEach { state.addCard(it) }
+        state.toggleBreak(main, 2)
+        state.toggleBreak(main, 5)
+        assertEquals(setOf(2, 5), state.breaksIn(main).before)
 
-        state.tidySection(main, TidyBy.CATEGORY)
+        state.clearBreaks(main)
 
-        assertEquals(setOf(3), state.breaksIn(main).before, "monsters, then the trap")
+        assertTrue(state.breaksIn(main).isEmpty)
     }
 
     @Test
-    fun sortingThrowsTheGapsAwayWithTheArrangement() = runTest {
+    fun gapsInOneSectionLeaveTheOthersAlone() = runTest {
         val state = builderState()
-        TestPool.many(6).forEach { state.addCard(it) }
-        state.toggleBreak(main, 3)
+        val cards = TestPool.many(6)
+        cards.forEach { state.addCard(it) }
+        cards.take(3).forEach { state.moveCard(it, main, DeckSection.SIDE) }
+        state.toggleBreak(main, 1)
+        state.toggleBreak(DeckSection.SIDE, 2)
 
-        state.sortSection(main, SortMode.NAME)
+        state.clearBreaks(main)
 
-        assertTrue(
-            state.breaksIn(main).isEmpty,
-            "a sort decides the whole order, so the old grouping is not about it",
-        )
+        assertTrue(state.breaksIn(main).isEmpty)
+        assertEquals(setOf(2), state.breaksIn(DeckSection.SIDE).before)
     }
 
     @Test
