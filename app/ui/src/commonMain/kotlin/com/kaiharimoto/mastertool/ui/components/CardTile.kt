@@ -21,8 +21,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -94,15 +92,11 @@ fun CardTile(
         // Drawn beneath the artwork rather than only when both URLs are absent:
         // a card whose image fails to load — the offline case this app is built
         // for — otherwise renders as a blank rectangle with nothing to read.
-        Text(
-            text = card.name,
-            style = MaterialTheme.typography.labelSmall,
-            textAlign = TextAlign.Center,
-            maxLines = 4,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.align(Alignment.Center).padding(4.dp),
-        )
+        //
+        // It used to be the name in the middle of the surface colour, which is
+        // legible and is not a card: forty of them touching read as a wall of
+        // labels, in exactly the situation this program says it is for.
+        CardFaceArt(card, Modifier.fillMaxSize())
 
         AsyncImage(
             model = card.imageUrlSmall ?: card.imageUrl,

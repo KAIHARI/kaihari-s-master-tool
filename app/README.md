@@ -157,6 +157,16 @@ you can page through the results in, deck statistics with opening-hand odds, a
 deck-check panel that jumps to the card an issue names, a TCG/OCG toggle, deck
 library, YDK/YDKX import, export and share.
 
+A card with no picture is drawn rather than labelled. This program is built for a
+venue with no signal — it says so, and it keeps an outdated card pool rather than
+none — and then it drew every card as a grey rectangle with the name across it,
+so the case it was designed for was the one where forty cards touching read as a
+wall of labels. Now the frame is the card's own: orange has an effect, green is a
+spell, black is an Xyz, and the art window holds an abstract field seeded by the
+passcode, so three copies look like three copies and the card beside them does
+not. Each frame carries its own ink, checked against all three ends of its own
+gradient, because one of them is nearly black.
+
 Cards in a deck pane touch, on a mat — the deck's own, see below. They catch the
 light when you point at one, are dealt onto the table when a deck opens, and
 trail your hand on a spring while being carried. Several can be picked up and

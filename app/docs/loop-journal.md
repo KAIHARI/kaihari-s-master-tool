@@ -2198,6 +2198,55 @@ node with the name beside it, which is the thing you scan a history for.
 
 ---
 
+## 90 · The program is built for a venue with no signal and looked worst there
+
+Written down in three places: the app keeps an outdated card pool rather than
+none, a failed refresh never clears the cache, and the whole thing is offline by
+design. And a card whose image had not arrived drew as a grey rectangle with its
+name written across the middle. So the state this application was designed for
+was also its ugliest — forty cards touching, reading as a wall of labels.
+
+So the card gets drawn. Frame from `frameType` (the same key `isExtraDeck` uses,
+so a `fusion_pendulum` is drawn as the Fusion it is summoned as), the name, the
+level as stars, the attribute as a dot, ATK and DEF, and an abstract field in the
+art window seeded by the passcode. Deterministic, so three copies of a card look
+like three copies and the one beside them does not, and so the PNG exported of an
+arrangement matches the arrangement. It is not a forgery of the artwork and is
+not trying to be.
+
+Two things the prototype settled that reasoning had not:
+
+**The bands are fixed heights, not proportions.** The first version let the name
+band grow to fit, so one long-named card stepped every band across its row out of
+line with its neighbours. Cards in a pane *touch* — that misalignment reads as
+broken rather than as forty cards. The pip row is reserved even on a spell for
+the same reason.
+
+**The initials in the middle of the art window went.** "AB" floating in a box is
+what a placeholder avatar looks like. The attribute dot replaced it: it is real
+information, it uses the seven colours the statistics panel already uses, and it
+is quiet.
+
+### The palette was solved, not chosen
+
+`CardFrameContrastTest` was written the way `MatContrastTest` was — and then
+checked against the numbers *before pushing*, because `:ui` does not compile
+here and a failing assert costs a ten-minute round trip. Nine of eleven frames
+failed. The footer sits over the dark end of the frame's gradient, and on the
+Effect frame the ink was 2.1:1 there. Gold level stars on the gold Normal frame
+were 1.3:1 — invisible, and visible as such in the screenshot once looked for.
+
+The first fix was wrong: solving for 4.5:1 across the gradient flattened it to
+nothing on five frames. The actual error was the gradient, not the ink — a real
+card frame is one colour with a sheen, not a spotlight. Narrowed to ±16/20% and
+every frame clears 4.5:1 on the base and 3.3:1 at both ends, with two of them
+(Fusion, Trap) taking light ink because their bases sit in the middle. The stars
+are now ringed in the frame's own ink, which is by construction the one colour
+that reads on every frame there is — so the star's visibility is carried by an
+assertion that already exists rather than by a new one about gold.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus
