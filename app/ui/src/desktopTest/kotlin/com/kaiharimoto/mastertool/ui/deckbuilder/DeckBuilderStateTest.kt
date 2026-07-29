@@ -2751,6 +2751,23 @@ class DeckBuilderStateTest {
         assertEquals(0, state.index.size)
     }
 
+    @Test
+    fun andNothingIsCalledIllegalUntilThereIsSomethingToCheckItAgainst() = runTest {
+        // The validator is right to call a passcode it cannot resolve an error.
+        // Every passcode is unresolvable to an index nobody has opened, so the
+        // verdict on a perfectly good deck, on every cold launch, was sixty
+        // errors in red saying the card database had never heard of any of it.
+        val state = builderState()
+        TestPool.many(5).forEach { state.addCard(it) }
+
+        assertNull(state.validation, "no verdict before the pool has been read")
+
+        state.start()
+        advanceUntilIdle()
+
+        assertNotNull(state.validation, "and a verdict once it has")
+    }
+
     private fun requireNonNull(value: String?): String =
         value ?: error("nothing was exported")
 }

@@ -811,9 +811,17 @@ class DeckBuilderState(
      * it — including every keystroke in the deck-name field, since that shares a
      * recomposition scope with the legality readout — and validation walks every
      * distinct card scanning all three sections.
+     *
+     * Null until the card database has been read, and null rather than an empty
+     * verdict so that neither reader can spend it by accident. Every passcode is
+     * unknown to an index nobody has opened yet, and the validator is right to
+     * call an unknown passcode an error — so the honest reading of a deck at
+     * that moment is *forty errors*, in red, on every cold launch, about a deck
+     * that is fine. There is no verdict until there is something to reach one
+     * with.
      */
-    val validation: DeckValidation by derivedStateOf {
-        DeckValidator.validate(deck, index::byId, format)
+    val validation: DeckValidation? by derivedStateOf {
+        if (!poolRead) null else DeckValidator.validate(deck, index::byId, format)
     }
 
     val statistics: DeckStatistics by derivedStateOf {

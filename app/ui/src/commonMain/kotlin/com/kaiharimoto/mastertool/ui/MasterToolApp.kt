@@ -193,6 +193,8 @@ fun MasterToolApp(deps: AppDependencies) {
                         openDeck = builderState.deck,
                         openDeckName = builderState.deckName,
                         format = builderState.format,
+                        // Same signal the builder's own legality chip waits on.
+                        poolRead = builderState.poolRead,
                         // The pool the builder already has. The library needs it
                         // only to turn three passcodes into three pictures.
                         index = builderState.index,

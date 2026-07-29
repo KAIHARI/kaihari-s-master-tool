@@ -106,20 +106,23 @@ fun DeckBuilderTopBar(
 
         // The legality readout is the way in to the issue list: knowing there are
         // three problems is only useful if you can find out what they are.
+        //
+        // Still drawn while there is no verdict, greyed and inert rather than
+        // absent: a control that appears a second after the bar does is a bar
+        // that rearranges itself under a thumb already on the way to it.
         AssistChip(
             onClick = { state.issuesVisible = true },
+            enabled = validation != null,
             label = {
                 Text(
-                    if (validation.isLegal) {
-                        if (validation.warnings.isEmpty()) {
-                            "Legal"
-                        } else {
-                            "${validation.warnings.size} note(s)"
-                        }
-                    } else {
-                        "${validation.errors.size} issue(s)"
+                    when {
+                        validation == null -> "Checking…"
+                        validation.isLegal && validation.warnings.isEmpty() -> "Legal"
+                        validation.isLegal -> "${validation.warnings.size} note(s)"
+                        else -> "${validation.errors.size} issue(s)"
                     },
                     color = when {
+                        validation == null -> MaterialTheme.colorScheme.onSurfaceVariant
                         !validation.isLegal -> MasterToolPalette.Danger
                         validation.warnings.isNotEmpty() -> MasterToolPalette.Warning
                         else -> MasterToolPalette.SideAccent

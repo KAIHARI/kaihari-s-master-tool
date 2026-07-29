@@ -264,9 +264,13 @@ fun DeckBuilderScreen(
         )
     }
 
-    if (state.issuesVisible) {
+    // The chip that opens this is inert until there is a verdict, so the null
+    // case is not reachable from a tap — it is here because a keyboard shortcut
+    // is, and a deck check with nothing behind it would list every card in the
+    // deck as a passcode the database has never heard of.
+    state.validation?.takeIf { state.issuesVisible }?.let { validation ->
         IssuesPanel(
-            validation = state.validation,
+            validation = validation,
             onReveal = { issue ->
                 val id = issue.cardId ?: return@IssuesPanel
                 val section = issue.section ?: state.sectionsHolding(id).firstOrNull()

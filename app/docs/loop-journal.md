@@ -2835,3 +2835,38 @@ database…" until it has been. The `:ui` test asserts both halves in one go: fa
 at construction, true after `start()`, and the index still empty afterwards —
 because the fixture has no cards in it, and the flag is about having looked
 rather than about having found. That is the distinction the whole defect was.
+
+## 108 · Sixty errors in red, on every cold launch, about a deck that was fine
+
+The same frame again, and this one had been there since the deck check was
+written.
+
+`DeckValidator` reports a passcode it cannot resolve as an error, and its own
+docstring says why that is right: *"that case is a real error worth surfacing,
+not something to silently drop."* Which it is — a `.ydk` full of passcodes the
+database has never heard of is a decklist somebody cannot register.
+
+It is also what every passcode looks like to an index nobody has opened yet.
+
+So on every cold launch, in the window between the app reading the last deck and
+the app reading thirteen thousand cards out of SQLite, the toolbar said
+**"60 issue(s)"** in red about a deck that was legal, and the deck check behind
+it listed all sixty: *Passcode 14558127 is not in the card database.* The library
+did the same to every deck on the shelf at once, and that was reachable by
+tapping the library within about a second of launch.
+
+`validation` is nullable now. Not an empty verdict — an absent one, so neither
+reader can spend it by accident and both had to be edited to compile. The chip
+stays where it is and says "Checking…", greyed and inert, because a control that
+appears a second after the bar does is a bar that rearranges itself under a thumb
+already on its way. The library takes the same flag from the same place, so the
+two screens cannot disagree about whether a verdict exists.
+
+Three defects in one afternoon, all the same shape, none of them found by a test
+that already existed, and every one of them found by asking a single question of
+things the program says: **had it looked, when it said that?**
+
+The frame is worth keeping. Everything a program says about a thing it loads
+asynchronously has a moment before the load where the sentence is still there
+and the thing behind it is not, and the default value of a collection — empty —
+is exactly the value that makes the wrong sentence sound reasonable.

@@ -94,6 +94,8 @@ fun DeckLibraryScreen(
     openDeckName: String,
     /** The banlist every saved deck is checked against, which is the builder's. */
     format: Format,
+    /** Whether the card pool has been read, which is what makes a verdict possible. */
+    poolRead: Boolean,
     onOpenDeck: (String) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -225,6 +227,7 @@ fun DeckLibraryScreen(
                         stored = stored,
                         index = index,
                         format = format,
+                        poolRead = poolRead,
                         // Why this deck is on screen, when it is not obvious from
                         // the name at the top of the tile.
                         matched = match.cards,
@@ -292,6 +295,7 @@ private fun DeckCard(
     index: CardIndex,
     mat: MatColors,
     format: Format,
+    poolRead: Boolean,
     /** Cards in this deck that answered the search, best first. */
     matched: List<LibrarySearch.CardMatch>,
     now: Long,
@@ -386,10 +390,15 @@ private fun DeckCard(
                 // useful question a shelf of decks raises is which of them broke
                 // while you were not looking, and a banlist update breaks them
                 // without touching them.
-                val validation = remember(deck, format, index) {
-                    DeckValidator.validate(deck, index::byId, format)
+                //
+                // And only once there is a database to check against. The
+                // builder holds off the same way: to an index nobody has opened
+                // yet every passcode is a stranger, and nine decks would each be
+                // reporting sixty issues that all say the same untrue thing.
+                val validation = remember(deck, format, index, poolRead) {
+                    if (!poolRead) null else DeckValidator.validate(deck, index::byId, format)
                 }
-                if (!validation.isLegal) {
+                if (validation != null && !validation.isLegal) {
                     Text(
                         "${validation.errors.size} ISSUE${if (validation.errors.size == 1) "" else "S"}",
                         style = tacticalStyle(),
