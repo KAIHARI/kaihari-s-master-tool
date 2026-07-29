@@ -220,8 +220,25 @@ class DeckBuilderState(
      * Absent means no gaps, which is the state of every deck nobody has arranged
      * — so this is empty far more often than not and costs nothing when it is.
      */
-    var breaks by mutableStateOf<Map<DeckSection, Breaks>>(emptyMap())
-        private set
+    private var currentBreaks by mutableStateOf<Map<DeckSection, Breaks>>(emptyMap())
+
+    /**
+     * Where the gaps are, by section.
+     *
+     * Assigning it starts the autosave clock, for the same reason the deck's
+     * setter does and with the same history behind it: the gaps ride in the
+     * payload, six different places write them, and every one of those places
+     * forgetting to ask for a save is how an arrangement stops being written
+     * down. See [SavedSnapshot] — this is the half of that fix that stops the
+     * next writer reintroducing it.
+     */
+    var breaks: Map<DeckSection, Breaks>
+        get() = currentBreaks
+        private set(value) {
+            if (value == currentBreaks) return
+            currentBreaks = value
+            scheduleAutosave()
+        }
 
     fun breaksIn(section: DeckSection): Breaks =
         (breaks[section] ?: Breaks.NONE).clampedTo(deck[section].size)
@@ -238,7 +255,6 @@ class DeckBuilderState(
         if (index !in 1 until deck[section].size) return
         val next = breaksIn(section).toggledAt(index)
         breaks = if (next.isEmpty) breaks - section else breaks + (section to next)
-        scheduleAutosave()
     }
 
     /**
@@ -265,13 +281,19 @@ class DeckBuilderState(
      * from across the room, and it rides in the file, so the deck brings its
      * table with it.
      */
-    var mat by mutableStateOf(MatChoice.DEFAULT)
-        private set
+    private var currentMat by mutableStateOf(MatChoice.DEFAULT)
+
+    var mat: MatChoice
+        get() = currentMat
+        private set(value) {
+            if (value == currentMat) return
+            currentMat = value
+            scheduleAutosave()
+        }
 
     fun chooseMat(choice: MatChoice) {
         if (choice == mat) return
         mat = choice
-        scheduleAutosave()
     }
 
     /** Whether the mat picker is open. */
@@ -284,8 +306,15 @@ class DeckBuilderState(
      * [CardNotes]. It rides the same payload the gaps do and is written by the
      * same rule, one level further in.
      */
-    var cardNotes by mutableStateOf(CardNotes.NONE)
-        private set
+    private var currentCardNotes by mutableStateOf(CardNotes.NONE)
+
+    var cardNotes: CardNotes
+        get() = currentCardNotes
+        private set(value) {
+            if (value == currentCardNotes) return
+            currentCardNotes = value
+            scheduleAutosave()
+        }
 
     fun noteOn(id: CardId): String? = cardNotes[id]
 
@@ -301,7 +330,6 @@ class DeckBuilderState(
         val next = cardNotes.with(id, text)
         if (next == cardNotes) return
         cardNotes = next
-        scheduleAutosave()
     }
 
     /** Which card the note editor is open on, if any. */
@@ -324,7 +352,6 @@ class DeckBuilderState(
     fun clearBreaks(section: DeckSection) {
         if (section !in breaks) return
         breaks = breaks - section
-        scheduleAutosave()
     }
 
     var deckName by mutableStateOf("Untitled Deck")
@@ -461,7 +488,23 @@ class DeckBuilderState(
      * Snapshot state because the siding panel is read off it: loading a `.ydkx`
      * has to make its patterns appear without anything else being told.
      */
-    private var extended by mutableStateOf<JsonObject?>(null)
+    private var currentExtended by mutableStateOf<JsonObject?>(null)
+
+    /**
+     * Whatever the file carried that this program does not own.
+     *
+     * The siding plans are written back into it, so it is an edit like any
+     * other — and recording a plan used to be the one that never asked for a
+     * save, which meant a plan could sit unwritten until something else was
+     * changed.
+     */
+    private var extended: JsonObject?
+        get() = currentExtended
+        set(value) {
+            if (value == currentExtended) return
+            currentExtended = value
+            scheduleAutosave()
+        }
 
     /** Whether the siding panel is up. */
     var sidingVisible by mutableStateOf(false)

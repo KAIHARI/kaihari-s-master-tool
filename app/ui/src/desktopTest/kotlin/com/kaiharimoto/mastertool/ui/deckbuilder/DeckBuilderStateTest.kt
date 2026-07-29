@@ -914,6 +914,28 @@ class DeckBuilderStateTest {
         assertEquals(SaveStatus.SAVED, state.saveStatus)
     }
 
+    @Test
+    fun recordingASidingPlanIsWrittenWithoutBeingAsked() = runTest {
+        // The plan goes into the payload, and recording one used to ask for no
+        // save at all -- so a plan could sit unwritten until something else was
+        // changed, which for a plan recorded at the end of a session is never.
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+        advanceUntilIdle()
+        state.save()
+        advanceUntilIdle()
+
+        state.moveCard(TestPool.maxx, DeckSection.MAIN, DeckSection.SIDE)
+        state.moveCard(TestPool.droll, DeckSection.SIDE, DeckSection.MAIN)
+        advanceUntilIdle()
+        state.recordSiding("Fiendsmith")
+
+        assertEquals(SaveStatus.UNSAVED_CHANGES, state.saveStatus)
+        advanceUntilIdle()
+        assertEquals(SaveStatus.SAVED, state.saveStatus)
+    }
+
     // ---- the cloth the deck lies on ----------------------------------------
 
     @Test

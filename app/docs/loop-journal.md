@@ -1867,6 +1867,29 @@ new deck and checks all three.
 
 ---
 
+## 80 · Making it impossible to forget again
+
+Fixing the snapshot stopped the gaps, the card notes and the mat from *reporting*
+themselves saved. It did not stop the next writer from forgetting to ask for a
+save, and there was already one that had: `recordSiding` writes the plan into the
+payload and asked for nothing. Recording a plan usually follows a swap, whose own
+autosave has already fired by the time you press the button — so a plan recorded
+at the end of a session was a plan that was never written.
+
+Two explicit calls would have fixed the two known cases. What is there instead is
+the pattern this file already argues for in the deck's own setter: the four
+properties that make up the payload — the gaps, the card notes, the mat, and the
+opaque payload itself — each start the clock when they are assigned. Six places
+write the gaps; every one of them is covered by one line, and so is the seventh
+somebody adds later.
+
+The deck's setter has said why since it was written: *enforced here rather than
+at the eight places that write a deck: one of them forgetting would leave...*
+Everything about the deck that is not the deck had simply never been given the
+same treatment.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **790 tests**, up from 249, plus
