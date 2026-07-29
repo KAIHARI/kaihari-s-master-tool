@@ -1051,6 +1051,63 @@ class DeckBuilderStateTest {
         assertEquals(SaveStatus.SAVED, state.saveStatus)
     }
 
+    @Test
+    fun aNoteAboutTwoCardsIsFoundFromEither() = runTest {
+        val state = builderState()
+        listOf(TestPool.ash, TestPool.maxx).forEach { state.addCard(it) }
+
+        state.writePairNote(TestPool.ash.id, TestPool.maxx.id, "both is a hand trap war")
+
+        assertEquals("both is a hand trap war", state.noteOn(TestPool.ash.id, TestPool.maxx.id))
+        assertEquals("both is a hand trap war", state.noteOn(TestPool.maxx.id, TestPool.ash.id))
+    }
+
+    @Test
+    fun theTwoCardsPickedOutAreTheOnesTheNoteIsAbout() = runTest {
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.select(main, 1)
+        state.toggleSelected(main, 3)
+
+        state.notePickedPair()
+
+        val target = assertNotNull(state.pairTarget)
+        assertEquals(setOf(state.deck.main[1], state.deck.main[3]), setOf(target.first, target.second))
+    }
+
+    @Test
+    fun threeCardsPickedOutIsNotAPair() = runTest {
+        // A note about three cards is a note about the deck, which already has
+        // somewhere to live.
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.select(main, 0)
+        state.selectThrough(main, 2)
+
+        state.notePickedPair()
+
+        assertNull(state.pairTarget)
+    }
+
+    @Test
+    fun aPairNoteTravelsInTheExportedFileBesideTheCardNotes() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+        advanceUntilIdle()
+        val cards = state.deck.main.take(2)
+
+        state.writeNote(cards[0], "a card note")
+        state.writePairNote(cards[0], cards[1], "a pair note")
+        state.exportToFile()
+        advanceUntilIdle()
+
+        val written = requireNonNull(files.exported)
+        assertTrue("a card note" in written, "the card half was destroyed")
+        assertTrue("a pair note" in written, "the pair half was destroyed")
+        assertTrue("somethingThisAppDoesNotKnow" in written)
+    }
+
     // ---- the cloth the deck lies on ----------------------------------------
 
     @Test
@@ -1649,6 +1706,7 @@ class DeckBuilderStateTest {
             Overlay.INSPECTOR -> inspect(listOf(TestPool.ash), 0)
             Overlay.HELP -> helpVisible = true
             Overlay.CARD_NOTE -> noteTarget = TestPool.ash.id
+            Overlay.PAIR_NOTE -> pairTarget = TestPool.ash.id to TestPool.maxx.id
             Overlay.MAT -> matVisible = true
             Overlay.FILTERS -> filtersVisible = true
             Overlay.STATS -> statsVisible = true

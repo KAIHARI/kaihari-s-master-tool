@@ -2040,6 +2040,17 @@ follows, applied one level further in, to two codecs that now have to live
 together. The test that matters is that they compose in either order and produce
 the same object: neither can destroy the half it does not understand.
 
+**Authoring it needed no new gesture.** The selection already exists — arrows and
+shift on a keyboard, "select" and "select through here" on a tablet — and two
+cards picked out is exactly the shape of a combo. So the card menu grows one item
+when the selection is two, and nothing at all when it is one or three. A note
+about three cards is a note about the deck, which already has somewhere to live.
+
+Reading it is the part that decides whether the feature exists at all. A pair note
+is listed on *both* cards' sheets, under the card's own note, with the other
+card's name — and tapping one opens it. Written from a selection, found from
+either end.
+
 ---
 
 ## Where this stands

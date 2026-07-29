@@ -218,9 +218,12 @@ that plays through Ash*, *third copy is for the mirror* — from its long-press
 menu, marked by a folded corner on the tile. It goes by passcode, so every copy
 carries it and cutting one does not take it away, and it turns up wherever you
 are looking at the card rather than only where you wrote it: in the inspector,
-and under the hover preview in the pool as well as the deck. The original tool
-wrote an empty `notes.cards` into every file it ever exported; this is what goes
-in it.
+and under the hover preview in the pool as well as the deck. And a note about *two* cards, written from a
+two-card selection and listed on both their sheets — the half of deck building a
+decklist cannot hold at all, because a deck is a handful of two-card openings and
+thirty-odd cards that make them likelier. The original tool wrote an empty
+`notes: { cards: {}, pairs: {} }` into every file it ever exported; this is what
+goes in both halves.
 
 The deck you were working on is the one that opens next time. A deck saved once
 keeps itself saved — every edit after the first save is written without being

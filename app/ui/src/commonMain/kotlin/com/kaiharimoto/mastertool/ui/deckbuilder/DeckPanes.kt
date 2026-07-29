@@ -687,6 +687,15 @@ private fun DeckCard(
                         state.selectBlockThrough(section, position, columns)
                     },
                 )
+                // Two cards picked out is the shape of a combo, and the only
+                // shape a pair note has. Three is a note about the deck, which
+                // already has somewhere to live.
+                if (state.selection.size == 2) {
+                    DropdownMenuItem(
+                        text = { Text("What these two do…") },
+                        onClick = { menuOpen = false; state.notePickedPair() },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text("Done selecting") },
                     onClick = { menuOpen = false; state.clearSelection() },

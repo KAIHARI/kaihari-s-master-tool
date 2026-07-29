@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -90,6 +91,41 @@ fun CardNotePanel(state: DeckBuilderState, id: CardId) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            // What this card does with other cards, which is written elsewhere
+            // and is exactly what somebody opening this sheet wants to see.
+            val pairs = state.pairNotes.about(id)
+            if (pairs.isNotEmpty()) {
+                Text(
+                    "WITH",
+                    style = tacticalStyle(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                pairs.forEach { (pair, note) ->
+                    val other = state.pairNotes.other(pair, than = id)
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                state.noteTarget = null
+                                state.pairTarget = id to other
+                            }
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Text(
+                            state.index.byId(other)?.name ?: other.value.toString(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            note,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
     }
 }

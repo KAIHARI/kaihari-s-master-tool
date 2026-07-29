@@ -15,6 +15,8 @@ import com.kaiharimoto.mastertool.core.deck.DeckEditor
 import com.kaiharimoto.mastertool.core.deck.DeckLookCodec
 import com.kaiharimoto.mastertool.core.deck.DeckSorter
 import com.kaiharimoto.mastertool.core.deck.MatChoice
+import com.kaiharimoto.mastertool.core.deck.PairNotes
+import com.kaiharimoto.mastertool.core.deck.PairNotesCodec
 import com.kaiharimoto.mastertool.core.deck.DeckTidy
 import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.deck.HandSimulator
@@ -81,6 +83,7 @@ enum class Overlay {
     INSPECTOR,
     HELP,
     CARD_NOTE,
+    PAIR_NOTE,
     MAT,
     FILTERS,
     STATS,
@@ -270,7 +273,13 @@ class DeckBuilderState(
      */
     private val payload: JsonObject?
         get() = DeckLookCodec
-            .write(CardNotesCodec.write(ArrangementCodec.write(extended, breaks), cardNotes), mat)
+            .write(
+                PairNotesCodec.write(
+                    CardNotesCodec.write(ArrangementCodec.write(extended, breaks), cardNotes),
+                    pairNotes,
+                ),
+                mat,
+            )
             .takeIf { it.isNotEmpty() }
 
     /**
@@ -336,6 +345,46 @@ class DeckBuilderState(
 
     /** Which card the note editor is open on, if any. */
     var noteTarget by mutableStateOf<CardId?>(null)
+
+    private var currentPairNotes by mutableStateOf(PairNotes.NONE)
+
+    /**
+     * What the player wrote about two cards together.
+     *
+     * The half a decklist cannot hold: a deck is a handful of two-card openings
+     * and thirty-odd cards that make them likelier. See [PairNotes]; assigning
+     * it starts the autosave clock like everything else in the payload.
+     */
+    var pairNotes: PairNotes
+        get() = currentPairNotes
+        private set(value) {
+            if (value == currentPairNotes) return
+            currentPairNotes = value
+            scheduleAutosave()
+        }
+
+    fun noteOn(a: CardId, b: CardId): String? = pairNotes.of(a, b)
+
+    fun writePairNote(a: CardId, b: CardId, text: String) {
+        pairNotes = pairNotes.with(a, b, text)
+    }
+
+    /** Which two cards the pair editor is open on, if any. */
+    var pairTarget by mutableStateOf<Pair<CardId, CardId>?>(null)
+
+    /**
+     * Opens the pair editor on the two cards currently picked out.
+     *
+     * Two is the whole of it. A note about three cards is a note about the deck,
+     * which already has somewhere to live, and pretending otherwise would mean
+     * a key nothing could look up from a card.
+     */
+    fun notePickedPair() {
+        val section = selection.section ?: return
+        val ids = selection.indices.sorted().mapNotNull { deck[section].getOrNull(it) }
+        if (ids.size != 2) return
+        pairTarget = ids[0] to ids[1]
+    }
 
     /**
      * Puts a gap before the card the cursor is on.
@@ -421,6 +470,7 @@ class DeckBuilderState(
         Overlay.INSPECTOR -> inspection != null
         Overlay.HELP -> helpVisible
         Overlay.CARD_NOTE -> noteTarget != null
+        Overlay.PAIR_NOTE -> pairTarget != null
         Overlay.MAT -> matVisible
         Overlay.FILTERS -> filtersVisible
         Overlay.STATS -> statsVisible
@@ -446,6 +496,7 @@ class DeckBuilderState(
             // Closed the same way the sheet's own dismiss does, so Escape keeps
             // what was typed rather than throwing it away.
             Overlay.CARD_NOTE -> noteTarget = null
+            Overlay.PAIR_NOTE -> pairTarget = null
             Overlay.MAT -> matVisible = false
             Overlay.FILTERS -> filtersVisible = false
             Overlay.STATS -> statsVisible = false
@@ -1627,6 +1678,7 @@ class DeckBuilderState(
         val extended: JsonObject?,
         val breaks: Map<DeckSection, Breaks>,
         val cardNotes: CardNotes,
+        val pairNotes: PairNotes,
         val mat: MatChoice,
     )
 
@@ -1638,6 +1690,7 @@ class DeckBuilderState(
         extended = extended,
         breaks = breaks,
         cardNotes = cardNotes,
+        pairNotes = pairNotes,
         mat = mat,
     )
 
@@ -1649,6 +1702,7 @@ class DeckBuilderState(
         extended = was.extended
         breaks = was.breaks
         cardNotes = was.cardNotes
+        pairNotes = was.pairNotes
         mat = was.mat
     }
 
@@ -1722,6 +1776,7 @@ class DeckBuilderState(
         extended = null
         breaks = emptyMap()
         cardNotes = CardNotes.NONE
+        pairNotes = PairNotes.NONE
         mat = MatChoice.DEFAULT
         showToast(
             "Started a new deck.",
@@ -1821,6 +1876,7 @@ class DeckBuilderState(
                     extended = stored.extended,
                     breaks = ArrangementCodec.read(stored.extended),
                     cardNotes = CardNotesCodec.read(stored.extended),
+                    pairNotes = PairNotesCodec.read(stored.extended),
                     mat = DeckLookCodec.read(stored.extended),
                 ),
             )
@@ -1853,6 +1909,7 @@ class DeckBuilderState(
                     extended = parsed.document.extended,
                     breaks = ArrangementCodec.read(parsed.document.extended),
                     cardNotes = CardNotesCodec.read(parsed.document.extended),
+                    pairNotes = PairNotesCodec.read(parsed.document.extended),
                     mat = DeckLookCodec.read(parsed.document.extended),
                 ),
             )

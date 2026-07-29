@@ -282,6 +282,8 @@ fun DeckBuilderScreen(
 
     state.noteTarget?.let { CardNotePanel(state, it) }
 
+    state.pairTarget?.let { (a, b) -> PairNotePanel(state, a, b) }
+
     if (state.matVisible) MatPanel(state)
 
     if (state.shootoutVisible) {
