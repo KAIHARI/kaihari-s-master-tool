@@ -353,7 +353,10 @@ coming back to a deck after a break keeps a copy of how you left it — one per
 sitting, not one per keystroke — and the library draws them as a line down the
 page, each one saying what came out and what went in to get from there to here.
 Go back to one and the deck you are leaving is kept on the way past, which is why
-that button asks nothing first. Name one and it is never let go of: *this is the
+that button asks nothing first. And read across all of them at once the
+history answers a question no single pair of versions can: how many of these
+cards have been in every one of them, and how many have come and gone. The first
+number is the deck; the second is the part you are still deciding. Name one and it is never let go of: *this is the
 list I registered* is the thing only you know, so it can also be said from the
 builder's menu, in front of the deck, which is where you are when you know it —
 and read from there too, since a drawer you can put things into and not open is

@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.data.DeckVersion
 import com.kaiharimoto.mastertool.core.deck.DeckDiff
 import com.kaiharimoto.mastertool.core.model.Deck
+import com.kaiharimoto.mastertool.core.deck.DeckLife
 import com.kaiharimoto.mastertool.core.util.RelativeTime
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
@@ -93,6 +94,23 @@ fun HistorySheet(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 6.dp),
             )
+
+            // Read across every kept version at once, which is a different
+            // question from what changed between two of them — and the one a
+            // deck raises after a month: which of this is the deck, and which of
+            // it am I still deciding.
+            val lives = remember(versions, current) { versions.map { it.deck } + current }
+            val core = remember(lives) { DeckLife.core(lives) }
+            val churn = remember(lives) { DeckLife.changing(lives) }
+            if (core.isNotEmpty() || churn.isNotEmpty()) {
+                Text(
+                    "${core.size} cards have been in every one of these. " +
+                        "${churn.size} have come and gone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
 
             Box(Modifier.height(18.dp))
 

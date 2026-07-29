@@ -3181,3 +3181,30 @@ one matchup that cuts it.
 
 Ten tests. All green first run, which after the last two sections is worth
 noting: the arithmetic was counting rather than probability.
+
+## 119 · The deck, and the part still being decided
+
+The second thing found by asking section 117's question on purpose.
+
+Deck versions exist so you can go back to a list you registered, and the sheet
+shows what changed between one version and the next. Read across **all** of them
+at once, they answer something else: *how many of these cards have been in every
+single version, and how many have come and gone.*
+
+The first number is the deck. The second is the part you are still deciding — and
+somebody who can see the two apart knows where to aim the next test without
+having to remember six weeks of edits.
+
+Presence anywhere counts, Main or Side or Extra. A card that moved between
+sections is still a card you kept; where it sat that week is a different question
+and the sheet answers it already, version by version, right underneath.
+
+Three versions is the floor, the same one the siding habits use. Two agreeing is
+a coincidence with a sample size of two.
+
+Two features in a row now, both built out of data that was already on disk for a
+completely different reason, and both answering questions this program had never
+been asked. That is a rule of thumb worth keeping: **before adding a thing to
+store, look at what is already stored.** The siding plans were a matchup diary
+and turned out to describe a deck; the version history was an undo of last resort
+and turned out to describe what a deck *is*.
