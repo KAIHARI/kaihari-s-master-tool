@@ -1396,6 +1396,7 @@ class DeckBuilderStateTest {
             Overlay.SHOWCASE -> showcaseVisible = true
             Overlay.INSPECTOR -> inspect(listOf(TestPool.ash), 0)
             Overlay.HELP -> helpVisible = true
+            Overlay.CARD_NOTE -> noteTarget = TestPool.ash.id
             Overlay.FILTERS -> filtersVisible = true
             Overlay.STATS -> statsVisible = true
             Overlay.SIDING -> sidingVisible = true

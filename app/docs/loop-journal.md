@@ -1696,3 +1696,11 @@ Not in the siding panel, where it would have been most useful of all — its
 thumbnails are thirty-four points wide and a folded corner there is three pixels
 that look like a rendering fault. It is the right place for the idea and the
 wrong place for this drawing of it.
+
+**Red, and the guard that caught it.** Adding `CARD_NOTE` to `Overlay` broke the
+desktop build and nothing else — because the *test* that walks every layer,
+opening and dismissing each one, is also an exhaustive `when` over the enum. That
+is what it was written for, and it is the second time the enum has paid for
+itself: a layer that cannot be dismissed is a layer Escape leaves on screen, and
+the compiler now refuses to let one be added without saying how it opens, how it
+closes, and how a test opens it.
