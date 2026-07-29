@@ -85,6 +85,20 @@ class CardFrameContrastTest {
     }
 
     @Test
+    fun theFrameAlwaysWinsOverTheAttribute() {
+        // The art window is pulled towards the card's attribute so that forty
+        // effect monsters are not a wall of one colour. Past halfway the pull
+        // stops being a tint and starts being the colour, and the frame stops
+        // meaning what it means -- which is how a WIND Synchro came out looking
+        // like a spell the first time this was tried.
+        assertTrue(
+            CardFrames.AttributeTint < 0.5f,
+            "at ${CardFrames.AttributeTint} the attribute would outweigh the frame",
+        )
+        assertTrue(CardFrames.AttributeTint > 0f, "a tint of nothing is not a tint")
+    }
+
+    @Test
     fun everyFrameKindHasAFrame() {
         // `of` is a `when` over the enum, so this is really about the mapping
         // from the database's strings staying pointed at something drawable.

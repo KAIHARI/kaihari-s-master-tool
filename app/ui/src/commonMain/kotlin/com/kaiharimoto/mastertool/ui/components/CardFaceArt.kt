@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -80,7 +81,7 @@ fun CardFaceArt(card: Card, modifier: Modifier = Modifier) {
         // which is the whole of what a swatch that small can say.
         if (maxWidth < LEGIBLE) {
             Box(Modifier.fillMaxSize().padding(unit * 3)) {
-                ArtWindow(card, frame.base, frame.dark)
+                ArtWindow(card, frame.base, frame.dark, CardFrames.attribute(card.attribute))
             }
             return@BoxWithConstraints
         }
@@ -129,14 +130,23 @@ fun CardFaceArt(card: Card, modifier: Modifier = Modifier) {
                     .fillMaxWidth()
                     .padding(horizontal = unit * 4),
             ) {
-                ArtWindow(card, frame.base, frame.dark)
+                val attribute = CardFrames.attribute(card.attribute)
 
-                CardFrames.attribute(card.attribute)?.let {
+                ArtWindow(card, frame.base, frame.dark, attribute)
+
+                attribute?.let {
                     Box(
                         Modifier
                             .align(Alignment.TopEnd)
                             .padding(unit * 3)
-                            .size(unit * 7)
+                            .size(unit * 8)
+                            .clip(CircleShape)
+                            // Ringed like the level stars, and for the reason the
+                            // stars needed it: the window behind this is now
+                            // pulled towards the very colour the dot is, so on
+                            // its own it would sink into it.
+                            .background(frame.ink)
+                            .padding(unit)
                             .clip(CircleShape)
                             .background(it),
                     )
@@ -160,12 +170,21 @@ fun CardFaceArt(card: Card, modifier: Modifier = Modifier) {
     }
 }
 
-/** The abstract field behind the art. Deterministic in the passcode. */
+/**
+ * The abstract field behind the art. Deterministic in the passcode.
+ *
+ * Pulled towards the card's [attribute] where it has one, which is what stops a
+ * deck of forty effect monsters from being a wall of one colour — and which
+ * spells and traps do not get, so green still reliably means spell.
+ */
 @Composable
-private fun ArtWindow(card: Card, base: Color, dark: Color) {
+private fun ArtWindow(card: Card, base: Color, dark: Color, attribute: Color?) {
     val seed = card.id.value
     val angle = remember(seed) { CardFace.angle(seed) }
     val shapes = remember(seed) { CardFace.shapes(seed) }
+
+    val near = attribute?.let { lerp(dark, it, CardFrames.AttributeTint) } ?: dark
+    val far = attribute?.let { lerp(base, it, CardFrames.AttributeTint * 0.6f) } ?: base
 
     Canvas(Modifier.fillMaxSize()) {
         // A pane can be dragged closed, and a gradient whose start and end are
@@ -182,7 +201,7 @@ private fun ArtWindow(card: Card, base: Color, dark: Color) {
 
         drawRect(
             brush = Brush.linearGradient(
-                listOf(dark, base),
+                listOf(near, far),
                 start = centre - along,
                 end = centre + along,
             ),

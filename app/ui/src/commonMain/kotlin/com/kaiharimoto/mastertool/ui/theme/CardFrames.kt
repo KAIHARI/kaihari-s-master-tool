@@ -79,6 +79,16 @@ object CardFrames {
     }
 
     /**
+     * How far the art window is pulled towards the card's attribute.
+     *
+     * Enough that forty cards read as forty cards rather than as nine identical
+     * orange ones — a FIRE monster is warm, a DARK one is not — and not so far
+     * that the frame stops meaning what it means. At 0.42 a WIND Synchro came out
+     * green, which is what *spell* looks like here; the frame has to win.
+     */
+    const val AttributeTint = 0.26f
+
+    /**
      * The gold of a level star, which is the same on every frame.
      *
      * Ringed in the frame's own [FrameColors.ink] rather than left as a bare

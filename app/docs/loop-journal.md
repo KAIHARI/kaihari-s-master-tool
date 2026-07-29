@@ -2348,6 +2348,33 @@ project has had — it has not been.
 
 ---
 
+## 94 · Forty cards, one colour
+
+The drawn faces work, and then a real deck exposed the thing a mixed sample hid:
+a Main deck is mostly effect monsters, and every effect monster had the same
+orange frame around the same orange field. Three copies of a card *should* look
+identical — that is the point — but forty different cards should not.
+
+The card already knows something nothing was drawing: its attribute. So the art
+field is pulled towards it. A FIRE monster is warm, a DARK one is not, and the
+arrangement becomes readable across the pane in a way the order alone cannot
+manage.
+
+Found the ceiling by looking, as usual. At 0.42 a WIND Synchro came out pale
+green, which in this program is what *spell* looks like — the tint had started
+overruling the frame. At 0.26 the frames all keep their meaning and the wall is
+still varied. That number now has a test on it, because the failure it prevents
+is one nobody would call a bug: the card would just quietly say the wrong thing.
+
+Spells and traps take no tint at all. They have no attribute, and it means green
+stays a reliable answer to "is that a spell" rather than a probable one.
+
+One thing followed from it: the attribute dot in the corner now sits on a window
+pulled towards the dot's own colour, so it needed the same ink ring the level
+stars needed, for exactly the same reason.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus

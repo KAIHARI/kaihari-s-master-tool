@@ -168,7 +168,10 @@ so the case it was designed for was the one where forty cards touching read as a
 wall of labels. Now the frame is the card's own: orange has an effect, green is a
 spell, black is an Xyz, and the art window holds an abstract field seeded by the
 passcode, so three copies look like three copies and the card beside them does
-not. Each frame carries its own ink, checked against all three ends of its own
+not. A monster's field is pulled towards its attribute — a FIRE card is warm, a
+DARK one is not — far enough that forty of them are forty cards rather than a
+wall of one colour, and not so far that the frame stops meaning what it means.
+Spells and traps get none of it, so green still reliably means spell. Each frame carries its own ink, checked against all three ends of its own
 gradient, because one of them is nearly black.
 
 Cards in a deck pane touch, on a mat — the deck's own, see below. They catch the
