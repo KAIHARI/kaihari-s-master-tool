@@ -19,7 +19,7 @@ class SandboxStateTest {
     private val deck = Deck(main = cards, extra = emptyList(), side = emptyList())
     private val zone = BoardLayout.monsterRow[0]
 
-    private fun open(): SandboxState = SandboxState().also { it.open(deck, Random(4)) }
+    private fun open(): SandboxState = SandboxState().also { it.open(deck, random = Random(4)) }
 
     @Test
     fun openingDealsAHandAndNothingElse() {
@@ -190,7 +190,7 @@ class SandboxDragTest {
 
     /** The zone sits at 100,100 and is 70 by 100; nothing else is on the table. */
     private fun laidOut(): SandboxState = SandboxState { now }.also {
-        it.open(deck, Random(9))
+        it.open(deck, random = Random(9))
         it.registerZone(zone, Rect(100f, 100f, 170f, 200f))
         it.registerZone(elsewhere, Rect(400f, 100f, 470f, 200f))
     }
@@ -328,7 +328,7 @@ class SandboxPileTest {
     private val deck = Deck(main = main, extra = extra, side = emptyList())
     private val zone = BoardLayout.monsterRow[0]
 
-    private fun open(): SandboxState = SandboxState().also { it.open(deck, Random(2)) }
+    private fun open(): SandboxState = SandboxState().also { it.open(deck, random = Random(2)) }
 
     @Test
     fun theDeckReadsFromTheTopDown() {
