@@ -218,5 +218,10 @@ table back, hand and deck included.
 A hand you like in the test panel or the shootout is one button from being a
 board with that hand already in it.
 
-Not yet built: siding for the *opponent* between games, a second board across the
-table, and PDF export of a siding sheet.
+Print the siding sheet: every matchup on paper, going first above going second,
+out on the left and in on the right, with a count on each side so an uneven swap
+cannot slip past. It is written directly rather than through a library — the
+whole file is ASCII, which is what lets it ride the same export the deck does.
+
+Not yet built: siding for the *opponent* between games, and a second board across
+the table.

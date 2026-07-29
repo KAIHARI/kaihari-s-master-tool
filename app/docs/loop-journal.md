@@ -1171,12 +1171,52 @@ no opponent to simulate — a zone you could drop into that belonged to nobody
 would be a worse lie than an empty rectangle. The honest version, a second set of
 zones with a second player behind them, is a real feature and not this one.
 
+## 56. Writing the PDF instead of depending on one
+
+The last thing the original tool did that this one could not, and the reason it
+stayed on the list all loop is that no PDF library resolves in this environment.
+The plan said "spike before committing to it". The spike was to notice that a
+siding sheet is text in a grid, and that PDF is a text format.
+
+So it is written by hand, in `:core`, in about two hundred lines: two weights of
+Helvetica, greyscale, lines and filled rectangles. Nothing else, because a siding
+sheet is a thing you print and put next to your deck box between rounds, and
+every feature not in that sentence is a feature that can be wrong.
+
+The hard part is not drawing. It is the cross-reference table, which is a list of
+byte offsets that must each point exactly at the object it names — and that is
+arithmetic, which is testable. It rests on one decision: everything emitted is
+ASCII, with characters past Latin-1 becoming `?` and the rest escaped to octal.
+That is what makes "string length" and "byte offset" the same number. Escaping
+parentheses is not optional either, or a card called *Number 39: Utopia (Assault
+Mode)* produces a file no reader will open.
+
+That ASCII promise then paid for itself twice. The sheet goes out through the
+same text export the deck itself uses — the bytes survive a round trip through a
+string untouched, so no platform code had to learn about binary files.
+
+And it is *verified*, which matters more here than usual because the whole thing
+is a format I could get subtly wrong in a way no test I wrote would notice.
+Generating a real sheet and reading it back with an independent parser gave: one
+A4 page, both matchups whole, per-copy lines, the uneven swap flagged, and an
+accented deck name intact. That is the first time in this loop something was
+checked by a program that had no idea what I intended.
+
+The sheet itself is shaped by when it is read: thirty seconds after a die roll,
+on paper, beside a deck box. One matchup per block, going first above going
+second, out on the left and in on the right, a count on each side — because the
+one mistake that costs a game loss is siding four out and three in, and nothing
+else on the sheet would show it. Copies get a line each rather than a `3x`, since
+siding out two of three is a different decision from siding out all three. And a
+matchup is never split across a page break, because reading half a plan and
+turning the page is exactly what a sheet is meant to save you from.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **682 tests**, up from 249, plus
-**162 in `:ui`** where there were none — a module that cannot even be compiled in
+`:core` carries the arithmetic for all of it, at **676 tests**, up from 249, plus
+**172 in `:ui`** where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
 Still open, in the order they are worth doing:
@@ -1185,15 +1225,11 @@ Still open, in the order they are worth doing:
 one under the cursor (sections 51-54), and the header says what the groups came
 to. Picking a gap up and moving it is the obvious next gesture and is not built.
 
-**Siding for the opponent, between games.** A run sides *your* deck and records
-which version dealt each hand (sections 43-45). The deck across the table never
-changes — which is the half of a real match still missing, and the reason their
-turn-two board looks the same in game three as in game one.
-
 **A board across the table.** Yours deals, lays cards out, turns them, makes
 tokens, opens every stack and undoes all of it (sections 46-50, 55). The far half
 is an outline: one set of zone ids exists and it is yours. A second set with a
 second player behind it is the feature that half is waiting for.
 
-**PDF export of a siding sheet.** The original's actual deliverable. Needs a PDF
-writer that resolves from Maven Central; spike before committing to it.
+**Siding for the opponent, between games.** A run sides *your* deck and knows
+which version dealt each hand. The deck across the table never changes, which is
+the half of a real match still missing.
