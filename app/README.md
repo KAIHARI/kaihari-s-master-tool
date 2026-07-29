@@ -223,5 +223,9 @@ out on the left and in on the right, with a count on each side so an uneven swap
 cannot slip past. It is written directly rather than through a library — the
 whole file is ASCII, which is what lets it ride the same export the deck does.
 
-Not yet built: siding for the *opponent* between games, and a second board across
-the table.
+Between games the deck across the table sides too, when its own file says how —
+a `.ydkx` carries that deck's plans, so a downloaded list often arrives with what
+its players actually bring in.
+
+Not yet built: a second board across the table, and a way to record what you
+expect an opponent to side when their file does not say.

@@ -1211,6 +1211,32 @@ siding out two of three is a different decision from siding out all three. And a
 matchup is never split across a page break, because reading half a plan and
 turning the page is exactly what a sheet is meant to save you from.
 
+## 57. Their side of the table sides too
+
+The half of a real match the shootout was still missing. A run sided *your* deck
+and knew which version dealt each hand; the deck across the table stayed the deck
+you loaded, so their game three looked exactly like their game one.
+
+The answer turned out to already be in the file. A `.ydkx` written by the desktop
+tool keeps that deck's own siding plans inside it, so a list downloaded from
+somebody who plays the deck often arrives carrying what they actually side —
+against you, among others. That is a far better answer than a guess and it cost
+nothing to use: `SidingCodec` already reads that payload, and `SidingEngine`
+already applies a plan to a deck.
+
+When the file says nothing, the panel says nothing. Inventing their fifteen would
+be putting a made-up board across the table and then drawing conclusions from how
+your hand fared against it, which is worse than admitting there is nothing to
+show.
+
+Two things fell out of the model that was already there. Their hand is dealt
+again the moment their deck changes — the same trap that made *your* side
+re-deal, and just as invisible, because a hand on the table came off the list
+they were playing a second ago. And their list goes back for game one of the next
+trial, since game one is pre-side for both decks: leaving them sided would
+compare your opening list against their game-two list, which is a match that
+never happens.
+
 ---
 
 ## Where this stands
@@ -1230,6 +1256,7 @@ tokens, opens every stack and undoes all of it (sections 46-50, 55). The far hal
 is an outline: one set of zone ids exists and it is yours. A second set with a
 second player behind it is the feature that half is waiting for.
 
-**Siding for the opponent, between games.** A run sides *your* deck and knows
-which version dealt each hand. The deck across the table never changes, which is
-the half of a real match still missing.
+**Siding for the opponent when their file does not say how.** They side from
+their own plans when the file carries them (section 57). A deck that arrives as a
+plain `.ydk` still sits there unchanged, and the honest fix is a way to record
+what you *expect* them to side rather than inventing it.
