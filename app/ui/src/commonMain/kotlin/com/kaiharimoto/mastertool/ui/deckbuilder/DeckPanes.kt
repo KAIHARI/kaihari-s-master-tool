@@ -686,6 +686,15 @@ private fun DeckCard(
                     text = { Text("Select") },
                     onClick = { menuOpen = false; state.select(section, position) },
                 )
+                // Only where there are gaps to make groups out of. Without any,
+                // "this group" is the whole section, and an item that quietly
+                // means select-all is one nobody presses twice.
+                if (!state.breaksIn(section).isEmpty) {
+                    DropdownMenuItem(
+                        text = { Text("Pick up this group") },
+                        onClick = { menuOpen = false; state.selectGroupAt(section, position) },
+                    )
+                }
             } else {
                 DropdownMenuItem(
                     text = { Text("Select through here") },

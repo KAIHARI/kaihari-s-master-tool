@@ -70,6 +70,9 @@ enum class ShortcutAction {
     /** Write on the card the cursor is on, or on the two it is holding. */
     NOTE_CARD,
 
+    /** Pick up the whole run of cards between the gaps the cursor is inside. */
+    SELECT_GROUP,
+
     /** Move the cards themselves. */
     CARRY_LEFT,
     CARRY_RIGHT,
@@ -232,6 +235,12 @@ object ShortcutTable {
         Shortcut(
             KeyChord("g"), ShortcutAction.TOGGLE_GAP, ShortcutScope.BUILDER,
             "Gap before the selected card",
+        ),
+        Shortcut(
+            // Shift of the key that makes a gap, because the gaps are what the
+            // groups are: one puts a pile down, the other picks one up.
+            KeyChord("g", shift = true), ShortcutAction.SELECT_GROUP, ShortcutScope.BUILDER,
+            "Pick up the whole group the cursor is in",
         ),
         Shortcut(
             // One key for both, because it is one question -- what do I want to

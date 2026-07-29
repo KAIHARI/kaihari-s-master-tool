@@ -2278,6 +2278,42 @@ still true.
 
 ---
 
+## 92 · Put a pile down, pick a pile up
+
+The gaps have been the groups since the day they were drawn — the statistics
+panel measures them, the tidies draw them, the full-deck view separates on them,
+and a `.ydkx` carries them. And the only way to *hold* one was to select nine
+cards one at a time or drag a careful box round them.
+
+On a table you do not select nine cards. You put your hand round the pile and
+lift it. So: shift-`g`, next to the `g` that makes the gap, and "Pick up this
+group" on a card's own menu for the tablet with no keyboard. Everything that
+already works on a selection — carry it, side it, note two of it — now works on a
+group, and none of it needed to know that groups exist.
+
+The one thing worth getting right was the anchor. The focus is derived from the
+anchor rather than stored, so anchoring at the near end of the run would put the
+cursor at the far end and the next arrow key would jump across the pile you just
+picked up. Anchoring at the *far* end leaves it where your hand already was.
+
+The menu item only appears in a section that has gaps in it. Without any, "this
+group" is the whole section, and an item that quietly means select-all is one
+nobody presses twice.
+
+**And the red build in the middle of this.** The group names went out and CI came
+back failing on one `:ui` test, which asserted two groups came out called
+"Monsters". They came out called nothing: the test harness deliberately never
+seeds the card pool — `addCard` takes the card itself — and a derived name is
+read *off the pool*. My assumption, not a defect.
+
+Except it pointed straight at one. Decks arrive from other programs carrying
+passcodes this database has never heard of, and a name read off the half of a
+group that resolved is a claim about the half that did not. So a group names
+itself only when more than half of it is known, and there is now a test for the
+case the failure was standing in for.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus

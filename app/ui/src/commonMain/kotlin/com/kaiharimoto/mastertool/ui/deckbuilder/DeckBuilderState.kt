@@ -443,6 +443,38 @@ class DeckBuilderState(
         toggleBreak(section, Selections.focusOf(selection))
     }
 
+    /**
+     * Picks up the whole pile the cursor is in.
+     *
+     * On a table you do not select nine cards, you put your hand round the pile
+     * and lift it — and the gaps are already the piles, so the program has known
+     * where they are since the day they were drawn. One press instead of nine
+     * taps or a careful drag across a grid, and everything that works on a
+     * selection — move it, side it, tidy it, put a note on two of it — then
+     * works on a group.
+     *
+     * Anchored at the end of the run furthest from the card the cursor was on,
+     * because the focus is derived from the anchor: anchoring at the far end is
+     * what leaves the cursor at the near one, so an arrow key afterwards carries
+     * on from the edge the hand is already at rather than jumping across.
+     */
+    fun selectGroupAtCursor() {
+        val section = selection.section ?: return
+        selectGroupAt(section, Selections.focusOf(selection))
+    }
+
+    /** The same, from a card's own menu, so it exists without a keyboard. */
+    fun selectGroupAt(section: DeckSection, index: Int) {
+        val group = breaksIn(section).groupAt(index, deck[section].size) ?: return
+
+        val nearerTheStart = index - group.first <= group.last - index
+        selection = Selection(
+            section = section,
+            indices = group.toSet(),
+            anchor = if (nearerTheStart) group.last else group.first,
+        )
+    }
+
     /** Takes every gap out of a section, for when the grouping has gone stale. */
     fun clearBreaks(section: DeckSection) {
         if (section !in breaks) return
@@ -796,7 +828,11 @@ class DeckBuilderState(
     val groupNames: List<String?> by derivedStateOf {
         val cards = deck[statsSection]
         breaksIn(statsSection).groups(cards.size).map { range ->
-            GroupNaming.nameOf(range.mapNotNull { index.byId(cards[it]) })
+            val known = range.mapNotNull { index.byId(cards[it]) }
+            // A name read off half a group is a claim about the other half too.
+            // Decks arrive from other programs carrying passcodes this pool has
+            // never heard of, and "Monsters" would be a guess about those.
+            if (known.size * 2 < range.count()) null else GroupNaming.nameOf(known)
         }
     }
 

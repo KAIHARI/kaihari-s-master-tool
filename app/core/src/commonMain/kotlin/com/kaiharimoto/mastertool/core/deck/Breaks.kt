@@ -58,6 +58,15 @@ data class Breaks(val before: Set<Int> = emptySet()) {
     }
 
     /**
+     * The run of cards this position belongs to.
+     *
+     * What "that pile" means when somebody points at one card in it. Null for a
+     * position outside the section, which is what a stale cursor is.
+     */
+    fun groupAt(index: Int, size: Int): IntRange? =
+        groups(size).firstOrNull { index in it }
+
+    /**
      * Moves the gaps along after cards are inserted at [at].
      *
      * A card dropped exactly on a gap joins the group *before* it. Either answer

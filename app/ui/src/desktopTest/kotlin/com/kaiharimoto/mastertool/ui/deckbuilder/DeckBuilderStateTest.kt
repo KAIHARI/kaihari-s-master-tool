@@ -4,6 +4,8 @@ import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.deck.GroupOdds
+import com.kaiharimoto.mastertool.core.deck.Selections
+import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.core.deck.MatChoice
 import com.kaiharimoto.mastertool.core.export.Png
 import com.kaiharimoto.mastertool.core.layout.GridStep
@@ -2330,13 +2332,29 @@ class DeckBuilderStateTest {
     @Test
     fun aGroupIsNamedAfterWhatIsInIt() = runTest {
         val state = builderState()
-        TestPool.many(6).forEach { state.addCard(it) }
+        val cards = TestPool.many(6)
+        // The harness deliberately never seeds the pool -- addCard takes the
+        // card itself -- and a name is read off the pool, so this is the one
+        // test that has to put the cards where the index can find them.
+        state.index = CardIndex.build(cards)
+        cards.forEach { state.addCard(it) }
 
         state.toggleBreak(main, 3)
 
-        // The pool fixtures are all effect monsters, so both groups are monsters
-        // -- which is the honest reading of them, and there are two of it.
+        // The fixtures are all effect monsters, so both groups are monsters,
+        // which is the honest reading of them.
         assertEquals(listOf("Monsters", "Monsters"), state.groupNames)
+    }
+
+    @Test
+    fun aGroupOfCardsThePoolHasNeverHeardOfIsNotNamed() = runTest {
+        // Decks arrive from other programs carrying passcodes this database does
+        // not have. Calling that group "Monsters" would be a guess.
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+
+        assertEquals(listOf(null, null), state.groupNames)
     }
 
     @Test
@@ -2371,6 +2389,85 @@ class DeckBuilderStateTest {
         state.statsSection = DeckSection.SIDE
 
         assertEquals(emptyList(), state.groupNames, "an empty side deck has no groups")
+    }
+
+    // ---- picking up a whole pile -------------------------------------------
+
+    @Test
+    fun pickingUpAGroupTakesEveryCardBetweenTheGaps() = runTest {
+        val state = builderState()
+        TestPool.many(9).forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+        state.toggleBreak(main, 6)
+
+        state.select(main, 4)
+        state.selectGroupAtCursor()
+
+        assertEquals(setOf(3, 4, 5), state.selection.indices)
+        assertEquals(main, state.selection.section)
+    }
+
+    @Test
+    fun aSectionWithNoGapsPicksUpAllOfIt() = runTest {
+        // One group, which is what no gaps means everywhere else in the program.
+        val state = builderState()
+        TestPool.many(5).forEach { state.addCard(it) }
+        state.select(main, 2)
+
+        state.selectGroupAtCursor()
+
+        assertEquals(setOf(0, 1, 2, 3, 4), state.selection.indices)
+    }
+
+    @Test
+    fun theCursorStaysAtTheEndYourHandWasAt() = runTest {
+        // The focus is derived from the anchor, so picking a pile up must not
+        // move the cursor across it -- the next arrow key would jump.
+        val state = builderState()
+        TestPool.many(9).forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+        state.toggleBreak(main, 6)
+
+        state.select(main, 3)
+        state.selectGroupAtCursor()
+        assertEquals(3, Selections.focusOf(state.selection))
+
+        state.select(main, 5)
+        state.selectGroupAtCursor()
+        assertEquals(5, Selections.focusOf(state.selection))
+    }
+
+    @Test
+    fun pickingUpAGroupWithNothingSelectedDoesNothing() = runTest {
+        val state = builderState()
+        TestPool.many(5).forEach { state.addCard(it) }
+
+        state.selectGroupAtCursor()
+
+        assertTrue(state.selection.isEmpty)
+    }
+
+    @Test
+    fun aGroupPickedUpFromACardsOwnMenuNeedsNoCursor() = runTest {
+        val state = builderState()
+        TestPool.many(9).forEach { state.addCard(it) }
+        state.toggleBreak(main, 6)
+
+        state.selectGroupAt(main, 7)
+
+        assertEquals(setOf(6, 7, 8), state.selection.indices)
+    }
+
+    @Test
+    fun pickingUpAGroupThatIsNotThereLeavesTheSelectionAlone() = runTest {
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.select(main, 1)
+        val before = state.selection
+
+        state.selectGroupAt(main, 40)
+
+        assertEquals(before, state.selection)
     }
 
     private fun requireNonNull(value: String?): String =

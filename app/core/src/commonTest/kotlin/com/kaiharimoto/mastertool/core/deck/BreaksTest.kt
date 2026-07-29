@@ -2,6 +2,8 @@ package com.kaiharimoto.mastertool.core.deck
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class BreaksTest {
@@ -133,5 +135,47 @@ class BreaksTest {
         val breaks = Breaks.betweenRuns(lengths)
 
         assertEquals(lengths, breaks.groups(lengths.sum()).map { it.count() })
+    }
+}
+
+class GroupAtTest {
+
+    @Test
+    fun aCardInTheMiddlePileFindsThatPile() {
+        val breaks = Breaks(setOf(3, 7))
+
+        assertEquals(3..6, breaks.groupAt(5, size = 10))
+    }
+
+    @Test
+    fun theCardAGapSitsBeforeStartsTheNextPile() {
+        val breaks = Breaks(setOf(3, 7))
+
+        assertEquals(3..6, breaks.groupAt(3, size = 10))
+        assertEquals(0..2, breaks.groupAt(2, size = 10))
+    }
+
+    @Test
+    fun aSectionWithNoGapsIsOnePile() {
+        assertEquals(0..9, Breaks().groupAt(4, size = 10))
+    }
+
+    @Test
+    fun aPositionOffTheEndBelongsToNothing() {
+        // A cursor left pointing past the end of a section it used to fit.
+        assertNull(Breaks(setOf(3)).groupAt(10, size = 10))
+        assertNull(Breaks(setOf(3)).groupAt(-1, size = 10))
+        assertNull(Breaks().groupAt(0, size = 0))
+    }
+
+    @Test
+    fun everyPositionBelongsToExactlyOnePile() {
+        val breaks = Breaks(setOf(1, 4, 9, 12))
+
+        (0 until 15).forEach { index ->
+            val group = assertNotNull(breaks.groupAt(index, size = 15), "$index")
+            assertEquals(1, breaks.groups(15).count { index in it }, "$index is in two piles")
+            assertTrue(index in group)
+        }
     }
 }

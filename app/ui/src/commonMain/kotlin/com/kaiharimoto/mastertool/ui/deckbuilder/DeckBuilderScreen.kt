@@ -123,6 +123,7 @@ fun DeckBuilderScreen(
                 ShortcutAction.TOGGLE_HELP -> state.helpVisible = !state.helpVisible
                 ShortcutAction.TOGGLE_SHOWCASE -> state.showcaseVisible = !state.showcaseVisible
                 ShortcutAction.TOGGLE_GAP -> state.toggleGapAtCursor()
+                ShortcutAction.SELECT_GROUP -> state.selectGroupAtCursor()
                 ShortcutAction.NOTE_CARD -> state.noteAtCursor()
                 ShortcutAction.DISMISS -> dismissTopLayer(state) { focusManager.clearFocus() }
                 ShortcutAction.FOCUS_MAIN -> layout.focusSection(DeckSection.MAIN)

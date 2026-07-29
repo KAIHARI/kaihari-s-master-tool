@@ -183,8 +183,8 @@ away — the whole deck at the largest size it fits at, no controls on top of it
 On desktop: keyboard shortcuts throughout (press `?` for the list, which is
 generated from the table that implements them) and a hover preview on any card.
 The whole deck can be arranged from the keyboard — arrows move a cursor, shift
-grows it, Ctrl carries what it holds, `g` puts a gap in and `n` writes on what is
-being held: on the card if that is one, on the pair if it is two. Typing in the
+grows it, Ctrl carries what it holds, `g` puts a gap in, shift-`g` picks the whole
+group back up, and `n` writes on what is being held: on the card if that is one, on the pair if it is two. Typing in the
 search box completes the card's name.
 
 Siding works end to end. Plans arrive in a `.ydkx`, are applied as one undoable
@@ -223,7 +223,9 @@ And then they can be read back. Deck statistics measures each group you pushed
 apart: how often an opening hand holds one of it, how often two, and how many on
 average. Nothing was tagged or named to make that possible — an arrangement made
 to be looked at turns out to be an arrangement that can be measured, and "these
-nine are the engine" was always a claim about hands.
+nine are the engine" was always a claim about hands. Each row says what its group
+is about as well — read back off the cards in it rather than typed, so it cannot
+go stale, and left blank when the group has nothing to say for itself.
 
 The mat belongs to the deck, not to the program. The theme is what the
 application is wearing; the cloth under the cards is this deck's own, chosen from
