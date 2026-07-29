@@ -19,13 +19,50 @@ import com.kaiharimoto.mastertool.core.model.CardId
  * any card in it. Anchoring a gap to "before the second Ash Blossom" would mean
  * the gap moving when a copy is cut, which is not what anybody drew it to mean.
  */
-data class Breaks(val before: Set<Int> = emptySet()) {
+data class Breaks(
+    val before: Set<Int> = emptySet(),
+    /**
+     * What the player has called each pile, keyed by the position it starts at.
+     *
+     * A pile starts at zero or at a gap, so these keys are `0` and the contents
+     * of [before] — which is what makes a name follow its own gap through every
+     * edit below, rather than sitting at a number that used to mean something.
+     *
+     * Optional in every sense. The statistics panel already works out what a
+     * pile is *about* from the cards in it, and that reading is never wrong
+     * because nobody wrote it. A name is the other thing: what the pile is
+     * *for*, which is a claim only its owner can make.
+     */
+    val names: Map<Int, String> = emptyMap(),
+) {
 
     val isEmpty: Boolean get() = before.isEmpty()
 
-    /** Puts a gap here, or takes one away if there already is one. */
+    /** What the pile starting at [start] is called, if anything. */
+    fun nameOf(start: Int): String? = names[start]?.takeIf { it.isNotBlank() }
+
+    /**
+     * Names the pile that starts at [start], or takes the name off it.
+     *
+     * Blank means unnamed rather than named nothing: a field somebody emptied is
+     * a field somebody meant to clear.
+     */
+    fun named(start: Int, name: String): Breaks =
+        copy(names = if (name.isBlank()) names - start else names + (start to name.trim()))
+
+    /**
+     * Puts a gap here, or takes one away if there already is one.
+     *
+     * Taking one away takes the name of the pile it started with: that pile no
+     * longer exists, it has been folded into the one above, and leaving the name
+     * behind would put it on a pile nobody named.
+     */
     fun toggledAt(index: Int): Breaks =
-        if (index in before) Breaks(before - index) else Breaks(before + index)
+        if (index in before) {
+            Breaks(before - index, names - index)
+        } else {
+            Breaks(before + index, names)
+        }
 
     /**
      * Keeps only the gaps that still mean something.
@@ -35,7 +72,13 @@ data class Breaks(val before: Set<Int> = emptySet()) {
      * cards come and go, and both are meaningless rather than wrong — so they
      * are dropped on the way out rather than guarded against on the way in.
      */
-    fun clampedTo(size: Int): Breaks = Breaks(before.filterTo(HashSet()) { it in 1 until size })
+    fun clampedTo(size: Int): Breaks {
+        val cuts = before.filterTo(HashSet()) { it in 1 until size }
+        // A section with no gaps is one pile, and one pile is the section — so a
+        // name on it says nothing the section heading does not already say.
+        if (cuts.isEmpty()) return Breaks(cuts)
+        return Breaks(cuts, names.filterKeys { it == 0 || it in cuts })
+    }
 
     /**
      * The runs of cards between the gaps.
@@ -74,7 +117,12 @@ data class Breaks(val before: Set<Int> = emptySet()) {
      * end of a section never disturbs a gap, which is what most additions are.
      */
     fun afterInsert(at: Int, count: Int = 1): Breaks =
-        Breaks(before.mapTo(HashSet()) { if (it >= at) it + count else it })
+        Breaks(
+            before.mapTo(HashSet()) { if (it >= at) it + count else it },
+            // Zero is not a gap, it is the front of the section, and the front
+            // of the section does not move when something is put in front of it.
+            names.mapKeys { (start, _) -> if (start != 0 && start >= at) start + count else start },
+        )
 
     /**
      * Moves the gaps back after the card at [at] is taken out.
@@ -85,7 +133,10 @@ data class Breaks(val before: Set<Int> = emptySet()) {
      * is cut, rather than swallowing it.
      */
     fun afterRemove(at: Int): Breaks =
-        Breaks(before.mapTo(HashSet()) { if (it > at) it - 1 else it })
+        Breaks(
+            before.mapTo(HashSet()) { if (it > at) it - 1 else it },
+            names.mapKeys { (start, _) -> if (start > at) start - 1 else start },
+        )
 
     /**
      * A card that was at [from] and is now at [to].

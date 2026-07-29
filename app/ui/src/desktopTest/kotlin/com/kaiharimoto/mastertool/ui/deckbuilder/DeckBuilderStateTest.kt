@@ -1808,6 +1808,7 @@ class DeckBuilderStateTest {
             Overlay.NOTES -> notesVisible = true
             Overlay.ISSUES -> issuesVisible = true
             Overlay.HISTORY -> historyVisible = true
+            Overlay.PASTE -> pasteVisible = true
         }
     }
 

@@ -179,3 +179,114 @@ class GroupAtTest {
         }
     }
 }
+
+/**
+ * A name on a pile, and the one property that makes it worth having: it stays on
+ * the pile it was put on, through everything that moves the pile.
+ */
+class NamedPileTest {
+
+    private val engine = Breaks(before = setOf(9, 15))
+        .named(0, "Engine")
+        .named(9, "Handtraps")
+        .named(15, "Board breakers")
+
+    @Test
+    fun aPileIsNamedByWhereItStarts() {
+        assertEquals("Engine", engine.nameOf(0))
+        assertEquals("Handtraps", engine.nameOf(9))
+        assertNull(engine.nameOf(4), "a position inside a pile is not where it starts")
+    }
+
+    @Test
+    fun aBlankNameIsNoNameRatherThanTheNameBlank() {
+        assertNull(engine.named(9, "   ").nameOf(9))
+    }
+
+    @Test
+    fun aNameIsTrimmed() {
+        assertEquals("Handtraps", engine.named(9, "  Handtraps ").nameOf(9))
+    }
+
+    @Test
+    fun addingCardsAboveAPileCarriesItsNameDown() {
+        // Three copies appended to the engine. Everything below moves by three
+        // and its names go with it -- a name left at 9 would now be on a card
+        // still in the engine.
+        val after = engine.afterInsert(at = 5, count = 3)
+
+        assertEquals(setOf(12, 18), after.before)
+        assertEquals("Handtraps", after.nameOf(12))
+        assertEquals("Board breakers", after.nameOf(18))
+        assertNull(after.nameOf(9))
+    }
+
+    @Test
+    fun theFrontOfTheSectionDoesNotMoveWhenSomethingIsPutInFrontOfIt() {
+        // Zero is not a gap, it is where the section starts, and it starts there
+        // whatever arrives before it.
+        val after = engine.afterInsert(at = 0, count = 2)
+
+        assertEquals("Engine", after.nameOf(0))
+    }
+
+    @Test
+    fun cuttingACardCarriesTheNamesBackUp() {
+        val after = engine.afterRemove(at = 2)
+
+        assertEquals(setOf(8, 14), after.before)
+        assertEquals("Handtraps", after.nameOf(8))
+        assertEquals("Engine", after.nameOf(0))
+    }
+
+    @Test
+    fun takingAGapOutTakesTheNameOfThePileItStarted() {
+        // That pile no longer exists -- it has been folded into the one above.
+        // Leaving the name behind would put it on a pile nobody named.
+        val after = engine.toggledAt(9)
+
+        assertEquals(setOf(15), after.before)
+        assertNull(after.nameOf(9))
+        assertEquals("Engine", after.nameOf(0))
+        assertEquals("Board breakers", after.nameOf(15))
+    }
+
+    @Test
+    fun aNewGapStartsAnUnnamedPile() {
+        val after = engine.toggledAt(4)
+
+        assertNull(after.nameOf(4))
+        assertEquals("Engine", after.nameOf(0), "and does not take the name of the one it split")
+    }
+
+    @Test
+    fun aNameOnAPileThatIsNoLongerThereIsDropped() {
+        // Cut the deck down to eight and the gap at nine is gone, so the pile it
+        // started is gone with it.
+        val after = engine.clampedTo(12)
+
+        assertEquals(setOf(9), after.before)
+        assertEquals("Handtraps", after.nameOf(9))
+        assertNull(after.nameOf(15))
+    }
+
+    @Test
+    fun aSectionWithNoGapsCarriesNoNames() {
+        // One pile is the section, and naming it says nothing its own heading
+        // does not already say.
+        val after = engine.clampedTo(4)
+
+        assertTrue(after.before.isEmpty())
+        assertTrue(after.names.isEmpty())
+    }
+
+    @Test
+    fun aCardDraggedAcrossAGapMovesTheNamesWithTheCardsRatherThanTheOtherWay() {
+        // From the engine into the handtraps: the engine loses one, so every
+        // pile below starts one earlier, and its name arrives there too.
+        val after = engine.afterShift(from = 3, to = 11)
+
+        assertEquals("Handtraps", after.nameOf(8))
+        assertEquals("Engine", after.nameOf(0))
+    }
+}
