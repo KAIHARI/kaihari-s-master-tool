@@ -1526,3 +1526,43 @@ brightest segment for the value and the dim remainder for an extension of it. A
 tick mark on the bar is unambiguous — the bar is one number, the mark says where
 the other falls along it. Caught in the prototype, before any Compose was
 written, which is the third time that has paid for itself.
+
+---
+
+## 67 · The cards make room
+
+Dropping a card into the middle of a pane drew a marker on the seam it would
+land at. That is software's way of saying it. On a table you do not put a card
+*onto* a row — you push two cards apart and slide it between them, and you can
+see the slot before you let go.
+
+So now the cards lean. `MakeRoom.shiftFor` gives each card a signed fraction of
+its own width to move: the two at the seam lean furthest, the two behind them
+half as far, everything else stays put. Together the marker and the parting are a
+slot opening rather than a line appearing.
+
+Three things had to be got right and only one of them was obvious.
+
+**Nothing leans off its own row.** Cards 7 and 8 in an eight-wide pane are
+neighbours in the list and strangers on the screen, and a card sliding sideways
+with nothing beside it reads as a card falling over rather than as room being
+made.
+
+**A full row must not drift.** The first version tapered over a fixed reach of
+two, which is fine in the middle of a row and wrong one card in from its left
+edge: only one card leans left there, two lean right, and the row's last card
+gets pushed out past the pane, where it is drawn cut in half. Fixed by giving
+both sides the same reach — near an edge the notch keeps its width and loses its
+tail. A row with empty space after it is exempt, because it has somewhere to lean
+into.
+
+**It is sprung, not snapped.** The seam jumps from one card to the next as a hand
+moves; cards that teleported a quarter of their width to follow it would read as
+the pane flinching. Held as a `State` and read inside `graphicsLayer`, so the
+slide invalidates a layer rather than recomposing forty cards for every frame of
+it.
+
+Prototyped first as eight rectangles in a browser, at four seam positions —
+middle of a row, one in from the edge, on the row boundary, and appending to a
+part-full last row. The drift bug was visible there in about a second, which is
+roughly a nine-minute round trip through CI that did not have to happen.

@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
@@ -75,6 +76,7 @@ import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.layout.DealAnimation
 import com.kaiharimoto.mastertool.core.layout.GridFit
 import com.kaiharimoto.mastertool.core.layout.GridFitter
+import com.kaiharimoto.mastertool.core.layout.MakeRoom
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.DeckSection
@@ -367,6 +369,11 @@ private fun DeckSectionPane(
                     // drawn rather than drawn somewhere wrong.
                     val gaps = state.breaksIn(section).before
 
+                    // Where a card being carried would land, if it would be
+                    // taken. The cards either side of it push apart, so the slot
+                    // is visible before the card lands rather than only marked.
+                    val leanSeam = hover?.takeIf { it.accepted }?.index
+
                     items(
                         ids.size,
                         key = { "${section.name}-${ids[it].value}-${copies[it]}" },
@@ -385,6 +392,12 @@ private fun DeckSectionPane(
                             position = position,
                             columns = fit.columns,
                             deal = { DealAnimation.progressFor(position, ids.size, deal.value) },
+                            // The cards either side of the drop push apart, so
+                            // the slot the card is going into is visible before
+                            // it lands rather than only marked.
+                            lean = leanSeam?.let {
+                                MakeRoom.shiftFor(position, it, fit.columns, ids.size)
+                            } ?: 0f,
                             // Sorting a section, or dropping a card into the middle
                             // of one, now slides the cards that moved instead of
                             // redrawing the pane somewhere else.
@@ -485,6 +498,11 @@ private fun DeckCard(
      * recomposing forty cards sixty times a second.
      */
     deal: () -> Float,
+    /**
+     * How far this card should lean aside for a drop, as a fraction of its own
+     * width. Zero whenever nothing is being carried over this pane.
+     */
+    lean: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
     val card: Card? = state.index.byId(id)
@@ -570,8 +588,23 @@ private fun DeckCard(
         }
     }
 
+    // Sprung rather than snapped. The seam jumps from one card to the next as a
+    // hand moves, and cards that teleported a quarter of their width to follow it
+    // would read as the pane flinching. Held as a State and read inside
+    // `graphicsLayer`, so the slide invalidates a layer rather than recomposing
+    // forty cards for every frame of it.
+    val leaning = animateFloatAsState(
+        targetValue = lean,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+    )
+
     Box(
         modifier.graphicsLayer {
+            translationX = leaning.value * size.width
+
             val progress = deal()
             if (progress >= 1f) return@graphicsLayer
             alpha = progress
