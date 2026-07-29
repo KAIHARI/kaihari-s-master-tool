@@ -1606,6 +1606,50 @@ class DeckBuilderState(
     }
 
     /** Undoes an edit only while it is still the most recent one. */
+    /**
+     * Everything that says *which* deck is open, apart from the cards.
+     *
+     * Captured as one value so that putting a deck back is one move. Both the
+     * places that replace the open deck wholesale — starting a new one and
+     * importing a file — offer to take it back, and both used to restore the
+     * cards and a hand-kept subset of the rest. That list grew a fourth item the
+     * day the mat arrived and had already been wrong about the payload, so
+     * undoing an import left the imported file's siding plans attached to the
+     * deck it had just put back.
+     */
+    private data class OpenDeck(
+        val name: String,
+        val notes: String,
+        val id: String?,
+        val snapshot: SavedSnapshot?,
+        val extended: JsonObject?,
+        val breaks: Map<DeckSection, Breaks>,
+        val cardNotes: CardNotes,
+        val mat: MatChoice,
+    )
+
+    private fun openDeck() = OpenDeck(
+        name = deckName,
+        notes = deckNotes,
+        id = deckId,
+        snapshot = savedSnapshot,
+        extended = extended,
+        breaks = breaks,
+        cardNotes = cardNotes,
+        mat = mat,
+    )
+
+    private fun reopen(was: OpenDeck) {
+        deckName = was.name
+        deckNotes = was.notes
+        deckId = was.id
+        savedSnapshot = was.snapshot
+        extended = was.extended
+        breaks = was.breaks
+        cardNotes = was.cardNotes
+        mat = was.mat
+    }
+
     private fun undoIfCurrent(token: UndoToken): Boolean {
         if (editSerial != token.serial) return false
         undo()
@@ -1669,9 +1713,7 @@ class DeckBuilderState(
         // it. Undo brings the cards back in the order they were in, and an
         // arrangement without its gaps -- or its notes, or the cloth it was laid
         // out on -- is not the deck that was there a moment ago.
-        val hadBreaks = breaks
-        val hadNotes = cardNotes
-        val hadMat = mat
+        val was = openDeck()
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
         deckNotes = ""
@@ -1681,13 +1723,7 @@ class DeckBuilderState(
         mat = MatChoice.DEFAULT
         showToast(
             "Started a new deck.",
-            undo = {
-                if (undoIfCurrent(token)) {
-                    breaks = hadBreaks
-                    cardNotes = hadNotes
-                    mat = hadMat
-                }
-            },
+            undo = { if (undoIfCurrent(token)) reopen(was) },
         )
     }
 
@@ -1788,6 +1824,7 @@ class DeckBuilderState(
             val parsed = YdkCodec.parse(file.content)
 
             // An imported file is a new deck, not an edit to the open one.
+            val was = openDeck()
             releaseOpenDeck()
             val token = pushUndo(deck)
             deck = parsed.document.deck
@@ -1804,7 +1841,10 @@ class DeckBuilderState(
                 .takeIf { it > 0 }
                 ?.let { " ($it line${if (it == 1) "" else "s"} skipped)" }
                 .orEmpty()
-            showToast("Imported ${deck.totalCards} cards$warning.", undo = { undoIfCurrent(token) })
+            showToast(
+                "Imported ${deck.totalCards} cards$warning.",
+                undo = { if (undoIfCurrent(token)) reopen(was) },
+            )
         }
     }
 

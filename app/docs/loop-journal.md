@@ -1984,6 +1984,31 @@ part they share, and that only the comparison notices when the order moved.
 
 ---
 
+## 85 · Undoing an import gave you back a deck that never existed
+
+Two places replace the open deck wholesale and offer to take it back: starting a
+new one, and importing a file. Both restored the cards and a hand-kept list of
+everything else — and section 76 already recorded that list growing a fourth item
+the day the mat arrived, in `newDeck`. `importFromFile` had the same list and it
+was shorter still.
+
+So: import a `.ydkx` over the deck you were working on, press undo, and you got
+your cards back carrying *the imported file's* siding plans, gaps, notes and mat.
+A deck that had never existed anywhere.
+
+The fix is the shape the rest of this file keeps arriving at. `openDeck()`
+captures everything that says *which* deck is open — name, notes, id, saved
+snapshot, payload, gaps, card notes, mat — as one value, and `reopen()` puts it
+back in one move. Both callers use both. A ninth thing about a deck is one field
+in one place rather than two lists somebody has to remember to keep in step.
+
+That is the third time in this stretch that a hand-kept list of things-about-a-deck
+has been wrong, after the saved snapshot and `newDeck`'s undo. The lesson is not
+"be careful with lists"; it is that a program with a concept it never named will
+keep rediscovering it one field at a time.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus

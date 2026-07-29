@@ -912,6 +912,32 @@ class DeckBuilderStateTest {
         assertTrue("somethingThisAppDoesNotKnow" in written)
     }
 
+    @Test
+    fun takingBackAnImportPutsTheWholeDeckBack() = runTest {
+        // Not only the cards. Undoing an import used to leave the imported
+        // file's siding plans, gaps and mat attached to the deck it had just
+        // restored, which is a deck that never existed.
+        val state = builderState(testDependencies(StubFileAccess(sidedFile)))
+        TestPool.many(4).forEach { state.addCard(it) }
+        val card = state.deck.main.first()
+        state.toggleBreak(main, 2)
+        state.writeNote(card, "kept")
+        state.chooseMat(MatChoice.BAIZE)
+        val before = state.deck
+
+        state.importFromFile()
+        advanceUntilIdle()
+        assertTrue("Snake-Eye" in state.sidingPatterns, "the import brought its plans")
+
+        state.toast?.undo?.invoke()
+
+        assertEquals(before, state.deck)
+        assertEquals(setOf(2), state.breaksIn(main).before)
+        assertEquals("kept", state.noteOn(card))
+        assertEquals(MatChoice.BAIZE, state.mat)
+        assertFalse("Snake-Eye" in state.sidingPatterns, "the imported plans came back with it")
+    }
+
     // ---- what a save has to include ----------------------------------------
 
     @Test
