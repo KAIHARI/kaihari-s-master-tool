@@ -231,8 +231,11 @@ way it faces: drop it and it stands up in attack, flick it sideways and it lies
 down in defence, hold it a moment first and it goes face-down. All four stacks
 open — deck, Extra deck, graveyard, banished — and a card taken out of one is
 picked up the same way a card in your hand is. Drop something on the graveyard
-and it goes there, and make a token when the turn needs one. Undo puts the whole
-table back, hand and deck included.
+and it goes there, and make a token when the turn needs one. Tap a card to turn
+it; hold it to pick it back up into your hand, which is the only way off the
+board that goes backwards — everything else carries on forwards, so a slip used
+to mean sweeping the table and building it again. Undo puts the whole table back,
+hand and deck included.
 
 A hand you like in the test panel or the shootout is one button from being a
 board with that hand already in it.

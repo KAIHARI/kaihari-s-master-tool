@@ -4,7 +4,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -289,6 +291,7 @@ private fun ExtraMonsterRow(
  * the fallback for every gesture and the only way to correct one. Tapping an
  * empty zone puts the held card there.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Zone(
     state: SandboxState,
@@ -355,16 +358,23 @@ private fun Zone(
                 },
             )
             .border(1.dp, edge, RoundedCornerShape(3.dp))
-            .clickable {
-                when {
-                    // Something picked up goes down first: an occupied zone
-                    // refuses it anyway, and turning a card you were not
-                    // holding would be the wrong guess about what was meant.
-                    held != null -> state.placeHeld(zone)
-                    top != null -> state.turn(zone)
-                    else -> Unit
-                }
-            },
+            .combinedClickable(
+                onClick = {
+                    when {
+                        // Something picked up goes down first: an occupied zone
+                        // refuses it anyway, and turning a card you were not
+                        // holding would be the wrong guess about what was meant.
+                        held != null -> state.placeHeld(zone)
+                        top != null -> state.turn(zone)
+                        else -> Unit
+                    }
+                },
+                // The only way back off the board that goes backwards. Every
+                // other one -- graveyard, banished, another zone -- carries on
+                // forwards, so a hand that slipped meant sweeping the table and
+                // building it again.
+                onLongClick = { if (held == null && top != null) state.toHand(zone) },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         if (top != null) LaidCard(top, index, zoneWidth)

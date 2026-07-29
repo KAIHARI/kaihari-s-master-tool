@@ -88,7 +88,7 @@ class TableStateTest {
     @Test
     fun aCardCanGoStraightToAPile() {
         val before = table()
-        val after = assertNotNull(before.sendFromHand(0, BoardLayout.graveyard))
+        val after = assertNotNull(before.play(0, BoardLayout.graveyard, Placement.ATTACK))
 
         assertEquals(listOf(PlacedCard(before.hand[0])), after.board[BoardLayout.graveyard])
         assertEquals(before.hand.size - 1, after.hand.size)
@@ -143,7 +143,7 @@ class TableStateTest {
         val start = TableState.from(deck, Random(11))
 
         val after = assertNotNull(start.play(2, zone, Placement.ATTACK))
-            .let { assertNotNull(it.sendFromHand(0, BoardLayout.graveyard)) }
+            .let { assertNotNull(it.play(0, BoardLayout.graveyard, Placement.ATTACK)) }
             .let { assertNotNull(it.toHand(zone)) }
 
         val everywhere = after.hand + after.library + after.board.cards.map { it.id }
@@ -207,7 +207,7 @@ class TableStateTest {
     @Test
     fun aCardIsRetrievedFromTheMiddleOfAGraveyard() {
         var table = TableState(library = cards).draw(3)
-        repeat(3) { table = assertNotNull(table.sendFromHand(0, BoardLayout.graveyard)) }
+        repeat(3) { table = assertNotNull(table.play(0, BoardLayout.graveyard, Placement.ATTACK)) }
         val wanted = table.board[BoardLayout.graveyard][1]
 
         val retrieved = assertNotNull(table.retrieve(BoardLayout.graveyard, 1))
@@ -220,7 +220,7 @@ class TableStateTest {
     @Test
     fun aCardIsRaisedOutOfTheGraveyardStraightOntoTheBoard() {
         var table = TableState(library = cards).draw(2)
-        repeat(2) { table = assertNotNull(table.sendFromHand(0, BoardLayout.graveyard)) }
+        repeat(2) { table = assertNotNull(table.play(0, BoardLayout.graveyard, Placement.ATTACK)) }
         val wanted = table.board[BoardLayout.graveyard][0]
 
         val raised = assertNotNull(
@@ -237,7 +237,7 @@ class TableStateTest {
     fun raisingIntoAFullZoneLeavesTheGraveyardAlone() {
         var table = TableState(library = cards).draw(2)
         table = assertNotNull(table.play(0, zone, Placement.ATTACK))
-        table = assertNotNull(table.sendFromHand(0, BoardLayout.graveyard))
+        table = assertNotNull(table.play(0, BoardLayout.graveyard, Placement.ATTACK))
 
         assertNull(table.raise(BoardLayout.graveyard, 0, zone, Placement.ATTACK))
     }
@@ -245,7 +245,7 @@ class TableStateTest {
     @Test
     fun raisingAPileOntoItselfIsRefused() {
         var table = TableState(library = cards).draw(1)
-        table = assertNotNull(table.sendFromHand(0, BoardLayout.graveyard))
+        table = assertNotNull(table.play(0, BoardLayout.graveyard, Placement.ATTACK))
 
         assertNull(table.raise(BoardLayout.graveyard, 0, BoardLayout.graveyard, Placement.ATTACK))
     }

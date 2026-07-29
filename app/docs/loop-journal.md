@@ -1777,3 +1777,29 @@ specification instead of about a shared assumption, and it runs on every push.
 The by-hand check still happened, and it still mattered — it is how I knew the
 windowed table was right before writing a test for it. What changed is that it no
 longer has to happen again.
+
+---
+
+## 76 · A removal that never happened, and the gap it uncovered
+
+Entry 74 said `CardNotes.keepingOnly` had been removed. It had not: the edit
+matched on a doc comment that did not match, changed nothing, and the tests
+passed because the replacement test never called the function. The commit message
+was true about the intent and false about the diff. It is gone now, and the
+lesson is the ordinary one — an edit that reports success because nothing failed
+is not the same as an edit that happened.
+
+What found it was a sweep for `:core` API with no caller outside its own tests,
+run once as a review rather than added as a lint. It turned up two more.
+
+`TableState.sendFromHand` was `play` with the placement left at its default. Two
+names for one operation, and the one with the shorter name was the one nothing
+used. Removed; its tests now say `play`.
+
+`TableState.toHand` was the opposite problem. Nothing called it because the
+sandbox had no gesture for it — and that is a gap, not dead code. Every other way
+off the board goes *forwards*: to the graveyard, to banished, to another zone. A
+card put down in the wrong place could not be picked back up, so a slip meant
+sweeping the table and building it again. Tapping a zone already turns the card;
+holding it now takes it back into your hand. The core function was written and
+tested a while ago and had simply never been reachable.

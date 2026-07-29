@@ -52,13 +52,6 @@ data class TableState(
         return copy(board = placed, hand = hand.withoutIndex(handIndex))
     }
 
-    /** From the hand straight to a pile, for a discard or a banish cost. */
-    fun sendFromHand(handIndex: Int, zone: ZoneId): TableState? {
-        val card = hand.getOrNull(handIndex) ?: return null
-        val placed = board.place(zone, PlacedCard(card)) ?: return null
-        return copy(board = placed, hand = hand.withoutIndex(handIndex))
-    }
-
     /**
      * Out of the Extra deck and onto the board.
      *

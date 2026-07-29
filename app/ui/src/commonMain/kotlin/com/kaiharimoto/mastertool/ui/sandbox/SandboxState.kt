@@ -282,6 +282,16 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
         move(zone, BoardLayout.graveyard)
     }
 
+    /**
+     * Picks a card back up off the board.
+     *
+     * A bounce, or more often a misplacement — every other way out of a zone
+     * goes forwards, and a board simulator you cannot take a card back off is a
+     * board simulator you have to sweep and rebuild every time your hand slips.
+     * A token stops existing instead, because there is no card to hold.
+     */
+    fun toHand(zone: ZoneId) = change { it.toHand(zone) }
+
     fun hold(origin: DragOrigin?) {
         held = origin
     }

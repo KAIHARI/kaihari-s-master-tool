@@ -56,18 +56,6 @@ data class CardNotes(val byCard: Map<CardId, String> = emptyMap()) {
         }
     }
 
-    /**
-     * Drops notes about cards the deck no longer holds.
-     *
-     * Deliberately *not* called when a card is cut. Taking the last copy out and
-     * putting it back is a thing that happens constantly while building, and a
-     * note that did not survive that would be a note nobody trusts. This exists
-     * for the one moment it is right — writing the file — and even then it is the
-     * caller's decision.
-     */
-    fun keepingOnly(ids: Set<CardId>): CardNotes =
-        if (byCard.keys.all { it in ids }) this else CardNotes(byCard.filterKeys { it in ids })
-
     companion object {
         val NONE = CardNotes()
     }
