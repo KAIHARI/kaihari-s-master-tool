@@ -2183,7 +2183,16 @@ class DeckBuilderState(
             val carried = payload
             val text = YdkCodec.write(deck, createdBy = "kai's master tool", extended = carried)
             val extension = if (carried != null) "ydkx" else "ydk"
-            deps.fileAccess.shareDeck("${deckName.ifBlank { "deck" }}.$extension", text)
+            val name = "${deckName.ifBlank { "deck" }}.$extension"
+            // Says something either way. On the tablet the share sheet is its own
+            // answer; on the desktop there is no sheet, so a press that opened a
+            // folder somewhere behind the window looked exactly like a press that
+            // did nothing.
+            if (deps.fileAccess.shareDeck(name, text)) {
+                showToast("Shared $name.")
+            } else {
+                showToast("Could not share $name.")
+            }
         }
     }
 

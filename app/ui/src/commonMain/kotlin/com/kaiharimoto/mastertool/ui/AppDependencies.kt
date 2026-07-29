@@ -32,14 +32,21 @@ interface DeckFileAccess {
     /** Writes [bytes] out, letting the user choose where. */
     suspend fun export(suggestedName: String, bytes: ByteArray, mimeType: String): Boolean
 
-    /** Hands the file to the platform share sheet, where one exists. */
-    suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String)
+    /**
+     * Hands the file to the platform share sheet, where one exists.
+     *
+     * Returns whether anything happened, like [export] does. Not every platform
+     * has a share sheet — the desktop writes the file and shows it instead — and
+     * one that quietly does neither is a menu item that looks broken rather than
+     * unavailable.
+     */
+    suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String): Boolean
 }
 
 suspend fun DeckFileAccess.exportDeck(suggestedName: String, content: String): Boolean =
     export(suggestedName, content.encodeToByteArray(), mimeTypeFor(suggestedName))
 
-suspend fun DeckFileAccess.shareDeck(suggestedName: String, content: String) =
+suspend fun DeckFileAccess.shareDeck(suggestedName: String, content: String): Boolean =
     share(suggestedName, content.encodeToByteArray(), mimeTypeFor(suggestedName))
 
 /**

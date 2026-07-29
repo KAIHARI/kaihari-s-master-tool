@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
         return deferred.await()
     }
 
-    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) {
+    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String): Boolean {
         val uri = withContext(Dispatchers.IO) {
             val shareDir = File(cacheDir, "shared").apply { mkdirs() }
             val file = File(shareDir, suggestedName).apply { writeBytes(bytes) }
@@ -116,7 +116,9 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
             putExtra(Intent.EXTRA_TITLE, suggestedName)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(intent, "Share"))
+        // A device with nothing that can receive the file throws rather than
+        // showing an empty sheet, and a crash is not the answer to "share this".
+        return runCatching { startActivity(Intent.createChooser(intent, "Share")) }.isSuccess
     }
 
     // ---- helpers -----------------------------------------------------------

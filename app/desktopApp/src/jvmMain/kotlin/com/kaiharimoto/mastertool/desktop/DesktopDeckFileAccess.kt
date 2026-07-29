@@ -57,18 +57,20 @@ class DesktopDeckFileAccess : DeckFileAccess {
      * Desktop has no share sheet; the closest equivalent is writing the file out
      * and revealing it in the file manager.
      */
-    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) {
+    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String): Boolean =
         withContext(Dispatchers.IO) {
             val file = File(System.getProperty("java.io.tmpdir"), suggestedName)
+            // The write is what makes this true. Opening the folder is the nice
+            // part and is allowed to fail -- a headless session or a machine
+            // with no file manager still has the file where it was put.
             runCatching {
                 file.writeBytes(bytes)
                 if (Desktop.isDesktopSupported()) {
                     val desktop = Desktop.getDesktop()
                     if (desktop.isSupported(Desktop.Action.OPEN)) {
-                        desktop.open(file.parentFile)
+                        runCatching { desktop.open(file.parentFile) }
                     }
                 }
-            }
+            }.isSuccess
         }
-    }
 }

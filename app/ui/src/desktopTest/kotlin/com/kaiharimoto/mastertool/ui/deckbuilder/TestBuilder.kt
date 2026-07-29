@@ -92,7 +92,7 @@ internal fun TestScope.builderState(
 internal object NoFileAccess : DeckFileAccess {
     override suspend fun importDeck(): ImportedFile? = null
     override suspend fun export(suggestedName: String, bytes: ByteArray, mimeType: String) = false
-    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) = Unit
+    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) = true
 }
 
 /** Hands back a file instead of opening a picker, and keeps whatever was written. */
@@ -120,7 +120,7 @@ internal class StubFileAccess(private val file: ImportedFile) : DeckFileAccess {
         return true
     }
 
-    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) = Unit
+    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) = true
 }
 
 internal object NoUpdater : AppUpdater {

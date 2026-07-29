@@ -2688,6 +2688,21 @@ class DeckBuilderStateTest {
         assertEquals(1, deps.deckRepository.all().size, "one deck, saved twice")
     }
 
+    @Test
+    fun sharingSaysSoEitherWay() = runTest {
+        // Silent before. On the tablet the share sheet is its own answer; on the
+        // desktop there is no sheet, so a press that opened a folder behind the
+        // window looked exactly like a press that did nothing.
+        val state = builderState()
+        TestPool.many(5).forEach { state.addCard(it) }
+        state.rename("Snake-Eye")
+
+        state.shareDeck()
+        advanceUntilIdle()
+
+        assertEquals("Shared Snake-Eye.ydk.", requireNonNull(state.toast?.message))
+    }
+
     private fun requireNonNull(value: String?): String =
         value ?: error("nothing was exported")
 }
