@@ -3,6 +3,7 @@ package com.kaiharimoto.mastertool.ui.deckbuilder
 import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.deck.TidyBy
+import com.kaiharimoto.mastertool.core.deck.MatChoice
 import com.kaiharimoto.mastertool.core.export.Png
 import com.kaiharimoto.mastertool.core.layout.GridStep
 import com.kaiharimoto.mastertool.core.model.DeckSection
@@ -856,6 +857,44 @@ class DeckBuilderStateTest {
         assertTrue(written.contains("somethingThisAppDoesNotKnow"), written)
     }
 
+    // ---- the cloth the deck lies on ----------------------------------------
+
+    @Test
+    fun theMatTravelsInTheExportedFile() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+
+        state.chooseMat(MatChoice.WINE)
+        state.exportToFile()
+        advanceUntilIdle()
+
+        val written = requireNonNull(files.exported)
+        assertTrue("\"mat\": \"wine\"" in written || "\"mat\":\"wine\"" in written, written.takeLast(500))
+        assertTrue("somethingThisAppDoesNotKnow" in written)
+    }
+
+    @Test
+    fun aDeckNobodyDressedWritesNoMat() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+        state.exportToFile()
+        advanceUntilIdle()
+
+        assertFalse("\"look\"" in requireNonNull(files.exported))
+    }
+
+    @Test
+    fun aFreshDeckIsBackOnTheThemesOwnMat() = runTest {
+        val state = builderState()
+        state.chooseMat(MatChoice.BAIZE)
+
+        state.newDeck()
+
+        assertEquals(MatChoice.THEME, state.mat)
+    }
+
     // ---- a word on a card --------------------------------------------------
 
     @Test
@@ -1397,6 +1436,7 @@ class DeckBuilderStateTest {
             Overlay.INSPECTOR -> inspect(listOf(TestPool.ash), 0)
             Overlay.HELP -> helpVisible = true
             Overlay.CARD_NOTE -> noteTarget = TestPool.ash.id
+            Overlay.MAT -> matVisible = true
             Overlay.FILTERS -> filtersVisible = true
             Overlay.STATS -> statsVisible = true
             Overlay.SIDING -> sidingVisible = true

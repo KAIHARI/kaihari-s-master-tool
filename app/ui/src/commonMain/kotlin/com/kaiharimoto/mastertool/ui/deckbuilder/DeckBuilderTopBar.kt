@@ -246,6 +246,19 @@ fun DeckBuilderTopBar(
                     },
                 )
                 DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("The mat…")
+                            Text(
+                                "what this deck is laid out on",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    onClick = { menuOpen = false; state.matVisible = true },
+                )
+                DropdownMenuItem(
                     text = { Text("See the whole deck") },
                     onClick = { menuOpen = false; state.showcaseVisible = true },
                 )

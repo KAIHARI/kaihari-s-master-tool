@@ -1803,3 +1803,35 @@ card put down in the wrong place could not be picked back up, so a slip meant
 sweeping the table and building it again. Tapping a zone already turns the card;
 holding it now takes it back into your hand. The core function was written and
 tested a while ago and had simply never been reachable.
+
+---
+
+## 77 · The mat belongs to the deck
+
+The application has four themes and every deck looked exactly like every other
+one. Somebody who runs three lists should be able to tell which is open from
+across the room, and "the free order of cards is how the player sees their own
+deck" applies to the surface it is laid out on as much as to the order.
+
+So the split: **the theme is the program's, the mat is the deck's.** Six cloths —
+slate, leather, midnight, baize, wine, bone — plus "as the theme" for a deck
+nobody has dressed, written into the `.ydkx` under `look.mat` by the same merging
+rule as everything else in that payload. The deck brings its table with it.
+
+Named choices rather than a colour picker, deliberately. Every one of these was
+drawn under card art before being kept, because sitting under card art is the
+only thing a surface has to do, and a free colour is a way to produce a mat that
+fights the cards on it.
+
+**What the prototype changed.** Rendering the six as swatches with cards on them
+turned up the thing that would have shipped broken: a deck can now be on cloth
+lighter than the application is wearing, and the showcase's caption takes its
+colour from the theme. Bone mat, dark theme, and the deck's name is writing on
+nothing. So `MatColors` gained an `ink` and an `inkQuiet` — a mat now knows what
+colour writing goes on it — and the caption asks the cloth rather than the theme.
+Three lines of consequence, and the only reason it was found is that the bone mat
+was drawn next to the dark ones instead of being reasoned about.
+
+The bone swatch also came out shouting, because the weave was tuned by looking at
+bare cloth. It is drawn *behind* the cards and only really shows at the margins,
+so the warp came down by a third.

@@ -12,7 +12,9 @@ import com.kaiharimoto.mastertool.core.deck.CardNotesCodec
 import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.deck.DeckEdit
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
+import com.kaiharimoto.mastertool.core.deck.DeckLookCodec
 import com.kaiharimoto.mastertool.core.deck.DeckSorter
+import com.kaiharimoto.mastertool.core.deck.MatChoice
 import com.kaiharimoto.mastertool.core.deck.DeckTidy
 import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.deck.HandSimulator
@@ -79,6 +81,7 @@ enum class Overlay {
     INSPECTOR,
     HELP,
     CARD_NOTE,
+    MAT,
     FILTERS,
     STATS,
     SIDING,
@@ -249,9 +252,29 @@ class DeckBuilderState(
      * arranged stays a plain `.ydk`.
      */
     private val payload: JsonObject?
-        get() = CardNotesCodec
-            .write(ArrangementCodec.write(extended, breaks), cardNotes)
+        get() = DeckLookCodec
+            .write(CardNotesCodec.write(ArrangementCodec.write(extended, breaks), cardNotes), mat)
             .takeIf { it.isNotEmpty() }
+
+    /**
+     * The cloth this deck is laid out on.
+     *
+     * The theme belongs to the application; the mat belongs to the deck.
+     * Somebody who runs three lists should be able to tell which one is open
+     * from across the room, and it rides in the file, so the deck brings its
+     * table with it.
+     */
+    var mat by mutableStateOf(MatChoice.DEFAULT)
+        private set
+
+    fun chooseMat(choice: MatChoice) {
+        if (choice == mat) return
+        mat = choice
+        scheduleAutosave()
+    }
+
+    /** Whether the mat picker is open. */
+    var matVisible by mutableStateOf(false)
 
     /**
      * What the player wrote on individual cards.
@@ -367,6 +390,7 @@ class DeckBuilderState(
         Overlay.INSPECTOR -> inspection != null
         Overlay.HELP -> helpVisible
         Overlay.CARD_NOTE -> noteTarget != null
+        Overlay.MAT -> matVisible
         Overlay.FILTERS -> filtersVisible
         Overlay.STATS -> statsVisible
         Overlay.SIDING -> sidingVisible
@@ -391,6 +415,7 @@ class DeckBuilderState(
             // Closed the same way the sheet's own dismiss does, so Escape keeps
             // what was typed rather than throwing it away.
             Overlay.CARD_NOTE -> noteTarget = null
+            Overlay.MAT -> matVisible = false
             Overlay.FILTERS -> filtersVisible = false
             Overlay.STATS -> statsVisible = false
             Overlay.SIDING -> sidingVisible = false
@@ -1582,6 +1607,7 @@ class DeckBuilderState(
         extended = null
         breaks = emptyMap()
         cardNotes = CardNotes.NONE
+        mat = MatChoice.DEFAULT
         showToast(
             "Started a new deck.",
             undo = {
@@ -1673,6 +1699,7 @@ class DeckBuilderState(
             extended = stored.extended
             breaks = ArrangementCodec.read(stored.extended)
             cardNotes = CardNotesCodec.read(stored.extended)
+            mat = DeckLookCodec.read(stored.extended)
             undoStack.clear()
             redoStack.clear()
             stamp()
@@ -1695,6 +1722,7 @@ class DeckBuilderState(
             extended = parsed.document.extended
             breaks = ArrangementCodec.read(parsed.document.extended)
             cardNotes = CardNotesCodec.read(parsed.document.extended)
+            mat = DeckLookCodec.read(parsed.document.extended)
 
             val warning = parsed.warnings.size
                 .takeIf { it > 0 }

@@ -3,6 +3,7 @@ package com.kaiharimoto.mastertool.ui.theme
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import com.kaiharimoto.mastertool.core.deck.MatChoice
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.prefs.ThemeChoice
 
@@ -22,6 +23,17 @@ data class MatColors(
     val weft: Color,
     val sheen: Float,
     val vignette: Float,
+    /**
+     * The colour of writing on this cloth.
+     *
+     * Carried by the mat rather than taken from the theme because a deck brings
+     * its own mat now: a light one under a dark theme, or the other way round,
+     * would otherwise put the caption in a colour chosen for a surface that is
+     * no longer underneath it. There is not much writing on a mat — the deck's
+     * name and its counts — which is exactly why it would have gone unnoticed.
+     */
+    val ink: Color,
+    val inkQuiet: Color,
 )
 
 /**
@@ -70,6 +82,8 @@ val SwissColors = MasterToolColors(
         weft = Color.Black.copy(alpha = 0.16f),
         sheen = 0.05f,
         vignette = 0.42f,
+        ink = Color(0xFFF1F5F9),
+        inkQuiet = Color(0xFF94A3B8),
     ),
     sections = SectionColors(
         main = Color(0xFF3B82F6),
@@ -94,6 +108,8 @@ val ClassicColors = MasterToolColors(
         weft = Color.Black.copy(alpha = 0.26f),
         sheen = 0.055f,
         vignette = 0.52f,
+        ink = Color(0xFFF5E3B8),
+        inkQuiet = Color(0xFFB08C4A),
     ),
     sections = SectionColors(
         main = Color(0xFFE8A33D),
@@ -112,6 +128,8 @@ val CyberColors = MasterToolColors(
         weft = Color.Black.copy(alpha = 0.42f),
         sheen = 0.03f,
         vignette = 0.60f,
+        ink = Color(0xFFD6FFFF),
+        inkQuiet = Color(0xFF6FB3B3),
     ),
     sections = SectionColors(
         main = Color(0xFF00FFFF),
@@ -137,6 +155,8 @@ val DaylightColors = MasterToolColors(
         weft = Color(0xFF5A647D).copy(alpha = 0.10f),
         sheen = 0.5f,
         vignette = 0.13f,
+        ink = Color(0xFF1E293B),
+        inkQuiet = Color(0xFF5A647D),
     ),
     sections = SectionColors(
         main = Color(0xFF2563EB),
@@ -152,4 +172,99 @@ fun colorsFor(theme: ThemeChoice): MasterToolColors = when (theme) {
     ThemeChoice.CLASSIC -> ClassicColors
     ThemeChoice.CYBER -> CyberColors
     ThemeChoice.DAYLIGHT -> DaylightColors
+}
+
+/**
+ * The mats a deck can be laid out on, whatever the application is wearing.
+ *
+ * The theme belongs to the program and the mat belongs to the deck — see
+ * [com.kaiharimoto.mastertool.core.deck.MatChoice] for why that split is worth
+ * having. Each one carries its own ink, so a bone mat under a dark theme still
+ * has a caption somebody can read.
+ *
+ * Every one of these is picked to sit *under* card art, which is the only thing
+ * a surface has to do. That is also why there is no colour picker: a free choice
+ * here is a way to produce a mat that fights the cards on it.
+ */
+object DeckMats {
+
+    /** What [choice] looks like, falling back to whatever the theme decided. */
+    fun of(choice: MatChoice, theme: MasterToolColors): MatColors = when (choice) {
+        MatChoice.THEME -> theme.mat
+        MatChoice.SLATE -> Slate
+        MatChoice.LEATHER -> Leather
+        MatChoice.MIDNIGHT -> Midnight
+        MatChoice.BAIZE -> Baize
+        MatChoice.WINE -> Wine
+        MatChoice.BONE -> Bone
+    }
+
+    val Slate = MatColors(
+        base = Color(0xFF16203A),
+        warp = Color.White.copy(alpha = 0.022f),
+        weft = Color.Black.copy(alpha = 0.16f),
+        sheen = 0.05f,
+        vignette = 0.42f,
+        ink = Color(0xFFF1F5F9),
+        inkQuiet = Color(0xFF94A3B8),
+    )
+
+    val Leather = MatColors(
+        base = Color(0xFF2A1A08),
+        warp = Color(0xFFFFD68C).copy(alpha = 0.030f),
+        weft = Color.Black.copy(alpha = 0.26f),
+        sheen = 0.055f,
+        vignette = 0.52f,
+        ink = Color(0xFFF5E3B8),
+        inkQuiet = Color(0xFFB08C4A),
+    )
+
+    val Midnight = MatColors(
+        base = Color(0xFF0A0C14),
+        warp = Color(0xFFBECDFF).copy(alpha = 0.020f),
+        weft = Color.Black.copy(alpha = 0.34f),
+        sheen = 0.035f,
+        vignette = 0.58f,
+        ink = Color(0xFFE6EAF5),
+        inkQuiet = Color(0xFF8892AA),
+    )
+
+    /** What a card table is actually covered in. */
+    val Baize = MatColors(
+        base = Color(0xFF123024),
+        warp = Color(0xFFD2FFE1).copy(alpha = 0.026f),
+        weft = Color.Black.copy(alpha = 0.28f),
+        sheen = 0.05f,
+        vignette = 0.48f,
+        ink = Color(0xFFE4F5EA),
+        inkQuiet = Color(0xFF87AE99),
+    )
+
+    val Wine = MatColors(
+        base = Color(0xFF2C0E16),
+        warp = Color(0xFFFFBEC8).copy(alpha = 0.026f),
+        weft = Color.Black.copy(alpha = 0.30f),
+        sheen = 0.05f,
+        vignette = 0.50f,
+        ink = Color(0xFFF7E2E6),
+        inkQuiet = Color(0xFFB98D96),
+    )
+
+    /**
+     * The one light mat, and the reason [MatColors.ink] exists.
+     *
+     * The warp is well below what a light surface would take on its own, because
+     * the weave is drawn *behind* the cards and only shows at the margins — a
+     * value chosen by looking at the cloth alone comes out shouting once forty
+     * cards are on top of it.
+     */
+    val Bone = MatColors(
+        base = Color(0xFFE8E2D4),
+        warp = Color.White.copy(alpha = 0.35f),
+        weft = Color(0xFF5A5040).copy(alpha = 0.10f),
+        sheen = 0.22f,
+        vignette = 0.16f,
+        ink = Color(0xFF241E14),
+        inkQuiet = Color(0xFF6B6252),
+    )
 }

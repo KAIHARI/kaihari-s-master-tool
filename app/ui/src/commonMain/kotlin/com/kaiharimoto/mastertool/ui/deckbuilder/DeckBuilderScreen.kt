@@ -282,6 +282,8 @@ fun DeckBuilderScreen(
 
     state.noteTarget?.let { CardNotePanel(state, it) }
 
+    if (state.matVisible) MatPanel(state)
+
     if (state.shootoutVisible) {
         ShootoutPanel(state, onOpenSandbox)
     }

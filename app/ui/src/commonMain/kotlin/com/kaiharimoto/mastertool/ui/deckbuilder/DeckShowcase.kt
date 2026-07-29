@@ -48,7 +48,9 @@ import com.kaiharimoto.mastertool.ui.components.CARD_CORNER
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.accent
 import com.kaiharimoto.mastertool.ui.components.rememberScreenCapture
+import com.kaiharimoto.mastertool.ui.theme.DeckMats
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
+import com.kaiharimoto.mastertool.ui.theme.MatColors
 import com.kaiharimoto.mastertool.ui.theme.tableSurface
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 import kotlinx.coroutines.launch
@@ -91,6 +93,7 @@ private val SHOWCASE_ORDER =
 @Composable
 fun DeckShowcase(state: DeckBuilderState, onDismiss: () -> Unit) {
     val colors = LocalMasterToolColors.current
+    val mat = DeckMats.of(state.mat, colors)
     val blocks = SHOWCASE_ORDER
         .map { it to state.deck[it] }
         .filter { it.second.isNotEmpty() }
@@ -128,8 +131,8 @@ fun DeckShowcase(state: DeckBuilderState, onDismiss: () -> Unit) {
         // come out as a deck floating on nothing, which is a bug that only
         // appears in the exported copy.
         Box(Modifier.fillMaxSize().then(capture.modifier)) {
-            Box(Modifier.fillMaxSize().tableSurface(colors.accent, colors.mat)) {
-                ShowcaseContents(state, blocks, total, reveal)
+            Box(Modifier.fillMaxSize().tableSurface(colors.accent, mat)) {
+                ShowcaseContents(state, blocks, total, reveal, mat)
             }
         }
 
@@ -148,13 +151,14 @@ private fun ShowcaseContents(
     blocks: List<Pair<DeckSection, List<CardId>>>,
     total: Int,
     reveal: Animatable<Float, *>,
+    mat: MatColors,
 ) {
     Box(Modifier.fillMaxSize()) {
         if (blocks.isEmpty()) {
             Text(
                 "Nothing to show yet.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = mat.inkQuiet,
                 modifier = Modifier.align(Alignment.Center),
             )
             return@Box
@@ -211,7 +215,7 @@ private fun ShowcaseContents(
                     dealt += ids.size
                 }
 
-                Caption(state, total)
+                Caption(state, total, mat)
             }
         }
     }
@@ -358,7 +362,7 @@ private fun ShowcaseBlock(
 
 /** The only writing on the screen: whose deck this is and how big it is. */
 @Composable
-private fun Caption(state: DeckBuilderState, total: Int) {
+private fun Caption(state: DeckBuilderState, total: Int, mat: MatColors) {
     Row(
         Modifier.fillMaxWidth().padding(top = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -368,6 +372,10 @@ private fun Caption(state: DeckBuilderState, total: Int) {
             // Deliberately not the display face. That belongs to the wordmark
             // alone; a second use of it stops it being a wordmark.
             style = MaterialTheme.typography.titleMedium,
+            // The mat's own ink rather than the theme's: a deck can be laid out
+            // on cloth lighter than the application is wearing, and a caption
+            // coloured for the theme would then be writing on nothing.
+            color = mat.ink,
         )
         Box(Modifier.weight(1f))
         // Says so when most of what is on screen is an empty slot, because
@@ -384,7 +392,7 @@ private fun Caption(state: DeckBuilderState, total: Int) {
                 "   ·   $total" +
                 if (missing > total / 2) "   ·   STILL DOWNLOADING" else "",
             style = tacticalStyle(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = mat.inkQuiet,
         )
     }
 }

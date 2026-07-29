@@ -200,6 +200,14 @@ average. Nothing was tagged or named to make that possible — an arrangement ma
 to be looked at turns out to be an arrangement that can be measured, and "these
 nine are the engine" was always a claim about hands.
 
+The mat belongs to the deck, not to the program. The theme is what the
+application is wearing; the cloth under the cards is this deck's own, chosen from
+six that were each picked to sit *under* card art — slate, leather, midnight,
+baize, wine and one bone-coloured one for building in daylight. It rides in the
+`.ydkx`, so the deck brings its table with it, and each mat carries its own ink
+so the caption is readable whichever way the contrast falls. Three lists on three
+cloths are three decks you can tell apart from across the room.
+
 Notes: whatever you want to remember about the deck, written into it and saved
 with it, and shown in the library. And a line on a single card — *only starter
 that plays through Ash*, *third copy is for the mirror* — from its long-press
