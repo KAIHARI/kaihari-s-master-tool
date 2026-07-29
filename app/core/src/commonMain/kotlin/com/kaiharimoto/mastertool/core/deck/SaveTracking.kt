@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.core.deck
 
 import com.kaiharimoto.mastertool.core.model.Deck
+import kotlinx.serialization.json.JsonObject
 
 /**
  * What is on disk, if anything is.
@@ -9,7 +10,22 @@ import com.kaiharimoto.mastertool.core.model.Deck
  * snapshot forgets is a field that reports itself saved the moment it changes,
  * which is worse than not tracking it at all.
  */
-data class SavedSnapshot(val deck: Deck, val name: String, val notes: String)
+data class SavedSnapshot(
+    val deck: Deck,
+    val name: String,
+    val notes: String,
+    /**
+     * The `#ydkx-extended` payload as it was written.
+     *
+     * Everything that is *about* the deck rather than in it travels in here —
+     * the gaps, the notes on individual cards, the mat. All three reported
+     * themselves saved the moment they changed, because this field was not here
+     * and the comparison could not see them, so none of them ever started the
+     * autosave clock. The arrangement is the thing this program exists to keep,
+     * and it was the thing least likely to be written down.
+     */
+    val extended: JsonObject? = null,
+)
 
 /**
  * Where the work stands relative to what has been written down.
@@ -52,10 +68,14 @@ object SaveTracking {
         name: String,
         notes: String,
         saved: SavedSnapshot?,
+        extended: JsonObject? = null,
     ): SaveStatus = when {
         saved == null && current.isEmpty() && notes.isEmpty() -> SaveStatus.UNTOUCHED
         saved == null -> SaveStatus.NEVER_SAVED
-        current == saved.deck && name == saved.name && notes == saved.notes -> SaveStatus.SAVED
+        current == saved.deck &&
+            name == saved.name &&
+            notes == saved.notes &&
+            extended == saved.extended -> SaveStatus.SAVED
         else -> SaveStatus.UNSAVED_CHANGES
     }
 

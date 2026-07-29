@@ -2,6 +2,8 @@ package com.kaiharimoto.mastertool.core.deck
 
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.Deck
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -17,10 +19,17 @@ class SaveTrackingTest {
         name: String = "Deck",
         notes: String = "",
         saved: SavedSnapshot? = null,
-    ) = SaveTracking.status(current, name, notes, saved)
+        extended: JsonObject? = null,
+    ) = SaveTracking.status(current, name, notes, saved, extended)
 
-    private fun snapshot(deck: Deck, name: String = "Deck", notes: String = "") =
-        SavedSnapshot(deck, name, notes)
+    private fun snapshot(
+        deck: Deck,
+        name: String = "Deck",
+        notes: String = "",
+        extended: JsonObject? = null,
+    ) = SavedSnapshot(deck, name, notes, extended)
+
+    private fun payload(json: String) = Json.parseToJsonElement(json) as JsonObject
 
     @Test
     fun anUntouchedDeckHasNothingToSay() {
@@ -135,5 +144,71 @@ class SaveTrackingTest {
         )
 
         assertEquals(SaveStatus.entries.toSet(), produced)
+    }
+
+    // ---- what travels beside the decklist ----------------------------------
+
+    @Test
+    fun aGapNobodyHasWrittenDownCountsAsAChange() {
+        // The bug this exists to stop: the arrangement, the notes on individual
+        // cards and the mat all live in the payload, and none of them was in the
+        // snapshot -- so every one of them reported itself saved the instant it
+        // changed and the autosave clock never started. The one thing this
+        // program exists to keep was the thing least likely to be written down.
+        val stored = deck(1, 2, 3)
+        val was = payload("""{"arrangement":{"main":[1]}}""")
+        val now = payload("""{"arrangement":{"main":[2]}}""")
+
+        assertEquals(
+            SaveStatus.UNSAVED_CHANGES,
+            status(stored, saved = snapshot(stored, extended = was), extended = now),
+        )
+    }
+
+    @Test
+    fun aPayloadThatMatchesIsStillSaved() {
+        val stored = deck(1, 2, 3)
+        val same = payload("""{"arrangement":{"main":[1]},"notes":{"cards":{"1":"x"}}}""")
+
+        assertEquals(
+            SaveStatus.SAVED,
+            status(stored, saved = snapshot(stored, extended = same), extended = same),
+        )
+    }
+
+    @Test
+    fun aDeckThatCarriesNothingAndSavedNothingIsSaved() {
+        val stored = deck(1, 2, 3)
+
+        assertEquals(SaveStatus.SAVED, status(stored, saved = snapshot(stored)))
+    }
+
+    @Test
+    fun dressingAPlainDeckIsAChange() {
+        // A `.ydk` with no payload at all, given a mat.
+        val stored = deck(1, 2, 3)
+
+        assertEquals(
+            SaveStatus.UNSAVED_CHANGES,
+            status(
+                stored,
+                saved = snapshot(stored),
+                extended = payload("""{"look":{"mat":"wine"}}"""),
+            ),
+        )
+    }
+
+    @Test
+    fun takingTheLastGapOutIsAChangeToo() {
+        // Back to no payload at all, which is not the same as never having had
+        // one -- and would have been the easy case to get wrong by treating null
+        // as "nothing to compare".
+        val stored = deck(1, 2, 3)
+        val was = payload("""{"arrangement":{"main":[1]}}""")
+
+        assertEquals(
+            SaveStatus.UNSAVED_CHANGES,
+            status(stored, saved = snapshot(stored, extended = was), extended = null),
+        )
     }
 }

@@ -238,6 +238,7 @@ class DeckBuilderState(
         if (index !in 1 until deck[section].size) return
         val next = breaksIn(section).toggledAt(index)
         breaks = if (next.isEmpty) breaks - section else breaks + (section to next)
+        scheduleAutosave()
     }
 
     /**
@@ -323,6 +324,7 @@ class DeckBuilderState(
     fun clearBreaks(section: DeckSection) {
         if (section !in breaks) return
         breaks = breaks - section
+        scheduleAutosave()
     }
 
     var deckName by mutableStateOf("Untitled Deck")
@@ -1654,7 +1656,7 @@ class DeckBuilderState(
      * "would I lose this".
      */
     val saveStatus: SaveStatus by derivedStateOf {
-        SaveTracking.status(deck, deckName, deckNotes, savedSnapshot)
+        SaveTracking.status(deck, deckName, deckNotes, savedSnapshot, payload)
     }
 
     private fun scheduleAutosave() {
@@ -1681,8 +1683,11 @@ class DeckBuilderState(
         val name = deckName.ifBlank { "Untitled Deck" }
         val written = deck
         val notes = deckNotes
-        deps.deckRepository.save(id, name, written, payload, notes)
-        savedSnapshot = SavedSnapshot(written, name, notes)
+        // Read once. The snapshot has to hold exactly what went to disk, and
+        // reading `payload` twice is two chances for it to have moved between.
+        val carried = payload
+        deps.deckRepository.save(id, name, written, carried, notes)
+        savedSnapshot = SavedSnapshot(written, name, notes, carried)
     }
 
     fun load(id: String) {
@@ -1695,7 +1700,8 @@ class DeckBuilderState(
             deckName = stored.entry.name
             deckNotes = stored.entry.notes
             deckId = stored.entry.id
-            savedSnapshot = SavedSnapshot(stored.entry.deck, stored.entry.name, stored.entry.notes)
+            savedSnapshot =
+                SavedSnapshot(stored.entry.deck, stored.entry.name, stored.entry.notes, stored.extended)
             extended = stored.extended
             breaks = ArrangementCodec.read(stored.extended)
             cardNotes = CardNotesCodec.read(stored.extended)

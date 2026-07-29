@@ -1855,3 +1855,33 @@ the notes anyway — so every tile now draws its own deck on its own cloth.
 That is the whole claim made good: three lists you can tell apart before reading
 a name. It cost one parameter and one line, because the mat was put in the file
 rather than in a setting.
+
+---
+
+## 79 · The arrangement was the least durable thing in the program
+
+`SavedSnapshot` carries what a save wrote, and `SaveTracking.status` compares the
+deck in front of you against it. Its own documentation says the rule: *everything
+a save writes has to be in here; a field the writer sends but the snapshot
+forgets is a field that reports itself saved the moment it changes.*
+
+The snapshot held the deck, the name and the notes. The writer also sends the
+`#ydkx-extended` payload — the gaps, the notes on individual cards, and now the
+mat. None of those was compared, so all three reported themselves saved the
+instant they changed, `shouldAutosave` declined, and nothing was written. Worse,
+`toggleBreak` never even started the clock.
+
+So: move a gap on a saved deck, change nothing else, close the app. The gap is
+gone. The one thing this program exists to keep was the thing least likely to
+survive.
+
+The fix is the rule the file already stated: the payload goes in the snapshot and
+into the comparison, and the two gap operations schedule a save like every other
+edit. Five tests in `:core` and four in `:ui` — including the one that is easy to
+get wrong, taking the *last* gap out, where the payload goes back to null and
+"nothing to compare" and "nothing left" have to stay different answers.
+
+Found by reading, again, and prompted by the mat: I went to check that choosing
+one would persist, found it would not, and found that gaps had never persisted
+either. Adding a feature is a good way to discover that the ground under it was
+not solid.

@@ -857,6 +857,63 @@ class DeckBuilderStateTest {
         assertTrue(written.contains("somethingThisAppDoesNotKnow"), written)
     }
 
+    // ---- what a save has to include ----------------------------------------
+
+    @Test
+    fun aGapOnItsOwnIsEnoughToNeedSaving() = runTest {
+        // The whole class of bug: the arrangement, the card notes and the mat
+        // all ride in the payload, and none of them used to count as a change.
+        // A deck whose only edit was a gap reported itself saved and was never
+        // written, so the arrangement was the least durable thing in the app.
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+        assertEquals(SaveStatus.SAVED, state.saveStatus)
+
+        state.toggleBreak(main, 2)
+
+        assertEquals(SaveStatus.UNSAVED_CHANGES, state.saveStatus)
+    }
+
+    @Test
+    fun aNoteOnItsOwnIsEnoughToNeedSaving() = runTest {
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+
+        state.writeNote(state.deck.main.first(), "handtrap")
+
+        assertEquals(SaveStatus.UNSAVED_CHANGES, state.saveStatus)
+    }
+
+    @Test
+    fun aMatOnItsOwnIsEnoughToNeedSaving() = runTest {
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+
+        state.chooseMat(MatChoice.WINE)
+
+        assertEquals(SaveStatus.UNSAVED_CHANGES, state.saveStatus)
+    }
+
+    @Test
+    fun aGapIsWrittenWithoutBeingAsked() = runTest {
+        // And the other half: needing a save is no use unless one happens.
+        val state = builderState()
+        TestPool.many(4).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+
+        state.toggleBreak(main, 2)
+        advanceUntilIdle()
+
+        assertEquals(SaveStatus.SAVED, state.saveStatus)
+    }
+
     // ---- the cloth the deck lies on ----------------------------------------
 
     @Test

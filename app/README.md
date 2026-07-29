@@ -221,8 +221,9 @@ wrote an empty `notes.cards` into every file it ever exported; this is what goes
 in it.
 
 The deck you were working on is the one that opens next time. A deck saved once
-keeps itself saved — every edit after the first save is
-written without being asked. A deck that has never been saved is never written
+keeps itself saved — every edit after the first save is written without being
+asked, and *edit* includes the things that are about the deck rather than in it:
+a gap moved, a note written on a card, a mat chosen. A deck that has never been saved is never written
 on its own, and the toolbar says so. Saved decks show three of their own cards
 in the library rather than only a name.
 
