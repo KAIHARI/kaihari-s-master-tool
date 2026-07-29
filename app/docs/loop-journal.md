@@ -3400,3 +3400,43 @@ section 116 spent a paragraph on being surprised by.
 The frame that caught it: **grep for what you just added, and count callers in
 production separately from callers in tests.** The `percent` collision fell out
 of reading the import list while doing that, not from the counting.
+
+## 126 · The third time, and the first time a test will catch it
+
+Four themes rendered side by side from their real palettes — the first look at
+anything but Swiss. Swiss, Classic and Cyber all hold up; Cyber is the striking
+one, near-black with cyan and magenta section rules and the cards coming off it
+hard.
+
+Daylight is where the mock went muddy, and chasing why found something the mock
+was not modelling.
+
+The empty-section slots — the forty outlines that draw *the deck that is not
+there yet* — were `Color.Black.copy(alpha = 0.22f)`. A shallow dip in slate. On
+the bone mat, a set of neutral grey holes at over twice the weight of that
+cloth's own weave, in a cloth whose weft is deliberately warm and deliberately
+10% *because* of exactly this: its docstring already says a value chosen by
+looking at the cloth alone comes out shouting once forty cards are on top of it.
+
+This is the **third** instance of one mistake. `MatColors.ink` exists because the
+showcase caption was coloured for the theme rather than the cloth. `inkQuiet`
+followed. `MatContrastTest`'s own docstring opens *"this exists because the same
+mistake was made twice and caught both times by looking at a picture"* — and it
+was made a third time, one surface further down, where that test could not see it
+because the value was not a field.
+
+So it is a field. `MatColors.recess`, stated by all eleven cloths, and the two
+that are light say something different from the nine that are dark. Both places
+that drew a slot now take it — the pane, and the showcase, whose comment claimed
+*"the same treatment an empty pane uses"* and would have quietly stopped being
+true otherwise.
+
+And the guarantee, which is the part that matters: two new assertions over all
+twenty-eight cloth-and-theme combinations. A hollow composited over its cloth has
+to be **darker** than the cloth, and **less than 2:1** against it — a slot is
+where a card will go, not a gap in the table. Hand-checked before pushing, since
+`:ui` tests only run in CI: every one passes, and the widest is bone at 1.25:1.
+
+The drag shadow's 22% black stays black. A shadow is an absence of light and does
+not belong to the cloth. That distinction is the whole of why this took a field
+rather than a find-and-replace.

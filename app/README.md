@@ -136,6 +136,15 @@ palette is left to Material, since a menu item's container and its text are
 paired by the colour scheme and this is not the place to decide the contrast of
 every theme.
 
+**A hollow belongs to the cloth it is in.** The empty-section slots — the deck
+that is not there yet — were a fixed 22% black. That is a shallow dip in slate
+and a hole punched through the bone mat, at over twice the weight of that cloth's
+own weave. `MatColors` carries a `recess` now, the same way and for the same
+reason it carries its own `ink`, and `MatContrastTest` checks all twenty-eight
+cloth-and-theme combinations both ways: a hollow has to come out darker than the
+cloth, and not so much darker that it reads as a gap in the table rather than a
+place a card will go.
+
 **A shape drawn on a card scales with it; an edge does not.** The face, the
 badges and the note fold are all fractions of the card's own width, so turning
 the density up shrinks what is written on a card along with the card — at twenty

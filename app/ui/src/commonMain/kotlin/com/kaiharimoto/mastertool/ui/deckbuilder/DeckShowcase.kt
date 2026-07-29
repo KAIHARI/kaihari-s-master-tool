@@ -244,6 +244,7 @@ private fun ShowcaseContents(
                         ids = ids,
                         columns = fit.columns,
                         cardWidth = cardWidth,
+                        mat = mat,
                         // Each card's place in the whole deck, not in its own
                         // block, so the reveal runs on unbroken across the seam.
                         progress = { index ->
@@ -347,6 +348,8 @@ private fun ShowcaseBlock(
     ids: List<CardId>,
     columns: Int,
     cardWidth: Dp,
+    /** The cloth underneath, because an empty slot is a hollow in it. */
+    mat: MatColors,
     progress: (Int) -> Float,
 ) {
     val accent = section.accent()
@@ -419,7 +422,11 @@ private fun ShowcaseBlock(
                                     .aspectRatio(CARD_ASPECT_RATIO)
                                     .padding(3.dp)
                                     .clip(RoundedCornerShape(CARD_CORNER))
-                                    .background(Color.Black.copy(alpha = 0.22f)),
+                                    // The cloth's own hollow. A fixed black is
+                                    // a hole punched in the bone mat rather than
+                                    // a dip in it, and this claims to use the
+                                    // same treatment the empty pane does.
+                                    .background(mat.recess),
                             )
                         } else {
                             CardTile(card = card, format = state.format)

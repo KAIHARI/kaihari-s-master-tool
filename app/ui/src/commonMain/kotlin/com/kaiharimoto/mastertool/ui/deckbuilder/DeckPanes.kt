@@ -92,6 +92,7 @@ import com.kaiharimoto.mastertool.ui.dnd.DragSession
 import com.kaiharimoto.mastertool.ui.dnd.DragSource
 import com.kaiharimoto.mastertool.ui.dnd.DropHover
 import com.kaiharimoto.mastertool.ui.theme.DeckMats
+import com.kaiharimoto.mastertool.ui.theme.MatColors
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.tableSurface
@@ -277,7 +278,7 @@ private fun DeckSectionPane(
         if (preferences.collapsed) return@Column
 
         if (ids.isEmpty()) {
-            EmptySection(section, accent)
+            EmptySection(section, accent, DeckMats.of(state.mat, LocalMasterToolColors.current))
             return@Column
         }
 
@@ -986,7 +987,7 @@ private fun SectionHeader(
  * lands, and it turns the whole thing from decoration into an answer.
  */
 @Composable
-private fun EmptySection(section: DeckSection, accent: Color) {
+private fun EmptySection(section: DeckSection, accent: Color, mat: MatColors) {
     // Extra and Side have no minimum, so their capacity is the ceiling. Main's
     // is the forty a legal deck starts at rather than the sixty it may reach:
     // the promise being drawn is what is needed, not what is permitted.
@@ -1022,7 +1023,9 @@ private fun EmptySection(section: DeckSection, accent: Color) {
 
                 val slot = Size(cardWidth - inset * 2, cardHeight - inset * 2)
                 drawRoundRect(
-                    color = Color.Black.copy(alpha = 0.22f * fade),
+                    // The cloth's own hollow, not a fixed black: this is drawn
+                    // straight onto the mat, and one of the mats is bone.
+                    color = mat.recess.copy(alpha = mat.recess.alpha * fade),
                     topLeft = Offset(left, top),
                     size = slot,
                     cornerRadius = CornerRadius(corner),

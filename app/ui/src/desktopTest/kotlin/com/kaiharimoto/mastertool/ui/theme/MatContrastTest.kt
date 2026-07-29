@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.ui.theme
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.kaiharimoto.mastertool.core.deck.MatChoice
 import com.kaiharimoto.mastertool.core.prefs.ThemeChoice
@@ -77,6 +78,46 @@ class MatContrastTest {
             val clothIsLight = Contrast.relativeLuminance(mat.base.toArgb()) > 0.5
             assertTrue(inkIsLight != clothIsLight, "$what: the ink and the cloth agree")
         }
+    }
+
+    // ---- the hollow ---------------------------------------------------------
+
+    @Test
+    fun aHollowInEveryClothReadsAsAHollow() {
+        // The empty-section slots are drawn straight onto the mat, and were a
+        // fixed 22% black on all seven of these -- which is a dip in slate and a
+        // hole punched through bone. Composited over the cloth, a recess has to
+        // come out darker than the cloth it is in.
+        cloths.forEach { (what, mat) ->
+            val cloth = Contrast.relativeLuminance(mat.base.toArgb())
+            val hollow = Contrast.relativeLuminance(over(mat.recess, mat.base).toArgb())
+            assertTrue(
+                hollow < cloth,
+                "$what: the hollow is lighter than the cloth ($hollow vs $cloth)",
+            )
+        }
+    }
+
+    @Test
+    fun andIsNotSoDeepThatItIsAHole() {
+        // A slot is where a card will go, not a gap in the table. Forty of them
+        // at once is the first thing a new deck shows, so the whole pane reads as
+        // whatever this value is -- and on a light cloth a neutral 22% black was
+        // over twice the weight of the cloth's own weave.
+        cloths.forEach { (what, mat) ->
+            val ratio = Contrast.ratio(over(mat.recess, mat.base).toArgb(), mat.base.toArgb())
+            assertTrue(ratio < 2.0, "$what: the hollow is ${ratio.rounded()}:1 against the cloth")
+        }
+    }
+
+    /** [top] laid over [bottom], which is what a translucent fill actually shows. */
+    private fun over(top: Color, bottom: Color): Color {
+        val a = top.alpha
+        return Color(
+            red = top.red * a + bottom.red * (1 - a),
+            green = top.green * a + bottom.green * (1 - a),
+            blue = top.blue * a + bottom.blue * (1 - a),
+        )
     }
 
     private fun Double.rounded(): String {

@@ -34,6 +34,19 @@ data class MatColors(
      */
     val ink: Color,
     val inkQuiet: Color,
+    /**
+     * The colour of a hollow in this cloth.
+     *
+     * The empty-section slots — the deck that is not there yet — were a fixed
+     * 22% black, which is a shallow recess on five of these and a set of neutral
+     * grey holes on the light one, at more than twice the weight of its own
+     * weave. Exactly the mistake [ink] exists to have stopped, one surface
+     * further down.
+     *
+     * Carries its own alpha, because how deep a hollow reads depends on how dark
+     * the cloth already is.
+     */
+    val recess: Color,
 )
 
 /**
@@ -84,6 +97,7 @@ val SwissColors = MasterToolColors(
         vignette = 0.42f,
         ink = Color(0xFFF1F5F9),
         inkQuiet = Color(0xFF94A3B8),
+        recess = Color.Black.copy(alpha = 0.22f),
     ),
     sections = SectionColors(
         main = Color(0xFF3B82F6),
@@ -110,6 +124,7 @@ val ClassicColors = MasterToolColors(
         vignette = 0.52f,
         ink = Color(0xFFF5E3B8),
         inkQuiet = Color(0xFFB08C4A),
+        recess = Color.Black.copy(alpha = 0.26f),
     ),
     sections = SectionColors(
         main = Color(0xFFE8A33D),
@@ -130,6 +145,7 @@ val CyberColors = MasterToolColors(
         vignette = 0.60f,
         ink = Color(0xFFD6FFFF),
         inkQuiet = Color(0xFF6FB3B3),
+        recess = Color.Black.copy(alpha = 0.34f),
     ),
     sections = SectionColors(
         main = Color(0xFF00FFFF),
@@ -157,6 +173,9 @@ val DaylightColors = MasterToolColors(
         vignette = 0.13f,
         ink = Color(0xFF1E293B),
         inkQuiet = Color(0xFF5A647D),
+        // Warm-neutral and shallow, for the reason the weft is: a black hollow
+        // in a lit surface is a hole cut in it rather than a dip.
+        recess = Color(0xFF5A647D).copy(alpha = 0.16f),
     ),
     sections = SectionColors(
         main = Color(0xFF2563EB),
@@ -207,6 +226,7 @@ object DeckMats {
         vignette = 0.42f,
         ink = Color(0xFFF1F5F9),
         inkQuiet = Color(0xFF94A3B8),
+        recess = Color.Black.copy(alpha = 0.22f),
     )
 
     val Leather = MatColors(
@@ -217,6 +237,7 @@ object DeckMats {
         vignette = 0.52f,
         ink = Color(0xFFF5E3B8),
         inkQuiet = Color(0xFFB08C4A),
+        recess = Color.Black.copy(alpha = 0.26f),
     )
 
     val Midnight = MatColors(
@@ -227,6 +248,7 @@ object DeckMats {
         vignette = 0.58f,
         ink = Color(0xFFE6EAF5),
         inkQuiet = Color(0xFF8892AA),
+        recess = Color.Black.copy(alpha = 0.30f),
     )
 
     /** What a card table is actually covered in. */
@@ -238,6 +260,7 @@ object DeckMats {
         vignette = 0.48f,
         ink = Color(0xFFE4F5EA),
         inkQuiet = Color(0xFF87AE99),
+        recess = Color.Black.copy(alpha = 0.26f),
     )
 
     val Wine = MatColors(
@@ -248,6 +271,7 @@ object DeckMats {
         vignette = 0.50f,
         ink = Color(0xFFF7E2E6),
         inkQuiet = Color(0xFFB98D96),
+        recess = Color.Black.copy(alpha = 0.28f),
     )
 
     /**
@@ -266,5 +290,9 @@ object DeckMats {
         vignette = 0.16f,
         ink = Color(0xFF241E14),
         inkQuiet = Color(0xFF6B6252),
+        // The reason [MatColors.recess] exists, the same way the ink was. Warm,
+        // and shallow: a black hollow in bone reads as a hole punched through it,
+        // and 22% of it is heavier than this cloth's own weave by a factor of two.
+        recess = Color(0xFF5A5040).copy(alpha = 0.16f),
     )
 }
