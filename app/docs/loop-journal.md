@@ -1268,26 +1268,48 @@ value a page coordinate can take. `12.` is not a number, a reader that meets one
 stops drawing the page, and it was reachable only through float error — which is
 exactly the kind of thing that happens once, on somebody else's deck.
 
+## 59. The other side of the table
+
+Section 55 made the far half an outline and said the honest version was a real
+feature. It turned out to be a small one, because the reason to want it is
+sharper than "two boards": a single player laying cards out is almost always
+asking *they have this, can I break it*, and that question cannot be asked at all
+if the other side of the mat is scenery.
+
+So a zone knows which half it is on, defaulted to yours — everything about your
+own half was written before theirs existed and should not have to say so. The
+`Board` needed no change at all: it is a map keyed by zone, and there are simply
+more zones now.
+
+Their spells sit nearest the crease and their monsters behind them, which is what
+you are looking at from across a table, and their field spell zone flanks them on
+their right. Cards, tokens and face-downs all go over there by the same tap or
+drag as anything else, which is the return on there being one idea of "picked
+up" — mocking a board is mostly tokens and face-downs, and neither needed
+anything built.
+
+Their half reads quieter than yours: both are real and both take cards, but the
+board you are trying to break is the backdrop to the one you are building.
+
+The test that pins it is the one that would have caught the original bug — the
+two sets of ids are provably distinct, so a card played in front of you can never
+appear across from you.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **676 tests**, up from 249, plus
-**172 in `:ui`** where there were none — a module that cannot even be compiled in
+`:core` carries the arithmetic for all of it, at **679 tests**, up from 249, plus
+**182 in `:ui`** where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
 Still open, in the order they are worth doing:
 
-**Dragging a gap along.** They are placed from a card's menu or with `g` on the
-one under the cursor (sections 51-54), and the header says what the groups came
-to. Picking a gap up and moving it is the obvious next gesture and is not built.
+**Dragging a gap along.** A gap is placed from a card's menu or with `g` on the
+card under the cursor (sections 51-54), and moving one is two taps rather than a
+drag. Picking it up and sliding it is the obvious next gesture.
 
-**A board across the table.** Yours deals, lays cards out, turns them, makes
-tokens, opens every stack and undoes all of it (sections 46-50, 55). The far half
-is an outline: one set of zone ids exists and it is yours. A second set with a
-second player behind it is the feature that half is waiting for.
-
-**Siding for the opponent when their file does not say how.** They side from
-their own plans when the file carries them (section 57). A deck that arrives as a
-plain `.ydk` still sits there unchanged, and the honest fix is a way to record
-what you *expect* them to side rather than inventing it.
+**Siding for an opponent whose file does not say how.** They side from their own
+plans when the file carries them (section 57). A deck that arrives as a plain
+`.ydk` still sits there unchanged, and the honest fix is somewhere to record what
+you *expect* them to bring in — not to invent it for them.

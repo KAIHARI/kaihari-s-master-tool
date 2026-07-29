@@ -227,5 +227,9 @@ Between games the deck across the table sides too, when its own file says how �
 a `.ydkx` carries that deck's plans, so a downloaded list often arrives with what
 its players actually bring in.
 
-Not yet built: a second board across the table, and a way to record what you
-expect an opponent to side when their file does not say.
+The mat has two halves. Lay out the board you are trying to break on the far
+side — cards, tokens, face-downs, all by the same gesture — and then see what
+your opening does about it.
+
+Not yet built: dragging a gap along rather than replacing it, and a way to record
+what you expect an opponent to side when their file does not say.
