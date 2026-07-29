@@ -70,6 +70,8 @@ enum class ShortcutAction {
     /** Write on the card the cursor is on, or on the two it is holding. */
     NOTE_CARD,
 
+    NAME_PILE,
+
     /** Pick up the whole run of cards between the gaps the cursor is inside. */
     SELECT_GROUP,
 
@@ -248,6 +250,12 @@ object ShortcutTable {
             // whether that is one card or two.
             KeyChord("n"), ShortcutAction.NOTE_CARD, ShortcutScope.BUILDER,
             "Note the selected card, or the two selected",
+        ),
+        Shortcut(
+            // Shift of the key that writes on a card, because it is the same
+            // question one level up: what do I want to remember about this pile.
+            KeyChord("n", shift = true), ShortcutAction.NAME_PILE, ShortcutScope.BUILDER,
+            "Name the pile the cursor is in",
         ),
         Shortcut(
             KeyChord("1"), ShortcutAction.FOCUS_MAIN, ShortcutScope.BUILDER,

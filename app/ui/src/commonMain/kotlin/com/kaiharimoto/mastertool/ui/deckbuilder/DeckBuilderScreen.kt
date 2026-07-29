@@ -129,6 +129,7 @@ fun DeckBuilderScreen(
                 ShortcutAction.TOGGLE_GAP -> state.toggleGapAtCursor()
                 ShortcutAction.SELECT_GROUP -> state.selectGroupAtCursor()
                 ShortcutAction.NOTE_CARD -> state.noteAtCursor()
+                ShortcutAction.NAME_PILE -> state.namePileAtCursor()
                 ShortcutAction.DISMISS -> dismissTopLayer(state) { focusManager.clearFocus() }
                 ShortcutAction.FOCUS_MAIN -> layout.focusSection(DeckSection.MAIN)
                 ShortcutAction.FOCUS_EXTRA -> layout.focusSection(DeckSection.EXTRA)

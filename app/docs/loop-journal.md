@@ -2976,3 +2976,23 @@ added.
 Twenty-one tests across `Breaks`, the codec and the state holder, and the one
 they all circle is the third one: *a name follows its own pile when the deck
 above it changes.*
+
+## 112 · Shift of the key that writes on a card
+
+`namePileAtCursor` existed and nothing called it — which the unused-API sweep
+would have found next time round, so it got found this time instead.
+
+It is shift-`n` now, which is the arrangement of that whole keyboard row saying
+something: `g` puts a gap in, shift-`g` picks the pile up, `n` writes on the card
+you are holding, shift-`n` writes on the pile you are in. Shift means *one level
+up* on both pairs, and neither of them was designed to; the second one just had
+nowhere else sensible to go.
+
+And a combination check on the two features written this afternoon, since they
+had never met: **pasting a list before the card pool has been read.** Every line
+is looked up in that pool, so nothing resolves, and the answer came back
+*"Nothing in that was a card."* — which is the program blaming the list for its
+own database. Section 107's frame again, one step further along: it is not only
+what a program says about a thing it has not looked at, it is what a program says
+about the *thing you gave it* while it has not looked at its own. The panel says
+which of the two it is waiting on now, and the button stays down until it is not.

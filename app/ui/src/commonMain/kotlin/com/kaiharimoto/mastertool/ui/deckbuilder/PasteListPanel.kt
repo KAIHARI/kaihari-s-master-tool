@@ -42,7 +42,7 @@ import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 @Composable
 fun PasteListPanel(state: DeckBuilderState) {
     var text by remember { mutableStateOf("") }
-    val ready = remember(text) { DecklistText.looksLikeAList(text) }
+    val ready = remember(text) { DecklistText.looksLikeAList(text) } && state.poolRead
 
     MasterToolSheet(onDismiss = { state.pasteVisible = false }) {
         Column(
@@ -60,8 +60,16 @@ fun PasteListPanel(state: DeckBuilderState) {
             }
 
             Text(
-                "Counts in front or behind, headings or none at all. Anything it " +
-                    "cannot find a card for is listed back at you rather than dropped.",
+                // Every line is looked up in the card pool, so a pool that has
+                // not been read yet finds nothing — and "nothing in that was a
+                // card" would be blaming the list for the database.
+                if (state.poolRead) {
+                    "Counts in front or behind, headings or none at all. Anything it " +
+                        "cannot find a card for is listed back at you rather than dropped."
+                } else {
+                    "The card database is still opening. Nothing pasted now could be " +
+                        "found in it yet."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -72,7 +80,11 @@ fun PasteListPanel(state: DeckBuilderState) {
                 label = { Text("3 Ash Blossom & Joyous Spring") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 200.dp, max = 340.dp)
+                    // A sheet does not scroll on its own, and on a tablet the
+                    // keyboard takes back a third of the screen the moment this
+                    // field is touched. Tall enough to see a decklist in, short
+                    // enough that the button under it survives that.
+                    .heightIn(min = 160.dp, max = 260.dp)
                     // The shortcut layer has to stop reading keys as commands
                     // while somebody is typing into a field, or a list with a
                     // `v` in it opens the full-deck view halfway through.
