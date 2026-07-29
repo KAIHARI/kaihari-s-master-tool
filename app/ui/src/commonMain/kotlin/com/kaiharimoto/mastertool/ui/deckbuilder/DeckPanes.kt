@@ -54,10 +54,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -360,6 +362,10 @@ private fun DeckSectionPane(
                     // see the whole tail replaced rather than moved, and nothing
                     // could animate.
                     val copies = DeckKeys.occurrences(ids)
+                    // Where the player has pushed this pile apart. Clamped, so a
+                    // gap left past the end of a shrinking section simply is not
+                    // drawn rather than drawn somewhere wrong.
+                    val gaps = state.breaksIn(section).before
 
                     items(
                         ids.size,
@@ -382,13 +388,17 @@ private fun DeckSectionPane(
                             // Sorting a section, or dropping a card into the middle
                             // of one, now slides the cards that moved instead of
                             // redrawing the pane somewhere else.
-                            modifier = Modifier.animateItem(
-                                placementSpec = spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessMediumLow,
-                                    visibilityThreshold = IntOffset.VisibilityThreshold,
+                            modifier = Modifier
+                                .animateItem(
+                                    placementSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow,
+                                        visibilityThreshold = IntOffset.VisibilityThreshold,
+                                    ),
+                                )
+                                .then(
+                                    if (position in gaps) Modifier.groupStart(accent) else Modifier,
                                 ),
-                            ),
                         )
                     }
                 }
@@ -405,6 +415,34 @@ private fun DeckSectionPane(
  * undone by tapping again — is behind the long-press menu rather than behind a
  * second gesture nobody would find.
  */
+/**
+ * The gap a player pushed between two piles.
+ *
+ * Drawn as space rather than as a line with space around it — the space *is* the
+ * separation, and a card that has been pushed aside reads as pushed aside. The
+ * hairline in it is there because at zero gutter a gap of eight points could
+ * otherwise be mistaken for the grid breathing.
+ *
+ * The card gives up the width rather than the pane growing, so a section with
+ * gaps in it holds the same number of cards per row as one without. Nothing
+ * reflows when a gap is drawn, which is the difference between marking up an
+ * arrangement and rearranging it.
+ */
+private fun Modifier.groupStart(accent: Color): Modifier = this
+    .drawBehind {
+        val x = GROUP_GAP.toPx() / 2f
+        drawLine(
+            color = accent.copy(alpha = 0.55f),
+            start = Offset(x, size.height * 0.10f),
+            end = Offset(x, size.height * 0.90f),
+            strokeWidth = 1.5.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
+    }
+    .padding(start = GROUP_GAP)
+
+private val GROUP_GAP = 9.dp
+
 @Composable
 private fun DeckCard(
     state: DeckBuilderState,
@@ -581,6 +619,17 @@ private fun DeckCard(
             }
 
             HorizontalDivider()
+
+            // Only between two cards. A gap before the first card of a section
+            // is not a gap, it is the edge, and offering it would be offering
+            // nothing.
+            if (position > 0) {
+                val already = position in state.breaksIn(section).before
+                DropdownMenuItem(
+                    text = { Text(if (already) "Close the gap here" else "Start a group here") },
+                    onClick = { menuOpen = false; state.toggleBreak(section, position) },
+                )
+            }
 
             val elsewhere = if (section == DeckSection.SIDE) card.requiredSection() else DeckSection.SIDE
             DropdownMenuItem(
