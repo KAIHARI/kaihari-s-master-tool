@@ -26,6 +26,7 @@ import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
+import kotlin.math.roundToInt
 
 /**
  * A line written against one card.
@@ -117,8 +118,15 @@ fun CardNotePanel(state: DeckBuilderState, id: CardId) {
                             }
                             .padding(vertical = 4.dp),
                     ) {
+                        // The partner, and how often the two of them turn up
+                        // together — which is the question the note is about,
+                        // and is why the pair was worth writing down at all.
+                        val odds = state.oddsOfOpeningBoth(id, other)
                         Text(
-                            state.index.byId(other)?.name ?: other.value.toString(),
+                            buildString {
+                                append(state.index.byId(other)?.name ?: other.value.toString())
+                                if (odds != null) append("   ${(odds * 100).roundToInt()}%")
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )

@@ -116,6 +116,14 @@ data class Pile(
     val size: Int,
 )
 
+/** Two cards somebody wrote a note about, and how often a hand holds both. */
+data class PairOpening(
+    val first: String,
+    val second: String,
+    val note: String,
+    val odds: Double,
+)
+
 /** A transient message shown in the snackbar, optionally with an undo action. */
 data class Toast(
     val message: String,
@@ -539,6 +547,28 @@ class DeckBuilderState(
         val second = main.count { it == b }
         if (first == 0 || second == 0) return null
         return Hypergeometric.bothAppear(main.size, first, second, handSize)
+    }
+
+    /**
+     * Every noted pair whose halves are both in the Main deck, likeliest first.
+     *
+     * The deck read as the thing its owner said it was: not a curve, not a type
+     * breakdown, but *the openings I care about and how often each turns up.*
+     * Nothing had to be tagged to make this — the pairs were written down for
+     * their own sake and turn out to be a list of what the deck is trying to do.
+     */
+    val pairOdds: List<PairOpening> by derivedStateOf {
+        pairNotes.byPair.entries.mapNotNull { (pair, note) ->
+            val a = pair.first
+            val b = pair.second
+            val odds = oddsOfOpeningBoth(a, b) ?: return@mapNotNull null
+            PairOpening(
+                first = index.byId(a)?.name ?: a.value.toString(),
+                second = index.byId(b)?.name ?: b.value.toString(),
+                note = note,
+                odds = odds,
+            )
+        }.sortedByDescending { it.odds }
     }
 
     /** The pile a name is being written on, or null when nothing is being named. */

@@ -338,7 +338,9 @@ ever exported; this is what goes in both halves. And a pair is told how often it
 opens: three of each in forty is one game in ten, which is the number the whole
 idea rests on and the one the program could not say. Not the product of the two
 separate answers — the cards come out of the same deck, and multiplying is close
-enough to look right.
+enough to look right. Every pair you wrote down is listed together in the
+statistics, likeliest first — the deck read as the thing its owner said it was
+rather than as a pile of cards, and nothing had to be tagged to produce it.
 
 And what it used to be. A deck that saves itself has no yesterday: cut a card
 from the list you registered and the sixty you registered stop existing. So

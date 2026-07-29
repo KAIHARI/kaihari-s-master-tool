@@ -3123,3 +3123,29 @@ rather than more copies of either.
 twenty: five cards cannot miss either half"* and asserted 1.0. Five cards can be
 all twenty-A: it happens about one game in twenty-one. The assertion is 0.9529
 now, and the test is renamed after what it actually demonstrates.
+
+## 117 · The list nobody had to write
+
+The pair odds went two places, and the second one is the interesting one.
+
+The obvious place is beside each pair: on its own sheet, and next to the
+partner's name in the "WITH" list on a card's sheet. Fine, expected, useful.
+
+The other is a **Two-card openings** block in the deck statistics, listing every
+pair somebody has written down with how often it turns up, likeliest first.
+
+Every other number on that sheet is about the deck as a pile of cards — how many
+monsters, what the level curve looks like, how often a pile shows up. This one is
+about the deck as *the thing its owner said it was*. And nothing had to be tagged
+or configured to produce it: the pair notes were written for their own sake,
+months of them, and they turn out to already be a list of what the deck is trying
+to do.
+
+That is the same shape as section 91, where an arrangement made to be looked at
+turned out to be an arrangement that could be measured. **Twice now, a feature
+built for one reason has turned out to already contain the data for a different
+one.** Worth naming as a thing to go looking for: what has this program been
+storing, for its own reasons, that answers a question nobody has asked it yet?
+
+Absent rather than empty when there are no pairs, because a heading over nothing
+is a feature advertising itself.

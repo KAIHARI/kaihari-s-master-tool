@@ -31,6 +31,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.core.deck.Breaks
@@ -60,6 +62,8 @@ fun DeckStatsPanel(
     breaks: Breaks,
     /** What each of those groups is about, read off its cards. Index-aligned. */
     groupNames: List<String?>,
+    /** The two-card openings somebody wrote down, likeliest first. */
+    pairs: List<PairOpening>,
     onSectionChange: (DeckSection) -> Unit,
     /** Browses the pool by a facet the breakdown names. */
     onBrowse: (CardFilter) -> Unit,
@@ -121,6 +125,7 @@ fun DeckStatsPanel(
             if (section == DeckSection.MAIN) {
                 OpeningHandOdds(statistics)
                 GroupOddsSection(breaks, statistics.sectionSize, groupNames)
+                TwoCardOpenings(pairs)
             }
 
             if (statistics.byLevel.isNotEmpty()) {
@@ -414,6 +419,56 @@ private fun CountChips(entries: List<Pair<String, Int>>, onPick: (String) -> Uni
             // moment you want to look at the others, so that is what it does.
             AssistChip(onClick = { onPick(label) }, label = { Text("$label  $count") })
         }
+    }
+}
+
+/**
+ * The openings somebody actually wrote down, and how often each turns up.
+ *
+ * Every other number on this sheet is about the deck as a pile of cards. This
+ * one is about the deck as the thing its owner said it was — and nothing had to
+ * be tagged to produce it, because the pair notes were written for their own
+ * sake and turn out to be a list of what the deck is trying to do.
+ *
+ * Absent rather than empty when nobody has written any: a heading over nothing
+ * is a feature advertising itself.
+ */
+@Composable
+private fun TwoCardOpenings(pairs: List<PairOpening>) {
+    if (pairs.isEmpty()) return
+
+    Section("Two-card openings") {
+        pairs.forEach { pair ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "${pair.first}  +  ${pair.second}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (pair.note.isNotBlank()) {
+                        Text(
+                            pair.note,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Text(
+                    "${(pair.odds * 100).roundToInt()}%",
+                    style = tacticalStyle(),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        Text(
+            "How often an opening five holds both halves, out of the Main deck.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
