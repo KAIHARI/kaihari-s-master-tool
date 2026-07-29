@@ -57,6 +57,7 @@ import coil3.compose.AsyncImage
 import com.kaiharimoto.mastertool.core.data.StoredDeck
 import com.kaiharimoto.mastertool.core.deck.DeckIdentity
 import com.kaiharimoto.mastertool.core.model.Card
+import com.kaiharimoto.mastertool.core.deck.DeckLookCodec
 import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.core.search.TextMatching
 import com.kaiharimoto.mastertool.core.util.RelativeTime
@@ -65,6 +66,8 @@ import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CARD_CORNER
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.DeckMats
+import com.kaiharimoto.mastertool.ui.theme.MatColors
 import com.kaiharimoto.mastertool.ui.theme.tableSurface
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 import com.kaiharimoto.mastertool.ui.theme.wellSurface
@@ -177,6 +180,10 @@ fun DeckLibraryScreen(
                     DeckCard(
                         stored = stored,
                         index = index,
+                        // Each deck in the library sits on its own cloth, which
+                        // is the whole point of the mat belonging to the deck:
+                        // three lists you can tell apart before reading a name.
+                        mat = DeckMats.of(DeckLookCodec.read(stored.extended), colors),
                         // Read once per visit rather than per tile, so nine
                         // decks saved in the same minute all say the same thing.
                         now = openedAt,
@@ -204,6 +211,7 @@ fun DeckLibraryScreen(
 private fun DeckCard(
     stored: StoredDeck,
     index: CardIndex,
+    mat: MatColors,
     now: Long,
     onOpen: () -> Unit,
     onRename: (String) -> Unit,
@@ -214,7 +222,7 @@ private fun DeckCard(
     var draft by remember(stored.entry.id) { mutableStateOf(stored.entry.name) }
 
     MaterialCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
-        DeckFaces(DeckIdentity.faces(deck).mapNotNull(index::byId))
+        DeckFaces(DeckIdentity.faces(deck).mapNotNull(index::byId), mat)
 
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -319,8 +327,7 @@ private val FAN_HEIGHT = 116.dp
  * without a hard edge between them.
  */
 @Composable
-private fun DeckFaces(faces: List<Card>) {
-    val mat = LocalMasterToolColors.current.mat
+private fun DeckFaces(faces: List<Card>, mat: MatColors) {
     val surface = MaterialTheme.colorScheme.surface
 
     Box(

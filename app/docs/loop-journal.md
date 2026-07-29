@@ -1843,3 +1843,15 @@ the caption had, in the one place the caption is not. It now takes both its
 backing and its ink from the cloth, and which way the cloth runs is read off the
 ink rather than off the base colour, because the ink is already the answer to
 that question and asking the base again is a second chance to disagree with it.
+
+---
+
+## 78 · And the library shows it
+
+A mat that only exists while a deck is open is a mat you have to open a deck to
+see. The library already loads each deck's payload — it needs it for the gaps and
+the notes anyway — so every tile now draws its own deck on its own cloth.
+
+That is the whole claim made good: three lists you can tell apart before reading
+a name. It cost one parameter and one line, because the mat was put in the file
+rather than in a setting.

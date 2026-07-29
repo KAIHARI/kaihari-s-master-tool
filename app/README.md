@@ -206,7 +206,9 @@ six that were each picked to sit *under* card art — slate, leather, midnight,
 baize, wine and one bone-coloured one for building in daylight. It rides in the
 `.ydkx`, so the deck brings its table with it, and each mat carries its own ink
 so the caption is readable whichever way the contrast falls. Three lists on three
-cloths are three decks you can tell apart from across the room.
+cloths are three decks you can tell apart from across the room — and the library
+draws each saved deck on its own, so you can tell them apart before reading a
+name.
 
 Notes: whatever you want to remember about the deck, written into it and saved
 with it, and shown in the library. And a line on a single card — *only starter
