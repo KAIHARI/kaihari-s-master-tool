@@ -2430,6 +2430,31 @@ found the large one.
 
 ---
 
+## 96 · A deck over months, not over three calls
+
+Every test written for the history so far checks one step. The rules that
+actually matter are about the shape of a history after a long time, and none of
+them can fail in three steps: that it never grows without bound, that a named
+version is still there after sixty more sittings, that the far end does not
+quietly fall off, and that going back and forth never loses a deck.
+
+So: sixty simulated sittings — three edits twenty minutes apart, then a twenty
+hour gap — and the invariants asserted over the result. Twelve versions, spread
+across the whole span rather than clustered in the last week, the registered list
+still named and card for card what it was, and six rounds of restore where the
+deck being left is provably still reachable afterwards. That last one is the
+property the *absence of a confirmation* on "go back to it" rests on, and it had
+never been checked more than one round deep.
+
+It failed first time by twenty-four minutes, and the failure was worth having: I
+had asserted the oldest version is the deck as it *first* stood. It cannot be. A
+copy is only ever of what was there before a change, and a deck's opening state
+is written over inside its own first sitting — so the earliest version there can
+be is how that sitting was *left*. Correct behaviour, wrong expectation, and now
+a stated property instead of an assumption.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus
