@@ -132,7 +132,16 @@ fun DragSource(
 
                     lifted = false
                     if (completed) {
-                        onDropped(started, controller.finish())
+                        val landed = controller.finish()
+                        // The other half of the gesture. You feel the card leave
+                        // your hand on the lift; feeling it land is what closes
+                        // the loop -- and it fires only when it actually landed,
+                        // because a refused drop that buzzed would be the program
+                        // agreeing with something it had just refused.
+                        if (landed?.accepted == true) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        onDropped(started, landed)
                     } else {
                         controller.cancel()
                     }

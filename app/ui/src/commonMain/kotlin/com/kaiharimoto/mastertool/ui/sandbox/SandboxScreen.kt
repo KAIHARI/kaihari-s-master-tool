@@ -38,11 +38,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -296,6 +299,7 @@ private fun Zone(
     shared: Boolean = false,
 ) {
     val colors = LocalMasterToolColors.current
+    val haptics = LocalHapticFeedback.current
     val top = state.board[zone].lastOrNull()
     val held = state.held
     // Where this zone sits on the table, which both a drop and a drag need.
@@ -345,6 +349,7 @@ private fun Zone(
                             anchor = { here },
                             source = DragOrigin.OnBoard(zone),
                             id = top.id,
+                            haptics = haptics,
                         )
                     }
                 },
@@ -495,6 +500,7 @@ private fun Gap(zoneWidth: Dp) {
 private fun Hand(state: SandboxState, index: CardIndex, zoneWidth: Dp, origin: Offset) {
     val cards = state.table.hand
     if (cards.isEmpty()) return
+    val haptics = LocalHapticFeedback.current
 
     val cardWidth = zoneWidth * 0.94f
     val middle = (cards.size - 1) / 2f
@@ -538,6 +544,7 @@ private fun Hand(state: SandboxState, index: CardIndex, zoneWidth: Dp, origin: O
                             anchor = { here },
                             source = DragOrigin.Hand(position),
                             id = id,
+                            haptics = haptics,
                         )
                     }
                     .clickable {
@@ -577,6 +584,7 @@ private suspend fun PointerInputScope.dragging(
     anchor: () -> Offset,
     source: DragOrigin,
     id: CardId,
+    haptics: HapticFeedback,
 ) {
     detectDragGestures(
         // The gesture reports positions relative to this card; the board thinks
@@ -586,7 +594,12 @@ private suspend fun PointerInputScope.dragging(
             change.consume()
             state.dragBy(delta)
         },
-        onDragEnd = { state.endDrag() },
+        onDragEnd = {
+            // Felt only when the card actually landed. A drop the board refused
+            // is a card going back where it came from, and a buzz would be the
+            // program agreeing with something it had just refused.
+            if (state.endDrag()) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        },
         onDragCancel = { state.cancelDrag() },
     )
 }
