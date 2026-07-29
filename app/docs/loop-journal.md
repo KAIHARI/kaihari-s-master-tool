@@ -3243,3 +3243,38 @@ already asked the question.
 No change came out of this section, and that is the finding. Recorded rather than
 skipped, because a review that only gets written up when it finds something is a
 review nobody can trust the silence of.
+
+## 121 · Forty hands is a sample; three fifteens used to be three shrugs
+
+A shootout run answers *is my side deck doing anything against this deck*, and
+the report refuses to answer until there are enough hands — deliberately, and the
+reasoning behind that refusal is written out at the top of `ShootoutReport`.
+
+The run then lived in memory until the app closed.
+
+Which quietly made the whole feature about an evening rather than about a deck.
+Forty hands is a big enough sample to say something; forty hands is also more
+than anybody sits down and deals at once. Three sittings of fifteen is the real
+shape of it, and three sittings of fifteen were three separate things that each
+said *not enough hands to say* and then evaporated.
+
+`TestingRecord` and `TestingCodec`, kept in the deck's own `#ydkx-extended`
+payload rather than in a table of its own. The results are about this deck, they
+travel with it in the file, and a new table would mean a migration for what is
+four integers and a timestamp. Same reasoning the gaps, the notes and the cloth
+already live there under.
+
+Written as `[playable, bricks]` per side of the die roll — four numbers, no field
+names — because the shape is fixed and a file somebody opens in a text editor is
+easier to read as `"first":[8,2]` than as four labelled objects. Oldest first, so
+two saves of the same runs produce the same bytes and a file does not look like
+it changed when it did not.
+
+Anything malformed is dropped rather than trusted, including a run with no hands
+in it: nothing here writes one, and a file that carries one is a file saying
+something it cannot mean.
+
+Two of my twelve expectations were wrong again, and both the same way: a run is
+ten hands off the registered list *and* ten off the sided one, and I kept
+counting one half. The test that passed had it right, which is how the two that
+failed were obviously mine.
