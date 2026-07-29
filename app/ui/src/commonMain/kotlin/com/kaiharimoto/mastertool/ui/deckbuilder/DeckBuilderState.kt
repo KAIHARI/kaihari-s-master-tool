@@ -1860,10 +1860,11 @@ class DeckBuilderState(
      * the worst thing this program could do, so it is done in one place and the
      * three callers say why they are calling it.
      */
-    private fun releaseOpenDeck() {
-        flushPendingSave()
+    private fun releaseOpenDeck(): Job? {
+        val writing = flushPendingSave()
         deckId = null
         savedSnapshot = null
+        return writing
     }
 
     /**
@@ -1878,11 +1879,11 @@ class DeckBuilderState(
      * caller is about to replace all of it: the write has to be of the deck as
      * it was when it was let go of, not of whatever arrived in its place.
      */
-    private fun flushPendingSave() {
+    private fun flushPendingSave(): Job? {
         autosaveJob?.cancel()
 
-        val id = deckId ?: return
-        if (saveStatus != SaveStatus.UNSAVED_CHANGES) return
+        val id = deckId ?: return null
+        if (saveStatus != SaveStatus.UNSAVED_CHANGES) return null
 
         val written = deck
         val name = deckName.ifBlank { "Untitled Deck" }
@@ -1890,8 +1891,10 @@ class DeckBuilderState(
         val carried = payload
 
         // No snapshot update: the deck this belonged to is being closed, and
-        // `releaseOpenDeck` clears the snapshot on the next line anyway.
-        scope.launch { deps.deckRepository.save(id, name, written, carried, notes) }
+        // `releaseOpenDeck` clears the snapshot on the next line anyway. The job
+        // is handed back so a caller that is about to *read* the database can
+        // wait for the write it just started.
+        return scope.launch { deps.deckRepository.save(id, name, written, carried, notes) }
     }
 
     fun newDeck() {
@@ -2050,15 +2053,26 @@ class DeckBuilderState(
      */
     fun load(id: String) {
         scope.launch {
-            val stored = deps.deckRepository.byId(id) ?: return@launch
-
             // Only worth offering back when there is something to lose: a saved
             // deck is on disk either way, and a toast about it would be noise.
             val was = openDeck()
             val losing = was.id == null && !deck.isEmpty
             val hadDeck = deck
 
-            releaseOpenDeck()
+            // Let go *before* reading, and wait for the write that letting go
+            // starts. Reading first is a race with it, and the case that makes
+            // it real is opening the deck you already have open — from the
+            // library, or from a restore — where the read would return the
+            // version from before your own pending edit landed.
+            releaseOpenDeck()?.join()
+
+            val stored = deps.deckRepository.byId(id) ?: run {
+                // Nothing there to open. Letting go was in preparation for
+                // something that did not happen, so it is taken back.
+                reopen(was)
+                return@launch
+            }
+
             deck = stored.entry.deck
             registeredDeck = stored.entry.deck
             dealSerial++

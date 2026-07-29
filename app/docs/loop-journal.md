@@ -2486,6 +2486,33 @@ an existing guarantee into a lie. Closed rather than shipped.
 
 ---
 
+## 98 · Reading the database before the write you just started
+
+Found by asking the concurrency question of the path I had just added: restoring
+a version ends in `state.load(id)`, and that id is *the deck already open*.
+
+`load` read the stored deck first and let go of the outgoing one second. Letting
+go is what writes the pending autosave — so for a while the read was of the
+version from before that write landed. When the two ids differ nobody notices.
+When they are the same, the screen shows the deck from before your own last edit
+while the disk holds the edit, and neither of them is wrong on its own.
+
+Reachable without the restore path, too: tap Open on the deck you are already
+editing, from the library.
+
+So the order is inverted — let go, wait for the write it starts, then read — and
+`flushPendingSave` hands its job back so a caller about to read the database can
+wait for what it just began. Inverting it created a case that did not exist
+before: a deck that is not there is now discovered *after* letting go of the one
+you had, so a miss takes that back rather than leaving you holding nothing.
+
+The restore path is safe by construction rather than by luck, and it is worth
+saying why: the history is a modal sheet, so no edit can happen between
+`showHistory` writing and the restore reading. Nothing is pending, the flush is a
+no-op, and the read returns the restored deck.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus

@@ -2605,6 +2605,47 @@ class DeckBuilderStateTest {
         assertFalse(state.isOpen(Overlay.HISTORY))
     }
 
+    @Test
+    fun openingTheDeckYouAlreadyHaveOpenShowsYourLatestWork() = runTest {
+        // The read used to happen before the write that letting go starts, so
+        // this came back as the deck from before the pending edit -- and then
+        // the disk and the screen disagreed about a deck nobody had touched.
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(5).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+        val id = requireNonNull(state.deckId)
+
+        state.removeOne(TestPool.many(5).first(), main)
+        val edited = state.deck
+
+        state.load(id)
+        advanceUntilIdle()
+
+        assertEquals(edited, state.deck, "the screen kept the edit")
+        assertEquals(edited, assertNotNull(deps.deckRepository.byId(id)).entry.deck, "so did the disk")
+    }
+
+    @Test
+    fun openingADeckThatIsNoLongerThereKeepsTheOneYouHave() = runTest {
+        // Letting go happens first now, so a miss has to take it back.
+        val deps = testDependencies()
+        val state = builderState(deps)
+        TestPool.many(5).forEach { state.addCard(it) }
+        state.save()
+        advanceUntilIdle()
+        val id = requireNonNull(state.deckId)
+        val had = state.deck
+
+        state.load("no such deck")
+        advanceUntilIdle()
+
+        assertEquals(had, state.deck)
+        assertEquals(id, state.deckId, "still the deck it was, and still saved")
+        assertEquals(SaveStatus.SAVED, state.saveStatus)
+    }
+
     private fun requireNonNull(value: String?): String =
         value ?: error("nothing was exported")
 }
