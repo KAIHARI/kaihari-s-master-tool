@@ -387,8 +387,8 @@ class SandboxPileTest {
     @Test
     fun aCardComesBackOutOfTheGraveyard() {
         val state = open()
-        state.discard(0)
-        state.discard(0)
+        state.play(0, BoardLayout.graveyard, Placement.ATTACK)
+        state.play(0, BoardLayout.graveyard, Placement.ATTACK)
         val wanted = state.contentsOf(Pile.GRAVEYARD)[0]
 
         state.holdFromPile(Pile.GRAVEYARD, 0)
@@ -402,7 +402,7 @@ class SandboxPileTest {
     @Test
     fun aCardIsRetrievedFromTheGraveyardToTheHand() {
         val state = open()
-        state.discard(0)
+        state.play(0, BoardLayout.graveyard, Placement.ATTACK)
         val wanted = state.contentsOf(Pile.GRAVEYARD)[0]
         val handSize = state.table.hand.size
 
@@ -499,7 +499,7 @@ class SandboxPileTest {
     @Test
     fun aCardIsBanishedOutOfTheGraveyard() {
         val state = open()
-        state.discard(0)
+        state.play(0, BoardLayout.graveyard, Placement.ATTACK)
         val card = state.contentsOf(Pile.GRAVEYARD).single()
 
         state.holdFromPile(Pile.GRAVEYARD, 0)

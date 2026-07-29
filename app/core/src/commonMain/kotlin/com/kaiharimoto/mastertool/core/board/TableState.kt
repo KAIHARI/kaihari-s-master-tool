@@ -24,8 +24,6 @@ data class TableState(
     val library: List<CardId> = emptyList(),
     val extra: List<CardId> = emptyList(),
 ) {
-    val isEmpty: Boolean get() = board.isEmpty && hand.isEmpty()
-
     /**
      * Draws from the top, and stops when the deck runs out.
      *

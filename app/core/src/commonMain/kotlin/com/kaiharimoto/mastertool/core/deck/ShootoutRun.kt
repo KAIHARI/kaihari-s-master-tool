@@ -83,10 +83,6 @@ data class ShootoutRun(
         )
     }
 
-    /** Takes back the last verdict, for a misclick. */
-    fun undoGame(): ShootoutRun =
-        if (games.isEmpty()) this else copy(games = games.dropLast(1))
-
     /**
      * Throws away the trial in progress, or the last finished one if none is.
      *

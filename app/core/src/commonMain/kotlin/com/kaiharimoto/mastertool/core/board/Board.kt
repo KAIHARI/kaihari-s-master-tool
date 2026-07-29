@@ -159,8 +159,6 @@ data class Board(private val contents: Map<ZoneId, List<PlacedCard>> = emptyMap(
         return withZone(zone, existing.filterIndexed { i, _ -> i != index })
     }
 
-    fun clear(zone: ZoneId): Board = withZone(zone, emptyList())
-
     private fun withZone(zone: ZoneId, cards: List<PlacedCard>): Board =
         Board(if (cards.isEmpty()) contents - zone else contents + (zone to cards))
 

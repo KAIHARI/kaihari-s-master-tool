@@ -282,10 +282,6 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
         move(zone, BoardLayout.graveyard)
     }
 
-    fun returnToHand(zone: ZoneId) = change { it.toHand(zone) }
-
-    fun discard(handIndex: Int) = change { it.sendFromHand(handIndex, BoardLayout.graveyard) }
-
     fun hold(origin: DragOrigin?) {
         held = origin
     }

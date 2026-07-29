@@ -82,21 +82,9 @@ class ShootoutRunTest {
     }
 
     @Test
-    fun undoingAGameTakesBackOneVerdict() {
-        val run = ShootoutRun()
-            .record(youWentFirst = true, sided = false, playable = true)
-            .record(youWentFirst = true, sided = true, playable = false)
-            .undoGame()
-
-        assertEquals(1, run.played)
-        assertEquals(2, run.nextGame)
-    }
-
-    @Test
     fun undoingNothingIsHarmless() {
         val run = ShootoutRun()
 
-        assertEquals(run, run.undoGame())
         assertEquals(run, run.undoTrial())
     }
 
