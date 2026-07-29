@@ -2,6 +2,7 @@ package com.kaiharimoto.mastertool.core.export
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
@@ -145,5 +146,78 @@ class PdfTest {
         val out = render { text(10f, 10f, "") }
 
         assertTrue("Tj" !in out)
+    }
+}
+
+class PdfFitTest {
+
+    private val room = 363f
+
+    @Test
+    fun aShortNameIsWrittenFullSize() {
+        val fitted = Pdf.fit("Snake-Eye", room)
+
+        assertEquals("Snake-Eye", fitted.text)
+        assertEquals(14f, fitted.size)
+    }
+
+    @Test
+    fun aLongNameShrinksBeforeItIsCut() {
+        // A judge would rather have the whole name small than most of it large.
+        val name = "Snake-Eye Fiendsmith Unchained, Regionals build"
+        val fitted = Pdf.fit(name, room)
+
+        assertEquals(name, fitted.text, "nothing was cut")
+        assertTrue(fitted.size < 14f, "it got there by shrinking")
+    }
+
+    @Test
+    fun nothingEverOverrunsTheRoomItWasGiven() {
+        val names = listOf(
+            "S",
+            "Snake-Eye",
+            "Snake-Eye Fiendsmith Unchained, Regionals build",
+            "a".repeat(200),
+            "Branded Despia Albaz Lubellion Fallen of Albaz Mirrorjade the Iceblade Dragon",
+        )
+
+        names.forEach { name ->
+            val fitted = Pdf.fit(name, room)
+            assertTrue(
+                fitted.text.length * fitted.size * 0.58f <= room + 0.01f,
+                "\"$name\" came out ${fitted.text.length} chars at ${fitted.size}pt",
+            )
+        }
+    }
+
+    @Test
+    fun aNameTooLongToShrinkIntoIsCutAndSaysSo() {
+        val fitted = Pdf.fit("a".repeat(200), room)
+
+        assertTrue(fitted.text.endsWith("..."))
+        assertEquals(9f, fitted.size, "cut only once shrinking has reached the floor")
+    }
+
+    @Test
+    fun theCutIsAsciiLikeEverythingElseThisWriterEmits() {
+        // A real ellipsis is not in the font this writer declares, and would come
+        // out as the substitute glyph in the middle of a title.
+        val fitted = Pdf.fit("a".repeat(200), room)
+
+        assertTrue(fitted.text.all { it.code in 32..126 })
+    }
+
+    @Test
+    fun noRoomAtAllIsNotACrash() {
+        assertEquals("", Pdf.fit("", room).text)
+        assertEquals("Snake-Eye", Pdf.fit("Snake-Eye", 0f).text)
+        assertEquals("Snake-Eye", Pdf.fit("Snake-Eye", -5f).text)
+    }
+
+    @Test
+    fun aCutNameDoesNotEndInASpaceBeforeItsDots() {
+        val fitted = Pdf.fit("Snake  " + "b".repeat(200), room)
+
+        assertFalse(fitted.text.contains(" ..."))
     }
 }

@@ -67,7 +67,9 @@ object SidingSheet {
 
     private fun title(page: Pdf.Page, deckName: String, count: Int, continued: Boolean = false): Float {
         page.rect(MARGIN, MARGIN, WIDTH, 30f, grey = 0.90f)
-        page.text(MARGIN + 10f, MARGIN + 8f, deckName.ifBlank { "Untitled Deck" }, size = 14f, bold = true)
+        // Fitted, like every other hand-typed name this writer puts on a page.
+        val heading = Pdf.fit(deckName.ifBlank { "Untitled Deck" }, WIDTH - 20f)
+        page.text(MARGIN + 10f, MARGIN + 8f, heading.text, size = heading.size, bold = true)
         page.text(
             MARGIN + 10f,
             MARGIN + 38f,
@@ -89,7 +91,8 @@ object SidingSheet {
 
         page.line(MARGIN, y, MARGIN + WIDTH, y, width = 1f, grey = 0.25f)
         y += 6f
-        page.text(MARGIN, y, pattern.deckName.ifBlank { "Unnamed matchup" }, size = 12f, bold = true)
+        val matchup = Pdf.fit(pattern.deckName.ifBlank { "Unnamed matchup" }, WIDTH, largest = 12f)
+        page.text(MARGIN, y, matchup.text, size = matchup.size, bold = true)
         y += 20f
 
         y = half(page, y, "GOING FIRST", pattern.goingFirst, nameOf)

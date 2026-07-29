@@ -109,7 +109,13 @@ object DecklistSheet {
         continued: Boolean = false,
     ): Float {
         page.rect(MARGIN, MARGIN, WIDTH, 30f, grey = 0.90f)
-        page.text(MARGIN + 10f, MARGIN + 8f, deckName.ifBlank { "Untitled Deck" }, size = 14f, bold = true)
+
+        // A deck name is typed by hand and people put the event and the version
+        // in it. Written at a fixed size it ran through the counts on the right
+        // and off the page -- on the one sheet in this program that is handed to
+        // somebody else.
+        val heading = Pdf.fit(deckName.ifBlank { "Untitled Deck" }, NAME_ROOM)
+        page.text(MARGIN + 10f, MARGIN + 8f, heading.text, size = heading.size, bold = true)
         page.text(
             MARGIN + WIDTH - 150f,
             MARGIN + 10f,
@@ -210,6 +216,9 @@ object DecklistSheet {
     private const val WIDTH = Pdf.PAGE_WIDTH - MARGIN * 2
     private const val GUTTER = 16f
     private const val COLUMN = WIDTH / 2
+
+    /** From the left edge of the name to where the format and counts begin. */
+    private const val NAME_ROOM = WIDTH - 160f
     private const val ROW = 12.5f
     private const val HEAD_HEIGHT = 26f
     private const val FIELDS_HEIGHT = 40f

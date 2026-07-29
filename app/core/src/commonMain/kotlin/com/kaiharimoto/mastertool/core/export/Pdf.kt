@@ -21,6 +21,56 @@ package com.kaiharimoto.mastertool.core.export
 object Pdf {
 
     /** A4 in points, which is what a PDF measures in. */
+    /**
+     * A line of text made to fit a width it was not written for.
+     *
+     * Shrunk before it is cut, because a judge reading a decklist would rather
+     * have the whole name small than most of it large — and cut only when
+     * shrinking has reached the size below which nobody is reading it anyway.
+     */
+    data class Fitted(val text: String, val size: Float)
+
+    /**
+     * Fits [text] into [room] points.
+     *
+     * There is no font metric table here and there is not going to be one: this
+     * writer exists so the whole file stays ASCII and hand-checkable, and 200
+     * character widths would be the largest thing in it by a wide margin. So the
+     * estimate is deliberately pessimistic — [CHAR_WIDTH] is wider than
+     * Helvetica-Bold's average — and the failure it can still have is a name cut
+     * a character or two earlier than it needed to be, rather than one written
+     * across the counts beside it.
+     */
+    fun fit(
+        text: String,
+        room: Float,
+        largest: Float = 14f,
+        smallest: Float = 9f,
+    ): Fitted {
+        if (text.isEmpty() || room <= 0f) return Fitted(text, largest)
+
+        val wanted = room / (text.length * CHAR_WIDTH)
+        if (wanted >= largest) return Fitted(text, largest)
+
+        // Shrinking was enough. Returned without re-deriving how many characters
+        // fit, because that arithmetic is this one run backwards and the two
+        // disagree by a rounding error -- which cost a character off the end of
+        // every name that shrank to exactly its room.
+        if (wanted >= smallest) return Fitted(text, wanted)
+
+        val fits = (room / (smallest * CHAR_WIDTH)).toInt()
+        if (text.length <= fits) return Fitted(text, smallest)
+
+        // Cut, and say so. Three full stops rather than an ellipsis: everything
+        // this writer emits is ASCII, and a character the font does not carry
+        // would come out as the substitute glyph in the middle of a title.
+        val kept = (fits - 3).coerceAtLeast(1)
+        return Fitted(text.take(kept).trimEnd() + "...", smallest)
+    }
+
+    /** Wider than Helvetica-Bold actually averages, so the estimate never overruns. */
+    private const val CHAR_WIDTH = 0.58f
+
     const val PAGE_WIDTH = 595f
     const val PAGE_HEIGHT = 842f
 
