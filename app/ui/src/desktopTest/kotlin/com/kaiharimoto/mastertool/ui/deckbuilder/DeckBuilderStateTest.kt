@@ -856,6 +856,79 @@ class DeckBuilderStateTest {
         assertTrue(written.contains("somethingThisAppDoesNotKnow"), written)
     }
 
+    // ---- a word on a card --------------------------------------------------
+
+    @Test
+    fun aNoteWrittenOnACardTravelsInTheExportedFile() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+        val card = state.deck.main.first()
+
+        state.writeNote(card, "only starter that plays through Ash")
+        state.exportToFile()
+        advanceUntilIdle()
+
+        val written = requireNonNull(files.exported)
+        assertTrue("only starter that plays through Ash" in written, written.takeLast(400))
+        // And the payload rule still holds around it.
+        assertTrue("somethingThisAppDoesNotKnow" in written)
+    }
+
+    @Test
+    fun clearingTheBoxTakesTheNoteAway() = runTest {
+        val state = builderState()
+        TestPool.many(2).forEach { state.addCard(it) }
+        val card = state.deck.main.first()
+
+        state.writeNote(card, "something")
+        assertEquals("something", state.noteOn(card))
+
+        state.writeNote(card, "  ")
+        assertNull(state.noteOn(card))
+    }
+
+    @Test
+    fun everyCopyOfACardCarriesTheSameNote() = runTest {
+        // By passcode, not by position: cutting one copy must not take the note
+        // with it, and the second copy is not a different card.
+        val state = builderState()
+        val card = TestPool.ash
+        repeat(3) { state.addCard(card) }
+
+        state.writeNote(card.id, "handtrap")
+        state.removeOne(card, main)
+
+        assertEquals("handtrap", state.noteOn(card.id))
+    }
+
+    @Test
+    fun aNoteSurvivesTheCardLeavingTheDeckEntirely() = runTest {
+        // Taking the last copy out and putting it back happens constantly while
+        // building, and a note that did not survive it is a note nobody trusts.
+        val state = builderState()
+        val card = TestPool.ash
+        state.addCard(card)
+        state.writeNote(card.id, "kept")
+
+        state.removeOne(card, main)
+        state.addCard(card)
+
+        assertEquals("kept", state.noteOn(card.id))
+    }
+
+    @Test
+    fun aFreshDeckHasNothingWrittenOnIt() = runTest {
+        val state = builderState()
+        val card = TestPool.ash
+        state.addCard(card)
+        state.writeNote(card.id, "gone")
+
+        state.newDeck()
+
+        assertNull(state.noteOn(card.id))
+    }
+
     // ---- the sheet a judge reads -------------------------------------------
 
     @Test

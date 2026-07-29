@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -558,6 +559,34 @@ private fun DeckCard(
                     )
                 }
 
+                // A card somebody has written on. A folded corner rather than a
+                // badge: it is the mark you would make on the card itself, and
+                // at this size a badge would be a second count to misread.
+                if (state.noteOn(id) != null) {
+                    Canvas(Modifier.matchParentSize()) {
+                        val fold = 13.dp.toPx()
+                        val inset = 2.dp.toPx()
+                        val right = size.width - inset
+                        drawPath(
+                            Path().apply {
+                                moveTo(right - fold, inset)
+                                lineTo(right, inset)
+                                lineTo(right, inset + fold)
+                                close()
+                            },
+                            accent.copy(alpha = 0.92f),
+                        )
+                        // The crease, which is what makes it read as folded
+                        // paper rather than as a coloured triangle.
+                        drawLine(
+                            Color.Black.copy(alpha = 0.45f),
+                            Offset(right - fold, inset),
+                            Offset(right, inset + fold),
+                            strokeWidth = 1.dp.toPx(),
+                        )
+                    }
+                }
+
                 // Where the drop would land, in the colour of the section it
                 // would land in — the same colour that pane is bound in.
                 //
@@ -671,6 +700,12 @@ private fun DeckCard(
                     menuOpen = false
                     state.inspect(siblings.mapNotNull { state.index.byId(it) }, position)
                 },
+            )
+            DropdownMenuItem(
+                text = {
+                    Text(if (state.noteOn(id) != null) "Read the note…" else "Write a note…")
+                },
+                onClick = { menuOpen = false; state.noteTarget = id },
             )
             DropdownMenuItem(
                 text = { Text("Remove one") },

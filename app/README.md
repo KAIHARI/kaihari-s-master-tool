@@ -201,7 +201,11 @@ to be looked at turns out to be an arrangement that can be measured, and "these
 nine are the engine" was always a claim about hands.
 
 Notes: whatever you want to remember about the deck, written into it and saved
-with it, and shown in the library.
+with it, and shown in the library. And a line on a single card — *only starter
+that plays through Ash*, *third copy is for the mirror* — from its long-press
+menu, marked by a folded corner on the tile. It goes by passcode, so every copy
+carries it and cutting one does not take it away. The original tool wrote an
+empty `notes.cards` into every file it ever exported; this is what goes in it.
 
 The deck you were working on is the one that opens next time. A deck saved once
 keeps itself saved — every edit after the first save is

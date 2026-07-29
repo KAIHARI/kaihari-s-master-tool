@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import com.kaiharimoto.mastertool.core.data.SyncResult
 import com.kaiharimoto.mastertool.core.deck.ArrangementCodec
 import com.kaiharimoto.mastertool.core.deck.BreakTracking
+import com.kaiharimoto.mastertool.core.deck.CardNotes
+import com.kaiharimoto.mastertool.core.deck.CardNotesCodec
 import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.deck.DeckEdit
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
@@ -76,6 +78,7 @@ enum class Overlay {
     SHOWCASE,
     INSPECTOR,
     HELP,
+    CARD_NOTE,
     FILTERS,
     STATS,
     SIDING,
@@ -246,7 +249,39 @@ class DeckBuilderState(
      * arranged stays a plain `.ydk`.
      */
     private val payload: JsonObject?
-        get() = ArrangementCodec.write(extended, breaks).takeIf { it.isNotEmpty() }
+        get() = CardNotesCodec
+            .write(ArrangementCodec.write(extended, breaks), cardNotes)
+            .takeIf { it.isNotEmpty() }
+
+    /**
+     * What the player wrote on individual cards.
+     *
+     * Kept whole rather than swept when a card leaves the deck -- see
+     * [CardNotes]. It rides the same payload the gaps do and is written by the
+     * same rule, one level further in.
+     */
+    var cardNotes by mutableStateOf(CardNotes.NONE)
+        private set
+
+    fun noteOn(id: CardId): String? = cardNotes[id]
+
+    /**
+     * Writes a note against a card, or clears it when the box is emptied.
+     *
+     * As it is typed, like the deck's own notes: the autosave is debounced, so
+     * a sentence is one write however many keystrokes it took — and anything
+     * that saved on the way out instead would lose what was typed the moment
+     * somebody closed the sheet with Escape.
+     */
+    fun writeNote(id: CardId, text: String) {
+        val next = cardNotes.with(id, text)
+        if (next == cardNotes) return
+        cardNotes = next
+        scheduleAutosave()
+    }
+
+    /** Which card the note editor is open on, if any. */
+    var noteTarget by mutableStateOf<CardId?>(null)
 
     /**
      * Puts a gap before the card the cursor is on.
@@ -331,6 +366,7 @@ class DeckBuilderState(
         Overlay.SHOWCASE -> showcaseVisible
         Overlay.INSPECTOR -> inspection != null
         Overlay.HELP -> helpVisible
+        Overlay.CARD_NOTE -> noteTarget != null
         Overlay.FILTERS -> filtersVisible
         Overlay.STATS -> statsVisible
         Overlay.SIDING -> sidingVisible
@@ -352,6 +388,9 @@ class DeckBuilderState(
             Overlay.SHOWCASE -> showcaseVisible = false
             Overlay.INSPECTOR -> inspection = null
             Overlay.HELP -> helpVisible = false
+            // Closed the same way the sheet's own dismiss does, so Escape keeps
+            // what was typed rather than throwing it away.
+            Overlay.CARD_NOTE -> noteTarget = null
             Overlay.FILTERS -> filtersVisible = false
             Overlay.STATS -> statsVisible = false
             Overlay.SIDING -> sidingVisible = false
@@ -1536,14 +1575,21 @@ class DeckBuilderState(
         // brings the cards back in the order they were in, and an arrangement
         // without its gaps is not the arrangement that was there.
         val hadBreaks = breaks
+        val hadNotes = cardNotes
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
         deckNotes = ""
         extended = null
         breaks = emptyMap()
+        cardNotes = CardNotes.NONE
         showToast(
             "Started a new deck.",
-            undo = { if (undoIfCurrent(token)) breaks = hadBreaks },
+            undo = {
+                if (undoIfCurrent(token)) {
+                    breaks = hadBreaks
+                    cardNotes = hadNotes
+                }
+            },
         )
     }
 
@@ -1626,6 +1672,7 @@ class DeckBuilderState(
             savedSnapshot = SavedSnapshot(stored.entry.deck, stored.entry.name, stored.entry.notes)
             extended = stored.extended
             breaks = ArrangementCodec.read(stored.extended)
+            cardNotes = CardNotesCodec.read(stored.extended)
             undoStack.clear()
             redoStack.clear()
             stamp()
@@ -1647,6 +1694,7 @@ class DeckBuilderState(
             deckNotes = ""
             extended = parsed.document.extended
             breaks = ArrangementCodec.read(parsed.document.extended)
+            cardNotes = CardNotesCodec.read(parsed.document.extended)
 
             val warning = parsed.warnings.size
                 .takeIf { it > 0 }

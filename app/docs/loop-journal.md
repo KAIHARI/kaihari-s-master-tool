@@ -1651,3 +1651,29 @@ The codec is the payload rule one level down. The object under `notes` also
 carries `pairs`, so writing `notes` wholesale would delete it — the same argument
 as the top-level merge and easier to get wrong, because the key being preserved
 looks like one we own rather than like somebody else's unknown.
+
+---
+
+## 71 · The note, on screen
+
+`CardNotes` needed somewhere to be written and something to show it. The sheet
+opens from a card's long-press menu with the card beside the box, because a note
+about a card you cannot see is a note about a passcode. The mark on the tile is a
+folded corner rather than a badge — it is what you would do to the card itself,
+and at deck-pane size a badge would be a second number to misread next to the
+copy count.
+
+Two things caught while writing it, both of the same kind: a design that sounded
+right in prose and was wrong in behaviour.
+
+I had it saving on the way out, with a comment about not queueing a write per
+keystroke. Then Escape came up. `Overlay` closes layers by setting their state to
+null, which would have thrown away the sentence — and the "hundred writes"
+worry was wrong anyway, because `scheduleAutosave` cancels and re-schedules, so a
+sentence is one write however long it took to type. It saves as it is typed now,
+exactly like the deck's own notes.
+
+Then binding the field straight at the model ate the space bar. A note is stored
+trimmed, so `noteOn` gave back the text without its trailing space and the field
+put it back a character short every time. The field keeps the raw text and the
+deck keeps it tidy.
