@@ -1890,6 +1890,19 @@ same treatment.
 
 ---
 
+## 81 · The board is the deck's table too
+
+The sandbox drew its mat from the theme while the deck panes it was opened from
+drew theirs from the deck. Laying an opening out on a board is the same deck on
+the same table — walking into a differently-coloured room to do it is the sort of
+seam that says *these are two screens* when the whole idea is that they are one
+piece of furniture.
+
+One parameter, and it composes with everything else the mat already touches: the
+builder, the full-deck view, the picture that leaves, and the library tile.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **790 tests**, up from 249, plus

@@ -55,11 +55,13 @@ import com.kaiharimoto.mastertool.core.board.BoardLayout
 import com.kaiharimoto.mastertool.core.board.Placement
 import com.kaiharimoto.mastertool.core.board.PlacedCard
 import com.kaiharimoto.mastertool.core.board.ZoneId
+import com.kaiharimoto.mastertool.core.deck.MatChoice
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.DeckMats
 import com.kaiharimoto.mastertool.ui.theme.tableSurface
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 import kotlin.math.roundToInt
@@ -82,9 +84,14 @@ import kotlin.math.roundToInt
 fun SandboxScreen(
     state: SandboxState,
     index: CardIndex,
+    /** The cloth the deck being laid out is built on. */
+    matChoice: MatChoice,
     onBack: () -> Unit,
 ) {
     val colors = LocalMasterToolColors.current
+    // The same table the deck is built on. It is that deck's board, so arriving
+    // here should not feel like walking into a different room.
+    val mat = DeckMats.of(matChoice, colors)
 
     Column(
         Modifier
@@ -139,7 +146,7 @@ fun SandboxScreen(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .tableSurface(accent = colors.accent, mat = colors.mat, corner = 8.dp)
+                .tableSurface(accent = colors.accent, mat = mat, corner = 8.dp)
                 .onGloballyPositioned { origin = it.positionInRoot() }
                 .padding(horizontal = 20.dp, vertical = 14.dp),
         ) {

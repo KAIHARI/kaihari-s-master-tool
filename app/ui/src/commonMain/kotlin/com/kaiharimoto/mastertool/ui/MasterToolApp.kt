@@ -91,6 +91,7 @@ fun MasterToolApp(deps: AppDependencies) {
             Screen.Sandbox -> SandboxScreen(
                 state = sandboxState,
                 index = builderState.index,
+                matChoice = builderState.mat,
                 onBack = { screen = Screen.DeckBuilder },
             )
 

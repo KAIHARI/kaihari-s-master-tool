@@ -236,7 +236,8 @@ to say. A run survives siding, because that is what it measures; it ends the
 moment you change which sixty cards you brought.
 
 Sandbox: lay the opening out on a board and see whether it assembles into
-anything. The table folds — the far half tips away, the near half toward you,
+anything. The table is the deck's own cloth, so arriving there is not walking
+into a different room. It folds — the far half tips away, the near half toward you,
 hinged on the shared zones between them. The way you let go of a card says which
 way it faces: drop it and it stands up in attack, flick it sideways and it lies
 down in defence, hold it a moment first and it goes face-down. All four stacks
