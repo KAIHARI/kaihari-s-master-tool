@@ -2584,7 +2584,25 @@ the first three were looking at behaviour and this one was looking at sequence.
 
 ---
 
-## Where this stands
+## 102 · Two projections nothing projected
+
+The unused-API sweep, run over what this loop added. `DeckVersion` carried a
+`mark` that built the `VersionMark` the retention rules take — and nothing ever
+called it, because the repository builds one straight off the database row. It
+was written on the assumption that the two would meet somewhere and they never
+did.
+
+And a `toDocument()`, parallel to `StoredDeck`'s, which one test used to prove a
+version writes out as a file. Nothing else. The test above it already asserts the
+version holds the right cards, which is the property that mattered; writing them
+out through a projection nobody calls proves the projection, not the version.
+Eighth and ninth removals by this rule.
+
+`Contrast.READABLE` and `READABLE_LARGE` came up in the same sweep and stay. They
+are used only by tests too, and that is not the same thing: contrast in this
+program is checked at build time rather than at runtime, so the tests *are* the
+consumer. A threshold whose only job is to be asserted against is doing its job.
+Worth writing down, because the next sweep will find them again.
 
 `:core` carries the arithmetic for all of it, at **913 tests**, up from 249, plus
 **258 in `:ui`** where there were none — a module that cannot even be compiled in

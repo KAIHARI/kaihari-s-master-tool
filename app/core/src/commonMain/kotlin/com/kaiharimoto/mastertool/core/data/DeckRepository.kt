@@ -38,11 +38,7 @@ data class DeckVersion(
     val deck: Deck,
     val notes: String,
     val extended: JsonObject? = null,
-) {
-    val mark: VersionMark get() = VersionMark(id, keptAtEpochMs, name)
-
-    fun toDocument(): YdkDocument = YdkDocument(deck, createdBy = null, extended = extended)
-}
+)
 
 /**
  * Persistence for saved decks.

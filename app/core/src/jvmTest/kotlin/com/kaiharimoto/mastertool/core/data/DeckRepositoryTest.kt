@@ -5,7 +5,6 @@ import com.kaiharimoto.mastertool.core.db.MasterToolDatabase
 import com.kaiharimoto.mastertool.core.deck.DeckHistory
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.Deck
-import com.kaiharimoto.mastertool.core.ydk.YdkCodec
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -316,16 +315,5 @@ class DeckRepositoryTest {
     @Test
     fun keepingADeckThatIsNotThereKeepsNothing() = runTest {
         assertNull(decks.keepNow("nope", "regionals"))
-    }
-
-    @Test
-    fun aVersionGoesBackOutAsAFileTheWayADeckDoes() = runTest {
-        decks.save("d", "Snake-Eye", deck(1, 2, 3))
-        now += 40 * HOUR
-        decks.save("d", "Snake-Eye", deck(1))
-
-        val text = YdkCodec.write(decks.versions("d").single().toDocument())
-
-        assertEquals(deck(1, 2, 3), YdkCodec.parse(text).document.deck)
     }
 }
