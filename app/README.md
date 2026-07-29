@@ -118,11 +118,12 @@ background gradient, a category, tags and the opponent's decklist there; decodin
 into a data class and encoding back would delete all of it. Editing a deck on the
 tablet must not destroy work done on the desktop.
 
-**Five scripts under `tools/` check what the compiler cannot see from here.**
+**Six scripts under `tools/` check what the compiler cannot see from here.**
 `:ui` does not build in a restricted environment, so a missing import, a modifier
-called without importing it, an orphaned property accessor, a test in the wrong
-source set or a Row child asking for the whole row's width all cost a CI round
-trip instead of a red squiggle. Each was written the day after making the
+called without importing it, an assignment to a property whose setter is private,
+an orphaned property accessor, a test in the wrong source set or a Row child
+asking for the whole row's width all cost a CI round trip instead of a red
+squiggle. Each was written the day after making the
 mistake, and each was verified by putting the mistake back and watching it fire.
 None has a hardcoded list of Compose names: the modifier check reads the mapping
 out of the codebase's own import lines, so it learns a new one the first time it

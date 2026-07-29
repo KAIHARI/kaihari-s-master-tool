@@ -2312,6 +2312,18 @@ group that resolved is a claim about the half that did not. So a group names
 itself only when more than half of it is known, and there is now a test for the
 case the failure was standing in for.
 
+**And then a second red build, from the fix.** Seeding the pool in that test
+meant assigning `state.index`, which has a private setter — correct, because the
+pool is loaded and never handed in. Not a warning: a compile error, in the module
+that does not compile here, so it cost the whole round trip to learn. The
+assertion is gone; what a group is *called* is `:core`'s business and is covered
+there against real card shapes, and what `:ui` owns is the wiring.
+
+The mistake became the sixth script under `tools/`. The other five catch a name
+that does not resolve; this one catches a name that resolves perfectly and cannot
+be written to — the same cost, a different error. Verified the way the others
+were, by putting the line back and watching it fire.
+
 ---
 
 ## Where this stands

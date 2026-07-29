@@ -5,7 +5,6 @@ import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.deck.GroupOdds
 import com.kaiharimoto.mastertool.core.deck.Selections
-import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.core.deck.MatChoice
 import com.kaiharimoto.mastertool.core.export.Png
 import com.kaiharimoto.mastertool.core.layout.GridStep
@@ -2329,22 +2328,11 @@ class DeckBuilderStateTest {
 
     // ---- what a group is called --------------------------------------------
 
-    @Test
-    fun aGroupIsNamedAfterWhatIsInIt() = runTest {
-        val state = builderState()
-        val cards = TestPool.many(6)
-        // The harness deliberately never seeds the pool -- addCard takes the
-        // card itself -- and a name is read off the pool, so this is the one
-        // test that has to put the cards where the index can find them.
-        state.index = CardIndex.build(cards)
-        cards.forEach { state.addCard(it) }
-
-        state.toggleBreak(main, 3)
-
-        // The fixtures are all effect monsters, so both groups are monsters,
-        // which is the honest reading of them.
-        assertEquals(listOf("Monsters", "Monsters"), state.groupNames)
-    }
+    // What a group is *called* is `GroupNamingTest` in :core, against real card
+    // shapes. It cannot be checked here: a name is read off the card pool, the
+    // harness deliberately never seeds one -- `addCard` takes the card itself --
+    // and `index` has a private setter, which is right. So these are about the
+    // wiring, and about the case an empty pool makes easy to reach.
 
     @Test
     fun aGroupOfCardsThePoolHasNeverHeardOfIsNotNamed() = runTest {
