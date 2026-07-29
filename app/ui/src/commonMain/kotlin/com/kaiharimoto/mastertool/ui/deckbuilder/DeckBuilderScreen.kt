@@ -245,6 +245,7 @@ fun DeckBuilderScreen(
         DeckStatsPanel(
             statistics = state.statistics,
             section = state.statsSection,
+            breaks = state.breaksIn(state.statsSection),
             onSectionChange = { state.statsSection = it },
             onBrowse = { filter ->
                 state.onQueryChange("")

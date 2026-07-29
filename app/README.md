@@ -187,6 +187,12 @@ The tidies draw their own, so "group by type" separates the groups it made. Gaps
 travel with the file in its `#ydkx-extended` payload, and they survive being
 built around: append, cut, drag a card across one, and they stay where they mean.
 
+And then they can be read back. Deck statistics measures each group you pushed
+apart: how often an opening hand holds one of it, how often two, and how many on
+average. Nothing was tagged or named to make that possible — an arrangement made
+to be looked at turns out to be an arrangement that can be measured, and "these
+nine are the engine" was always a claim about hands.
+
 Notes: whatever you want to remember about the deck, written into it and saved
 with it, and shown in the library.
 
@@ -216,6 +222,12 @@ table back, hand and deck included.
 
 A hand you like in the test panel or the shootout is one button from being a
 board with that hand already in it.
+
+Take a picture of it. The full-deck view is captured from the same draw pass
+that put it on screen and written out as a PNG under the deck's own name — the
+arrangement, the gaps, the mat, at the size it was being looked at. Every other
+builder can export a decklist image and every one of them sorts it first, which
+is a picture of a deck nobody arranged.
 
 Print the siding sheet: every matchup on paper, going first above going second,
 out on the left and in on the right, with a count on each side so an uneven swap

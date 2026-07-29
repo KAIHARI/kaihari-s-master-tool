@@ -1493,3 +1493,36 @@ Everything either side of that line is tested: the PNG writer in `:core`, and
 `exportPicture` in `:ui`, including the case where the screen could not be read
 at all, because a file of no bytes called `deck.png` is worse than being told it
 did not work.
+
+---
+
+## 66 · The gaps turn out to be measurable
+
+A gap says *these nine are the engine and those six are the handtraps*. That is a
+claim about opening hands, and until now nothing in the program checked it.
+
+`Hypergeometric` in `:core`: draws without replacement, exactly-k and at-least-k,
+and the average. `GroupOdds.forGroups` runs it over the groups `Breaks` already
+knows about. Deck statistics grows a block showing, per group, how often a hand
+holds one of it, how often two, and how many on average.
+
+What makes it worth having is that it asks for nothing. No tag, no category, no
+form — the arrangement somebody made to *look* at is the arrangement that gets
+measured. Every other tool that computes this wants you to build a list of
+"starters" first, which is the same information typed in a second time.
+
+Two things the tests caught. Every number I wrote from memory was wrong — three
+copies in forty opens 33.8% of the time, not 33.8-ish as I had it, and twelve
+starters open one 85.1% rather than the 88% I guessed. The reference values came
+out of Python's `math.comb`. And the check that actually earns its place is the
+one comparing this against `DeckStatistics.openingHandOdds`, which computes the
+same thing a completely different way — that one multiplies out 1 − P(none) term
+by term, this one sums combinations. Agreement between two independent
+derivations is worth more than either being checked against itself.
+
+The picture was drawn twice. The first attempt put "at least two" as a brighter
+fill nested inside "at least one", which reads backwards: the eye takes the
+brightest segment for the value and the dim remainder for an extension of it. A
+tick mark on the bar is unambiguous — the bar is one number, the mark says where
+the other falls along it. Caught in the prototype, before any Compose was
+written, which is the third time that has paid for itself.

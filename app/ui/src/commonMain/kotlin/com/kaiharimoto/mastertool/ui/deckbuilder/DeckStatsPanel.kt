@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,13 +25,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
+import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
+import com.kaiharimoto.mastertool.core.deck.GroupOdds
 import com.kaiharimoto.mastertool.core.model.Attribute
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.search.CardFilter
+import com.kaiharimoto.mastertool.ui.components.oneDecimal
 import com.kaiharimoto.mastertool.ui.components.percent
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
@@ -47,6 +55,8 @@ import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 fun DeckStatsPanel(
     statistics: DeckStatistics,
     section: DeckSection,
+    /** The gaps in the section being shown, which are the groups measured below. */
+    breaks: Breaks,
     onSectionChange: (DeckSection) -> Unit,
     /** Browses the pool by a facet the breakdown names. */
     onBrowse: (CardFilter) -> Unit,
@@ -107,6 +117,7 @@ fun DeckStatsPanel(
 
             if (section == DeckSection.MAIN) {
                 OpeningHandOdds(statistics)
+                GroupOddsSection(breaks, statistics.sectionSize)
             }
 
             if (statistics.byLevel.isNotEmpty()) {
@@ -183,6 +194,141 @@ private fun OpeningHandOdds(statistics: DeckStatistics) {
             }
         }
     }
+}
+
+/**
+ * What each pile you pushed apart does to an opening hand.
+ *
+ * The best thing about it is that it asks for nothing. The groups are the gaps
+ * already in the deck — nobody named a category, tagged a card or filled in a
+ * form; an arrangement made to be *looked* at turns out to be an arrangement
+ * that can be measured. "These nine are the engine and those six are the
+ * handtraps" was always the claim, and this is what it comes to in hands.
+ *
+ * Only for the Main deck, which is the only section anything is drawn from.
+ */
+@Composable
+private fun GroupOddsSection(breaks: Breaks, sectionSize: Int) {
+    val groups = GroupOdds.forGroups(breaks, sectionSize)
+    if (groups.size < 2) return
+
+    val colors = LocalMasterToolColors.current
+
+    Section("Your groups — $sectionSize cards, going first") {
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Header("Cards", Modifier.width(34.dp))
+            Box(Modifier.weight(1f))
+            Header("One", Modifier.width(48.dp), TextAlign.End)
+            Header("Two", Modifier.width(48.dp), TextAlign.End)
+            Header("Avg", Modifier.width(38.dp), TextAlign.End)
+        }
+
+        groups.forEach { group ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    group.size.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.width(34.dp),
+                )
+                OddsBar(
+                    one = group.one.toFloat(),
+                    two = group.two.toFloat(),
+                    fill = colors.accent,
+                    modifier = Modifier.weight(1f),
+                )
+                Figure(percent(group.one), colors.accentBright, Modifier.width(48.dp))
+                Figure(
+                    percent(group.two),
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    Modifier.width(48.dp),
+                )
+                Figure(
+                    oneDecimal(group.average),
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    Modifier.width(38.dp),
+                )
+            }
+        }
+
+        Text(
+            "The bar is how often the group shows up at all; the tick is how often " +
+                "twice. Nothing here was tagged or named — the gaps you pushed into " +
+                "the deck already said which cards belong together.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * One group's odds, as a bar and a mark on it.
+ *
+ * Two quantities on one track, and the first attempt drew the second as a
+ * brighter fill nested inside the first — which read backwards, because the eye
+ * takes the brightest segment for the value and the dim remainder for an
+ * extension of it. A tick is unambiguous: the bar is one number, and the mark
+ * says where the other one falls along it.
+ */
+@Composable
+private fun OddsBar(one: Float, two: Float, fill: Color, modifier: Modifier = Modifier) {
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    val mark = MaterialTheme.colorScheme.onSurface
+
+    Canvas(modifier.height(14.dp)) {
+        val bar = 8.dp.toPx()
+        val top = (size.height - bar) / 2f
+        val radius = CornerRadius(2.dp.toPx())
+
+        drawRoundRect(track, topLeft = Offset(0f, top), size = Size(size.width, bar), cornerRadius = radius)
+        if (one > 0f) {
+            drawRoundRect(
+                fill,
+                topLeft = Offset(0f, top),
+                size = Size(size.width * one.coerceIn(0f, 1f), bar),
+                cornerRadius = radius,
+            )
+        }
+
+        val width = 1.5.dp.toPx()
+        // Kept inside the track at both ends, so a group that is almost never
+        // seen twice still shows a mark rather than half of one.
+        val x = (size.width * two.coerceIn(0f, 1f)).coerceIn(width, size.width - width)
+        drawRect(
+            mark.copy(alpha = 0.85f),
+            topLeft = Offset(x - width / 2f, top - 3.dp.toPx()),
+            size = Size(width, bar + 6.dp.toPx()),
+        )
+    }
+}
+
+@Composable
+private fun Header(text: String, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Start) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = align,
+        modifier = modifier,
+    )
+}
+
+/** A number in a column of numbers, so it lines up with the ones above it. */
+@Composable
+private fun Figure(text: String, color: Color, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = color,
+        textAlign = TextAlign.End,
+        modifier = modifier,
+    )
 }
 
 @Composable

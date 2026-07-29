@@ -13,3 +13,15 @@ internal fun percent(value: Double): String {
     val tenths = (value.coerceIn(0.0, 1.0) * 1000).roundToInt()
     return "${tenths / 10}.${tenths % 10}%"
 }
+
+/**
+ * Formats a count that is not a whole number — "1.4 of these nine".
+ *
+ * Same reason as above, and one place rather than two: a column of averages
+ * where some entries carried a decimal and some did not would not line up, and
+ * these are read by comparing them down the column.
+ */
+internal fun oneDecimal(value: Double): String {
+    val tenths = (value.coerceAtLeast(0.0) * 10).roundToInt()
+    return "${tenths / 10}.${tenths % 10}"
+}
