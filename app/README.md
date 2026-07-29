@@ -334,7 +334,11 @@ single card, from the keyboard cursor or the card menu — and the cards it is
 noted with light up around it, which is as close as this gets to drawing a line
 between two cards without drawing a line between two cards that move. The
 original tool wrote an empty `notes: { cards: {}, pairs: {} }` into every file it
-ever exported; this is what goes in both halves.
+ever exported; this is what goes in both halves. And a pair is told how often it
+opens: three of each in forty is one game in ten, which is the number the whole
+idea rests on and the one the program could not say. Not the product of the two
+separate answers — the cards come out of the same deck, and multiplying is close
+enough to look right.
 
 And what it used to be. A deck that saves itself has no yesterday: cut a card
 from the list you registered and the sixty you registered stop existing. So

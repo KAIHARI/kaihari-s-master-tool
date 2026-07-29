@@ -28,6 +28,7 @@ import com.kaiharimoto.mastertool.core.deck.OpeningHand
 import com.kaiharimoto.mastertool.core.deck.Selection
 import com.kaiharimoto.mastertool.core.deck.Selections
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
+import com.kaiharimoto.mastertool.core.deck.Hypergeometric
 import com.kaiharimoto.mastertool.core.deck.DeckValidation
 import com.kaiharimoto.mastertool.core.deck.DeckValidator
 import com.kaiharimoto.mastertool.core.deck.RejectionReason
@@ -518,6 +519,26 @@ class DeckBuilderState(
         val marks = breaksIn(section)
         if (marks.isEmpty) return
         breaks = breaks + (section to marks.named(start, name))
+    }
+
+    /**
+     * How often an opening hand holds both of two cards, out of the Main deck.
+     *
+     * The question a two-card note is *about*. Pair notes were built on the
+     * observation that a deck is a handful of two-card openings and thirty-odd
+     * cards that make them likelier — and the program could say how likely one
+     * card was, and how likely a pile was, and nothing at all about the pair
+     * somebody had gone to the trouble of writing down.
+     *
+     * Null when either card is not in the Main deck, since the question is about
+     * an opening hand and a Side deck card is not in one.
+     */
+    fun oddsOfOpeningBoth(a: CardId, b: CardId, handSize: Int = 5): Double? {
+        val main = deck.main
+        val first = main.count { it == a }
+        val second = main.count { it == b }
+        if (first == 0 || second == 0) return null
+        return Hypergeometric.bothAppear(main.size, first, second, handSize)
     }
 
     /** The pile a name is being written on, or null when nothing is being named. */

@@ -1782,6 +1782,32 @@ class DeckBuilderStateTest {
         assertTrue(state.revealRequest?.flash ?: false)
     }
 
+    // ---- two cards, one hand -----------------------------------------------
+
+    @Test
+    fun aPairIsToldHowOftenItOpens() = runTest {
+        val state = builderState()
+        val cards = TestPool.many(40)
+        cards.forEach { state.addCard(it) }
+        repeat(2) { state.addCard(cards[0]) }
+        repeat(2) { state.addCard(cards[1]) }
+
+        // Three of each in a forty-four card Main deck.
+        val odds = assertNotNull(state.oddsOfOpeningBoth(cards[0].id, cards[1].id))
+        assertTrue(odds > 0.0 && odds < 0.15, "an unlikely thing, which is the point: $odds")
+    }
+
+    @Test
+    fun andACardThatIsNotInTheMainDeckHasNoOpeningOdds() = runTest {
+        // The question is about an opening hand, and a Side deck card is not in
+        // one. Silence rather than zero: zero is an answer, and there is none.
+        val state = builderState()
+        val cards = TestPool.many(3)
+        cards.forEach { state.addCard(it) }
+
+        assertNull(state.oddsOfOpeningBoth(cards[0].id, TestPool.ash.id))
+    }
+
     // ---- naming a pile -----------------------------------------------------
 
     @Test

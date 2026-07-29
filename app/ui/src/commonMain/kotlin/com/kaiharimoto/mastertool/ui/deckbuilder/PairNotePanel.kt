@@ -25,6 +25,7 @@ import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
+import kotlin.math.roundToInt
 
 /**
  * What two cards do together.
@@ -56,8 +57,18 @@ fun PairNotePanel(state: DeckBuilderState, a: CardId, b: CardId) {
                     style = MaterialTheme.typography.headlineSmall,
                 )
                 Box(Modifier.weight(1f))
+
+                // The question this note is about. A pair note exists because a
+                // deck is a handful of two-card openings; how often the opening
+                // actually turns up is the number underneath that idea, and the
+                // program could already answer it for one card and for a pile.
+                val odds = state.oddsOfOpeningBoth(a, b)
                 Text(
-                    "SAVED WITH THE DECK",
+                    if (odds == null) {
+                        "SAVED WITH THE DECK"
+                    } else {
+                        "${(odds * 100).roundToInt()}% TO OPEN BOTH"
+                    },
                     style = tacticalStyle(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -86,7 +97,12 @@ fun PairNotePanel(state: DeckBuilderState, a: CardId, b: CardId) {
             }
 
             Text(
-                "A decklist cannot hold this. Clearing the box takes it away.",
+                if (state.oddsOfOpeningBoth(a, b) == null) {
+                    "A decklist cannot hold this. Clearing the box takes it away."
+                } else {
+                    "Out of the Main deck, in an opening five. A decklist cannot " +
+                        "hold any of this. Clearing the box takes the note away."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

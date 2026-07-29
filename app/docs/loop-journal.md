@@ -3092,3 +3092,34 @@ decoration people put round it and nothing else, which was already the rule.
 
 Pasting the contents of a `.ydk` is probably the single commonest way a list will
 ever arrive here, and it was the one shape that quietly did the wrong thing.
+
+## 116 · The number the pair notes were always about
+
+Pair notes exist on one observation, written into their own docstring months ago:
+*a deck is a handful of two-card openings and thirty-odd cards that make them
+likelier.* The program could tell you how often you see one card, and how often
+you see a pile — and nothing at all about the pair somebody had gone to the
+trouble of writing down.
+
+`Hypergeometric.bothAppear`. Inclusion and exclusion over the two misses, which
+is exact: `1 - P(no A) - P(no B) + P(neither)`.
+
+It is deliberately **not** the product of the two one-card answers, and there is
+a test that says so. The cards come out of the same deck, so drawing one uses up
+a slot the other needed; the two are not independent, and multiplying is close
+enough to look right and wrong enough to matter. That test asserts both halves —
+that the true answer is lower, and that it is not much lower, because *not much*
+is exactly why the wrong version passes a glance.
+
+Two of my seven expectations were wrong and both were arithmetic:
+
+**Three of each in forty opens the pair 9.8% of the time**, not 4.6%. I had
+written the formula into the comment correctly and then not evaluated it. It is a
+number worth being made to look at twice: three copies each, and you see the
+combo one game in ten. That is why real decks run searchers for both halves
+rather than more copies of either.
+
+**And a deck of nothing but the two of them still misses.** I wrote *"twenty and
+twenty: five cards cannot miss either half"* and asserted 1.0. Five cards can be
+all twenty-A: it happens about one game in twenty-one. The assertion is 0.9529
+now, and the test is renamed after what it actually demonstrates.

@@ -177,3 +177,72 @@ class GroupOddsTest {
         assertEquals(listOf(3, 7), odds.map { it.size })
     }
 }
+
+/**
+ * Two cards, one hand.
+ *
+ * The question a deck is actually built around — a deck is a handful of two-card
+ * openings and thirty-odd cards that make them likelier — and until now the only
+ * odds this program could give were about one card or one pile.
+ */
+class BothAppearTest {
+
+    @Test
+    fun threeAndThreeOutOfFortyOnFive() {
+        // (C(40,5) - 2*C(37,5) + C(34,5)) / C(40,5), which is 64470/658008.
+        // Worth reading twice: three of each in forty, and you open the pair one
+        // game in ten. That number is why decks run more than one of them.
+        val odds = Hypergeometric.bothAppear(deckSize = 40, first = 3, second = 3, handSize = 5)
+
+        assertEquals(0.0980, odds, 0.0005)
+    }
+
+    @Test
+    fun itIsNotTheProductOfTheTwoSeparateAnswers() {
+        // The cards come out of the same deck, so the two are not independent.
+        // Multiplying is close enough to look right, which is the danger.
+        val together = Hypergeometric.bothAppear(40, 3, 3, 5)
+        val apart = Hypergeometric.atLeast(40, 3, 5, 1) * Hypergeometric.atLeast(40, 3, 5, 1)
+
+        assertTrue(together < apart, "drawing one uses up a slot the other needed")
+        assertTrue(together > apart * 0.8, "and not by much, which is why it looks right")
+    }
+
+    @Test
+    fun aCardThatIsNotInTheDeckIsNeverOpened() {
+        assertEquals(0.0, Hypergeometric.bothAppear(40, 0, 3, 5))
+        assertEquals(0.0, Hypergeometric.bothAppear(40, 3, 0, 5))
+    }
+
+    @Test
+    fun aHandThatIsTheWholeDeckHoldsEverything() {
+        assertEquals(1.0, Hypergeometric.bothAppear(40, 3, 3, 40), 1e-9)
+    }
+
+    @Test
+    fun aDeckMadeOnlyOfTheTwoOfThemStillMissesSometimes() {
+        // Twenty and twenty, and a five-card hand is still all one half about
+        // one game in twenty-one. I expected certainty here and was wrong, which
+        // is the same shape of wrong the test above exists to catch.
+        assertEquals(0.9529, Hypergeometric.bothAppear(40, 20, 20, 5), 0.0005)
+    }
+
+    @Test
+    fun nonsenseIsZeroRatherThanAThrow() {
+        // Reached while a deck is being edited, not by a mistake worth stopping
+        // for -- the same rule the rest of this object follows.
+        assertEquals(0.0, Hypergeometric.bothAppear(0, 3, 3, 5))
+        assertEquals(0.0, Hypergeometric.bothAppear(40, 3, 3, 0))
+        assertEquals(0.0, Hypergeometric.bothAppear(4, 3, 3, 5), "more copies than deck")
+    }
+
+    @Test
+    fun moreCopiesIsNeverWorse() {
+        var last = 0.0
+        for (copies in 1..3) {
+            val odds = Hypergeometric.bothAppear(40, copies, 3, 5)
+            assertTrue(odds > last, "$copies copies should beat ${copies - 1}")
+            last = odds
+        }
+    }
+}

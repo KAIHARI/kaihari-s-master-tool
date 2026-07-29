@@ -71,6 +71,38 @@ object Hypergeometric {
      * overflowing — but 60! does, immediately, and the version that computes it
      * is the version that silently returns infinity.
      */
+    /**
+     * Probability that a hand holds at least one of *each* of two sets.
+     *
+     * The question a two-card combo actually asks. Not the product of the two
+     * one-card answers: the cards come out of the same deck, so seeing one makes
+     * the other very slightly likelier — there is one fewer card it could have
+     * been hiding behind. Multiplying is close enough to look right and wrong
+     * enough to be worth not doing.
+     *
+     * Inclusion and exclusion over the two misses, which is exact:
+     * `1 - P(no A) - P(no B) + P(neither)`.
+     *
+     * [first] and [second] are counts of copies, and are assumed to be disjoint —
+     * which for the two cards of a pair they are, since a card is never noted
+     * with itself.
+     */
+    fun bothAppear(deckSize: Int, first: Int, second: Int, handSize: Int): Double {
+        if (deckSize <= 0 || handSize <= 0) return 0.0
+        if (first <= 0 || second <= 0) return 0.0
+        if (first + second > deckSize) return 0.0
+
+        val hand = handSize.coerceAtMost(deckSize)
+        val all = choose(deckSize, hand)
+        if (all <= 0.0) return 0.0
+
+        val noFirst = choose(deckSize - first, hand)
+        val noSecond = choose(deckSize - second, hand)
+        val neither = choose(deckSize - first - second, hand)
+
+        return ((all - noFirst - noSecond + neither) / all).coerceIn(0.0, 1.0)
+    }
+
     internal fun choose(n: Int, k: Int): Double {
         if (k < 0 || k > n || n < 0) return 0.0
         val smaller = minOf(k, n - k)
