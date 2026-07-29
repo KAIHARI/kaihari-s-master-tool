@@ -1704,3 +1704,23 @@ is what it was written for, and it is the second time the enum has paid for
 itself: a layer that cannot be dismissed is a layer Escape leaves on screen, and
 the compiler now refuses to let one be added without saying how it opens, how it
 closes, and how a test opens it.
+
+---
+
+## 73 · The mat was going to be missing from the picture
+
+Found by re-reading the capture wiring rather than by any test, and it would only
+ever have shown up in the exported file.
+
+The showcase drew the mat with `Modifier.tableSurface(...)` and then added the
+capture modifier beside it in the same chain. Draw modifiers run in chain order,
+and a recording only covers what its own `drawContent` reaches — so the mat,
+sitting earlier in the chain, would have been drawn to the screen and not into
+the layer. On screen: a deck on a mat. In the file: a deck floating on nothing.
+
+The mat is now drawn by a child of the captured box rather than by a sibling
+modifier. Children are unambiguously inside `drawContent`, whichever way the
+chain semantics fall — which matters more than usual here, because this is a
+module that cannot be compiled or run in the environment it was written in, and
+"I reasoned it through" is a weaker guarantee than "there is no ordering left to
+get wrong".

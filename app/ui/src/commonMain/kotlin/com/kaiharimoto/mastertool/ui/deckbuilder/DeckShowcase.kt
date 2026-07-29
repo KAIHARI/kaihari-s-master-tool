@@ -120,13 +120,17 @@ fun DeckShowcase(state: DeckBuilderState, onDismiss: () -> Unit) {
         // The picture is exactly what this box draws, which is why the one
         // control on the screen is outside it: a save button in the corner of
         // somebody's decklist is not a thing anybody wants to post.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .tableSurface(colors.accent, colors.mat)
-                .then(capture.modifier),
-        ) {
-            ShowcaseContents(state, blocks, total, reveal)
+        //
+        // The mat is drawn by a *child* rather than by a modifier beside the
+        // capture. Draw modifiers run in chain order and the recording only
+        // covers what its own `drawContent` reaches, so a mat added next to it
+        // would sit on the screen and not in the file -- and the picture would
+        // come out as a deck floating on nothing, which is a bug that only
+        // appears in the exported copy.
+        Box(Modifier.fillMaxSize().then(capture.modifier)) {
+            Box(Modifier.fillMaxSize().tableSurface(colors.accent, colors.mat)) {
+                ShowcaseContents(state, blocks, total, reveal)
+            }
         }
 
         if (blocks.isNotEmpty()) {
