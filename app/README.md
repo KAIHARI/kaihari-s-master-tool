@@ -202,8 +202,13 @@ Sandbox: lay the opening out on a board and see whether it assembles into
 anything. The table folds — the far half tips away, the near half toward you,
 hinged on the shared zones between them. The way you let go of a card says which
 way it faces: drop it and it stands up in attack, flick it sideways and it lies
-down in defence, hold it a moment first and it goes face-down. Undo puts the
-whole table back, hand and deck included.
+down in defence, hold it a moment first and it goes face-down. All four stacks
+open — deck, Extra deck, graveyard, banished — and a card taken out of one is
+picked up the same way a card in your hand is. Drop something on the graveyard
+and it goes there. Undo puts the whole table back, hand and deck included.
 
-Not yet built: siding for the *opponent* between games, the Extra deck as
-somewhere to summon from, and PDF export of a siding sheet.
+A hand you like in the test panel or the shootout is one button from being a
+board with that hand already in it.
+
+Not yet built: siding for the *opponent* between games, counters and tokens on
+the board, and PDF export of a siding sheet.

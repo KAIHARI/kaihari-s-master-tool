@@ -997,12 +997,64 @@ That last one is the clearest case yet for why the arithmetic lives in `:core`
 behind tests. It is a bug you could only find by playing with a tablet for an
 hour, and there is no tablet here.
 
+## 49. The half of a board that was never in your hand
+
+A modern turn ends in five monsters that were never drawn. A sandbox without the
+Extra deck can only ever show an opening, not what the opening builds — which is
+the entire question somebody opens a board to ask.
+
+So all four stacks became things you can look through and take from, behind one
+sheet. They ask the same question — *which one* — and four differently shaped
+answers would be three more things to learn. The Extra deck is taken by index and
+never by "the top", because it is a set rather than a stack; the graveyard is the
+same, since nothing in this game retrieves the card on top of a graveyard, it
+retrieves the one you want.
+
+Tapping a card in a stack picks it up rather than opening a menu. That turned out
+to unify four quite different operations — playing, moving, summoning, reviving —
+into one thing at the fingertips while keeping them apart in the model: a monster
+fished out of the graveyard lands in a zone by exactly the same tap or drag as one
+out of the hand, and the gesture still says which way it faces.
+
+Two details that are only obvious once you imagine using it. A *refused*
+placement keeps the card picked up — losing it there would mean finding it again
+in a stack, which is the opposite of what a refusal should cost. And searching the
+deck does not shuffle it, because a search that shuffled would quietly ruin
+whatever was set up on top and nothing on screen would say it had.
+
+Then the hole that made the rest of it half-useful: the stacks were somewhere to
+look and not somewhere to *put* things, and most of what a combo does is send
+cards to the graveyard. They are drop targets now, and banishing from the
+graveyard — which decks do every turn — falls out of the same mechanism.
+
+## 50. Play it out
+
+The moment a test hand stops being a hand and becomes a question. "Would I keep
+this" is answered by looking; "what does it actually do" is only answered by
+playing it, and until now that meant shuffling until the same five came up again.
+A hand in the test panel or the shootout is now one button from being a board
+with that hand already in it.
+
+Laying a deck out around a hand somebody already holds has two edges worth
+naming. Only one copy leaves the deck per copy in hand — a naive `removeAll`
+takes all three Ash Blossoms when you are holding one. And a card in the hand
+that is not in the list is dealt anyway: it came from somewhere real, and a hand
+that silently lost a card is a worse answer than one that is slightly generous.
+
+The build that caught the argument order is worth recording as a lesson rather
+than a mistake. `open(deck, random)` became `open(deck, hand, random)`, and every
+positional caller silently rebound — handing a random number generator to
+something expecting an opening hand. Nothing about that is loud. With a compiler
+in the room it is a red squiggle; here it is four minutes and a round trip, and
+the rule that follows is to name the argument or append the parameter, never
+insert it.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **630 tests**, up from 249, plus
-**135 in `:ui`** where there were none — a module that cannot even be compiled in
+`:core` carries the arithmetic for all of it, at **634 tests**, up from 249, plus
+**152 in `:ui`** where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
 Still open, in the order they are worth doing:
@@ -1012,9 +1064,9 @@ which version dealt each hand (sections 43-45). The deck across the table never
 changes — which is the half of a real match still missing, and the reason their
 turn-two board looks the same in game three as in game one.
 
-**The rest of the board.** It deals, lays cards out, turns them and undoes
-(sections 46-48). Still missing: the Extra deck as somewhere to summon *from*,
-counters and tokens, and a way to look through a pile rather than only count it.
+**The rest of the board.** It deals, lays cards out, turns them, sends them to
+the graveyard and undoes all of it (sections 46-50). Still missing: counters and
+tokens, the field spell zone, and a second board across the table.
 
 **PDF export of a siding sheet.** The original's actual deliverable. Needs a PDF
 writer that resolves from Maven Central; spike before committing to it.
