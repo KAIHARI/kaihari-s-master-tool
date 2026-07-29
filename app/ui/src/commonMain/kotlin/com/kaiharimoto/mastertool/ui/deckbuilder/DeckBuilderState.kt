@@ -22,6 +22,7 @@ import com.kaiharimoto.mastertool.core.deck.DeckTidy
 import com.kaiharimoto.mastertool.core.deck.TidyBy
 import com.kaiharimoto.mastertool.core.deck.HandSimulator
 import com.kaiharimoto.mastertool.core.deck.HandTally
+import com.kaiharimoto.mastertool.core.deck.GroupNaming
 import com.kaiharimoto.mastertool.core.deck.MatchupRecord
 import com.kaiharimoto.mastertool.core.deck.OpeningHand
 import com.kaiharimoto.mastertool.core.deck.Selection
@@ -778,6 +779,25 @@ class DeckBuilderState(
 
     val statistics: DeckStatistics by derivedStateOf {
         DeckStatistics.of(deck, index::byId, statsSection)
+    }
+
+    /**
+     * What each group in the statistics section is about.
+     *
+     * Derived, never stored and never typed. A gap is deliberately a gap and not
+     * a label, and that stays true — but it left the group odds listing two
+     * nine-card groups as two identical rows, and nothing on screen said which
+     * was which. Reading the name off the cards keeps the arrangement free of
+     * bookkeeping and cannot go stale: cut the last Snake-Eye card out of a group
+     * and it stops being called Snake-Eye.
+     *
+     * In the same order as `GroupOdds.forGroups`, so the two line up by index.
+     */
+    val groupNames: List<String?> by derivedStateOf {
+        val cards = deck[statsSection]
+        breaksIn(statsSection).groups(cards.size).map { range ->
+            GroupNaming.nameOf(range.mapNotNull { index.byId(cards[it]) })
+        }
     }
 
     /** Main-deck statistics, which is what opening-hand odds are drawn from. */

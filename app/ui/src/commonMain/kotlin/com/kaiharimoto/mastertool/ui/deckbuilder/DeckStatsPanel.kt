@@ -30,6 +30,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.core.deck.Breaks
@@ -57,6 +58,8 @@ fun DeckStatsPanel(
     section: DeckSection,
     /** The gaps in the section being shown, which are the groups measured below. */
     breaks: Breaks,
+    /** What each of those groups is about, read off its cards. Index-aligned. */
+    groupNames: List<String?>,
     onSectionChange: (DeckSection) -> Unit,
     /** Browses the pool by a facet the breakdown names. */
     onBrowse: (CardFilter) -> Unit,
@@ -117,7 +120,7 @@ fun DeckStatsPanel(
 
             if (section == DeckSection.MAIN) {
                 OpeningHandOdds(statistics)
-                GroupOddsSection(breaks, statistics.sectionSize)
+                GroupOddsSection(breaks, statistics.sectionSize, groupNames)
             }
 
             if (statistics.byLevel.isNotEmpty()) {
@@ -208,7 +211,7 @@ private fun OpeningHandOdds(statistics: DeckStatistics) {
  * Only for the Main deck, which is the only section anything is drawn from.
  */
 @Composable
-private fun GroupOddsSection(breaks: Breaks, sectionSize: Int) {
+private fun GroupOddsSection(breaks: Breaks, sectionSize: Int, names: List<String?>) {
     val groups = GroupOdds.forGroups(breaks, sectionSize)
     if (groups.size < 2) return
 
@@ -221,12 +224,13 @@ private fun GroupOddsSection(breaks: Breaks, sectionSize: Int) {
         ) {
             Header("Cards", Modifier.width(34.dp))
             Box(Modifier.weight(1f))
+            Box(Modifier.weight(1.4f))
             Header("One", Modifier.width(48.dp), TextAlign.End)
             Header("Two", Modifier.width(48.dp), TextAlign.End)
             Header("Avg", Modifier.width(38.dp), TextAlign.End)
         }
 
-        groups.forEach { group ->
+        groups.forEachIndexed { position, group ->
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -237,11 +241,23 @@ private fun GroupOddsSection(breaks: Breaks, sectionSize: Int) {
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.width(34.dp),
                 )
+                // Blank when the group has nothing to say for itself, which is
+                // honest -- eight unrelated cards are eight unrelated cards, and
+                // a name invented for them would be the program claiming to have
+                // understood something.
+                Text(
+                    names.getOrNull(position).orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
                 OddsBar(
                     one = group.one.toFloat(),
                     two = group.two.toFloat(),
                     fill = colors.accent,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.4f),
                 )
                 Figure(percent(group.one), colors.accentBright, Modifier.width(48.dp))
                 Figure(
@@ -260,7 +276,8 @@ private fun GroupOddsSection(breaks: Breaks, sectionSize: Int) {
         Text(
             "The bar is how often the group shows up at all; the tick is how often " +
                 "twice. Nothing here was tagged or named — the gaps you pushed into " +
-                "the deck already said which cards belong together.",
+                "the deck said which cards belong together, and what each group is " +
+                "called is read back off the cards in it.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

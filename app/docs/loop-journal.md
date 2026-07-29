@@ -2247,6 +2247,37 @@ assertion that already exists rather than by a new one about gold.
 
 ---
 
+## 91 · Two nine-card groups were two identical rows
+
+The group odds listed each group by size and nothing else, so a deck with two
+nine-card groups showed two rows reading `9`, and the only way to tell which was
+which was to count along the deck.
+
+The obvious fix is to let people name a group, and it is the wrong one. `Breaks`
+says what it is in its own first paragraph — "not a card, not a label, not a
+folder" — because a gap is what somebody does with their hands and costs nothing
+to ignore. A typed name is a folder with extra steps, it needs storing, it needs
+tracking through every edit that moves the gap it belongs to, and six weeks later
+it is wrong and nobody notices.
+
+So the name is *derived*: the archetype at least half the group belongs to, else
+the kind of card when they are all one kind, else the card there are most copies
+of. Nothing stored, nothing asked for, and it cannot go stale — cut the last
+Snake-Eye card out of a group and it stops being called Snake-Eye. Null when the
+group has nothing to say for itself, which matters more than the names do: eight
+unrelated cards are eight unrelated cards, and inventing a label for them would
+be the program claiming to have understood something.
+
+Three tests failed on the first run and two of them were my expectations, not the
+code: five monsters with two Snake-Eye among them *are* five monsters, and a
+weaker true thing beats nothing. The third was real — a one-card group came out
+labelled "Monsters", which says less than the card already visible above it.
+
+The panel's own line still ends "nothing here was tagged or named", and it is
+still true.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus

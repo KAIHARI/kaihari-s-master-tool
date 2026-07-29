@@ -248,6 +248,7 @@ fun DeckBuilderScreen(
             statistics = state.statistics,
             section = state.statsSection,
             breaks = state.breaksIn(state.statsSection),
+            groupNames = state.groupNames,
             onSectionChange = { state.statsSection = it },
             onBrowse = { filter ->
                 state.onQueryChange("")

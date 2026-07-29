@@ -3,6 +3,7 @@ package com.kaiharimoto.mastertool.ui.deckbuilder
 import com.kaiharimoto.mastertool.core.deck.Breaks
 import com.kaiharimoto.mastertool.core.deck.SaveStatus
 import com.kaiharimoto.mastertool.core.deck.TidyBy
+import com.kaiharimoto.mastertool.core.deck.GroupOdds
 import com.kaiharimoto.mastertool.core.deck.MatChoice
 import com.kaiharimoto.mastertool.core.export.Png
 import com.kaiharimoto.mastertool.core.layout.GridStep
@@ -2322,6 +2323,54 @@ class DeckBuilderStateTest {
         val kept = deps.deckRepository.versions(requireNonNull(state.deckId))
         assertEquals(1, kept.size, "one moment, one version")
         assertEquals("the one I actually played", kept.single().name)
+    }
+
+    // ---- what a group is called --------------------------------------------
+
+    @Test
+    fun aGroupIsNamedAfterWhatIsInIt() = runTest {
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+
+        state.toggleBreak(main, 3)
+
+        // The pool fixtures are all effect monsters, so both groups are monsters
+        // -- which is the honest reading of them, and there are two of it.
+        assertEquals(listOf("Monsters", "Monsters"), state.groupNames)
+    }
+
+    @Test
+    fun aSectionWithNoGapsIsOneGroup() = runTest {
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+
+        assertEquals(1, state.groupNames.size)
+    }
+
+    @Test
+    fun theNamesLineUpWithTheOddsTheyLabel() = runTest {
+        // They are index-aligned by construction and by nothing else, so a
+        // change to either side has to keep the lengths equal or the panel puts
+        // one group's name on another group's row.
+        val state = builderState()
+        TestPool.many(12).forEach { state.addCard(it) }
+        listOf(3, 7, 9).forEach { state.toggleBreak(main, it) }
+
+        assertEquals(
+            GroupOdds.forGroups(state.breaksIn(main), state.deck.main.size).size,
+            state.groupNames.size,
+        )
+    }
+
+    @Test
+    fun theNamesFollowTheSectionTheStatisticsAreShowing() = runTest {
+        val state = builderState()
+        TestPool.many(6).forEach { state.addCard(it) }
+        state.toggleBreak(main, 3)
+
+        state.statsSection = DeckSection.SIDE
+
+        assertEquals(emptyList(), state.groupNames, "an empty side deck has no groups")
     }
 
     private fun requireNonNull(value: String?): String =
