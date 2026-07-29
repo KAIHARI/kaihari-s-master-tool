@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.ui.components
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -93,16 +94,21 @@ fun HoverPreview(card: Card, note: String? = null, content: @Composable () -> Un
                         .padding(6.dp)
                         .width(280.dp),
                 ) {
-                    AsyncImage(
-                        model = card.imageUrl ?: card.imageUrlSmall,
-                        contentDescription = card.name,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
+                    Box(
+                        Modifier
                             .width(280.dp)
                             .height(408.dp)
                             .clip(RoundedCornerShape(CARD_CORNER))
                             .foilSweep(),
-                    )
+                    ) {
+                        CardFaceArt(card, Modifier.fillMaxSize())
+                        AsyncImage(
+                            model = card.imageUrl ?: card.imageUrlSmall,
+                            contentDescription = card.name,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
 
                     // Pointing at a card to remember what it does is the same
                     // gesture as pointing at it to remember why it is in there.

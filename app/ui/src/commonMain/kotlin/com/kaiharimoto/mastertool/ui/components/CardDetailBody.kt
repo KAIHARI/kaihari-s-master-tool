@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.ui.components
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -79,19 +80,26 @@ fun CardDetailBody(
             val artWidth = (maxWidth * 0.30f).coerceIn(180.dp, 340.dp)
 
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                AsyncImage(
-                    model = card.imageUrl ?: card.imageUrlSmall,
-                    contentDescription = card.name,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
+                // The drawn face underneath the picture, so a card whose image
+                // has not arrived is still a card here rather than a gap beside
+                // its own text. Same order as the tile: face, then art over it.
+                Box(
+                    Modifier
                         .width(artWidth)
                         // Derived rather than a second hardcoded number: the old
                         // 200x292 was very nearly the card's ratio, not exactly.
                         .aspectRatio(CARD_ASPECT_RATIO)
                         .clip(RoundedCornerShape(CARD_CORNER))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
                         .foilSweep(),
-                )
+                ) {
+                    CardFaceArt(card, Modifier.fillMaxSize())
+                    AsyncImage(
+                        model = card.imageUrl ?: card.imageUrlSmall,
+                        contentDescription = card.name,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(card.name, style = MaterialTheme.typography.headlineSmall)

@@ -74,6 +74,17 @@ fun CardFaceArt(card: Card, modifier: Modifier = Modifier) {
         // two designs that happen to share a palette.
         val unit = maxWidth / 96f
 
+        // Below this there is no room for a name, and 3sp of it is not a name
+        // but a smear. A siding sheet's thumbnails are 34dp wide, and at that
+        // size the frame colour on its own still says monster, spell or trap --
+        // which is the whole of what a swatch that small can say.
+        if (maxWidth < LEGIBLE) {
+            Box(Modifier.fillMaxSize().padding(unit * 3)) {
+                ArtWindow(card, frame.base, frame.dark)
+            }
+            return@BoxWithConstraints
+        }
+
         Column(Modifier.fillMaxSize()) {
             Text(
                 card.name,
@@ -203,6 +214,9 @@ private fun rightFoot(card: Card, kind: FrameKind): String = when {
     !CardFace.isMonster(kind) -> ""
     else -> card.def?.toString() ?: "?"
 }
+
+/** Narrower than this and the card is a swatch rather than a face. */
+private val LEGIBLE = 52.dp
 
 // Band heights, in ninety-sixths of the card's width — the size a deck pane
 // draws one at, and the size the proportions were looked at.

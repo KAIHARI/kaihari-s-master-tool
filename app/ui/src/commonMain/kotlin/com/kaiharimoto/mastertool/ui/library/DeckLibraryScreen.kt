@@ -66,6 +66,7 @@ import com.kaiharimoto.mastertool.core.util.RelativeTime
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CARD_CORNER
+import com.kaiharimoto.mastertool.ui.components.CardFaceArt
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.DeckMats
@@ -423,11 +424,8 @@ private fun DeckFaces(faces: List<Card>, mat: MatColors) {
             .wellSurface(mat),
     ) {
         faces.take(3).forEachIndexed { position, card ->
-            AsyncImage(
-                model = card.imageUrlSmall ?: card.imageUrl,
-                contentDescription = card.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
+            Box(
+                Modifier
                     .offset(
                         x = 14.dp + FACE_STEP * position,
                         // The middle card sits a little proud, which is what
@@ -437,9 +435,19 @@ private fun DeckFaces(faces: List<Card>, mat: MatColors) {
                     .width(FACE_WIDTH)
                     .aspectRatio(CARD_ASPECT_RATIO)
                     .graphicsLayer { rotationZ = (position - 1) * 7f }
-                    .clip(RoundedCornerShape(CARD_CORNER))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
+                    .clip(RoundedCornerShape(CARD_CORNER)),
+            ) {
+                // Three grey rectangles standing for a deck defeats the point of
+                // showing three cards at all, which is telling nine saved decks
+                // apart without reading nine names.
+                CardFaceArt(card, Modifier.fillMaxSize())
+                AsyncImage(
+                    model = card.imageUrlSmall ?: card.imageUrl,
+                    contentDescription = card.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
 
         Box(

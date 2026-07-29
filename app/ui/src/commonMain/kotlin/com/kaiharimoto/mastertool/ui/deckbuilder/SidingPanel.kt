@@ -1,5 +1,7 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,7 +40,9 @@ import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.siding.SidingPattern
 import com.kaiharimoto.mastertool.core.siding.SidingSwap
+import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CARD_CORNER
+import com.kaiharimoto.mastertool.ui.components.CardFaceArt
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
 
 /**
@@ -186,14 +190,21 @@ private fun Thumbnail(state: DeckBuilderState, id: CardId) {
     Box(
         Modifier
             .width(34.dp)
+            // The ratio is stated rather than taken from the image: with no
+            // picture the image has no height, and the row collapsed.
+            .aspectRatio(CARD_ASPECT_RATIO)
             .clip(RoundedCornerShape(CARD_CORNER))
             .background(MaterialTheme.colorScheme.surface),
     ) {
+        // At 34dp this draws the frame alone -- too narrow for a name, and the
+        // colour still says monster, spell or trap, which is what a swatch this
+        // size is for.
+        card?.let { CardFaceArt(it, Modifier.fillMaxSize()) }
         AsyncImage(
             model = card?.imageUrlSmall ?: card?.imageUrl,
             contentDescription = card?.name,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.width(34.dp),
+            modifier = Modifier.fillMaxSize(),
         )
     }
 }
