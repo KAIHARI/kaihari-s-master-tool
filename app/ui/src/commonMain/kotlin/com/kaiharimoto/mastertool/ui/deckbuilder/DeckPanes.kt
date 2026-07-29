@@ -533,7 +533,7 @@ private fun DeckCard(
     }
 
     val tile: @Composable () -> Unit = {
-        HoverPreview(card) {
+        HoverPreview(card, note = state.noteOn(id)) {
             CardTile(
                 card = card,
                 format = state.format,

@@ -219,6 +219,7 @@ fun DeckBuilderScreen(
             openingHandOdds = { copies, handSize ->
                 state.mainStatistics.openingHandOdds(copies, handSize)
             },
+            noteOn = { state.noteOn(it.id) },
             onDismiss = { state.inspection = null },
             onPageChanged = state::onInspectionPageChanged,
             onSetCount = { card, section, count -> state.setCount(card, section, count) },

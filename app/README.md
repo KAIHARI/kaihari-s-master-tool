@@ -204,8 +204,11 @@ Notes: whatever you want to remember about the deck, written into it and saved
 with it, and shown in the library. And a line on a single card — *only starter
 that plays through Ash*, *third copy is for the mirror* — from its long-press
 menu, marked by a folded corner on the tile. It goes by passcode, so every copy
-carries it and cutting one does not take it away. The original tool wrote an
-empty `notes.cards` into every file it ever exported; this is what goes in it.
+carries it and cutting one does not take it away, and it turns up wherever you
+are looking at the card rather than only where you wrote it: in the inspector,
+and under the hover preview in the pool as well as the deck. The original tool
+wrote an empty `notes.cards` into every file it ever exported; this is what goes
+in it.
 
 The deck you were working on is the one that opens next time. A deck saved once
 keeps itself saved — every edit after the first save is

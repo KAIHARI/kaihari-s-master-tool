@@ -3,11 +3,13 @@ package com.kaiharimoto.mastertool.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -46,7 +49,7 @@ private const val DWELL_MS = 350L
  * produces, so this simply never fires there — no platform check required.
  */
 @Composable
-fun HoverPreview(card: Card, content: @Composable () -> Unit) {
+fun HoverPreview(card: Card, note: String? = null, content: @Composable () -> Unit) {
     var hovered by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
 
@@ -81,13 +84,14 @@ fun HoverPreview(card: Card, content: @Composable () -> Unit) {
                 popupPositionProvider = BesideAnchor,
                 properties = PopupProperties(focusable = false),
             ) {
-                Box(
+                Column(
                     Modifier
                         .padding(8.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surface)
                         .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
-                        .padding(6.dp),
+                        .padding(6.dp)
+                        .width(280.dp),
                 ) {
                     AsyncImage(
                         model = card.imageUrl ?: card.imageUrlSmall,
@@ -99,6 +103,18 @@ fun HoverPreview(card: Card, content: @Composable () -> Unit) {
                             .clip(RoundedCornerShape(CARD_CORNER))
                             .foilSweep(),
                     )
+
+                    // Pointing at a card to remember what it does is the same
+                    // gesture as pointing at it to remember why it is in there.
+                    if (!note.isNullOrBlank()) {
+                        Text(
+                            note,
+                            style = MaterialTheme.typography.bodySmall
+                                .copy(fontStyle = FontStyle.Italic),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp),
+                        )
+                    }
                 }
             }
         }

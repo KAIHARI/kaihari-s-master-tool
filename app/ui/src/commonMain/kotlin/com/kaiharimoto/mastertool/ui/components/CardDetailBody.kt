@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
@@ -49,6 +50,8 @@ fun CardDetailBody(
     copiesBySection: Map<DeckSection, Int>,
     mainDeckSize: Int,
     openingHandOdds: (copies: Int, handSize: Int) -> Double,
+    /** What the player wrote on this card, if anything. */
+    note: String?,
     onSetCount: (DeckSection, Int) -> Unit,
     onMove: (from: DeckSection, to: DeckSection) -> Unit,
     onBrowse: (CardFilter) -> Unit,
@@ -92,6 +95,21 @@ fun CardDetailBody(
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(card.name, style = MaterialTheme.typography.headlineSmall)
+
+                    // What you wrote about this card, above what Konami wrote.
+                    // The whole reason for the feature is the moment you are
+                    // looking at the card wondering why it is in the deck.
+                    if (!note.isNullOrBlank()) {
+                        // Set apart by being in somebody's voice rather than by
+                        // a rule or a box: everything else on this sheet is what
+                        // Konami printed, and this is the one line that is not.
+                        Text(
+                            note,
+                            style = MaterialTheme.typography.bodyMedium
+                                .copy(fontStyle = FontStyle.Italic),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     Text(
                         card.type,
                         style = MaterialTheme.typography.labelLarge,

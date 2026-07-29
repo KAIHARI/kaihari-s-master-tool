@@ -215,7 +215,7 @@ fun SearchPane(
                     onLongPress = { state.inspect(state.results, position) },
                     onDropped = onDropped,
                 ) {
-                    HoverPreview(card) {
+                    HoverPreview(card, note = state.noteOn(card.id)) {
                         CardTile(
                             card = card,
                             format = state.format,

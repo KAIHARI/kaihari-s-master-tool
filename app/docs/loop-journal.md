@@ -1677,3 +1677,22 @@ Then binding the field straight at the model ate the space bar. A note is stored
 trimmed, so `noteOn` gave back the text without its trailing space and the field
 put it back a character short every time. The field keeps the raw text and the
 deck keeps it tidy.
+
+---
+
+## 72 · The note turns up where the card does
+
+Writing a note and then only being able to read it by opening the sheet you wrote
+it in is a filing cabinet, not a note. So it appears wherever a card is being
+*considered*: in the inspector, under the name, and under the hover preview — in
+the pool as well as the deck, because the moment you point at a card in the pool
+wondering whether to run it is the moment last week's answer is worth having.
+
+Set apart by being in somebody's voice rather than by a rule or a box: italic, in
+the accent. Everything else on those surfaces is what Konami printed, and this is
+the one line that is not.
+
+Not in the siding panel, where it would have been most useful of all — its
+thumbnails are thirty-four points wide and a folded corner there is three pixels
+that look like a rendering fault. It is the right place for the idea and the
+wrong place for this drawing of it.
