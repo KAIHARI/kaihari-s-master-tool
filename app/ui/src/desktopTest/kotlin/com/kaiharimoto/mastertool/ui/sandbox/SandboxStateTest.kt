@@ -55,7 +55,7 @@ class SandboxStateTest {
     @Test
     fun playingPutsTheHeldCardDown() {
         val state = open()
-        state.hold(2)
+        state.hold(DragOrigin.Hand(2))
 
         state.play(2, zone, Placement.ATTACK)
 
@@ -66,7 +66,7 @@ class SandboxStateTest {
     fun holdingTheSameCardIsHowYouPutItBack() {
         val state = open()
 
-        state.hold(1)
+        state.hold(DragOrigin.Hand(1))
         assertEquals(1, state.heldInHand)
         state.hold(null)
         assertNull(state.heldInHand)
@@ -311,5 +311,140 @@ class SandboxDragTest {
         state.dragBy(Offset(50f, 50f))
 
         assertEquals(Offset.Zero, state.pointer)
+    }
+}
+
+/**
+ * The stacks: looking through them, and taking something out.
+ *
+ * Everything a modern turn is made of that never passed through the opening
+ * hand -- what comes out of the Extra deck, what comes back out of the
+ * graveyard, what a searcher finds.
+ */
+class SandboxPileTest {
+
+    private val main = (1..20).map { CardId(900_000 + it) }
+    private val extra = (1..3).map { CardId(700_000 + it) }
+    private val deck = Deck(main = main, extra = extra, side = emptyList())
+    private val zone = BoardLayout.monsterRow[0]
+
+    private fun open(): SandboxState = SandboxState().also { it.open(deck, Random(2)) }
+
+    @Test
+    fun theDeckReadsFromTheTopDown() {
+        // The top of the deck is the only part of it anybody has an opinion
+        // about, so it is the part they should see first.
+        val state = open()
+
+        assertEquals(state.table.library.last(), state.contentsOf(Pile.DECK).first())
+        assertEquals(state.table.library.size, state.contentsOf(Pile.DECK).size)
+    }
+
+    @Test
+    fun searchingTakesTheCardThatWasPointedAt() {
+        val state = open()
+        val wanted = state.contentsOf(Pile.DECK)[6]
+
+        assertTrue(state.takeToHand(Pile.DECK, 6))
+
+        assertTrue(wanted in state.table.hand)
+        assertTrue(wanted !in state.table.library)
+        assertTrue(state.canUndo, "a search is an edit like any other")
+    }
+
+    @Test
+    fun theExtraDeckIsShownAsItIs() {
+        val state = open()
+
+        assertEquals(extra, state.contentsOf(Pile.EXTRA))
+    }
+
+    @Test
+    fun anExtraDeckMonsterIsPickedUpAndPutDown() {
+        val state = open()
+
+        state.holdFromPile(Pile.EXTRA, 1)
+        assertEquals(DragOrigin.Extra(1), state.held)
+        assertNull(state.openPile, "picking one up closes the stack you picked it from")
+
+        assertTrue(state.placeHeld(zone))
+
+        assertEquals(extra[1], state.board[zone].single().id)
+        assertEquals(listOf(extra[0], extra[2]), state.table.extra)
+        assertNull(state.held)
+    }
+
+    @Test
+    fun nothingIsSummonedStraightOutOfTheDeck() {
+        val state = open()
+
+        state.holdFromPile(Pile.DECK, 0)
+
+        assertNull(state.held)
+        assertFalse(state.takeToHand(Pile.EXTRA, 0), "and the Extra deck is not searched to hand")
+    }
+
+    @Test
+    fun aCardComesBackOutOfTheGraveyard() {
+        val state = open()
+        state.discard(0)
+        state.discard(0)
+        val wanted = state.contentsOf(Pile.GRAVEYARD)[0]
+
+        state.holdFromPile(Pile.GRAVEYARD, 0)
+        assertTrue(state.placeHeld(zone, Placement.DEFENSE))
+
+        assertEquals(wanted, state.board[zone].single().id)
+        assertEquals(Placement.DEFENSE, state.board[zone].single().placement)
+        assertEquals(1, state.contentsOf(Pile.GRAVEYARD).size)
+    }
+
+    @Test
+    fun aCardIsRetrievedFromTheGraveyardToTheHand() {
+        val state = open()
+        state.discard(0)
+        val wanted = state.contentsOf(Pile.GRAVEYARD)[0]
+        val handSize = state.table.hand.size
+
+        assertTrue(state.takeToHand(Pile.GRAVEYARD, 0))
+
+        assertEquals(handSize + 1, state.table.hand.size)
+        assertTrue(wanted in state.table.hand)
+        assertTrue(state.contentsOf(Pile.GRAVEYARD).isEmpty())
+    }
+
+    @Test
+    fun aRefusedPlacementKeepsTheCardPickedUp() {
+        // The zone is full. Losing the held card here would mean finding it
+        // again in a stack, which is the opposite of what a refusal should cost.
+        val state = open()
+        state.play(0, zone, Placement.ATTACK)
+
+        state.holdFromPile(Pile.EXTRA, 0)
+        assertFalse(state.placeHeld(zone))
+
+        assertEquals(DragOrigin.Extra(0), state.held)
+        assertEquals(3, state.table.extra.size)
+    }
+
+    @Test
+    fun puttingDownWithNothingPickedUpDoesNothing() {
+        val state = open()
+
+        assertFalse(state.placeHeld(zone))
+        assertTrue(state.board.isEmpty)
+    }
+
+    @Test
+    fun undoTakesBackASummonAndTheExtraDeckWithIt() {
+        val state = open()
+        state.holdFromPile(Pile.EXTRA, 0)
+        state.placeHeld(zone)
+
+        state.undo()
+
+        assertTrue(state.board.isEmpty)
+        assertEquals(extra, state.table.extra)
+        assertNull(state.held, "and nothing is left picked up")
     }
 }

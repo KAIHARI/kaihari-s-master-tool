@@ -27,10 +27,31 @@ private val started = TimeSource.Monotonic.markNow()
 
 private val SystemClock: () -> Long = { started.elapsedNow().inWholeMilliseconds }
 
-/** Where a card being dragged came from, which decides where it goes back to. */
+/**
+ * Where a card being moved came from, which is what decides what moving it means.
+ *
+ * One type for four quite different actions — playing, moving, summoning and
+ * reviving — because from the player's side they are one action: pick the card
+ * up, put it somewhere. Keeping them apart in the model and together at the
+ * fingertips is the whole trick.
+ */
 sealed interface DragOrigin {
     data class Hand(val index: Int) : DragOrigin
     data class OnBoard(val zone: ZoneId) : DragOrigin
+
+    /** The Extra deck, by position in it. */
+    data class Extra(val index: Int) : DragOrigin
+
+    /** A pile on the board — graveyard, banished — by position in it. */
+    data class Pile(val zone: ZoneId, val index: Int) : DragOrigin
+}
+
+/** The four stacks that are worth looking through rather than only counting. */
+enum class Pile(val label: String, val shortLabel: String) {
+    DECK("Deck", "DECK"),
+    EXTRA("Extra deck", "EXTRA"),
+    GRAVEYARD("Graveyard", "GY"),
+    BANISHED("Banished", "BANISH"),
 }
 
 data class BoardDrag(val origin: DragOrigin, val id: CardId, val faceDown: Boolean = false)
@@ -52,9 +73,21 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
     var table by mutableStateOf(TableState())
         private set
 
-    /** Which card in hand is picked up, if any. */
-    var heldInHand by mutableStateOf<Int?>(null)
+    /**
+     * What is picked up, if anything.
+     *
+     * Tapping picks up and tapping a zone puts down, which is the whole
+     * interaction for anybody not using a mouse — and it is the same held card
+     * whether it came from the hand, the Extra deck or the graveyard.
+     */
+    var held by mutableStateOf<DragOrigin?>(null)
         private set
+
+    /** Which card in the fan is picked up, if the held card is one of them. */
+    val heldInHand: Int? get() = (held as? DragOrigin.Hand)?.index
+
+    /** Which stack is open for looking through, if any. */
+    var openPile by mutableStateOf<Pile?>(null)
 
     /** Which zone the last card landed in, for a moment of confirmation. */
     var justPlaced by mutableStateOf<ZoneId?>(null)
@@ -87,7 +120,7 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
         drag = BoardDrag(origin, id, faceDown)
         pointer = at
         trail = DragTrail.EMPTY.at(at.x, at.y, nowMs())
-        heldInHand = (origin as? DragOrigin.Hand)?.index
+        held = origin
     }
 
     fun dragBy(delta: Offset) {
@@ -111,24 +144,38 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
         val placement = trail.placementOnRelease(nowMs())
         drag = null
         trail = DragTrail.EMPTY
-        if (zone == null) {
-            heldInHand = null
-            return false
-        }
-
-        val landed = when (val origin = active.origin) {
-            is DragOrigin.Hand -> play(origin.index, zone, placement)
-            is DragOrigin.OnBoard -> move(origin.zone, zone)
-        }
-        heldInHand = null
-        return landed
+        held = null
+        if (zone == null) return false
+        return put(active.origin, zone, placement)
     }
 
     fun cancelDrag() {
         drag = null
         trail = DragTrail.EMPTY
-        heldInHand = null
+        held = null
     }
+
+    /**
+     * Puts down whatever is picked up, for the tap-tap way of doing it.
+     *
+     * The gesture cannot say anything here — there was no gesture — so it lands
+     * in attack and one tap turns it, which is the honest fallback rather than
+     * an invented default.
+     */
+    fun placeHeld(zone: ZoneId, placement: Placement = Placement.ATTACK): Boolean {
+        val origin = held ?: return false
+        val landed = put(origin, zone, placement)
+        if (landed) held = null
+        return landed
+    }
+
+    private fun put(origin: DragOrigin, zone: ZoneId, placement: Placement): Boolean =
+        when (origin) {
+            is DragOrigin.Hand -> play(origin.index, zone, placement)
+            is DragOrigin.OnBoard -> move(origin.zone, zone)
+            is DragOrigin.Extra -> summon(origin.index, zone, placement)
+            is DragOrigin.Pile -> raise(origin.zone, origin.index, zone, placement)
+        }
 
     private var history by mutableStateOf<List<TableState>>(emptyList())
 
@@ -139,7 +186,8 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
     /** Shuffles a decklist out and draws an opening hand. */
     fun open(deck: Deck, random: Random = Random.Default) {
         history = emptyList()
-        heldInHand = null
+        held = null
+        openPile = null
         justPlaced = null
         table = TableState.from(deck, random)
     }
@@ -156,7 +204,7 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
         val next = table.play(handIndex, zone, placement) ?: return false
         push()
         table = next
-        heldInHand = null
+        held = null
         justPlaced = zone
         return true
     }
@@ -185,15 +233,72 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
 
     fun discard(handIndex: Int) = change { it.sendFromHand(handIndex, BoardLayout.graveyard) }
 
-    fun hold(handIndex: Int?) {
-        heldInHand = handIndex
+    fun hold(origin: DragOrigin?) {
+        held = origin
+    }
+
+    // ---- the stacks --------------------------------------------------------
+
+    /**
+     * What is in a stack, in the order it is worth reading.
+     *
+     * The deck reads from the top down, because the top is the only part of it
+     * anybody has an opinion about.
+     */
+    fun contentsOf(pile: Pile): List<CardId> = when (pile) {
+        Pile.DECK -> table.library.asReversed()
+        Pile.EXTRA -> table.extra
+        Pile.GRAVEYARD -> table.board[BoardLayout.graveyard].map { it.id }
+        Pile.BANISHED -> table.board[BoardLayout.banished].map { it.id }
+    }
+
+    /** Picks a card out of an open stack, ready to be put somewhere. */
+    fun holdFromPile(pile: Pile, index: Int) {
+        held = when (pile) {
+            Pile.EXTRA -> DragOrigin.Extra(index)
+            Pile.GRAVEYARD -> DragOrigin.Pile(BoardLayout.graveyard, index)
+            Pile.BANISHED -> DragOrigin.Pile(BoardLayout.banished, index)
+            // Nothing is summoned straight out of the deck often enough to be
+            // worth a fifth case; searching it to hand and playing it is the
+            // same two taps and one fewer thing to explain.
+            Pile.DECK -> null
+        }
+        if (held != null) openPile = null
+    }
+
+    /** Takes a card out of an open stack and into the hand. */
+    fun takeToHand(pile: Pile, index: Int): Boolean {
+        val before = table
+        when (pile) {
+            Pile.DECK -> change { it.searchLibrary(it.library.size - 1 - index) }
+            Pile.EXTRA -> return false
+            Pile.GRAVEYARD -> change { it.retrieve(BoardLayout.graveyard, index) }
+            Pile.BANISHED -> change { it.retrieve(BoardLayout.banished, index) }
+        }
+        return table != before
+    }
+
+    fun summon(extraIndex: Int, zone: ZoneId, placement: Placement): Boolean {
+        val next = table.summon(extraIndex, zone, placement) ?: return false
+        push()
+        table = next
+        justPlaced = zone
+        return true
+    }
+
+    fun raise(from: ZoneId, index: Int, to: ZoneId, placement: Placement): Boolean {
+        val next = table.raise(from, index, to, placement) ?: return false
+        push()
+        table = next
+        justPlaced = to
+        return true
     }
 
     fun undo() {
         val previous = history.lastOrNull() ?: return
         history = history.dropLast(1)
         table = previous
-        heldInHand = null
+        held = null
         justPlaced = null
     }
 

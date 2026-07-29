@@ -50,7 +50,6 @@ import com.kaiharimoto.mastertool.core.board.BoardLayout
 import com.kaiharimoto.mastertool.core.board.Placement
 import com.kaiharimoto.mastertool.core.board.PlacedCard
 import com.kaiharimoto.mastertool.core.board.ZoneId
-import com.kaiharimoto.mastertool.core.board.ZoneKind
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.ui.components.CardTile
@@ -142,6 +141,8 @@ fun SandboxScreen(
             DragGhost(state, index, zoneWidth)
         }
     }
+
+    state.openPile?.let { PileSheet(state, it, index) }
 }
 
 /**
@@ -180,20 +181,45 @@ private fun Half(
         }
 
         rows.forEachIndexed { position, zones ->
-            // Piles sit at the ends of the row furthest from the middle, which
-            // is where a player's hands are and where they are on a real mat.
-            val flanked = if (yours) position == 1 else position == 0
             Row(horizontalArrangement = Arrangement.spacedBy(ZONE_GAP)) {
-                if (flanked) Pile(state, BoardLayout.deck, "DECK", zoneWidth) else Gap(zoneWidth)
+                // Only your half has stacks. The deck across the table is not
+                // simulated, and drawing its graveyard would be drawing a
+                // graveyard nothing could ever put a card into.
+                Flank(state, zoneWidth, yours, position, left = true)
                 zones.forEach { zone -> Zone(state, index, zone, zoneWidth, origin) }
-                if (flanked) {
-                    Pile(state, BoardLayout.graveyard, "GY", zoneWidth)
-                } else {
-                    Gap(zoneWidth)
-                }
+                Flank(state, zoneWidth, yours, position, left = false)
             }
         }
     }
+}
+
+/**
+ * The stacks down the sides, where they are on a mat.
+ *
+ * Extra deck and graveyard on the row you are summoning into, deck and banished
+ * below — near enough to the real thing that muscle memory finds them, and every
+ * one of them opens.
+ */
+@Composable
+private fun Flank(
+    state: SandboxState,
+    zoneWidth: Dp,
+    yours: Boolean,
+    row: Int,
+    left: Boolean,
+) {
+    if (!yours) {
+        Gap(zoneWidth)
+        return
+    }
+
+    val pile = when {
+        row == 0 && left -> Pile.EXTRA
+        row == 0 -> Pile.GRAVEYARD
+        left -> Pile.BANISHED
+        else -> Pile.DECK
+    }
+    PileSlot(state, pile, zoneWidth)
 }
 
 /**
@@ -238,7 +264,7 @@ private fun Zone(
 ) {
     val colors = LocalMasterToolColors.current
     val top = state.board[zone].lastOrNull()
-    val held = state.heldInHand
+    val held = state.held
     // Where this zone sits on the table, which both a drop and a drag need.
     var here by remember { mutableStateOf(Offset.Zero) }
     val edge = when {
@@ -289,8 +315,11 @@ private fun Zone(
             .border(1.dp, edge, RoundedCornerShape(3.dp))
             .clickable {
                 when {
+                    // Something picked up goes down first: an occupied zone
+                    // refuses it anyway, and turning a card you were not
+                    // holding would be the wrong guess about what was meant.
+                    held != null -> state.placeHeld(zone)
                     top != null -> state.turn(zone)
-                    held != null -> state.play(held, zone, Placement.ATTACK)
                     else -> Unit
                 }
             },
@@ -348,29 +377,35 @@ private fun CardBack(modifier: Modifier = Modifier) {
     )
 }
 
-/** A pile: how many, and the top of it. */
+/**
+ * A stack: what it is, how many are in it, and a way in.
+ *
+ * Drawn as a slab rather than as a card, because it is not one card — and an
+ * empty one still has to be tappable and still has to be somewhere, so it keeps
+ * its outline whether or not anything is in it.
+ */
 @Composable
-private fun Pile(state: SandboxState, zone: ZoneId, label: String, zoneWidth: Dp) {
-    val count = state.board[zone].size
+private fun PileSlot(state: SandboxState, pile: Pile, zoneWidth: Dp) {
+    val colors = LocalMasterToolColors.current
+    val count = state.contentsOf(pile).size
+    val edge = if (count == 0) {
+        colors.mat.weft.copy(alpha = 0.45f)
+    } else {
+        colors.mat.weft
+    }
 
     Box(
         Modifier
             .width(zoneWidth)
             .aspectRatio(CARD_ASPECT)
             .clip(RoundedCornerShape(3.dp))
-            .border(
-                1.dp,
-                LocalMasterToolColors.current.mat.weft.copy(alpha = 0.6f),
-                RoundedCornerShape(3.dp),
-            ),
+            .background(Color.Black.copy(alpha = if (count == 0) 0.06f else 0.22f))
+            .border(1.dp, edge, RoundedCornerShape(3.dp))
+            .clickable { state.openPile = pile },
         contentAlignment = Alignment.Center,
     ) {
-        val shown = when (zone.kind) {
-            ZoneKind.DECK -> state.table.library.size
-            else -> count
-        }
         Text(
-            "$label\n$shown",
+            "${pile.shortLabel}\n$count",
             style = tacticalStyle(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -439,7 +474,9 @@ private fun Hand(state: SandboxState, index: CardIndex, zoneWidth: Dp, origin: O
                             id = id,
                         )
                     }
-                    .clickable { state.hold(if (heldHere) null else position) },
+                    .clickable {
+                        state.hold(if (heldHere) null else DragOrigin.Hand(position))
+                    },
             ) {
                 HandCard(id, index)
             }
