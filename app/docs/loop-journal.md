@@ -1621,3 +1621,33 @@ now break at half of what is left to draw rather than at the bottom of the page,
 so a short list sits in two balanced columns and a long one still fills the page
 and runs over. `pypdfium2` renders it; the check that it says the right things is
 `pypdf` reading the text back.
+
+---
+
+## 70 · A word on a card
+
+Every `.ydkx` the original tool ever exported carries
+`notes: { cards: {}, pairs: {} }`, and it never put anything in either. The
+placeholder has been riding around in people's files for years.
+
+`CardNotes` fills in the first half: a line written against one card, the way you
+would put a sticky note on the pile. *Only starter that plays through Ash.*
+*Second copy is for the mirror.* It is the sort of thing you know while you are
+building and have forgotten by the time you are siding, which is exactly when it
+is worth having.
+
+By passcode, so it belongs to the card and not to a position — all three copies
+carry it, and cutting one does not take it away. That is the opposite of how
+`Breaks` works, for the opposite reason: a gap is about the layout, a note is
+about the card.
+
+Two decisions worth their comments. Blank *removes* rather than stores, so
+clearing the box is how you delete a note and there is no second gesture to hunt
+for. And notes are not swept when a card leaves the deck: taking the last copy
+out and putting it back is something that happens constantly while building, and
+a note that did not survive that is a note nobody would trust.
+
+The codec is the payload rule one level down. The object under `notes` also
+carries `pairs`, so writing `notes` wholesale would delete it — the same argument
+as the top-level merge and easier to get wrong, because the key being preserved
+looks like one we own rather than like somebody else's unknown.
