@@ -183,7 +183,9 @@ that *say* it instead.
 
 Gaps: push the piles apart. A deck's order is yours and nothing sorts it without
 being asked, but an order alone cannot say *these nine are the engine and those
-six are the handtraps* — so put a gap between them from a card's long-press menu.
+six are the handtraps* — so put a gap between them from a card's long-press menu
+or with `g`. In a pane the gap is a mark, so every card stays the same size; in
+the full-deck view the groups separate onto their own rows.
 The tidies draw their own, so "group by type" separates the groups it made. Gaps
 travel with the file in its `#ydkx-extended` payload, and they survive being
 built around: append, cut, drag a card across one, and they stay where they mean.

@@ -1295,6 +1295,27 @@ The test that pins it is the one that would have caught the original bug — the
 two sets of ids are provably distinct, so a card played in front of you can never
 appear across from you.
 
+## 60. The prototype that overruled the reasoning
+
+The gaps in a deck pane were drawn by taking nine points out of the width of the
+card at the break — the card gives up the space rather than the pane growing, so
+nothing reflows. That reasoning is sound and I wrote it into the commit message.
+
+Then I prototyped it at real card size and looked at it, and it is wrong. A grid
+where one card is narrower than the others reads as a fault long before it reads
+as a gap. It is obvious in the screenshot and it was not obvious in the argument.
+
+So the pane *marks* the arrangement and the showcase *shows* it. In the pane every
+card stays exactly the size of every other card, and a group is called out by a
+bar with serifs standing between two of them — the same shape the drop mark uses,
+because at zero gutter a bare line against a card edge reads as part of the card.
+In the showcase, where a deck is looked at rather than worked on, the groups
+genuinely separate onto their own rows.
+
+The two views are doing different jobs and it is right that they say it
+differently. That is a better answer than the one I set out with, and I would not
+have got to it by thinking harder — only by rendering it and looking.
+
 ---
 
 ## Where this stands

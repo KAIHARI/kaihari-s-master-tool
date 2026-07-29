@@ -59,7 +59,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -416,32 +416,52 @@ private fun DeckSectionPane(
  * second gesture nobody would find.
  */
 /**
- * The gap a player pushed between two piles.
+ * The gap a player pushed between two piles, drawn where the work happens.
  *
- * Drawn as space rather than as a line with space around it — the space *is* the
- * separation, and a card that has been pushed aside reads as pushed aside. The
- * hairline in it is there because at zero gutter a gap of eight points could
- * otherwise be mistaken for the grid breathing.
+ * A rule, and no space at all. The first version took the space out of the card's
+ * own width, on the reasoning that a card pushed aside should read as pushed
+ * aside — and a prototype at real card size showed why that is wrong: the card at
+ * the gap ends up visibly narrower than its neighbours, and a grid where one card
+ * is a different size reads as a fault long before it reads as a gap.
  *
- * The card gives up the width rather than the pane growing, so a section with
- * gaps in it holds the same number of cards per row as one without. Nothing
- * reflows when a gap is drawn, which is the difference between marking up an
- * arrangement and rearranging it.
+ * So the pane *marks* the arrangement and the showcase *shows* it. Every card
+ * here stays the size of every other card, and a group is called out by a line
+ * standing between two of them; over in the showcase, where a deck is looked at
+ * rather than worked on, the groups genuinely separate onto their own rows. The
+ * two views are doing different jobs and it is right that they say it differently.
+ *
+ * Bar and serifs rather than a plain line, which is the same shape the drop mark
+ * uses a few hundred lines up — at zero gutter a bare line against a card edge
+ * reads as part of the card.
  */
-private fun Modifier.groupStart(accent: Color): Modifier = this
-    .drawBehind {
-        val x = GROUP_GAP.toPx() / 2f
+private fun Modifier.groupStart(accent: Color): Modifier = this.drawWithContent {
+    drawContent()
+
+    val x = GROUP_RULE / 2f * density
+    val serif = GROUP_SERIF * density
+    val stroke = GROUP_RULE * density
+
+    drawLine(
+        color = accent,
+        start = Offset(x, 0f),
+        end = Offset(x, size.height),
+        strokeWidth = stroke,
+        cap = StrokeCap.Square,
+    )
+    listOf(0f, size.height).forEach { y ->
         drawLine(
-            color = accent.copy(alpha = 0.55f),
-            start = Offset(x, size.height * 0.10f),
-            end = Offset(x, size.height * 0.90f),
-            strokeWidth = 1.5.dp.toPx(),
-            cap = StrokeCap.Round,
+            color = accent,
+            start = Offset(x, y),
+            end = Offset(x + serif, y),
+            strokeWidth = stroke,
+            cap = StrokeCap.Square,
         )
     }
-    .padding(start = GROUP_GAP)
+}
 
-private val GROUP_GAP = 9.dp
+/** Drawn over the card, so it costs no width at all. */
+private const val GROUP_RULE = 2.5f
+private const val GROUP_SERIF = 6f
 
 @Composable
 private fun DeckCard(
