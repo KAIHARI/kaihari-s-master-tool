@@ -107,7 +107,13 @@ class SandboxState(private val nowMs: () -> Long = SystemClock) {
     /** Which stack is open for looking through, if any. */
     var openPile by mutableStateOf<Pile?>(null)
 
-    /** Which zone the last card landed in, for a moment of confirmation. */
+    /**
+     * The zone the last card landed in.
+     *
+     * Lit until the next thing happens rather than for a set time — a board
+     * being built one card at a time is a board where "the last one" keeps
+     * moving, and that is exactly what is worth pointing at.
+     */
     var justPlaced by mutableStateOf<ZoneId?>(null)
         private set
 

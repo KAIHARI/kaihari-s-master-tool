@@ -477,7 +477,11 @@ private fun DeckCard(
     val selecting = state.selection.section == section && !state.selection.isEmpty
 
     if (card == null) {
-        UnknownCardTile(id)
+        // Still carries the modifier the grid gave it. Without that, a deck in
+        // the first seconds after an import -- when every card is unknown --
+        // would lose its gaps and its placement animation, and then have them
+        // appear as the pool arrived.
+        UnknownCardTile(id, modifier)
         return
     }
 
@@ -926,9 +930,9 @@ private fun MenuHeading(text: String) {
  * what the validator names in the matching error.
  */
 @Composable
-private fun UnknownCardTile(id: CardId) {
+private fun UnknownCardTile(id: CardId, modifier: Modifier = Modifier) {
     Box(
-        Modifier
+        modifier
             .aspectRatio(CARD_ASPECT_RATIO)
             .clip(RoundedCornerShape(CARD_CORNER))
             .background(MaterialTheme.colorScheme.surfaceVariant)

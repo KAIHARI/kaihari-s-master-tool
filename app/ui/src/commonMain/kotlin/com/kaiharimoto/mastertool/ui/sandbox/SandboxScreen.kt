@@ -247,9 +247,9 @@ private fun AcrossTheTable(zoneWidth: Dp) {
 /**
  * The stacks down the sides, where they are on a mat.
  *
- * Extra deck and graveyard on the row you are summoning into, deck and banished
- * below — near enough to the real thing that muscle memory finds them, and every
- * one of them opens.
+ * Extra deck and graveyard flank the row you summon into; the field spell zone
+ * and the deck flank the one below. Near enough to a real mat that muscle memory
+ * finds them, and every stack opens.
  */
 @Composable
 private fun Flank(
