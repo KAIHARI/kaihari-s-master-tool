@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.data.DeckVersion
 import com.kaiharimoto.mastertool.core.deck.DeckDiff
@@ -88,6 +89,8 @@ fun HistorySheet(
                 if (versions.isEmpty()) deckName else "$deckName  ·  ${versions.size} kept",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 6.dp),
             )
 

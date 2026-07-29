@@ -297,9 +297,14 @@ private fun DeckCard(
                         Icon(Icons.Filled.Close, contentDescription = "Keep the old name")
                     }
                 } else {
+                    // One line. Tiles sit in a grid and a wrapped name makes
+                    // one of them taller than the rest, which reads as that
+                    // deck being different rather than as its name being long.
                     Text(
                         stored.entry.name,
                         style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = { renaming = true }) {

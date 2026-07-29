@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.layout.DealAnimation
 import com.kaiharimoto.mastertool.core.layout.GridFitter
@@ -403,8 +404,18 @@ private fun Caption(state: DeckBuilderState, total: Int, mat: MatColors) {
             // on cloth lighter than the application is wearing, and a caption
             // coloured for the theme would then be writing on nothing.
             color = mat.ink,
+            // A deck name is typed by hand and people put the event and the
+            // version in it. Unbounded it took the whole row and pushed the
+            // counts off the end -- the counts this view already reserves a
+            // strip at the bottom for. It yields instead: the counts are short,
+            // fixed and the thing somebody is checking.
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            // The name takes the room rather than a spacer taking half of it:
+            // weighted against a flexible gap it would have been cut at the
+            // halfway mark on a row with space to spare.
+            modifier = Modifier.weight(1f).padding(end = 12.dp),
         )
-        Box(Modifier.weight(1f))
         // Says so when most of what is on screen is an empty slot, because
         // "your card database has not arrived yet" and "this program cannot
         // draw your deck" look identical otherwise.
