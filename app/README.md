@@ -198,5 +198,12 @@ whether the side deck is working, and stays quiet until there are enough hands
 to say. A run survives siding, because that is what it measures; it ends the
 moment you change which sixty cards you brought.
 
-Not yet built: siding for the *opponent* between games, the sandbox board
-simulator, and PDF export of a siding sheet.
+Sandbox: lay the opening out on a board and see whether it assembles into
+anything. The table folds — the far half tips away, the near half toward you,
+hinged on the shared zones between them. The way you let go of a card says which
+way it faces: drop it and it stands up in attack, flick it sideways and it lies
+down in defence, hold it a moment first and it goes face-down. Undo puts the
+whole table back, hand and deck included.
+
+Not yet built: siding for the *opponent* between games, the Extra deck as
+somewhere to summon from, and PDF export of a siding sheet.

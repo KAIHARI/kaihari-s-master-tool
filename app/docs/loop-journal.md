@@ -916,12 +916,93 @@ hand looks good and only then judging it is how a sample stops meaning anything,
 and a run is nothing but its sample. Loose judging still offers it, because
 there it costs nothing.
 
+## 46. The board, and the one rule a sandbox has to know
+
+The deck builder can say a list opens. It cannot say the opening *does*
+anything, and nobody works that out by reading forty lines of text — they lay
+the cards out. So: somewhere to lay them out.
+
+The table is one value rather than three, because every operation moves a card
+between the board, the hand and the deck, and none of them means anything alone.
+That is also what makes undo a stack of whole tables instead of a stack of
+inverse operations. The original needed a command factory for this. A table is a
+dozen cards and copying one is free.
+
+It knows a card cannot be in two places at once and that a monster zone holds one
+monster. It knows nothing else — a sandbox that enforced summoning restrictions
+would be a sandbox nobody could use to check the thing they were unsure about.
+Decking out is not an error either; it is there being nothing left to draw. The
+one rule of the game it does have to know is that the Extra deck is not something
+you draw.
+
+One trap worth naming: a *refused* drop must not push an undo snapshot. It would
+make the next undo do nothing at all, which reads as undo being broken rather
+than as the drop having been refused.
+
+## 47. Prototyped twice before a line of Compose
+
+The fold is the part worth getting right and it comes from the original: the far
+half tips away, the near half tips toward you, hinged on the Extra Monster Zone
+row between them. It is not decoration. A flat overhead grid is a spreadsheet of
+a board; tipping it means your cards face you and theirs recede, which is what
+sitting across a table looks like.
+
+The first browser prototype was too flat to read at all — the rotation was there
+and simply did not register. The second broke: translating the halves in Z inside
+a shared perspective pushed one of them out of the frame entirely. The third
+worked, and only because everything sits in one perspective container with one
+rotation each and no Z tricks at all.
+
+Which turned out to be exactly what Compose can express. There is no
+`transform-style: preserve-3d` — a rotated parent flattens its children before
+they rotate themselves — so a half has to be one rigid plane. That is the right
+model anyway.
+
+One number in the whole screen is unverified: the camera distance. Its units are
+density-relative rather than the CSS pixels the prototype used, and there is no
+screen here to look at. Erring long costs a little depth; erring short would bend
+the far row into something unreadable, so it errs long. It is marked in the code
+as the thing a real screen has to confirm.
+
+## 48. The way you let go says which way the card faces
+
+Nothing asks. Drop a card and it stands up in attack; flick it sideways as you
+release and it lies down in defence; hold it a moment first and it goes
+face-down. The gesture is the card turning ninety degrees, which is what it
+means.
+
+The thresholds were never the hard part — they came from the original's own drop
+handler. Deciding *which movement* they apply to is. A card carried from the hand
+to the far spell zone has travelled a long way and means nothing by it, and a
+careful drag takes longer than a hold, so measuring either from the start of the
+drag turns every drop into a set card.
+
+Two things came out of testing it that would never have come out of writing it.
+
+Stillness has to be measured to the *release*, not to the last pointer event: a
+hand that has stopped sends nothing at all, so the silence is the entire hold.
+And sub-pixel jitter under a fingertip must not count as movement, or holding
+would be impossible on a touchscreen.
+
+Then the window length, which took three goes. One window cannot do it. A card
+brought quickly down and then flicked reads as a plain drop over ninety
+milliseconds, because the approach is vertical and drowns the flick; shortening
+the window loses the slower flick, which is the one most people make. Two
+windows, and a flick in either counts. The first pair was 45 and 90, and 45 was
+still wrong — at sixty frames a second it holds two samples, so a flick in it is
+a single interval, which landed exactly on the distance threshold and fell either
+side of it depending on nothing at all. Sixty and ninety.
+
+That last one is the clearest case yet for why the arithmetic lives in `:core`
+behind tests. It is a bug you could only find by playing with a tablet for an
+hour, and there is no tablet here.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **576 tests**, up from 249, plus
-**114 in `:ui`** where there were none — a module that cannot even be compiled in
+`:core` carries the arithmetic for all of it, at **630 tests**, up from 249, plus
+**135 in `:ui`** where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
 Still open, in the order they are worth doing:
@@ -931,9 +1012,9 @@ which version dealt each hand (sections 43-45). The deck across the table never
 changes — which is the half of a real match still missing, and the reason their
 turn-two board looks the same in game three as in game one.
 
-**The sandbox board.** Where the best idea in the original lives: the gesture
-*is* the orientation — quick drop is attack, a horizontal flick is defense, a
-hold is face-down. Nothing on the market does this.
+**The rest of the board.** It deals, lays cards out, turns them and undoes
+(sections 46-48). Still missing: the Extra deck as somewhere to summon *from*,
+counters and tokens, and a way to look through a pile rather than only count it.
 
 **PDF export of a siding sheet.** The original's actual deliverable. Needs a PDF
 writer that resolves from Maven Central; spike before committing to it.

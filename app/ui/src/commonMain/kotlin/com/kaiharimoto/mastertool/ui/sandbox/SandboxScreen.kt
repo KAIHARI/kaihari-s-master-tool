@@ -53,12 +53,12 @@ import com.kaiharimoto.mastertool.core.board.ZoneId
 import com.kaiharimoto.mastertool.core.board.ZoneKind
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.search.CardIndex
-import kotlin.math.roundToInt
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.theme.LocalMasterToolColors
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.tableSurface
 import com.kaiharimoto.mastertool.ui.theme.tacticalStyle
+import kotlin.math.roundToInt
 
 /**
  * The board, folded.

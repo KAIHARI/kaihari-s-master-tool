@@ -66,7 +66,7 @@ class DragTrailTest {
     fun aFlickRightAtTheEndOfAFastApproachIsAlsoRead() {
         // The one that needed a second window. Over ninety milliseconds this
         // path is mostly vertical -- the approach drowns the flick -- and it
-        // reads as an ordinary drop. Over forty-five it is plainly sideways.
+        // reads as an ordinary drop. Over sixty it is plainly sideways.
         val (trail, now) = trail(
             0f to 0f,
             0f to 40f,
@@ -140,7 +140,7 @@ class DragTrailTest {
         val trail = DragTrail.EMPTY.at(400f, 0f, 1_000)
 
         assertEquals(Drift.NONE, trail.drift(1_000), "one point has not moved from anywhere")
-        assertEquals(Drift.NONE, trail.drift(1_000, windowMs = 45))
+        assertEquals(Drift.NONE, trail.drift(1_000, windowMs = 60))
         assertEquals(Placement.ATTACK, trail.placementOnRelease(1_000))
     }
 }

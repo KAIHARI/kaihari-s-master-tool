@@ -89,8 +89,13 @@ data class DragTrail(val points: List<TrailPoint> = emptyList()) {
          * The short one catches a flick made right at the end of a fast
          * approach; the long one catches a slower flick that a short window
          * would see only part of.
+         *
+         * Sixty rather than forty-five because at sixty frames a second the
+         * shorter window holds two samples, and two samples of a flick is one
+         * interval — which lands right on the distance threshold and falls
+         * either side of it depending on nothing.
          */
-        val WINDOWS = listOf(45L, 90L)
+        val WINDOWS = listOf(60L, 90L)
 
         /** Longer than a hold, so a hold is always still inside what is kept. */
         const val MEMORY_MS = 600L
