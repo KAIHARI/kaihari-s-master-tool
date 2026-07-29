@@ -1316,12 +1316,42 @@ The two views are doing different jobs and it is right that they say it
 differently. That is a better answer than the one I set out with, and I would not
 have got to it by thinking harder — only by rendering it and looking.
 
+## 61. Small things found by looking at what was already there
+
+No new feature this round, and three things worth more than one.
+
+**A run and the deck across the table had a boundary each way that nobody set.**
+Starting a run against a deck left sided from a previous one puts a game-two
+board across the table for game one and says nothing about it; abandoning a run
+mid-trial leaves their deck sided while loose judging carries on, and loose
+judging says nothing about which version of anything it is looking at. Both are
+one line, and neither was visible from inside either feature — they only exist
+where the two meet.
+
+**The README had been wrong about siding for days.** It still carried a note
+saying the app does not implement siding *yet* and therefore round-trips the
+extended payload untouched — two entries about the same block of JSON, one of
+them stale. The plan for this loop said to keep that file true as behaviour
+changed, and it had quietly stopped being true. Folded into the entry that was
+right, which now also names the third thing written in there.
+
+**Closing every gap at once had no button.** The state could do it and the sort
+path used it, so a section whose grouping had gone stale meant toggling gaps off
+one at a time. It belongs with the tidies rather than the sorts, because taking
+the gaps away leaves every card exactly where it is.
+
+And one addition that is only a few lines but finishes something: the drag had a
+haptic when a card was lifted and none when it landed, so the gesture was felt at
+one end and not the other. It fires only on a drop that was accepted — a refused
+drop is a card going back where it came from, and a buzz there would be the
+program agreeing with something it had just refused.
+
 ---
 
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **679 tests**, up from 249, plus
-**182 in `:ui`** where there were none — a module that cannot even be compiled in
+**184 in `:ui`** where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
 Still open, in the order they are worth doing:
