@@ -1049,15 +1049,96 @@ in the room it is a red squiggle; here it is four minutes and a round trip, and
 the rule that follows is to name the argument or append the parameter, never
 insert it.
 
+## 51. Gaps, because that is what hands do to a pile
+
+The thing the person who asked for this called most important: *the free order of
+cards is how the player sees their own deck, like an art form.* The order has
+been theirs since the first day of this loop — nothing sorts without being asked.
+But an order alone cannot say *these nine are the engine and those six are the
+handtraps*, and on a table that is said by pushing the piles apart.
+
+So a gap. Not a card, not a label, not a folder — space, which is what hands
+actually do, and which costs nothing to ignore. Stored as positions rather than
+anchored to cards, because a gap belongs to the layout and not to anything in it:
+anchoring one to "before the second Ash Blossom" would move it when a copy is
+cut, which is not what anybody drew it to mean.
+
+Drawn as space too. The card at a gap gives up nine points of its own width, so a
+section with gaps holds the same number of cards per row as one without and
+nothing reflows — which is the whole difference between marking up an arrangement
+and rearranging it. There is a hairline in the space only because at zero gutter
+nine points could be mistaken for the grid breathing.
+
+The tidies produce them, which is what makes the feature findable without being
+explained: group by type, and the groups are pushed apart. Except gathering
+copies, where forty cards would become twenty gaps — that says nothing and looks
+like a fault. A sort takes them away, because a sort decides the whole order from
+one property and the arrangement the gaps described is gone.
+
+They go out in the `#ydkx-extended` payload and come back with the file. A plain
+`.ydk` has nowhere to put them, which is fine: opened anywhere else it is exactly
+the same deck, and a file that loses its gaps still opens.
+
+## 52. Reading the edit instead of being told about it
+
+The hard part was never drawing a gap. It was keeping one in the right place
+while a deck is built around it.
+
+The obvious design has every edit report its own index — add, remove, drop,
+drag-out, siding, undo, import — and every one of them remember to. Nine places
+to keep in step, in a module that cannot be compiled here, and the one that
+forgot would leave a gap silently pointing at the wrong card.
+
+So the gaps read the edit off the before and after instead, from inside the one
+place a deck is ever assigned. There is nothing to keep in step with. It only has
+to recognise the three things a person actually does — something arrived,
+something left, something moved — and a change it cannot read as one of those
+leaves the gaps alone rather than throwing them away. That is the recoverable
+failure of the two: a gap in an odd place is one tap from being moved, and a
+deleted gap is gone.
+
+Two edges found by writing the tests. A gap whose group loses its last card has
+to come along with the card that moved up, or the two groups silently run
+together. And a card dropped exactly *on* a gap has to join the group before it —
+either answer is defensible, but that is the one that makes appending to the end
+of a section free, and appending is most of what happens to a deck.
+
+## 53. Two red builds, and the third lint
+
+Both from the same cause: writing Compose without a compiler and paying four
+minutes to find out.
+
+The first was a parameter inserted into the middle of a signature. Nothing about
+that is loud — every positional caller silently rebinds, and here that meant
+handing a random number generator to something expecting an opening hand. The
+rule that follows is to name the argument or append the parameter, never insert
+it.
+
+The second was worse and is now impossible: a block of new members went in
+between a property and its `private set`, leaving the accessor dangling after an
+unrelated function. That one is mechanically detectable, so `check-accessors.py`
+detects it — a lone accessor must never follow a closing brace. Confirmed by
+putting the bug back and watching it fire, which is the only way to know a lint
+works.
+
+Third lint in this loop, all three written the moment a mistake proved they were
+worth having, none of them clever. The environment cannot give me a compiler, so
+the answer is to keep taking the specific mistakes it lets through and closing
+them one at a time.
+
 ---
 
 ## Where this stands
 
-`:core` carries the arithmetic for all of it, at **634 tests**, up from 249, plus
-**152 in `:ui`** where there were none — a module that cannot even be compiled in
+`:core` carries the arithmetic for all of it, at **682 tests**, up from 249, plus
+**162 in `:ui`** where there were none — a module that cannot even be compiled in
 the environment this was written in.
 
 Still open, in the order they are worth doing:
+
+**Gaps by keyboard and by drag.** They are placed from the long-press menu
+(sections 51-52). Dragging a gap along, and a shortcut for the card under the
+cursor, are both natural and neither is built.
 
 **Siding for the opponent, between games.** A run sides *your* deck and records
 which version dealt each hand (sections 43-45). The deck across the table never
