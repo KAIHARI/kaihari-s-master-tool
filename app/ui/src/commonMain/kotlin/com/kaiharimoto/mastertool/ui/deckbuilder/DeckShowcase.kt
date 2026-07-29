@@ -139,6 +139,7 @@ fun DeckShowcase(state: DeckBuilderState, onDismiss: () -> Unit) {
         if (blocks.isNotEmpty()) {
             SavePicture(
                 onClick = { scope.launch { state.exportPicture(capture.png()) } },
+                mat = mat,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(MARGIN),
             )
         }
@@ -230,7 +231,7 @@ private fun ShowcaseContents(
  * a pointer finds it.
  */
 @Composable
-private fun SavePicture(onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SavePicture(onClick: () -> Unit, mat: MatColors, modifier: Modifier = Modifier) {
     val colors = LocalMasterToolColors.current
     val interactions = remember { MutableInteractionSource() }
     val hovered by interactions.collectIsHoveredAsState()
@@ -241,7 +242,10 @@ private fun SavePicture(onClick: () -> Unit, modifier: Modifier = Modifier) {
         modifier
             .clip(RoundedCornerShape(3.dp))
             .border(1.dp, colors.accent.copy(alpha = 0.5f * lit), RoundedCornerShape(3.dp))
-            .background(Color.Black.copy(alpha = 0.3f * lit))
+            // Backed against the cloth rather than always in black: the mat is
+            // the deck's now, so a light one would otherwise get a black tab
+            // with writing on it nobody can read.
+            .background(backingFor(mat).copy(alpha = 0.3f * lit))
             .hoverable(interactions)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
@@ -249,10 +253,21 @@ private fun SavePicture(onClick: () -> Unit, modifier: Modifier = Modifier) {
         Text(
             "SAVE A PICTURE",
             style = tacticalStyle(),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = lit),
+            color = mat.ink.copy(alpha = lit),
         )
     }
 }
+
+/**
+ * Something for the tab to sit on, taken from which way the cloth runs.
+ *
+ * Light ink means a dark mat, which wants a darker tab under lighter writing;
+ * dark ink means the opposite. Read off the ink rather than the base colour
+ * because the ink is already the answer to "which way does this cloth run" —
+ * asking the base again is a second chance to disagree with it.
+ */
+private fun backingFor(mat: MatColors): Color =
+    if (mat.ink.red + mat.ink.green + mat.ink.blue > 1.5f) Color.Black else Color.White
 
 /** One line of cards, and whether a gap falls above it. */
 private class ShowcaseRow(

@@ -1835,3 +1835,11 @@ was drawn next to the dark ones instead of being reasoned about.
 The bone swatch also came out shouting, because the weave was tuned by looking at
 bare cloth. It is drawn *behind* the cards and only really shows at the margins,
 so the warp came down by a third.
+
+**And the same mistake once more, in the corner.** The showcase's save tab was
+black-backed with theme-coloured writing. It sits *over* the mat, so on the bone
+cloth it would have been a black tab with invisible text in it — exactly the bug
+the caption had, in the one place the caption is not. It now takes both its
+backing and its ink from the cloth, and which way the cloth runs is read off the
+ink rather than off the base colour, because the ink is already the answer to
+that question and asking the base again is a second chance to disagree with it.
