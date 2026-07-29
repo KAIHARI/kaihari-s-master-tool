@@ -202,6 +202,7 @@ class DeckBuilderState(
      * rather than removing a copy from the deck.
      */
     var selection by mutableStateOf(Selection.EMPTY)
+        private set
 
     /**
      * Where the player has pushed the piles apart, per section.
@@ -248,7 +249,6 @@ class DeckBuilderState(
         if (section !in breaks) return
         breaks = breaks - section
     }
-        private set
 
     var deckName by mutableStateOf("Untitled Deck")
         private set
