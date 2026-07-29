@@ -1434,3 +1434,29 @@ a table shows up here rather than as a file that opens nowhere.
 Next: a binary path out of the app — `DeckFileAccess` only speaks strings today,
 which is exactly why the PDF had to be all-ASCII — and then capturing the
 showcase into pixels.
+
+---
+
+## 64 · The door out only spoke text
+
+`DeckFileAccess` had `exportDeck(name, content: String)` and `shareDeck` the
+same, which is why the PDF writer keeps its whole output inside ASCII: the siding
+sheet rides the decklist's export, and anything binary would not survive being
+decoded and re-encoded on the way. That was a fine constraint for a PDF. It is
+not one a picture can meet.
+
+So the interface takes bytes and a type, and two extension functions keep every
+existing caller reading exactly the way it did. The PDF now goes out as
+`application/pdf` rather than as text pretending — which on Android is the
+difference between a share sheet offering *post this* and offering *attach this
+to an email*.
+
+Android's `CreateDocument` contract fixes its type at registration, so it is now
+registered with a wildcard and the picker takes the type from the suggested name
+instead. Three different kinds of file leave by that door now.
+
+The ASCII property in the PDF writer stays, and so does its test — it is still
+what makes "string length" and "byte offset" the same number in the
+cross-reference table. Only the *reason given for it* was wrong, and a comment
+that explains a constraint by pointing at something that has since moved is worse
+than no comment.

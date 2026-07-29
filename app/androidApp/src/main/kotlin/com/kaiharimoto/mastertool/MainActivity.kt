@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
 
     private var pendingImport: CompletableDeferred<ImportedFile?>? = null
     private var pendingExport: CompletableDeferred<Boolean>? = null
-    private var pendingExportContent: String? = null
+    private var pendingExportContent: ByteArray? = null
 
     private val openDocument =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -31,8 +31,12 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
             deferred?.complete(uri?.let(::readDeckFile))
         }
 
+    // Registered with a wildcard rather than a type: three different kinds of
+    // file leave by this door now -- a decklist, a siding sheet and a picture of
+    // the deck -- and the contract fixes its type at registration. The picker
+    // takes the type from the suggested name's extension instead.
     private val createDocument =
-        registerForActivityResult(ActivityResultContracts.CreateDocument(MIME_TYPE)) { uri ->
+        registerForActivityResult(ActivityResultContracts.CreateDocument(ANY_TYPE)) { uri ->
             val deferred = pendingExport
             val content = pendingExportContent
             pendingExport = null
@@ -40,7 +44,7 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
 
             val written = if (uri != null && content != null) {
                 runCatching {
-                    contentResolver.openOutputStream(uri)?.use { it.write(content.toByteArray()) }
+                    contentResolver.openOutputStream(uri)?.use { it.write(content) }
                 }.isSuccess
             } else {
                 false
@@ -82,30 +86,37 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
         return deferred.await()
     }
 
-    override suspend fun exportDeck(suggestedName: String, content: String): Boolean {
+    override suspend fun export(
+        suggestedName: String,
+        bytes: ByteArray,
+        mimeType: String,
+    ): Boolean {
         pendingExport?.complete(false)
 
         val deferred = CompletableDeferred<Boolean>()
         pendingExport = deferred
-        pendingExportContent = content
+        pendingExportContent = bytes
         createDocument.launch(suggestedName)
         return deferred.await()
     }
 
-    override suspend fun shareDeck(suggestedName: String, content: String) {
+    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) {
         val uri = withContext(Dispatchers.IO) {
             val shareDir = File(cacheDir, "shared").apply { mkdirs() }
-            val file = File(shareDir, suggestedName).apply { writeText(content) }
+            val file = File(shareDir, suggestedName).apply { writeBytes(bytes) }
             FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", file)
         }
 
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = MIME_TYPE
+            // The real type, not a placeholder: a share sheet offers a different
+            // set of applications for an image than for a document, which is the
+            // difference between "post this" and "attach this to an email".
+            type = mimeType
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_TITLE, suggestedName)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(intent, "Share deck"))
+        startActivity(Intent.createChooser(intent, "Share"))
     }
 
     // ---- helpers -----------------------------------------------------------
@@ -126,6 +137,6 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
             }
 
     private companion object {
-        const val MIME_TYPE = "text/plain"
+        const val ANY_TYPE = "*/*"
     }
 }

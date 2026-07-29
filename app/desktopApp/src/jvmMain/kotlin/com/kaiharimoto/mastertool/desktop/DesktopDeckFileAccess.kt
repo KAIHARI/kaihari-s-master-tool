@@ -33,30 +33,35 @@ class DesktopDeckFileAccess : DeckFileAccess {
         runCatching { ImportedFile(file.name, file.readText()) }.getOrNull()
     }
 
-    override suspend fun exportDeck(suggestedName: String, content: String): Boolean =
-        withContext(Dispatchers.IO) {
-            val chooser = JFileChooser().apply {
-                dialogTitle = "Export deck"
-                selectedFile = File(suggestedName)
-            }
-
-            if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {
-                return@withContext false
-            }
-
-            val target = chooser.selectedFile ?: return@withContext false
-            runCatching { target.writeText(content) }.isSuccess
+    override suspend fun export(
+        suggestedName: String,
+        bytes: ByteArray,
+        mimeType: String,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val chooser = JFileChooser().apply {
+            dialogTitle = "Export"
+            selectedFile = File(suggestedName)
         }
+
+        if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {
+            return@withContext false
+        }
+
+        val target = chooser.selectedFile ?: return@withContext false
+        // Bytes, not text: a deck file and a picture of one leave by the same
+        // door, and writing a PNG through a character encoder destroys it.
+        runCatching { target.writeBytes(bytes) }.isSuccess
+    }
 
     /**
      * Desktop has no share sheet; the closest equivalent is writing the file out
      * and revealing it in the file manager.
      */
-    override suspend fun shareDeck(suggestedName: String, content: String) {
+    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) {
         withContext(Dispatchers.IO) {
             val file = File(System.getProperty("java.io.tmpdir"), suggestedName)
             runCatching {
-                file.writeText(content)
+                file.writeBytes(bytes)
                 if (Desktop.isDesktopSupported()) {
                     val desktop = Desktop.getDesktop()
                     if (desktop.isSupported(Desktop.Action.OPEN)) {

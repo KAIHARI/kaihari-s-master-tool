@@ -48,6 +48,8 @@ import com.kaiharimoto.mastertool.core.search.Completions
 import com.kaiharimoto.mastertool.core.search.NameCompletion
 import com.kaiharimoto.mastertool.core.ydk.YdkCodec
 import com.kaiharimoto.mastertool.ui.AppDependencies
+import com.kaiharimoto.mastertool.ui.exportDeck
+import com.kaiharimoto.mastertool.ui.shareDeck
 import kotlinx.coroutines.CoroutineScope
 import kotlin.random.Random
 import kotlinx.coroutines.Job
@@ -958,7 +960,7 @@ class DeckBuilderState(
         scope.launch {
             val name = deckName.ifBlank { "Untitled Deck" }
             val sheet = SidingSheet.render(name, patterns) { index.byId(it)?.name }
-            val written = deps.fileAccess.exportDeck("$name siding.pdf", sheet.decodeToString())
+            val written = deps.fileAccess.export("$name siding.pdf", sheet, "application/pdf")
             if (written) showToast("Siding sheet written for ${patterns.size} matchups.")
         }
     }

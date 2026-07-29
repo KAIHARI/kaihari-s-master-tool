@@ -18,16 +18,42 @@ data class ImportedFile(val name: String, val content: String)
  * An interface rather than expect/actual so `:ui` stays free of platform source
  * sets: Android supplies an implementation backed by the Storage Access
  * Framework, desktop one backed by a file dialog.
+ *
+ * Bytes rather than text, because a picture of a deck is not text. The siding
+ * sheet gets away with riding a string export only because the PDF writer keeps
+ * the whole file inside ASCII on purpose; a PNG cannot, and would not survive
+ * being decoded and re-encoded on the way out. The two string helpers below keep
+ * every existing caller reading the way it did.
  */
 interface DeckFileAccess {
     /** Opens a picker. Returns null when the user cancels. */
     suspend fun importDeck(): ImportedFile?
 
-    /** Writes [content] out, letting the user choose where. */
-    suspend fun exportDeck(suggestedName: String, content: String): Boolean
+    /** Writes [bytes] out, letting the user choose where. */
+    suspend fun export(suggestedName: String, bytes: ByteArray, mimeType: String): Boolean
 
     /** Hands the file to the platform share sheet, where one exists. */
-    suspend fun shareDeck(suggestedName: String, content: String)
+    suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String)
+}
+
+suspend fun DeckFileAccess.exportDeck(suggestedName: String, content: String): Boolean =
+    export(suggestedName, content.encodeToByteArray(), mimeTypeFor(suggestedName))
+
+suspend fun DeckFileAccess.shareDeck(suggestedName: String, content: String) =
+    share(suggestedName, content.encodeToByteArray(), mimeTypeFor(suggestedName))
+
+/**
+ * What to tell the platform a file is, from what it is called.
+ *
+ * `.ydk` has no registered type and never will, so it goes out as plain text —
+ * which is what it is. The two that do have types matter: a share sheet offers a
+ * different set of applications for an image than for a document, and getting it
+ * wrong is the difference between "post this" and "attach this to an email".
+ */
+fun mimeTypeFor(name: String): String = when {
+    name.endsWith(".png", ignoreCase = true) -> "image/png"
+    name.endsWith(".pdf", ignoreCase = true) -> "application/pdf"
+    else -> "text/plain"
 }
 
 /**

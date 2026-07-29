@@ -91,23 +91,36 @@ internal fun TestScope.builderState(
 
 internal object NoFileAccess : DeckFileAccess {
     override suspend fun importDeck(): ImportedFile? = null
-    override suspend fun exportDeck(suggestedName: String, content: String) = false
-    override suspend fun shareDeck(suggestedName: String, content: String) = Unit
+    override suspend fun export(suggestedName: String, bytes: ByteArray, mimeType: String) = false
+    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) = Unit
 }
 
 /** Hands back a file instead of opening a picker, and keeps whatever was written. */
 internal class StubFileAccess(private val file: ImportedFile) : DeckFileAccess {
-    var exported: String? = null
+    var exportedBytes: ByteArray? = null
         private set
+    var exportedName: String? = null
+        private set
+    var exportedType: String? = null
+        private set
+
+    /** What was written, read back as text -- which most of it still is. */
+    val exported: String? get() = exportedBytes?.decodeToString()
 
     override suspend fun importDeck(): ImportedFile = file
 
-    override suspend fun exportDeck(suggestedName: String, content: String): Boolean {
-        exported = content
+    override suspend fun export(
+        suggestedName: String,
+        bytes: ByteArray,
+        mimeType: String,
+    ): Boolean {
+        exportedBytes = bytes
+        exportedName = suggestedName
+        exportedType = mimeType
         return true
     }
 
-    override suspend fun shareDeck(suggestedName: String, content: String) = Unit
+    override suspend fun share(suggestedName: String, bytes: ByteArray, mimeType: String) = Unit
 }
 
 internal object NoUpdater : AppUpdater {

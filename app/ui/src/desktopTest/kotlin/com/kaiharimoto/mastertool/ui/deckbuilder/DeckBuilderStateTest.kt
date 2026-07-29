@@ -727,8 +727,11 @@ class DeckBuilderStateTest {
         assertTrue("Snake-Eye" in written, "the matchup the file carries")
         assertTrue(
             written.all { it.code in 0..127 },
-            "it rides the text export, which only works while nothing is binary",
+            "the writer keeps the whole file inside ASCII, which is what makes " +
+                "string length and byte offset the same number",
         )
+        assertEquals("application/pdf", files.exportedType)
+        assertTrue(requireNonNull(files.exportedName).endsWith(".pdf"))
     }
 
     @Test
