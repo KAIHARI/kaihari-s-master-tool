@@ -1179,7 +1179,8 @@ class DeckBuilderState(
      */
     private fun keepRunIfFinished(run: ShootoutRun) {
         val stamp = runStartedAt ?: return
-        val others = testing.filterNot { it.atEpochMs == stamp }
+        val existing = testing
+        val others = existing.filterNot { it.atEpochMs == stamp }
         val kept = if (!run.finished) {
             others
         } else {
@@ -1191,6 +1192,10 @@ class DeckBuilderState(
                 atEpochMs = stamp,
             )
         }
+        // Nothing to say, and saying it anyway would say it twenty times a run.
+        // Assigning the payload is what starts the autosave clock, so an
+        // unchanged rewrite is a deck marked dirty by looking at a hand.
+        if (kept == existing) return
         extended = TestingCodec.write(extended, kept)
     }
 

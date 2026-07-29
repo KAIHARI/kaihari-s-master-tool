@@ -401,7 +401,12 @@ off the list you registered and the rest off the sided one, drawn as a score
 sheet whose two rows are the two brick rates underneath it. The report says
 whether the side deck is working, and stays quiet until there are enough hands
 to say. A run survives siding, because that is what it measures; it ends the
-moment you change which sixty cards you brought.
+moment you change which sixty cards you brought. And a finished run is kept, in
+the deck's own file: forty hands is a big enough sample to say something and more
+than anybody deals at one sitting, so three evenings of fifteen used to be three
+separate shrugs. Added up per opponent they are one answer about the deck rather
+than three about the evenings. Undoing the last verdict takes the record back
+out, because a run that is no longer finished is no longer a result.
 
 Sandbox: lay the opening out on a board and see whether it assembles into
 anything. The table is the deck's own cloth, so arriving there is not walking

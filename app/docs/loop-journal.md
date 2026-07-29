@@ -3319,3 +3319,24 @@ obviously wrong — a private top-level name is file-scoped, so putting `private
 class Set` into the shared map makes every `Set<…>` in the codebase look like a
 missing import. Five reports, instantly. That one is a comment in the regex now,
 because the next person to read it will have the same idea I did.
+
+## 123 · Saved by looking at a hand
+
+The wiring for section 121, and a defect in it found by reading my own diff
+before CI came back.
+
+`keepRunIfFinished` runs after **every** verdict, not only the last one — that is
+deliberate, and it is what makes undoing the final verdict of a finished run take
+the record back out again. Keyed on the run's own start stamp, so it is an upsert
+rather than an append: judge the last hand, undo it, judge it again, and there is
+one record rather than three.
+
+But it wrote the payload every time. Assigning `extended` is what starts the
+autosave clock — that is the whole point of the setter, and section 80 exists
+because six different places used to forget to. So a twenty-hand run marked the
+deck dirty twenty times and saved it twenty times, for a payload that was
+byte-identical nineteen of those times. A deck saved by *looking at a hand*.
+
+One line: if what would be written equals what is there, do not write. Which is
+the sort of guard that reads as belt and braces until you notice the setter it is
+guarding is the one with a side effect worth having.
