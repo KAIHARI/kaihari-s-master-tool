@@ -207,16 +207,66 @@ class DeckRepositoryTest {
     }
 
     @Test
-    fun aVersionCanBeThrownAwayOnItsOwn() = runTest {
-        decks.save("d", "Snake-Eye", deck(0))
+    fun goingBackPutsTheDeckBack() = runTest {
+        decks.save("d", "Snake-Eye", deck(1, 2, 3), notes = "before the event")
         val stamp = now
         now += 40 * HOUR
+        decks.save("d", "Snake-Eye", deck(9), notes = "after")
+
+        val back = assertNotNull(decks.restore("d", "d@$stamp"))
+
+        assertEquals(deck(1, 2, 3), back.entry.deck)
+        assertEquals("before the event", back.entry.notes)
+        assertEquals(deck(1, 2, 3), assertNotNull(decks.byId("d")).entry.deck)
+        assertEquals("Snake-Eye", back.entry.name, "the deck keeps its name and its id")
+    }
+
+    @Test
+    fun goingBackKeepsTheAfternoonYouAreLeaving() = runTest {
+        // The reason there is no confirmation on it.
+        decks.save("d", "Snake-Eye", deck(1, 2, 3))
+        val stamp = now
+        now += 40 * HOUR
+        decks.save("d", "Snake-Eye", deck(9))
+        now += 60 * 1000
+
+        decks.restore("d", "d@$stamp")
+
+        assertTrue(decks.versions("d").any { it.deck == deck(9) }, "what you left is still there")
+    }
+
+    @Test
+    fun goingBackToWhatIsAlreadyThereDoesNothing() = runTest {
+        decks.save("d", "Snake-Eye", deck(1, 2, 3))
+        val stamp = now
+        now += 40 * HOUR
+        decks.save("d", "Snake-Eye", deck(9))
+        decks.restore("d", "d@$stamp")
+
+        val before = decks.versions("d").size
+        decks.restore("d", "d@$stamp")
+
+        assertEquals(before, decks.versions("d").size, "no version of a deck that did not change")
+    }
+
+    @Test
+    fun aVersionOfSomebodyElsesDeckIsNotGoneBackTo() = runTest {
+        decks.save("a", "Snake-Eye", deck(1))
+        val stamp = now
+        now += 40 * HOUR
+        decks.save("a", "Snake-Eye", deck(2))
+        decks.save("b", "Fiendsmith", deck(7))
+
+        assertNull(decks.restore("b", "a@$stamp"))
+        assertEquals(deck(7), assertNotNull(decks.byId("b")).entry.deck)
+    }
+
+    @Test
+    fun goingBackToAVersionThatIsNotThereChangesNothing() = runTest {
         decks.save("d", "Snake-Eye", deck(1))
 
-        decks.deleteVersion("d@$stamp")
-
-        assertEquals(emptyList(), decks.versions("d"))
-        assertNotNull(decks.byId("d"), "and the deck is untouched")
+        assertNull(decks.restore("d", "d@999"))
+        assertEquals(deck(1), assertNotNull(decks.byId("d")).entry.deck)
     }
 
     @Test
@@ -228,6 +278,44 @@ class DeckRepositoryTest {
 
         assertEquals(1, decks.versions("a").size)
         assertEquals(emptyList(), decks.versions("b"))
+    }
+
+    @Test
+    fun theListYouRegisteredCanBeKeptOnPurpose() = runTest {
+        decks.save("d", "Snake-Eye", deck(1, 2, 3))
+
+        val kept = assertNotNull(decks.keepNow("d", "regionals"))
+
+        assertEquals("regionals", kept.name)
+        assertEquals(deck(1, 2, 3), kept.deck, "the deck as it stands, not as it was")
+        assertEquals(listOf("regionals"), decks.versions("d").map { it.name })
+    }
+
+    @Test
+    fun keepingTheSameMomentTwiceIsOneVersion() = runTest {
+        decks.save("d", "Snake-Eye", deck(1, 2, 3))
+
+        decks.keepNow("d", "regionals")
+        decks.keepNow("d", "the one I actually played")
+
+        assertEquals(listOf("the one I actually played"), decks.versions("d").map { it.name })
+    }
+
+    @Test
+    fun keepingAMomentAgainDoesNotQuietlyUnnameIt() = runTest {
+        // Restoring an older version keeps the present first, and if nothing has
+        // been edited since it was named, that lands on the named row.
+        decks.save("d", "Snake-Eye", deck(1, 2, 3))
+        decks.keepNow("d", "regionals")
+
+        decks.keepNow("d")
+
+        assertEquals(listOf("regionals"), decks.versions("d").map { it.name })
+    }
+
+    @Test
+    fun keepingADeckThatIsNotThereKeepsNothing() = runTest {
+        assertNull(decks.keepNow("nope", "regionals"))
     }
 
     @Test

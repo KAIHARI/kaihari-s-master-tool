@@ -117,6 +117,32 @@ class DeckRepository(
         )
     }
 
+    /**
+     * Keeps the deck exactly as it stands, without waiting for the clock.
+     *
+     * The half of this that matters before an event: *this is the list I
+     * registered*. The automatic rule keeps a copy of what a deck was when you
+     * come back to it, which is the right default and says nothing about which
+     * moments were important — only somebody about to play knows that.
+     *
+     * Also what restoring an older version does first, so that going back can
+     * never be the thing that loses the present.
+     *
+     * Naming a moment that is already kept renames it rather than duplicating
+     * it: the id is derived from the moment, so there is only one row for it.
+     */
+    suspend fun keepNow(deckId: String, name: String? = null): DeckVersion? =
+        withContext(ioDispatcher) {
+            val row = database.deckQueries.selectById(deckId).executeAsOneOrNull()
+                ?: return@withContext null
+
+            keep(row, name?.trim()?.takeIf(String::isNotEmpty))
+            database.deckVersionQueries
+                .selectById("$deckId@${row.updatedAtEpochMs}")
+                .executeAsOneOrNull()
+                ?.let(::toVersion)
+        }
+
     /** Every version of a deck, most recent first. */
     suspend fun versions(deckId: String): List<DeckVersion> = withContext(ioDispatcher) {
         database.deckVersionQueries.selectForDeck(deckId).executeAsList().map(::toVersion)
@@ -137,8 +163,40 @@ class DeckRepository(
         database.deckVersionQueries.setName(name?.trim()?.takeIf(String::isNotEmpty), id)
     }
 
-    suspend fun deleteVersion(id: String) = withContext(ioDispatcher) {
-        database.deckVersionQueries.deleteById(id)
+    /**
+     * Puts a deck back to how it was, and keeps how it is first.
+     *
+     * There is no way to lose work with this, which is why there is no
+     * confirmation on it: going back keeps the present as a version on the way
+     * past, so the button that undoes an afternoon is also the button that undoes
+     * itself. Going back to what is already there does nothing at all rather than
+     * writing a version of the deck as it already stands.
+     *
+     * Deliberately an ordinary edit of the deck rather than a second kind of open
+     * document: the deck keeps its id, its name and its place in the library, and
+     * everything downstream — autosave, export, the file on disk — carries on
+     * without knowing this happened.
+     */
+    suspend fun restore(deckId: String, versionId: String): StoredDeck? {
+        val version = version(versionId)?.takeIf { it.deckId == deckId } ?: return null
+        val current = byId(deckId) ?: return null
+
+        if (current.entry.deck == version.deck &&
+            current.entry.notes == version.notes &&
+            current.extended == version.extended
+        ) {
+            return current
+        }
+
+        keepNow(deckId)
+
+        return save(
+            id = deckId,
+            name = current.entry.name,
+            deck = version.deck,
+            extended = version.extended,
+            notes = version.notes,
+        )
     }
 
     /**
@@ -150,11 +208,18 @@ class DeckRepository(
      * without a generator — and `INSERT OR REPLACE` makes a repeat harmless
      * rather than a crash.
      */
-    private fun keep(row: DeckEntity) {
+    private fun keep(row: DeckEntity, name: String? = null) {
+        val id = "${row.id}@${row.updatedAtEpochMs}"
+
+        // Keeping a moment that is already kept must not quietly un-name it: the
+        // id is derived from the moment, so restoring an older version right
+        // after naming the current one lands on the same row.
+        val already = database.deckVersionQueries.selectById(id).executeAsOneOrNull()?.name
+
         database.deckVersionQueries.insert(
-            id = "${row.id}@${row.updatedAtEpochMs}",
+            id = id,
             deckId = row.id,
-            name = null,
+            name = name ?: already,
             main = row.main,
             extra = row.extra,
             side = row.side,
