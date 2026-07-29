@@ -2064,6 +2064,14 @@ it. `weight(1f)` is the answer, and this is the second time in this loop that a
 layout has been wrong in a way only arithmetic about what a modifier *means*
 would catch — there is no screen here to notice it on.
 
+So it is `tools/check-row-width.py` now, the fourth of these. It reports a
+`fillMaxWidth()` whose nearest enclosing layout is a `Row` and which is written
+more than four lines after that Row's own head, because `Row(modifier =
+Modifier.fillMaxWidth())` is correct and everywhere. Swept the whole module: the
+two note sheets were the only instances, and both were mine from an hour ago.
+Verified the way the last one was — by putting the bug back and watching it
+fire.
+
 ---
 
 ## Where this stands

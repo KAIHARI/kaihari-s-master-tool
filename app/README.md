@@ -118,6 +118,13 @@ background gradient, a category, tags and the opponent's decklist there; decodin
 into a data class and encoding back would delete all of it. Editing a deck on the
 tablet must not destroy work done on the desktop.
 
+**Four scripts under `tools/` check what the compiler cannot see from here.**
+`:ui` does not build in a restricted environment, so a missing import, an
+orphaned property accessor, a test in the wrong source set or a Row child asking
+for the whole row's width all cost a CI round trip instead of a red squiggle.
+Each was written the day after making the mistake, and each was verified by
+putting the mistake back and watching it fire.
+
 **Anything that can be a number lives in `:core`.** Foil angles, autoscroll
 ramps, grid geometry, siding. `androidx` is served only from Google's Maven, so
 in a restricted environment `:core` is the only thing that compiles at all — and
