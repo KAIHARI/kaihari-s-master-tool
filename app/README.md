@@ -236,6 +236,12 @@ arrangement, the gaps, the mat, at the size it was being looked at. Every other
 builder can export a decklist image and every one of them sorts it first, which
 is a picture of a deck nobody arranged.
 
+Print the decklist a judge reads: counts rather than a line per copy, grouped by
+monsters, spells and traps the way a registration sheet has always been, with
+blanks for player, event and table. Inside each type the deck keeps its own
+order, and the two columns balance so it does not read as half a page somebody
+forgot to finish.
+
 Print the siding sheet: every matchup on paper, going first above going second,
 out on the left and in on the right, with a count on each side so an uneven swap
 cannot slip past. It is written directly rather than through a library — the

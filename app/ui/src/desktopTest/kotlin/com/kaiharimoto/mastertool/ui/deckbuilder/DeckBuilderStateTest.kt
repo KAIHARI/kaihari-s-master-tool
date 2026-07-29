@@ -856,6 +856,36 @@ class DeckBuilderStateTest {
         assertTrue(written.contains("somethingThisAppDoesNotKnow"), written)
     }
 
+    // ---- the sheet a judge reads -------------------------------------------
+
+    @Test
+    fun theDecklistGoesOutAsAPdfWithTheCardsCounted() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+        state.importFromFile()
+
+        state.exportDecklistSheet()
+        advanceUntilIdle()
+
+        val written = requireNonNull(files.exported)
+        assertTrue(written.startsWith("%PDF"), written.take(40))
+        assertTrue("MONSTERS" in written && "EXTRA DECK" in written && "SIDE DECK" in written)
+        assertTrue("PLAYER" in written, "the field somebody fills in at the venue")
+        assertEquals("application/pdf", files.exportedType)
+        assertTrue(requireNonNull(files.exportedName).endsWith("decklist.pdf"))
+    }
+
+    @Test
+    fun aDeckWithNothingInItWritesNoDecklist() = runTest {
+        val files = StubFileAccess(sidedFile)
+        val state = builderState(testDependencies(files))
+
+        state.exportDecklistSheet()
+        advanceUntilIdle()
+
+        assertEquals(null, files.exportedBytes, "a sheet of nothing is worse than no sheet")
+    }
+
     // ---- a picture of the deck ---------------------------------------------
 
     @Test

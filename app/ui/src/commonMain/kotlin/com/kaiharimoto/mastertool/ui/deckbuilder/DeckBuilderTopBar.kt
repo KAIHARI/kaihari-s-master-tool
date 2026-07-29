@@ -200,6 +200,19 @@ fun DeckBuilderTopBar(
                     leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
                     onClick = { menuOpen = false; state.shareDeck() },
                 )
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("Print the decklist…")
+                            Text(
+                                "counted and grouped by type, for a judge",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    onClick = { menuOpen = false; state.exportDecklistSheet() },
+                )
 
                 HorizontalDivider()
 

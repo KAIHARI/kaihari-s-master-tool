@@ -1589,3 +1589,35 @@ like the arrangement being lost, which is the thing this was fixing. So it moves
 forward to the next seam there is, and two gaps landing on the same seam become
 one. A gap inside the *last* run has nothing after it at all and is not drawn,
 which is the rule `Breaks` already applies at the end of a section.
+
+---
+
+## 69 · The other piece of paper
+
+The siding sheet is read by its owner, in the thirty seconds after a die roll.
+The decklist is read by somebody who has never seen the deck, is holding it up
+against the cards in a box, and needs to be able to add it up. They are almost
+opposites, and the program only had one of them.
+
+So `DecklistSheet`: counts rather than a line per copy, grouped into monsters,
+spells and traps, with blanks for player, event and table because the point of
+printing it is to fill those in at the venue. Inside each type the deck keeps its
+own order — sorting alphabetically would be marginally faster to read and would
+throw away the one thing this program exists to preserve, and a judge counts a
+block, not a name.
+
+The block that is not on any registration sheet is the one that matters most
+here: **NOT RECOGNISED**, written as the complement of the other three rather
+than as a fourth rule. A passcode the pool has never heard of still shuffles and
+still counts towards forty, and a sheet that quietly left it out would be a sheet
+that disagrees with the deck box in front of the judge. Written as a complement,
+nothing can fall between the rules — a card the database knows but does not call
+a monster, spell or trap lands there too, rather than nowhere.
+
+Rasterised and looked at, which found the thing no test would have: everything
+was in the left column and the right half of the page was blank, because the
+whole list fit vertically. It reads as a form somebody forgot to finish. Columns
+now break at half of what is left to draw rather than at the bottom of the page,
+so a short list sits in two balanced columns and a long one still fills the page
+and runs over. `pypdfium2` renders it; the check that it says the right things is
+`pypdf` reading the text back.

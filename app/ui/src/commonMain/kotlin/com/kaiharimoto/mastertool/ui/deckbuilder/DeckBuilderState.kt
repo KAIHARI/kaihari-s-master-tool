@@ -28,6 +28,7 @@ import com.kaiharimoto.mastertool.core.deck.SaveTracking
 import com.kaiharimoto.mastertool.core.deck.SavedSnapshot
 import com.kaiharimoto.mastertool.core.deck.ShootoutRun
 import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.export.DecklistSheet
 import com.kaiharimoto.mastertool.core.export.SidingSheet
 import com.kaiharimoto.mastertool.core.siding.SidingCodec
 import com.kaiharimoto.mastertool.core.siding.SidingDiff
@@ -962,6 +963,27 @@ class DeckBuilderState(
             val sheet = SidingSheet.render(name, patterns) { index.byId(it)?.name }
             val written = deps.fileAccess.export("$name siding.pdf", sheet, "application/pdf")
             if (written) showToast("Siding sheet written for ${patterns.size} matchups.")
+        }
+    }
+
+    /**
+     * Writes out the decklist a judge reads.
+     *
+     * A different piece of paper from the siding sheet: counts rather than a
+     * line per copy, grouped by card type, with blanks for player and event.
+     * See [DecklistSheet] for why the two disagree on nearly everything.
+     */
+    fun exportDecklistSheet() {
+        if (deck.totalCards == 0) {
+            showToast("There is no deck to write down yet.")
+            return
+        }
+
+        scope.launch {
+            val name = deckName.ifBlank { "Untitled Deck" }
+            val sheet = DecklistSheet.render(name, deck, format.name) { index.byId(it) }
+            val written = deps.fileAccess.export("$name decklist.pdf", sheet, "application/pdf")
+            if (written) showToast("Decklist written for ${deck.totalCards} cards.")
         }
     }
 
