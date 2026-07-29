@@ -125,6 +125,17 @@ somebody whose disk was full or whose folder was read-only believed they had a
 decklist and did not, and that is the one case worth a sentence. A Boolean
 conflated the two and the callers went quiet on both.
 
+**A menu wears the card's edge.** The most-pressed control in the program was
+the last piece of stock Material in it. It now takes the same three-point corner
+and the same near-black hairline every card is drawn with, and a short shadow
+instead of a wide one — a card lies on the table, a menu is held above it, and
+the only thing wrong with the default was how far above. Not *no* shadow: without
+one it reads as a hole cut into the deck. And the hairline is black rather than
+the accent, because an accent outline already means *this is selected* here. The
+palette is left to Material, since a menu item's container and its text are
+paired by the colour scheme and this is not the place to decide the contrast of
+every theme.
+
 **A shape drawn on a card scales with it; an edge does not.** The face, the
 badges and the note fold are all fractions of the card's own width, so turning
 the density up shrinks what is written on a card along with the card — at twenty

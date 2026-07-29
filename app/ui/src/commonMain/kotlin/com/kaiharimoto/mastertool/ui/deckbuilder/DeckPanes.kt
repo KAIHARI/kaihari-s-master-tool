@@ -35,8 +35,8 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import com.kaiharimoto.mastertool.ui.components.MasterToolMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -686,7 +686,7 @@ private fun DeckCard(
             )
         }
 
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        MasterToolMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             // Selection is entered from here rather than from a modifier key, so
             // it exists at all on a tablet with no keyboard.
             if (!selecting) {
@@ -892,7 +892,7 @@ private fun SectionHeader(
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = "${section.displayName} deck options")
                 }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                MasterToolMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     // Tidy first, and with the blurbs, because the difference
                     // between the two halves of this menu is the whole point: a
                     // tidy moves cards next to each other and leaves the rest of

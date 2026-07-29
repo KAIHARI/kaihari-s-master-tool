@@ -2996,3 +2996,37 @@ own database. Section 107's frame again, one step further along: it is not only
 what a program says about a thing it has not looked at, it is what a program says
 about the *thing you gave it* while it has not looked at its own. The panel says
 which of the two it is waiting on now, and the button stays down until it is not.
+
+## 113 · The last thing in the program that floated
+
+Three `DropdownMenu`s — the card's long-press menu, twice, and the toolbar's —
+were the only stock Material left in a surface that has otherwise been argued
+over line by line. The card menu is the most-pressed control in the whole
+application, and it opened as a softly rounded panel on a wide drop shadow: the
+same object every other app on the tablet opens.
+
+They go through one `MasterToolMenu` now, wearing the card's own edge — the same
+three-point corner and the same near-black hairline every card in every pane is
+drawn with.
+
+Two things came out of the prototype that the reasoning had got wrong, which is
+the third or fourth time this loop that a screenshot has overruled a paragraph.
+
+**No shadow at all was worse.** I had written the argument out — *a surface whose
+whole point is that cards lie on a table should not have things floating over
+it* — and it is a nice sentence about the wrong object. A card lies on the table;
+a menu is **held above it**, and the shadow is what says so. Flat, it read as a
+hole cut into the deck. The default was not wrong to have a shadow, only wrong
+about how far above: 3dp instead of 8.
+
+**And the hairline cannot be the accent.** It looked obvious on paper — take the
+theme's colour, hold the edge with it. On screen it reads as a *selection*,
+because an accent outline is exactly what this program puts round a card you have
+picked up. Black, like the card's printed edge, and it belongs immediately.
+
+The colour inside is left to Material, deliberately. A menu item's container and
+its text are paired by the colour scheme, and a wrapper that overrode one of them
+would be quietly deciding the contrast of all four themes — including the light
+one — from a file nobody would think to check. Contrast in this program is
+checked at build time by `CardFrameContrastTest`; a wrapper that stepped outside
+that would be a guarantee with a hole in it.
