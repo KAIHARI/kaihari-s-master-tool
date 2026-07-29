@@ -477,4 +477,47 @@ class SandboxPileTest {
     fun anEmptyTableHasNothingToShuffle() {
         assertFalse(SandboxState().canRedeal)
     }
+
+    @Test
+    fun aPileKnowsWhetherItIsSomewhereToDropACard() {
+        assertEquals(BoardLayout.graveyard, Pile.GRAVEYARD.zone)
+        assertEquals(BoardLayout.banished, Pile.BANISHED.zone)
+        assertNull(Pile.DECK.zone, "a card put back into the deck has no known position")
+        assertNull(Pile.EXTRA.zone)
+    }
+
+    @Test
+    fun aCardIsDraggedFromTheHandToTheGraveyard() {
+        val state = open()
+        val card = state.table.hand[0]
+
+        assertTrue(state.play(0, BoardLayout.graveyard, Placement.ATTACK))
+
+        assertEquals(card, state.contentsOf(Pile.GRAVEYARD).single())
+    }
+
+    @Test
+    fun aCardIsBanishedOutOfTheGraveyard() {
+        val state = open()
+        state.discard(0)
+        val card = state.contentsOf(Pile.GRAVEYARD).single()
+
+        state.holdFromPile(Pile.GRAVEYARD, 0)
+        assertTrue(state.placeHeld(BoardLayout.banished))
+
+        assertTrue(state.contentsOf(Pile.GRAVEYARD).isEmpty())
+        assertEquals(card, state.contentsOf(Pile.BANISHED).single())
+    }
+
+    @Test
+    fun aMonsterOnTheBoardIsSentToTheGraveyard() {
+        val state = open()
+        state.play(0, zone, Placement.ATTACK)
+        val card = state.board[zone].single().id
+
+        state.sendToGraveyard(zone)
+
+        assertEquals(card, state.contentsOf(Pile.GRAVEYARD).single())
+        assertTrue(state.board[zone].isEmpty())
+    }
 }

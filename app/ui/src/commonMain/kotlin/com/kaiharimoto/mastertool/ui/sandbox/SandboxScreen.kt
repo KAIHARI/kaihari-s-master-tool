@@ -188,9 +188,9 @@ private fun Half(
                 // Only your half has stacks. The deck across the table is not
                 // simulated, and drawing its graveyard would be drawing a
                 // graveyard nothing could ever put a card into.
-                Flank(state, zoneWidth, yours, position, left = true)
+                Flank(state, zoneWidth, origin, yours, position, left = true)
                 zones.forEach { zone -> Zone(state, index, zone, zoneWidth, origin) }
-                Flank(state, zoneWidth, yours, position, left = false)
+                Flank(state, zoneWidth, origin, yours, position, left = false)
             }
         }
     }
@@ -207,6 +207,7 @@ private fun Half(
 private fun Flank(
     state: SandboxState,
     zoneWidth: Dp,
+    origin: Offset,
     yours: Boolean,
     row: Int,
     left: Boolean,
@@ -222,7 +223,7 @@ private fun Flank(
         left -> Pile.BANISHED
         else -> Pile.DECK
     }
-    PileSlot(state, pile, zoneWidth)
+    PileSlot(state, pile, zoneWidth, origin)
 }
 
 /**
@@ -388,13 +389,15 @@ private fun CardBack(modifier: Modifier = Modifier) {
  * its outline whether or not anything is in it.
  */
 @Composable
-private fun PileSlot(state: SandboxState, pile: Pile, zoneWidth: Dp) {
+private fun PileSlot(state: SandboxState, pile: Pile, zoneWidth: Dp, origin: Offset) {
     val colors = LocalMasterToolColors.current
     val count = state.contentsOf(pile).size
-    val edge = if (count == 0) {
-        colors.mat.weft.copy(alpha = 0.45f)
-    } else {
-        colors.mat.weft
+    val edge = when {
+        // Most of what a combo does is send cards here, so a pile that can be
+        // dropped into says so the moment something is in the air.
+        pile.zone != null && state.over == pile.zone -> colors.accentBright
+        count == 0 -> colors.mat.weft.copy(alpha = 0.45f)
+        else -> colors.mat.weft
     }
 
     Box(
@@ -403,6 +406,9 @@ private fun PileSlot(state: SandboxState, pile: Pile, zoneWidth: Dp) {
             .aspectRatio(CARD_ASPECT)
             .clip(RoundedCornerShape(3.dp))
             .background(Color.Black.copy(alpha = if (count == 0) 0.06f else 0.22f))
+            .onGloballyPositioned { coordinates ->
+                pile.zone?.let { state.registerZone(it, coordinates.boundsInRoot().translate(-origin)) }
+            }
             .border(1.dp, edge, RoundedCornerShape(3.dp))
             .clickable { state.openPile = pile },
         contentAlignment = Alignment.Center,

@@ -51,7 +51,22 @@ enum class Pile(val label: String, val shortLabel: String) {
     DECK("Deck", "DECK"),
     EXTRA("Extra deck", "EXTRA"),
     GRAVEYARD("Graveyard", "GY"),
-    BANISHED("Banished", "BANISH"),
+    BANISHED("Banished", "BANISH");
+
+    /**
+     * The zone a card dropped here would land in, if any.
+     *
+     * The graveyard and the banished pile are places on the board and can be
+     * dropped into; the deck and the Extra deck are not, and putting a card
+     * back into either is a rare enough thing that guessing where in the deck
+     * it went would do more harm than not offering it.
+     */
+    val zone: ZoneId?
+        get() = when (this) {
+            GRAVEYARD -> BoardLayout.graveyard
+            BANISHED -> BoardLayout.banished
+            DECK, EXTRA -> null
+        }
 }
 
 data class BoardDrag(val origin: DragOrigin, val id: CardId, val faceDown: Boolean = false)
