@@ -236,6 +236,18 @@ watch the rate over a run of them.
 Tidying, which is not sorting: gather stray copies, group by type or archetype.
 Each is a stable partition, so the arrangement inside a group survives it.
 
+A decklist can arrive as text. Every list in the wild is a message, a post under
+a tournament report, a column copied out of a table — and this could open a
+`.ydk` and nothing else, which meant it could only take a list from somebody who
+already had it. Paste one in: counts in front or behind, headings or none at all,
+and the Extra deck worked out from the cards rather than from a heading that may
+not be there. It never invents a card — a name the pool cannot place is listed
+back at you rather than dropped, because sixty cards arriving as fifty-eight is
+worse than being told which two did not. What the pool offers for a near miss is
+checked rather than taken: nothing is watching sixty lines go past, and every
+line that was never a card at all still has a nearest neighbour among thirteen
+thousand.
+
 Search finds cards by name, forgivingly, and completes the name as you type it.
 When nothing is *called* what you typed, it tells you so and shows the cards
 that *say* it instead.

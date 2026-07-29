@@ -2881,3 +2881,49 @@ A deck measured through an index nobody has opened is forty cards of which none
 is a monster, none is a spell and none is a trap, with opening-hand odds
 underneath. Not alarming, the way sixty red errors are, which is precisely why it
 was the one that would have been left in.
+
+## 110 · The wrong half of the world
+
+This program could open a `.ydk` and nothing else. Which means it could only
+accept a decklist from somebody who already had this program — and almost nobody
+passes a decklist around as a file. They paste it. In a message, under a
+tournament report, out of a column on a website, off the back of a stream.
+
+`DecklistText` reads that. It is not a format, it is a family of habits, so it
+takes counts in front (`3 Ash Blossom`, `3x`, `3.`) or behind (`x3`, `(3)`), or
+none at all meaning one; skips blank lines and `#`, `//`, `!`; drops trailing
+commas; and takes the headings a registration sheet uses — monsters, spells and
+traps all meaning the Main deck, because the split inside it is by card type and
+this has the cards themselves to work that out. Most pasted lists have no
+headings at all, so the Extra deck is found from the frame rather than from a
+line that may not be there.
+
+Two things in it are worth writing down.
+
+**A card whose name starts with a number is written in exactly the shape a count
+is.** `8-Claws Scorpion`. `7 Completed`. Split those and you get eight Claws
+Scorpions. The only thing that tells a count from a name is whether the whole
+line is already a card, so the whole line is tried first — and `3 8-Claws
+Scorpion` still splits, because the whole of *that* is not one.
+
+**And it never invents a card.** The pool's own search is deliberately forgiving
+about typos, which is right when you are watching it type-ahead and can see what
+it found. Nothing is watching sixty lines go past at once, and every line that
+was never a card at all — a heading nobody recognised, a note somebody left in —
+still has a nearest neighbour among thirteen thousand names. So what the search
+offers is checked rather than taken: a text match is refused outright, since a
+card whose *description* mentions a word is not a card anybody listed, and a name
+match has to be the same name typed badly. Two edits across the whole name, or a
+prefix of at least six characters, which is what a table that truncates does to
+the long ones. `Pot of Greed` does not become `Pot of Prosperity`.
+
+What it cannot place comes back rather than being dropped, because sixty cards
+arriving as fifty-eight is worse than being told which two did not — the second
+one you can do something about.
+
+Off the frame thread, for the reason the pool search is and the shelf search now
+is: sixty lines that miss on the exact name are sixty scans of the whole pool,
+which is sixty keystrokes' worth of work in one go.
+
+Sixteen tests. All green on the first run except a call to a method I had named
+`defaultSection` and the codebase calls `requiredSection`.

@@ -311,6 +311,10 @@ fun DeckBuilderScreen(
         ShortcutHelpSheet(onDismiss = { state.helpVisible = false })
     }
 
+    if (state.pasteVisible) {
+        PasteListPanel(state)
+    }
+
     if (state.notesVisible) {
         DeckNotesPanel(state)
     }

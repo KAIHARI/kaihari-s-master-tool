@@ -55,6 +55,7 @@ import com.kaiharimoto.mastertool.core.layout.GridStep
 import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.core.search.Completions
 import com.kaiharimoto.mastertool.core.search.NameCompletion
+import com.kaiharimoto.mastertool.core.ydk.DecklistText
 import com.kaiharimoto.mastertool.core.ydk.YdkCodec
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.exportDeck
@@ -96,6 +97,7 @@ enum class Overlay {
     NOTES,
     ISSUES,
     HISTORY,
+    PASTE,
 }
 
 /** A transient message shown in the snackbar, optionally with an undo action. */
@@ -561,6 +563,7 @@ class DeckBuilderState(
         Overlay.NOTES -> notesVisible
         Overlay.ISSUES -> issuesVisible
         Overlay.HISTORY -> historyVisible
+        Overlay.PASTE -> pasteVisible
     }
 
     /**
@@ -588,6 +591,7 @@ class DeckBuilderState(
             Overlay.NOTES -> notesVisible = false
             Overlay.ISSUES -> issuesVisible = false
             Overlay.HISTORY -> historyVisible = false
+            Overlay.PASTE -> pasteVisible = false
         }
     }
 
@@ -646,6 +650,9 @@ class DeckBuilderState(
     var sidingVisible by mutableStateOf(false)
 
     var notesVisible by mutableStateOf(false)
+
+    /** The field a decklist gets pasted into. */
+    var pasteVisible by mutableStateOf(false)
 
     var testHandVisible by mutableStateOf(false)
 
@@ -2197,6 +2204,83 @@ class DeckBuilderState(
                 undo = { if (undoIfCurrent(token)) reopen(was) },
             )
         }
+    }
+
+    /**
+     * Reads a decklist somebody pasted in, and opens it as a new deck.
+     *
+     * The same door an imported file goes through, for the same reason: a whole
+     * list arriving is a new deck rather than an edit to the open one, and it
+     * comes back the same way if it was not what you meant.
+     *
+     * Resolution is exact on the name first, then the pool's own search — which
+     * is forgiving about punctuation and about a typo or two, because a list
+     * copied out of a message has been through at least one program that did not
+     * care about the quotation marks in `Maxx "C"`.
+     */
+    fun readPastedList(text: String) {
+        scope.launch {
+            // Sixty lines, each one a scan of the whole pool when the name is not
+            // exact. That is sixty times the work the search box does per
+            // keystroke, and the search box already refuses to do it here.
+            val parsed = withContext(deps.computeDispatcher) {
+                DecklistText.parse(text, ::resolvePasted)
+            }
+            apply(parsed)
+        }
+    }
+
+    /**
+     * The card a pasted line names, or null when nothing is close enough.
+     *
+     * Exact on the name first — which, normalised, is most lines, since the
+     * punctuation in `Maxx "C"` is exactly what a message loses. Then the pool's
+     * own search, but *checked*: a text match is refused outright, because a
+     * card whose description mentions a word is not a card somebody listed, and
+     * a name match has to survive [DecklistText.isTheSameName].
+     */
+    private fun resolvePasted(name: String): Card? {
+        index.byName(name)?.let { return it }
+        val outcome = index.search(name, limit = 1)
+        if (outcome.matchedText) return null
+        val candidate = outcome.cards.firstOrNull() ?: return null
+        return candidate.takeIf { DecklistText.isTheSameName(name, it.name) }
+    }
+
+    private fun apply(parsed: DecklistText.Parsed) {
+        if (parsed.deck.isEmpty) {
+            showToast("Nothing in that was a card.")
+            return
+        }
+
+        val was = openDeck()
+        releaseOpenDeck()
+        val token = pushUndo(deck)
+        deck = parsed.deck
+        registeredDeck = parsed.deck
+        dealSerial++
+        // A pasted list carries nothing but cards: no siding, no gaps, no notes,
+        // no cloth. Cleared rather than left alone, or the deck that was open
+        // would hand this one its plans.
+        deckName = "Pasted Deck"
+        deckNotes = ""
+        extended = null
+        breaks = emptyMap()
+        cardNotes = CardNotes.NONE
+        pairNotes = PairNotes.NONE
+        mat = MatChoice.DEFAULT
+
+        val lost = parsed.missing.sumOf { it.copies }
+        val note = if (lost == 0) {
+            "."
+        } else {
+            " — $lost not found: ${parsed.missing.take(3).joinToString { it.text }}" +
+                if (parsed.missing.size > 3) "…" else ""
+        }
+        showToast(
+            "Read ${deck.totalCards} cards$note",
+            undo = { if (undoIfCurrent(token)) reopen(was) },
+        )
     }
 
     /**
