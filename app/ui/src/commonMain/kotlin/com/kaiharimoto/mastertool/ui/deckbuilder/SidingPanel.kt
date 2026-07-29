@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.kaiharimoto.mastertool.ui.components.MasterToolSheet
 import com.kaiharimoto.mastertool.core.model.CardId
+import com.kaiharimoto.mastertool.core.siding.SidingHabits
 import com.kaiharimoto.mastertool.core.siding.SidingPattern
 import com.kaiharimoto.mastertool.core.siding.SidingSwap
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
@@ -87,6 +88,8 @@ fun SidingPanel(state: DeckBuilderState) {
             }
 
             Recorder(state)
+
+            Habits(state)
 
             if (patterns.isEmpty()) {
                 Text(
@@ -282,6 +285,55 @@ private fun Recorder(state: DeckBuilderState) {
             ) {
                 Text("Record")
             }
+        }
+    }
+}
+
+/**
+ * What the plans, taken together, say about the deck they side.
+ *
+ * Nobody writes a siding plan to be counted. They are written one matchup at a
+ * time, months apart — and then across eight of them two things become obvious
+ * that are invisible in any one: a card every plan cuts is a card that is in the
+ * way, and a card every plan brings in is a Side deck slot arguing to be a Main
+ * deck one.
+ *
+ * Read off plans that were already there. Nothing was tagged to produce it.
+ */
+@Composable
+private fun Habits(state: DeckBuilderState) {
+    // Keyed on the map, not on its `values` view: a collection view does not
+    // define equals, so remembering against one recomputes every pass.
+    val stored = state.sidingPatterns
+    val plans = stored.values
+    val cut = remember(stored) { SidingHabits.alwaysCut(plans) }
+    val brought = remember(stored) { SidingHabits.alwaysBroughtIn(plans) }
+    if (cut.isEmpty() && brought.isEmpty()) return
+
+    fun names(ids: List<CardId>) =
+        ids.joinToString { state.index.byId(it)?.name ?: it.value.toString() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "ACROSS ALL ${plans.size} PLANS",
+            style = tacticalStyle(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (cut.isNotEmpty()) {
+            Text(
+                "Cut in every one: ${names(cut)}. A card you never keep is not in " +
+                    "the deck, it is in the way.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (brought.isNotEmpty()) {
+            Text(
+                "Brought in for every one: ${names(brought)}. Fifteen Side deck " +
+                    "slots is the scarcest thing in a decklist.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

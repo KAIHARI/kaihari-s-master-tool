@@ -3149,3 +3149,35 @@ storing, for its own reasons, that answers a question nobody has asked it yet?
 
 Absent rather than empty when there are no pairs, because a heading over nothing
 is a feature advertising itself.
+
+## 118 · Eight plans describing a deck instead of eight matchups
+
+Section 117 ended by naming something to go looking for: *what has this program
+been storing, for its own reasons, that answers a question nobody has asked it?*
+This is the first thing found by looking on purpose rather than by accident.
+
+The siding plans. Each one is written about a matchup — this is what is sitting
+across from me, so this is what changes — one at a time, months apart. Read
+together they say two things about the *deck* that no single plan can:
+
+**A card cut in every plan is not in the deck, it is in the way.** If every
+matchup you have thought about starts by taking it out, the only games it is in
+are the ones you have not thought about.
+
+**And a card brought in for every plan belongs in the Main deck.** Fifteen Side
+deck slots are the scarcest thing in a decklist, and one of them spent on a card
+that goes in every game is a slot spent buying back a decision already made.
+
+Neither is enforced and neither is a rule. The whole value is that both are
+invisible one plan at a time and obvious across eight — which is exactly the kind
+of thing software should be doing and mostly does not, because it requires having
+kept the data for a completely different reason.
+
+Three plans is the floor. Two agreeing is a coincidence with a sample size of
+two. And a plan counts once for a card however many copies it moves and whichever
+half of the match moves them, because the question is *how many matchups treat
+this card this way* — three copies out going first and two going second is still
+one matchup that cuts it.
+
+Ten tests. All green first run, which after the last two sections is worth
+noting: the arithmetic was counting rather than probability.

@@ -239,7 +239,12 @@ search box completes the card's name.
 Siding works end to end. Plans arrive in a `.ydkx`, are applied as one undoable
 edit, and are recorded by doing them — side by hand, then keep what you did. One
 recorded by mistake can be taken back out, which matters more than it sounds: a
-plan prints on the sheet and one press applies it to the deck.
+plan prints on the sheet and one press applies it to the deck. And across enough of them
+the plans start describing the deck rather than the matchups: a card cut in every
+single plan is not in the deck, it is in the way, and a card brought in for every
+plan is a Side deck slot arguing to be a Main deck one. Nobody writes a plan to
+be counted — they are written one matchup at a time, months apart — and read
+together they say something no single one of them can.
 
 Test hands: shuffle the Main deck, judge each opening as playable or a brick, and
 watch the rate over a run of them.
