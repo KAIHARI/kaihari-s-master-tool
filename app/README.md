@@ -148,7 +148,7 @@ you can page through the results in, deck statistics with opening-hand odds, a
 deck-check panel that jumps to the card an issue names, a TCG/OCG toggle, deck
 library, YDK/YDKX import, export and share.
 
-Cards in a deck pane touch, on a mat, in one of four surfaces. They catch the
+Cards in a deck pane touch, on a mat — the deck's own, see below. They catch the
 light when you point at one, are dealt onto the table when a deck opens, and
 trail your hand on a spring while being carried. Several can be picked up and
 moved together. A pane scrolls while you hold a card over its edge, and a long
@@ -223,8 +223,9 @@ in it.
 The deck you were working on is the one that opens next time. A deck saved once
 keeps itself saved — every edit after the first save is written without being
 asked, and *edit* includes the things that are about the deck rather than in it:
-a gap moved, a note written on a card, a mat chosen. A deck that has never been saved is never written
-on its own, and the toolbar says so. Saved decks show three of their own cards
+a gap moved, a note written on a card, a mat chosen, a siding plan recorded. A
+deck that has never been saved is never written on its own, and the toolbar says
+so. Saved decks show three of their own cards
 in the library rather than only a name.
 
 Shootout: load the deck you are testing against and see both openings at once.

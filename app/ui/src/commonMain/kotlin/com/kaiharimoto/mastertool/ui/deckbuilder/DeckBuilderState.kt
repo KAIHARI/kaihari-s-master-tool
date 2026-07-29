@@ -283,6 +283,7 @@ class DeckBuilderState(
      */
     private var currentMat by mutableStateOf(MatChoice.DEFAULT)
 
+    /** See above; assigning it starts the autosave clock like the gaps do. */
     var mat: MatChoice
         get() = currentMat
         private set(value) {
@@ -308,6 +309,7 @@ class DeckBuilderState(
      */
     private var currentCardNotes by mutableStateOf(CardNotes.NONE)
 
+    /** See above; assigning it starts the autosave clock like the gaps do. */
     var cardNotes: CardNotes
         get() = currentCardNotes
         private set(value) {
