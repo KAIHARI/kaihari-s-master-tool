@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
@@ -118,6 +119,12 @@ fun HoverPreview(card: Card, note: String? = null, content: @Composable () -> Un
                             style = MaterialTheme.typography.bodySmall
                                 .copy(fontStyle = FontStyle.Italic),
                             color = MaterialTheme.colorScheme.primary,
+                            // A glance, not a read. This is a popup and a popup
+                            // cannot scroll, so an unbounded note grows it off
+                            // the screen; the whole of it is in the inspector,
+                            // which can.
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp),
                         )
                     }

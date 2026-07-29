@@ -303,6 +303,11 @@ private fun TheySideToo(state: DeckBuilderState) {
             return@Row
         }
 
+        // Says so when there are more. A downloaded list can carry eight
+        // matchups; showing four and nothing else made the other four look like
+        // they did not exist, which is a worse lie than a crowded row.
+        val hidden = (state.opponentPlans.size - MAX_OPPONENT_PLANS).coerceAtLeast(0)
+
         state.opponentPlans.values.take(MAX_OPPONENT_PLANS).forEach { plan ->
             TextButton(
                 onClick = {
@@ -314,6 +319,14 @@ private fun TheySideToo(state: DeckBuilderState) {
             ) {
                 Text(plan.deckName.ifBlank { "their plan" })
             }
+        }
+
+        if (hidden > 0) {
+            Text(
+                "+$hidden more in their file",
+                style = tacticalStyle(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

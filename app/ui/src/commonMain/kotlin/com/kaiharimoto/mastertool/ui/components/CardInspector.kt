@@ -1,5 +1,7 @@
 package com.kaiharimoto.mastertool.ui.components
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -107,7 +109,15 @@ fun CardInspector(
 
         HorizontalPager(state = pagerState) { page ->
             val card = cards[page]
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Scrolls. Card text is as long as Konami made it, and a Link
+            // monster with four conditions and a note written under it is taller
+            // than a sheet -- with no way to reach the bottom of it, on the one
+            // screen whose whole job is showing you everything about a card.
+            // The pager takes the horizontal axis and this takes the other.
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
                 CardDetailBody(
                     card = card,
                     format = format,
