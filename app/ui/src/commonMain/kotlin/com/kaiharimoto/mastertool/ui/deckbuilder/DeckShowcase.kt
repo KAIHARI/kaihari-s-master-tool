@@ -70,6 +70,18 @@ private val MARGIN = 22.dp
 /** Room set aside for the one line of writing on the screen. */
 private val CAPTION_HEIGHT = 34.dp
 
+/**
+ * Room under the deck for the one control.
+ *
+ * The fitter takes the largest cards that fit, so the deck very nearly reaches
+ * the bottom of the screen by construction — and the caption's counts are
+ * right-aligned at the end of it. Without this the save tab would sit on top of
+ * them, in the one view whose whole argument is that nothing sits on top of the
+ * deck. `BoxWithConstraints` reads its height after the padding, so reserving it
+ * here is also what tells the fitter about it.
+ */
+private val TAB_ROOM = 46.dp
+
 /** How long the whole deck takes to arrive. Slower than a pane: this is a reveal. */
 private const val REVEAL_MS = 900
 
@@ -165,7 +177,7 @@ private fun ShowcaseContents(
             return@Box
         }
 
-        BoxWithConstraints(Modifier.fillMaxSize().padding(MARGIN)) {
+        BoxWithConstraints(Modifier.fillMaxSize().padding(MARGIN).padding(bottom = TAB_ROOM)) {
             val density = LocalDensity.current
 
             // Groups are laid out on their own rows, so a section with gaps in

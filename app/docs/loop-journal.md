@@ -2105,6 +2105,29 @@ hand leaving it.
 
 ---
 
+## 88 · Two things wanted the same corner
+
+Found by reading the showcase end to end rather than by running it, which is the
+only way anything gets found in a module that does not compile here.
+
+The save tab is aligned to the bottom-right of the screen. The caption under the
+deck ends with the card counts, right-aligned. Those are the same corner. It
+would not have looked like a bug in a screenshot of an empty deck, because it
+only collides when the deck reaches the bottom — and the deck always reaches the
+bottom, by construction: `GridFitter.fitAll` takes the *largest* cards that fit,
+so the arrangement fills the height it is given almost exactly. The one view
+whose entire argument is that nothing sits on top of your deck would have had a
+button sitting on top of it.
+
+A reserved strip fixes it, and reserving it as padding on the `BoxWithConstraints`
+rather than as a margin on the tab is what makes it real: the fitter reads its
+height *after* the padding, so this is also how the fitter is told the strip
+exists. Simulating the fitter against the new height, the strip costs at most one
+column — 1600×1000 with 40/15/15 gives 15 columns at 104px, and a 60-card main
+gives 17 at 92px, the same numbers as before in every case but one.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **808 tests**, up from 249, plus
