@@ -228,7 +228,10 @@ asked, and *edit* includes the things that are about the deck rather than in it:
 a gap moved, a note written on a card, a mat chosen, a siding plan recorded. A
 deck that has never been saved is never written on its own, and the toolbar says
 so. Saved decks show three of their own cards
-in the library rather than only a name.
+in the library rather than only a name, and any of them can be held up against
+the deck you have open: what came out, what went in, three of a card becoming
+two — and, when nothing was cut at all, that the same cards are simply arranged
+differently, which this program is not going to call *no change*.
 
 Shootout: load the deck you are testing against and see both openings at once.
 Judge them loosely, or run it properly — a set number of trials with game one

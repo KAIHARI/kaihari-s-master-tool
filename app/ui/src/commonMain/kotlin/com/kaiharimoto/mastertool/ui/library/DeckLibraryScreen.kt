@@ -58,6 +58,7 @@ import com.kaiharimoto.mastertool.core.data.StoredDeck
 import com.kaiharimoto.mastertool.core.deck.DeckIdentity
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.deck.DeckLookCodec
+import com.kaiharimoto.mastertool.core.model.Deck
 import com.kaiharimoto.mastertool.core.search.CardIndex
 import com.kaiharimoto.mastertool.core.search.TextMatching
 import com.kaiharimoto.mastertool.core.util.RelativeTime
@@ -83,12 +84,16 @@ import kotlinx.coroutines.launch
 fun DeckLibraryScreen(
     deps: AppDependencies,
     index: CardIndex,
+    /** The deck in the builder, so a saved one can be held up against it. */
+    openDeck: Deck,
+    openDeckName: String,
     onOpenDeck: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var decks by remember { mutableStateOf<List<StoredDeck>>(emptyList()) }
     var reloadToken by remember { mutableStateOf(0) }
+    var comparing by remember { mutableStateOf<StoredDeck?>(null) }
 
     // Stamped when the screen opens. A clock read during composition would make
     // "3 minutes ago" change under a recomposition triggered by something else
@@ -200,10 +205,22 @@ fun DeckLibraryScreen(
                                 reloadToken++
                             }
                         },
+                        onCompare = { comparing = stored },
                     )
                 }
             }
         }
+    }
+
+    comparing?.let { stored ->
+        CompareSheet(
+            savedName = stored.entry.name,
+            saved = stored.entry.deck,
+            openName = openDeckName,
+            open = openDeck,
+            index = index,
+            onDismiss = { comparing = null },
+        )
     }
 }
 
@@ -216,6 +233,7 @@ private fun DeckCard(
     onOpen: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
+    onCompare: () -> Unit,
 ) {
     val deck = stored.entry.deck
     var renaming by remember { mutableStateOf(false) }
@@ -304,7 +322,10 @@ private fun DeckCard(
                 )
             }
 
-            TextButton(onClick = onOpen) { Text("Open") }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onOpen) { Text("Open") }
+                TextButton(onClick = onCompare) { Text("What changed…") }
+            }
         }
     }
 }

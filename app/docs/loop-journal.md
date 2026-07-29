@@ -1949,6 +1949,34 @@ new way to get wrong.
 
 ---
 
+## 84 · What did I change since last week
+
+The question every list gets asked between events, and the only way to answer it
+was to open both decks and read them side by side. `DeckDiff.between` does it in
+`:core`, and the library's tiles grew a *What changed…* next to *Open*.
+
+Three decisions, all of them about matching how the question is actually asked.
+
+**Counts, not copies.** Three Bonfire becoming two is one line saying `3 → 2`,
+not a card leaving and a card arriving. And the line shows both numbers rather
+than a signed delta, because `3 → 2` is what happened and `−1` is arithmetic
+about what happened.
+
+**Two lists, not one signed one.** *What went out, what came in.* A single list
+sorted by delta puts a card that dropped a copy next to one that arrived, which
+reads as two unrelated facts.
+
+**The same cards in a different order is not "no change".** Everything else in
+this program treats the arrangement as the player's own work; a comparison that
+reported those two decks as identical would be contradicting the rest of the
+application in the one place somebody went looking for a difference.
+
+The tests include the property worth having: a card is never in both columns. A
+count went up or it went down, and a diff that listed a card as both added and
+removed is one somebody has to reconcile by hand.
+
+---
+
 ## Where this stands
 
 `:core` carries the arithmetic for all of it, at **790 tests**, up from 249, plus
