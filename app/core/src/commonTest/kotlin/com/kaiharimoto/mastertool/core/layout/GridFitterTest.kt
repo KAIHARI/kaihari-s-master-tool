@@ -307,6 +307,21 @@ class FitAllTest {
     }
 
     @Test
+    fun theSameFortyCardsInThreeGroupsNeverNeedsFewerColumns() {
+        // What the showcase relies on. A gap puts the group after it on a fresh
+        // row, so a gapped section is taller than its card count implies -- and
+        // fitting to the section total would size the cards for a deck that packs
+        // tighter than this one does, dropping the bottom of it off the screen.
+        val ungapped = fit(listOf(40), height = 500f)
+        val gapped = fit(listOf(9, 6, 25), height = 500f)
+
+        assertTrue(
+            gapped.columns >= ungapped.columns,
+            "splitting a section into groups cannot let the cards get bigger",
+        )
+    }
+
+    @Test
     fun oneSectionAgreesWithTheOrdinaryFitter() {
         // fitAll is a generalisation, not a second implementation, and this is
         // what says so.

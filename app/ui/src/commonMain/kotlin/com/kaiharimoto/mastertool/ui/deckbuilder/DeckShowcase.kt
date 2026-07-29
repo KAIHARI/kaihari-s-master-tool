@@ -119,11 +119,23 @@ fun DeckShowcase(state: DeckBuilderState, onDismiss: () -> Unit) {
 
         BoxWithConstraints(Modifier.fillMaxSize().padding(MARGIN)) {
             val density = LocalDensity.current
-            val gaps = with(density) { (BLOCK_GAP * (blocks.size - 1) + CAPTION_HEIGHT).toPx() }
+
+            // Groups are laid out on their own rows, so a section with gaps in
+            // it needs more rows than its card count implies -- the last row of
+            // each group is usually part-full. Fitting to the section totals
+            // would size the cards for a deck that packs tighter than this one
+            // does, and the bottom of it would fall off the screen.
+            val groups = blocks.map { (section, ids) ->
+                state.breaksIn(section).groups(ids.size).map { it.count() }
+            }
+            val extraRows = groups.sumOf { (it.size - 1).coerceAtLeast(0) }
+            val gaps = with(density) {
+                (BLOCK_GAP * (blocks.size - 1) + CAPTION_HEIGHT + GROUP_SPACE * extraRows).toPx()
+            }
 
             val fit = with(density) {
                 GridFitter.fitAll(
-                    counts = blocks.map { it.second.size },
+                    counts = groups.flatten(),
                     availableWidth = maxWidth.toPx(),
                     availableHeight = maxHeight.toPx(),
                     spacing = 0f,

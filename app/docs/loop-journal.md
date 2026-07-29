@@ -1369,3 +1369,28 @@ probability; and asking the player to author both halves of a plan for a deck
 they do not own is a form nobody would fill in twice. Their deck feeds only what
 you *see* across the table — it does not enter the report at all — so the honest
 answer is to leave it alone until somebody has a better idea than these.
+
+---
+
+## 62 · A deck with gaps in it was sized as though it had none
+
+The showcase — press `V` and everything else goes away — fits the whole deck to
+the screen by asking `GridFitter.fitAll` for the fewest columns that let every
+section fit at one card size. It passed the section *totals*.
+
+That was right until gaps got their own rows in that view. A group ends its last
+row wherever it ends, so a forty-card Main split nine / six / twenty-five needs
+more rows than forty cards do, and the fitter was sizing the cards for a deck
+that packs tighter than the one on screen. The bottom of it fell off.
+
+Fixed by passing the group sizes rather than the section sizes, and by counting
+the extra inter-group spacing into the gap budget that comes off the same height.
+The property that says it stays fixed is in `:core`: the same forty cards in
+three groups never needs fewer columns than forty cards do.
+
+Worth noting how this one was found — not by a test and not in CI, which cannot
+run this screen, but by reading the call site while writing something else and
+noticing the argument no longer meant what the parameter is named. The rule that
+keeps catching things in this repo is that arithmetic in `:core` gets a test and
+arithmetic passed *into* `:core` gets read again whenever the thing feeding it
+changes shape.
