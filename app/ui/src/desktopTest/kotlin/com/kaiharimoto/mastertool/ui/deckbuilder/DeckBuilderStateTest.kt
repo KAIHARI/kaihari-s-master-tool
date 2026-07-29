@@ -1782,6 +1782,61 @@ class DeckBuilderStateTest {
         assertTrue(state.revealRequest?.flash ?: false)
     }
 
+    // ---- keeping what a run found ------------------------------------------
+
+    @Test
+    fun aFinishedRunIsKeptInTheDeckAndAnUnfinishedOneIsNot() = runTest {
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+
+        state.startRun(trials = 1)
+        advanceUntilIdle()
+        val run = assertNotNull(state.shootoutRun)
+        assertTrue(state.testing.isEmpty(), "nothing to keep until the run is over")
+
+        repeat(run.length) { state.judgeShootout(playable = true) }
+        advanceUntilIdle()
+
+        assertEquals(1, state.testing.size)
+        assertEquals(run.length, state.testing.single().total)
+    }
+
+    @Test
+    fun andUndoingTheLastVerdictTakesTheRecordBackOut() = runTest {
+        // A run that is no longer finished is no longer a result, which is why
+        // the record is written after every verdict rather than once at the end.
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+
+        state.startRun(trials = 1)
+        advanceUntilIdle()
+        repeat(assertNotNull(state.shootoutRun).length) { state.judgeShootout(playable = true) }
+        advanceUntilIdle()
+        assertEquals(1, state.testing.size)
+
+        state.undoVerdict()
+        advanceUntilIdle()
+
+        assertTrue(state.testing.isEmpty())
+    }
+
+    @Test
+    fun judgingTheLastHandTwiceLeavesOneRecordRatherThanTwo() = runTest {
+        // Keyed on the run's own start stamp, so this is an upsert. An append
+        // would turn a misclick and its correction into two separate runs.
+        val state = builderState()
+        TestPool.many(40).forEach { state.addCard(it) }
+
+        state.startRun(trials = 1)
+        advanceUntilIdle()
+        repeat(assertNotNull(state.shootoutRun).length) { state.judgeShootout(playable = true) }
+        state.undoVerdict()
+        state.judgeShootout(playable = false)
+        advanceUntilIdle()
+
+        assertEquals(1, state.testing.size)
+    }
+
     // ---- two cards, one hand -----------------------------------------------
 
     @Test

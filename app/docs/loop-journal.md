@@ -3340,3 +3340,26 @@ byte-identical nineteen of those times. A deck saved by *looking at a hand*.
 One line: if what would be written equals what is there, do not write. Which is
 the sort of guard that reads as belt and braces until you notice the setter it is
 guarding is the one with a side effect worth having.
+
+## 124 · The container rolled back again
+
+Second time this loop. The local checkout reverted to `cad62fa` — a commit from
+hours earlier — with one stray modified file from that state still in the tree.
+Nothing was lost that had been pushed, which is every commit: `git fetch` showed
+`cad62fa..3f462a1` and a `checkout -B` off the remote put it all back, verified by
+running the whole `:core` suite and all six lints against the restored tree.
+
+What *was* lost is the only thing that had not been pushed: three `:ui` tests for
+the kept-run upsert, written while CI was still building the code they cover.
+Rewritten here.
+
+Which is the lesson, and it is the second time it has been the same lesson. The
+loop's protocol says push small and push often, and the reason given for it has
+always been *so a red build is revertible in one commit*. It turns out to have a
+second reason nobody wrote down: **the local disk is not where this work lives.**
+An hour of unpushed anything is an hour that can evaporate between one tool call
+and the next.
+
+So the rule tightens: tests go in the same push as the code they test, not the
+next one. Writing them while waiting for CI feels efficient and puts them in the
+one place that does not survive.
