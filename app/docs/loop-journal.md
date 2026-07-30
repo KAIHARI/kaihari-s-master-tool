@@ -59,7 +59,8 @@ to be (89, 96, 97, 101), and what changed since last week (84).
 **The machinery this was built with.** Testing a module that does not compile here
 (12). Six lints, each written the day after the mistake it catches (20, 53, 80,
 122). A build that was shouting over itself (93). "I looked at it" turned into
-something that runs (83).
+something that runs (83). A release that tags the commit it was built from, and
+refuses to reuse a number (129).
 
 **Reviews, and what they found.** Passes spent looking rather than adding
 (29, 58, 61, 107). Things the program said about data it had not read yet
@@ -3576,3 +3577,44 @@ at it.
 
 **And the reviews found more than the features did.** The group with the most
 entries after the arrangement is the one about looking at what was already there.
+
+## 129 · The number on the tin, and the commit it came from
+
+The first thing anyone does with a release is install it. The second is trust that
+what they installed is what the tag says. `release.yml` was wrong about the second,
+in two ways, and both were found by reading it before running it rather than after.
+
+**`gh release create` had no `--target`.** So it tagged whatever the default branch
+happened to be, while `actions/checkout` had already built the *dispatched* ref. A
+release cut from any branch but the default one shipped an APK whose code its own
+tag did not contain. One flag, and the tag now points at `$GITHUB_SHA` — the commit
+the run actually compiled.
+
+**And the other path had no opinion at all.** The publish step asks
+`gh release view "$TAG"`, and on a hit takes `gh release upload --clobber`, which is
+the right thing for re-running a release and the wrong thing for reusing its number:
+the tag stays where it was pointed and only the `.apk` is swapped. That path was
+about to be taken. `v1.0.0` already existed — cut from `main` on the 27th, before any
+of this work — so dispatching `1.0.0` would have left the tag on a commit from three
+days ago and hung an APK built from twenty-nine commits off it, silently. The
+`--target` fix does not cover it, because it only exists in the *other* branch of the
+`if`.
+
+So the upload path now checks. If the tag resolves to a commit that is not the one
+this run built, it fails and says so. Asked for `repos/…/commits/$TAG` rather than
+`git/ref/tags/$TAG`, because the ref answers with the *tag object's* SHA for an
+annotated tag, which never equals a commit and would fail every legitimate re-run.
+
+Released as `1.1.0` for that reason and not as a version bump anybody asked for.
+
+The signing gate is worth writing down too, because it misled me for ten minutes:
+`EXPECTED_SHA256` is the digest of the signing **certificate**, not of
+`kai-master-tool.jks`. Those are different numbers and only one of them appears in
+the check. `keytool -list -v -keystore … -alias kai-master-tool` prints the one that
+matters. The comment beside it now says which.
+
+**One thing this means for anyone already running a copy.** The debug APK that CI
+attaches to every push and the release APK published here are signed with different
+certificates, and Android will not swap one for the other in place. An existing
+debug install has to be uninstalled first. After that the in-app updater takes over
+and this is the last time it comes up.
