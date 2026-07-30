@@ -138,10 +138,14 @@ fun CardDetailBody(
 
         Text("Copies", style = MaterialTheme.typography.labelLarge)
 
+        // The copy limit is shared across the whole deck, so each section's
+        // ceiling is whatever the other section has left it. Handing both
+        // steppers the full limit made "+" light up and then do nothing — an
+        // enabled control that dead-ends, which is worse than a disabled one.
         CopiesStepper(
             label = "${home.displayName} Deck",
             count = copiesHome,
-            max = limit,
+            max = limit - copiesSide,
             accent = home.accent(),
             onChange = { onSetCount(home, it) },
         )
@@ -149,7 +153,7 @@ fun CardDetailBody(
         CopiesStepper(
             label = "Side Deck",
             count = copiesSide,
-            max = limit,
+            max = limit - copiesHome,
             accent = MasterToolPalette.SideAccent,
             onChange = { onSetCount(DeckSection.SIDE, it) },
         )

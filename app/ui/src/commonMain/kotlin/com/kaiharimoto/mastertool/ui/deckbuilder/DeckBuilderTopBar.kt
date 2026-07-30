@@ -193,8 +193,14 @@ fun DeckBuilderTopBar(
                     onClick = {
                         menuOpen = false
                         layout.update {
-                            // Keep what is about the deck, reset what is about the room.
-                            UiPreferences.DEFAULT.copy(format = it.format, stacked = it.stacked)
+                            // Keep what is about the deck — the format, the
+                            // stacked view, the pinned easter-egg pool — and
+                            // reset what is about the room.
+                            UiPreferences.DEFAULT.copy(
+                                format = it.format,
+                                stacked = it.stacked,
+                                easterEggPool = it.easterEggPool,
+                            )
                         }
                     },
                 )

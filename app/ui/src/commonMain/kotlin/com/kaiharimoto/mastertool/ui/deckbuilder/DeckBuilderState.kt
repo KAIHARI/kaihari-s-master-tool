@@ -141,8 +141,8 @@ class DeckBuilderState(
     /** The `#ydkx-extended` payload of the loaded deck, preserved untouched. */
     private var extended: JsonObject? = null
 
-    private val undoStack = ArrayDeque<Deck>()
-    private val redoStack = ArrayDeque<Deck>()
+    private val undoStack = ArrayDeque<HistoryEntry>()
+    private val redoStack = ArrayDeque<HistoryEntry>()
     private var searchJob: Job? = null
     private var toastCounter = 0L
     private var editSerial = 0L
@@ -401,8 +401,34 @@ class DeckBuilderState(
 
     // ---- history -----------------------------------------------------------
 
-    private fun pushUndo(previous: Deck): UndoToken {
-        undoStack.addLast(previous)
+    /**
+     * What the deck was, and — only when the edit replaced the whole deck —
+     * who it was.
+     *
+     * A card edit stores no identity, so undoing one never reverts a rename
+     * made after it (the bug that rule exists for). "New deck" and an import
+     * change the name, the id and the ydkx payload as part of the edit itself,
+     * and an undo that brought back the cards under the wrong name — ready to
+     * be saved as a duplicate, with the ydkx metadata gone — was half an undo.
+     */
+    private data class DeckIdentity(
+        val name: String,
+        val id: String?,
+        val extended: JsonObject?,
+    )
+
+    private data class HistoryEntry(val deck: Deck, val identity: DeckIdentity?)
+
+    private fun currentIdentity() = DeckIdentity(deckName, deckId, extended)
+
+    private fun applyIdentity(identity: DeckIdentity) {
+        deckName = identity.name
+        deckId = identity.id
+        extended = identity.extended
+    }
+
+    private fun pushUndo(previous: Deck, identity: DeckIdentity? = null): UndoToken {
+        undoStack.addLast(HistoryEntry(previous, identity))
         while (undoStack.size > UNDO_DEPTH) undoStack.removeFirst()
         // A new edit invalidates anything that was undone to reach this point.
         redoStack.clear()
@@ -410,16 +436,20 @@ class DeckBuilderState(
     }
 
     fun undo() {
-        val previous = undoStack.removeLastOrNull() ?: return
-        redoStack.addLast(deck)
-        deck = previous
+        val entry = undoStack.removeLastOrNull() ?: return
+        // Symmetric: only an entry that restores identity captures it going the
+        // other way, so redo can put the new deck's name back too.
+        redoStack.addLast(HistoryEntry(deck, entry.identity?.let { currentIdentity() }))
+        deck = entry.deck
+        entry.identity?.let(::applyIdentity)
         stamp()
     }
 
     fun redo() {
-        val next = redoStack.removeLastOrNull() ?: return
-        undoStack.addLast(deck)
-        deck = next
+        val entry = redoStack.removeLastOrNull() ?: return
+        undoStack.addLast(HistoryEntry(deck, entry.identity?.let { currentIdentity() }))
+        deck = entry.deck
+        entry.identity?.let(::applyIdentity)
         stamp()
     }
 
@@ -453,7 +483,7 @@ class DeckBuilderState(
     // ---- persistence -------------------------------------------------------
 
     fun newDeck() {
-        val token = pushUndo(deck)
+        val token = pushUndo(deck, currentIdentity())
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
         deckId = null
@@ -488,7 +518,7 @@ class DeckBuilderState(
             val file = deps.fileAccess.importDeck() ?: return@launch
             val parsed = YdkCodec.parse(file.content)
 
-            val token = pushUndo(deck)
+            val token = pushUndo(deck, currentIdentity())
             deck = parsed.document.deck
             deckName = file.name.substringBeforeLast('.').ifBlank { "Imported Deck" }
             deckId = null

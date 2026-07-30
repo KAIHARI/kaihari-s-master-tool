@@ -49,7 +49,10 @@ fun MasterToolApp(deps: AppDependencies) {
         builderState.start()
         // Silent on launch: it only interrupts if there is something to install.
         updateState.check(userInitiated = false)
-        onDispose { }
+        // The last layout change before the window closes is exactly the one
+        // the user quit to keep; without this it was still waiting out its
+        // save debounce when the scope died.
+        onDispose { layoutState.flush() }
     }
 
     MasterToolTheme {
