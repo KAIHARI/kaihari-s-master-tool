@@ -54,8 +54,24 @@ git tag v1.0.1 && git push origin v1.0.1
 ```
 
 It derives `versionCode` from the commit count (monotonic, reproducible),
-verifies the APK carries the committed signing certificate, and attaches
-`kai-master-tool-<version>.apk` to the GitHub release.
+verifies the APK carries the committed signing certificate, attaches the APK to
+the run as an artifact, and only then publishes it as
+`kai-master-tool-<version>.apk` on the GitHub release. In that order, so a
+publish that fails does not throw away a signed build.
+
+Two things it refuses to do:
+
+- **Tag the wrong commit.** `gh release create` gets `--target "$GITHUB_SHA"`,
+  or it would tag the default branch while the run built the dispatched ref.
+- **Reuse a version number for different code.** If the tag already exists and
+  points anywhere but this run's commit, the step fails rather than swapping the
+  `.apk` under a tag that does not contain it.
+
+**Dispatch it yourself.** A run started by a GitHub App gets a `GITHUB_TOKEN`
+capped by that app's permissions rather than by the `permissions:` block here, so
+an automated dispatch can build and sign but gets `403` on `POST /releases`. The
+signed APK is still on the run as an artifact; publishing needs a human dispatch
+from the Actions tab.
 
 ## Updating from GitHub
 

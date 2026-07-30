@@ -60,7 +60,7 @@ to be (89, 96, 97, 101), and what changed since last week (84).
 (12). Six lints, each written the day after the mistake it catches (20, 53, 80,
 122). A build that was shouting over itself (93). "I looked at it" turned into
 something that runs (83). A release that tags the commit it was built from, and
-refuses to reuse a number (129).
+refuses to reuse a number (129, 130).
 
 **Reviews, and what they found.** Passes spent looking rather than adding
 (29, 58, 61, 107). Things the program said about data it had not read yet
@@ -3618,3 +3618,37 @@ attaches to every push and the release APK published here are signed with differ
 certificates, and Android will not swap one for the other in place. An existing
 debug install has to be uninstalled first. After that the in-app updater takes over
 and this is the last time it comes up.
+
+## 130 · The one step of a release that is not about the code
+
+The `1.1.0` build went green through compile, naming and the signing gate, and
+then died on `POST /repos/…/releases` with **403 Resource not accessible by
+integration**.
+
+Nothing to do with the workflow. A run dispatched through a GitHub App receives a
+`GITHUB_TOKEN` whose permissions are capped by *that app's* installation, not by
+the `permissions: contents: write` this file declares. Run 1 succeeded three days
+ago because a person pressed the button. Pushing a `v1.1.0` tag instead — the
+workflow's other trigger — got `the remote end hung up unexpectedly` from the git
+proxy, which is the same answer wearing different clothes.
+
+So publishing is a human dispatch, and the workflow now says so in its own error
+message rather than leaving a bare 403 to be interpreted.
+
+Two changes came out of it that are worth having regardless:
+
+**The artifact upload moved above the publish step.** It was last, so a publish
+failure discarded a six-minute compile and a verified signature along with it. The
+signed APK is now kept first and published second. Failing late costs nothing;
+failing late *after* throwing away the thing that succeeded costs the build.
+
+**And the tag check moved out of the `else`.** Yesterday's version only looked at
+the tag on the `upload --clobber` path, on the theory that `create` cannot collide.
+It can: an existing tag silently overrides `--target`, so `gh release create` would
+happily hang a new release off a tag pointing at last week. Now the check runs
+whenever the tag resolves at all — which is also what made it safe to try the tag
+push above, since a stray tag left behind by a failed run can no longer mislead the
+next one.
+
+The general shape of both: a step that can fail for reasons outside the build
+should not be standing in front of the build's output.
