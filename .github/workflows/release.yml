@@ -116,6 +116,18 @@ jobs:
           if [ "${{ inputs.prerelease }}" = "true" ]; then PRERELEASE="--prerelease"; fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
+            # Re-running a release is fine. Reusing its number for different
+            # code is not: the tag stays where it was pointed and only the .apk
+            # is swapped, so the release would offer an APK built from commits
+            # its own tag does not contain -- and the updater trusts the tag.
+            # Asked for the commit rather than the ref so an annotated tag
+            # resolves too -- that ref would answer with the tag object's own
+            # SHA, which never equals a commit and would fail every re-run.
+            AT="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq '.sha' || true)"
+            if [ "$AT" != "$GITHUB_SHA" ]; then
+              echo "::error::$TAG already exists at ${AT:-an unreadable ref}, which is not the commit this run built ($GITHUB_SHA). Release under a new version instead."
+              exit 1
+            fi
             gh release upload "$TAG" "$APK" --clobber
           else
             # --target is the commit this run built, not the default branch.
