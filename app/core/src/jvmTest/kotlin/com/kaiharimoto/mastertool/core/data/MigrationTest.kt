@@ -105,7 +105,9 @@ class MigrationTest {
     fun addingATableMovedTheSchemaVersion() {
         // The whole failure mode in one assertion: a new table with no migration
         // file leaves this at 1 and nothing upgrades.
-        assertEquals(2L, MasterToolDatabase.Schema.version)
+        // 3, not 2: v1.1.0 shipped from a branch whose history stamped devices
+        // at user_version 3, so the version can never fall below that again.
+        assertEquals(3L, MasterToolDatabase.Schema.version)
     }
 
     @Test
