@@ -24,6 +24,7 @@ import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.defaultFeedbackEnabled
 import com.kaiharimoto.mastertool.ui.fx.rememberFeedback
 import com.kaiharimoto.mastertool.ui.library.DeckLibraryScreen
+import com.kaiharimoto.mastertool.ui.table.GoldfishScreen
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
 import com.kaiharimoto.mastertool.ui.update.UpdateDialog
 import com.kaiharimoto.mastertool.ui.update.UpdateState
@@ -37,6 +38,7 @@ import com.kaiharimoto.mastertool.ui.update.UpdateState
 private sealed interface Screen {
     data object DeckBuilder : Screen
     data object Library : Screen
+    data object Goldfish : Screen
 }
 
 @Composable
@@ -75,6 +77,12 @@ fun MasterToolApp(deps: AppDependencies) {
                 layout = layoutState,
                 updateState = updateState,
                 onOpenLibrary = { screen = Screen.Library },
+                onOpenGoldfish = { screen = Screen.Goldfish },
+            )
+
+            Screen.Goldfish -> GoldfishScreen(
+                state = builderState,
+                onBack = { screen = Screen.DeckBuilder },
             )
 
             Screen.Library -> DeckLibraryScreen(
