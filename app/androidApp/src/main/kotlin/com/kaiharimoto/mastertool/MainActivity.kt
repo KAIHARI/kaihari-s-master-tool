@@ -7,6 +7,28 @@ import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.DeckFileAccess
@@ -17,6 +39,52 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+
+/** Deliberately theme-free: it must render even when the theme cannot. */
+@Composable
+private fun CrashReportScreen(trace: String, onShare: () -> Unit, onDismiss: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF060608))
+            .padding(24.dp),
+    ) {
+        BasicText(
+            "The app crashed last time it ran",
+            style = TextStyle(color = Color.White, fontSize = 22.sp),
+        )
+        BasicText(
+            "Share this report so it can be fixed, then continue.",
+            style = TextStyle(color = Color(0xFF9C9CAB), fontSize = 14.sp),
+            modifier = Modifier.padding(top = 6.dp, bottom = 16.dp),
+        )
+
+        Row {
+            BasicText(
+                "SHARE REPORT",
+                style = TextStyle(color = Color(0xFF35E0FF), fontSize = 16.sp),
+                modifier = Modifier.clickable(onClick = onShare).padding(10.dp),
+            )
+            Spacer(Modifier.width(20.dp))
+            BasicText(
+                "CONTINUE TO APP",
+                style = TextStyle(color = Color.White, fontSize = 16.sp),
+                modifier = Modifier.clickable(onClick = onDismiss).padding(10.dp),
+            )
+        }
+
+        SelectionContainer(
+            Modifier
+                .padding(top = 12.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            BasicText(
+                trace,
+                style = TextStyle(color = Color(0xFFFF4D4D), fontSize = 11.sp),
+            )
+        }
+    }
+}
 
 class MainActivity : ComponentActivity(), DeckFileAccess {
 
@@ -51,6 +119,18 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // A crash on a tablet with no adb is a crash nobody can read. Persist
+        // any uncaught exception; the next launch shows it with a share button
+        // instead of dying silently again.
+        val crashFile = File(filesDir, "last-crash.txt")
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching { crashFile.writeText(error.stackTraceToString()) }
+            previousHandler?.uncaughtException(thread, error)
+        }
+
+        val pendingCrash = crashFile.takeIf { it.exists() }?.readText()
+
         val app = application as MasterToolApplication
         val deps = AppDependencies(
             cardRepository = app.cardRepository,
@@ -64,7 +144,29 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
             imageCacheDir = cacheDir.resolve("card_art").absolutePath,
         )
 
-        setContent { MasterToolApp(deps) }
+        setContent {
+            var showCrash by remember { mutableStateOf(pendingCrash != null) }
+            if (showCrash && pendingCrash != null) {
+                // Raw primitives on purpose: if the crash lives in the theme or
+                // font pipeline, this screen must not share its fate.
+                CrashReportScreen(
+                    trace = pendingCrash,
+                    onShare = {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, pendingCrash)
+                        }
+                        startActivity(Intent.createChooser(send, "Share crash report"))
+                    },
+                    onDismiss = {
+                        crashFile.delete()
+                        showCrash = false
+                    },
+                )
+            } else {
+                MasterToolApp(deps)
+            }
+        }
     }
 
     // ---- DeckFileAccess ----------------------------------------------------
