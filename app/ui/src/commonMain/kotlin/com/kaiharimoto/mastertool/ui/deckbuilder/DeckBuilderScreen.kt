@@ -111,6 +111,7 @@ fun DeckBuilderScreen(
         state.inspection != null -> ShortcutLayer.INSPECTOR
         state.helpVisible -> ShortcutLayer.HELP
         state.groupManagerVisible -> ShortcutLayer.GROUPS
+        state.consistencyVisible -> ShortcutLayer.CONSISTENCY
         state.filtersVisible -> ShortcutLayer.FILTERS
         state.statsVisible -> ShortcutLayer.STATS
         state.issuesVisible -> ShortcutLayer.ISSUES
@@ -134,6 +135,8 @@ fun DeckBuilderScreen(
             ShortcutAction.TOGGLE_BREAKDOWN -> state.breakdownVisible = !state.breakdownVisible
             ShortcutAction.TOGGLE_GROUP_MANAGER ->
                 state.groupManagerVisible = !state.groupManagerVisible
+            ShortcutAction.TOGGLE_CONSISTENCY ->
+                state.consistencyVisible = !state.consistencyVisible
             ShortcutAction.DISMISS -> dismissTopLayer(state) {
                 focusManager.clearFocus()
                 // Cleared focus is nobody's focus, and key events only arrive
@@ -287,6 +290,14 @@ fun DeckBuilderScreen(
         )
     }
 
+    if (state.consistencyVisible) {
+        ConsistencyDialog(
+            state = state,
+            onDismiss = { state.consistencyVisible = false },
+            shortcuts = shortcutRelay,
+        )
+    }
+
     if (state.eggVisible) {
         val pinned = layout.preferences.easterEggPool
 
@@ -336,6 +347,7 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
         state.inspection != null -> state.inspection = null
         state.helpVisible -> state.helpVisible = false
         state.groupManagerVisible -> state.groupManagerVisible = false
+        state.consistencyVisible -> state.consistencyVisible = false
         state.filtersVisible -> state.filtersVisible = false
         state.statsVisible -> state.statsVisible = false
         state.issuesVisible -> state.issuesVisible = false

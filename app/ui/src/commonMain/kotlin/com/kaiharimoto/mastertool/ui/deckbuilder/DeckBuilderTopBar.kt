@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
@@ -149,6 +150,9 @@ fun DeckBuilderTopBar(
         }
         IconButton(onClick = { state.statsVisible = true }) {
             Icon(Icons.Filled.BarChart, contentDescription = "Deck statistics")
+        }
+        IconButton(onClick = { state.consistencyVisible = true }) {
+            Icon(Icons.Filled.Percent, contentDescription = "Opening-hand odds")
         }
         IconButton(onClick = { state.save() }) {
             Icon(Icons.Filled.Save, contentDescription = "Save deck")

@@ -114,6 +114,8 @@ class DeckBuilderState(
 
     var groupManagerVisible by mutableStateOf(false)
 
+    var consistencyVisible by mutableStateOf(false)
+
     var filtersVisible by mutableStateOf(false)
 
     var statsVisible by mutableStateOf(false)

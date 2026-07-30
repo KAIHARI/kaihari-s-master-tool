@@ -42,6 +42,7 @@ enum class ShortcutAction {
     TOGGLE_HELP,
     TOGGLE_BREAKDOWN,
     TOGGLE_GROUP_MANAGER,
+    TOGGLE_CONSISTENCY,
     DISMISS,
     FOCUS_MAIN,
     FOCUS_EXTRA,
@@ -78,6 +79,7 @@ enum class ShortcutLayer {
     ISSUES,
     HELP,
     GROUPS,
+    CONSISTENCY,
     EGG,
 }
 
@@ -195,6 +197,10 @@ object ShortcutTable {
         Shortcut(
             KeyChord("g"), ShortcutAction.TOGGLE_GROUP_MANAGER, ShortcutScope.BUILDER,
             "Manage groups", togglesLayer = ShortcutLayer.GROUPS,
+        ),
+        Shortcut(
+            KeyChord("c"), ShortcutAction.TOGGLE_CONSISTENCY, ShortcutScope.BUILDER,
+            "Opening-hand odds over your groups", togglesLayer = ShortcutLayer.CONSISTENCY,
         ),
         Shortcut(
             KeyChord("1"), ShortcutAction.FOCUS_MAIN, ShortcutScope.BUILDER,
