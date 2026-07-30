@@ -155,12 +155,12 @@ jobs:
               --generate-notes \
               $PRERELEASE
             then
-              # A 403 here is nearly always the token rather than the release:
-              # a run dispatched through a GitHub App gets a GITHUB_TOKEN capped
-              # by that app's own permissions, whatever this file declares. The
+              # A 403 here has been transient at least once, on a run whose very
+              # next attempt published the same version from the same commit. The
               # signed APK is already attached to this run as an artifact, so
-              # nothing is lost -- dispatch it again from the Actions tab.
-              echo "::error::Could not publish $TAG. If this was a 403, dispatch this workflow from the Actions tab instead; the signed APK is attached to this run as an artifact either way."
+              # re-dispatching costs a retry and not a build -- and the tag check
+              # above is what makes re-dispatching the same version safe.
+              echo "::error::Could not publish $TAG. The signed APK is attached to this run as an artifact; re-dispatch the same version at the same commit to retry publishing."
               exit 1
             fi
           fi

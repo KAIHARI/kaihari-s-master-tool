@@ -3619,28 +3619,37 @@ certificates, and Android will not swap one for the other in place. An existing
 debug install has to be uninstalled first. After that the in-app updater takes over
 and this is the last time it comes up.
 
-## 130 · The one step of a release that is not about the code
+## 130 · A step that failed once, and the theory it nearly bought
 
 The `1.1.0` build went green through compile, naming and the signing gate, and
 then died on `POST /repos/…/releases` with **403 Resource not accessible by
-integration**.
+integration** — which threw away the six-minute compile and the verified signature
+along with it, because the artifact upload was the step *after* the one that failed.
 
-Nothing to do with the workflow. A run dispatched through a GitHub App receives a
-`GITHUB_TOKEN` whose permissions are capped by *that app's* installation, not by
-the `permissions: contents: write` this file declares. Run 1 succeeded three days
-ago because a person pressed the button. Pushing a `v1.1.0` tag instead — the
-workflow's other trigger — got `the remote end hung up unexpectedly` from the git
-proxy, which is the same answer wearing different clothes.
+I had a tidy explanation ready: a run dispatched through a GitHub App gets a
+`GITHUB_TOKEN` capped by that app's installation rather than by the
+`permissions: contents: write` this file declares, and run 1 succeeded three days
+ago because a person pressed the button. It fit. A `v1.1.0` tag push refused by the
+git proxy looked like the same wall from another angle, which made it fit better.
 
-So publishing is a human dispatch, and the workflow now says so in its own error
-message rather than leaving a bare 403 to be interpreted.
+It was wrong. The next run, from a commit that changed nothing about permissions,
+published `v1.1.0` on the first try. One 403, not a policy — and the second theory
+came with corroboration that turned out to be a coincidence sitting next to it.
+Worth writing down as the shape of the mistake rather than quietly deleting: two
+independent-looking failures with one plausible cause is exactly the pattern that
+stops you re-running the cheap experiment.
 
-Two changes came out of it that are worth having regardless:
+`target_commitish` on the published release reads `dfb90c6`, the commit the run
+actually compiled, so the `--target` fix above is confirmed by the first release it
+was used on rather than by reasoning about it.
 
-**The artifact upload moved above the publish step.** It was last, so a publish
-failure discarded a six-minute compile and a verified signature along with it. The
-signed APK is now kept first and published second. Failing late costs nothing;
-failing late *after* throwing away the thing that succeeded costs the build.
+Two changes came out of it, and a transient failure is the best possible reason to
+have made both:
+
+**The artifact upload moved above the publish step.** The signed APK is now kept
+first and published second, so the next flaky 403 costs a retry rather than a
+build. Verified on the very next run: the publish succeeded *and* the artifact is
+attached, which is the ordering doing its job in the case where it was not needed.
 
 **And the tag check moved out of the `else`.** Yesterday's version only looked at
 the tag on the `upload --clobber` path, on the theory that `create` cannot collide.
@@ -3651,4 +3660,5 @@ push above, since a stray tag left behind by a failed run can no longer mislead 
 next one.
 
 The general shape of both: a step that can fail for reasons outside the build
-should not be standing in front of the build's output.
+should not be standing in front of the build's output, and it should not be trusted
+to fail for the reason you first thought of.

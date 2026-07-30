@@ -67,11 +67,10 @@ Two things it refuses to do:
   points anywhere but this run's commit, the step fails rather than swapping the
   `.apk` under a tag that does not contain it.
 
-**Dispatch it yourself.** A run started by a GitHub App gets a `GITHUB_TOKEN`
-capped by that app's permissions rather than by the `permissions:` block here, so
-an automated dispatch can build and sign but gets `403` on `POST /releases`. The
-signed APK is still on the run as an artifact; publishing needs a human dispatch
-from the Actions tab.
+`POST /releases` has been seen to return a one-off `403 Resource not accessible by
+integration`. Re-dispatching the same version at the same commit is the fix — the
+tag check above makes that safe, and the signed APK is already on the failed run as
+an artifact either way.
 
 ## Updating from GitHub
 
