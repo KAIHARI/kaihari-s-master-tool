@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
             updater = AndroidAppUpdater(this, app.httpClient),
             newDeckId = { UUID.randomUUID().toString() },
             now = System::currentTimeMillis,
+            imageCacheDir = cacheDir.resolve("card_art").absolutePath,
         )
 
         setContent { MasterToolApp(deps) }

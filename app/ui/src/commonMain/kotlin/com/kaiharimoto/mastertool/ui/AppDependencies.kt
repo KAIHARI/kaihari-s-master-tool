@@ -53,4 +53,12 @@ class AppDependencies(
      * unless it says otherwise.
      */
     val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /**
+     * Directory for the card-art disk cache, or null to run memory-only.
+     *
+     * Card art has to survive a cold start without a network — the app's whole
+     * premise is working at a venue with no signal, and a memory-only cache
+     * quietly re-fetched every image on every launch.
+     */
+    val imageCacheDir: String? = null,
 )

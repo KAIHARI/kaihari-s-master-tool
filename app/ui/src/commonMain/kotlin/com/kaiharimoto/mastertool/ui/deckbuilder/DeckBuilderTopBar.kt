@@ -38,10 +38,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kaiharimoto.mastertool.core.model.Format
+import com.kaiharimoto.mastertool.core.prefs.ThemeMode
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
 import com.kaiharimoto.mastertool.ui.egg.ChibiLogo
+import com.kaiharimoto.mastertool.ui.theme.ChromaticText
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.archivoExpandedFamily
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
 @Composable
@@ -64,10 +68,15 @@ fun DeckBuilderTopBar(
     ) {
         ChibiLogo(onWake = { state.eggVisible = true })
 
-        Text(
-            "kai's master tool",
-            style = MaterialTheme.typography.titleMedium,
-            color = MasterToolPalette.Accent,
+        // The wordmark carries the identity: expanded cut, chromatic fringe —
+        // white light through a lens, not a coloured logo.
+        ChromaticText(
+            "KAI'S MASTER TOOL",
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontFamily = archivoExpandedFamily(),
+                letterSpacing = 1.5.sp,
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
         )
 
         OutlinedTextField(
@@ -189,17 +198,42 @@ fun DeckBuilderTopBar(
                     },
                 )
                 DropdownMenuItem(
+                    text = {
+                        Text(
+                            when (layout.preferences.themeMode) {
+                                ThemeMode.SYSTEM -> "Theme: match system"
+                                ThemeMode.DARK -> "Theme: dark"
+                                ThemeMode.LIGHT -> "Theme: light"
+                            }
+                        )
+                    },
+                    onClick = {
+                        // Cycles rather than opening a submenu: three values, and
+                        // the whole screen previews the choice instantly.
+                        layout.update {
+                            it.copy(
+                                themeMode = when (it.themeMode) {
+                                    ThemeMode.SYSTEM -> ThemeMode.DARK
+                                    ThemeMode.DARK -> ThemeMode.LIGHT
+                                    ThemeMode.LIGHT -> ThemeMode.SYSTEM
+                                }
+                            )
+                        }
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text("Reset layout") },
                     onClick = {
                         menuOpen = false
                         layout.update {
-                            // Keep what is about the deck — the format, the
-                            // stacked view, the pinned easter-egg pool — and
-                            // reset what is about the room.
+                            // Keep what is about the deck or the person — the
+                            // format, the stacked view, the pinned easter-egg
+                            // pool, the theme — and reset what is about the room.
                             UiPreferences.DEFAULT.copy(
                                 format = it.format,
                                 stacked = it.stacked,
                                 easterEggPool = it.easterEggPool,
+                                themeMode = it.themeMode,
                             )
                         }
                     },

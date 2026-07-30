@@ -5,6 +5,15 @@ import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
 import kotlinx.serialization.Serializable
 
+/** Which colour scheme the app renders in. */
+@Serializable
+enum class ThemeMode {
+    /** Follow the operating system. */
+    SYSTEM,
+    DARK,
+    LIGHT,
+}
+
 /** How one deck pane is laid out. */
 @Serializable
 data class SectionPreferences(
@@ -60,6 +69,7 @@ data class UiPreferences(
     /** Show one tile per distinct card with a count, rather than one per copy. */
     val stacked: Boolean = false,
     val format: Format = Format.TCG,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /**
      * Passcodes the easter egg throws, when it has been given a set to keep.
      *

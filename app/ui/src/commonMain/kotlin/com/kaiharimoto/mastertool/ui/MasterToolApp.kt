@@ -10,9 +10,11 @@ import androidx.compose.runtime.setValue
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
+import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
+import okio.Path.Companion.toPath
 import com.kaiharimoto.mastertool.core.remote.HttpClientFactory
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderScreen
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
@@ -42,7 +44,7 @@ fun MasterToolApp(deps: AppDependencies) {
     var screen by remember { mutableStateOf<Screen>(Screen.DeckBuilder) }
 
     DisposableEffect(Unit) {
-        configureImageLoader()
+        configureImageLoader(deps.imageCacheDir)
         // The format is a layout preference on disk but belongs to the builder at
         // runtime, so it is handed over once the stored settings arrive.
         layoutState.start { preferences -> builderState.onFormatChange(preferences.format) }
@@ -55,7 +57,7 @@ fun MasterToolApp(deps: AppDependencies) {
         onDispose { layoutState.flush() }
     }
 
-    MasterToolTheme {
+    MasterToolTheme(mode = layoutState.preferences.themeMode) {
         when (screen) {
             Screen.DeckBuilder -> DeckBuilderScreen(
                 state = builderState,
@@ -93,9 +95,11 @@ fun MasterToolApp(deps: AppDependencies) {
  * Card art is fetched over the same Ktor stack as the card data.
  *
  * A generous memory cache matters here: a deck pane can show 90 thumbnails at
- * once and scrolling back and forth should never re-decode them.
+ * once and scrolling back and forth should never re-decode them. The disk
+ * cache matters more: art must survive a cold start with no network, because
+ * the venue with no signal is where this app earns its keep.
  */
-private fun configureImageLoader() {
+private fun configureImageLoader(cacheDir: String?) {
     SingletonImageLoader.setSafe { context: PlatformContext ->
         ImageLoader.Builder(context)
             .components { add(KtorNetworkFetcherFactory(HttpClientFactory.create())) }
@@ -103,6 +107,16 @@ private fun configureImageLoader() {
                 MemoryCache.Builder()
                     .maxSizePercent(context, percent = 0.25)
                     .build()
+            }
+            .apply {
+                if (cacheDir != null) {
+                    diskCache {
+                        DiskCache.Builder()
+                            .directory(cacheDir.toPath())
+                            .maxSizeBytes(512L * 1024 * 1024)
+                            .build()
+                    }
+                }
             }
             .crossfade(true)
             .build()

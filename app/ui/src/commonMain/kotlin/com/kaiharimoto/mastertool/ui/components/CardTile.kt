@@ -27,6 +27,8 @@ import com.kaiharimoto.mastertool.core.model.BanStatus
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.animatedPrismAngle
+import com.kaiharimoto.mastertool.ui.theme.prismaticBorder
 
 /** Yu-Gi-Oh! cards are 59 x 86 mm. Everything that shows one uses this ratio. */
 const val CARD_ASPECT_RATIO = 59f / 86f
@@ -52,19 +54,28 @@ fun CardTile(
     val shape = RoundedCornerShape(4.dp)
     val banStatus = card.banStatus(format)
 
+    // A highlighted card wears the full prismatic ring, slowly turning — the
+    // "look here" treatment for reveals and flashes.
+    val prismAngle = if (highlighted) animatedPrismAngle().value else 0f
+
     Box(
         modifier = modifier
             .aspectRatio(CARD_ASPECT_RATIO)
+            .then(
+                if (highlighted) {
+                    Modifier.prismaticBorder(angle = prismAngle, cornerRadius = 4.dp, stroke = 2.5.dp)
+                } else {
+                    Modifier
+                },
+            )
             .clip(shape)
             .background(MasterToolPalette.SurfaceRaised)
-            .border(
-                width = if (highlighted) 2.dp else 1.dp,
-                color = if (highlighted) {
-                    MasterToolPalette.AccentBright
+            .then(
+                if (highlighted) {
+                    Modifier
                 } else {
-                    MaterialTheme.colorScheme.outline
+                    Modifier.border(1.dp, MaterialTheme.colorScheme.outline, shape)
                 },
-                shape = shape,
             )
             .clickable(onClick = onClick),
     ) {
