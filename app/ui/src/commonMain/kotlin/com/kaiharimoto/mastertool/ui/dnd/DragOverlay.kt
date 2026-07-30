@@ -4,9 +4,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.model.Format
@@ -32,12 +39,22 @@ fun DragOverlay(controller: DragController, format: Format) {
     val width = with(density) { session.size.width.toDp() }
     val height = with(density) { session.size.height.toDp() }
 
-    Box(Modifier.fillMaxSize()) {
+    // The pointer arrives in root coordinates, but this overlay does not sit at
+    // the root origin — the scaffold's content padding (status bars, cutouts)
+    // displaces it. Without subtracting its own origin the ghost trails the
+    // finger by exactly that inset.
+    var overlayOrigin by remember { mutableStateOf(Offset.Zero) }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { overlayOrigin = it.positionInRoot() },
+    ) {
         Box(
             Modifier
                 .size(if (width > 0.dp) width else 96.dp, if (height > 0.dp) height else 140.dp)
                 .graphicsLayer {
-                    val point = controller.pointer
+                    val point = controller.pointer - overlayOrigin
                     translationX = point.x - size.width / 2f
                     translationY = point.y - size.height / 2f
                     // Lifted off the table rather than lying on it.

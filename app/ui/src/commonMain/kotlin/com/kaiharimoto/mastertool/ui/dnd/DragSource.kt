@@ -8,11 +8,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -46,7 +48,18 @@ private const val MENU_MS = 400L
  * One detector owns the press. A `combinedClickable` with `onLongClick` and a
  * drag detector on the same node fight over it, so long press is reported from
  * here instead. Tap is deliberately left alone — nothing is consumed unless a
- * drag actually starts, so the tile's own `clickable` still sees it.
+ * drag actually starts or a menu press completes, so the tile's own `clickable`
+ * still sees a plain tap.
+ *
+ * The decision loop watches the [PointerEventPass.Initial] pass. That is what
+ * lets a menu press swallow its own release: the tile's `clickable` collects the
+ * up in the Main pass, which runs after Initial, so consuming the release here
+ * is the difference between "long press opens the menu" and "long press opens
+ * the menu *and* taps the card underneath it".
+ *
+ * [dragEnabled] exists for the stacked view, where a tile stands for several
+ * copies at once and dragging it has no coherent meaning — but the long-press
+ * menu still does.
  */
 @Composable
 fun DragSource(
@@ -56,6 +69,7 @@ fun DragSource(
     session: () -> DragSession,
     onLongPress: () -> Unit,
     onDropped: (DragSession, DropHover?) -> Unit,
+    dragEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     var origin by remember { mutableStateOf(Offset.Zero) }
@@ -66,6 +80,13 @@ fun DragSource(
 
     val haptics = LocalHapticFeedback.current
 
+    // The gesture coroutine below outlives any single composition, so it must
+    // read these through state or it acts on whatever list and position this
+    // tile showed when the coroutine was first installed.
+    val currentSession by rememberUpdatedState(session)
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
+    val currentOnDropped by rememberUpdatedState(onDropped)
+
     Box(
         Modifier
             .onGloballyPositioned {
@@ -74,7 +95,7 @@ fun DragSource(
             }
             // The card is in your hand now, so the space it left is shown empty.
             .alpha(if (lifted) 0.3f else 1f)
-            .pointerInput(key, competesWithScroll) {
+            .pointerInput(key, competesWithScroll, dragEnabled) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val slop = viewConfiguration.touchSlop
@@ -82,9 +103,11 @@ fun DragSource(
 
                     var latest: PointerInputChange = down
 
-                    // Wait for the gesture to say what it is.
+                    // Wait for the gesture to say what it is. Watched in the
+                    // Initial pass so this node hears the release before the
+                    // tile's own click handler does.
                     while (true) {
-                        val event = awaitPointerEvent()
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
                         val change = event.changes.firstOrNull { it.id == down.id }
                             ?: return@awaitEachGesture
                         latest = change
@@ -94,15 +117,21 @@ fun DragSource(
 
                         if (!change.pressed) {
                             // Let go without dragging. Held still and long enough
-                            // is a menu press; anything shorter is a tap, and the
-                            // tile's own click handler is welcome to it.
-                            if (heldFor >= MENU_MS && travelled <= slop) onLongPress()
+                            // is a menu press, and the release is consumed so the
+                            // tile's click does not also fire; anything shorter is
+                            // a tap, and the tile's own click handler is welcome
+                            // to it.
+                            if (heldFor >= MENU_MS && travelled <= slop) {
+                                change.consume()
+                                currentOnLongPress()
+                            }
                             return@awaitEachGesture
                         }
 
                         if (travelled > slop) {
                             // Moved too soon to be anything but a scroll.
                             if (heldFor < settleFor) return@awaitEachGesture
+                            if (!dragEnabled) return@awaitEachGesture
                             break
                         }
                     }
@@ -110,19 +139,23 @@ fun DragSource(
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     lifted = true
 
-                    val started = session().copy(size = tileSize)
+                    val started = currentSession().copy(size = tileSize)
                     // Started from where the finger is, not from where it landed,
                     // so the card does not jump by the slop distance.
                     controller.start(started, origin + latest.position)
 
                     val completed = drag(down.id) { change ->
+                        // Read before consuming: a consumed change reports its
+                        // position delta as zero, which once froze every drag at
+                        // the point it was picked up.
+                        val delta = change.positionChange()
                         change.consume()
-                        controller.move(change.positionChange())
+                        controller.move(delta)
                     }
 
                     lifted = false
                     if (completed) {
-                        onDropped(started, controller.finish())
+                        currentOnDropped(started, controller.finish())
                     } else {
                         controller.cancel()
                     }
