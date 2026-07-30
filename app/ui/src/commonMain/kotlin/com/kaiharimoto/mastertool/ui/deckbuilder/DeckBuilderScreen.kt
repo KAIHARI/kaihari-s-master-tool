@@ -42,6 +42,7 @@ import com.kaiharimoto.mastertool.ui.dnd.DropHover
 import com.kaiharimoto.mastertool.core.input.ShortcutLayer
 import com.kaiharimoto.mastertool.ui.input.ShortcutHelpSheet
 import com.kaiharimoto.mastertool.ui.input.ShortcutHost
+import com.kaiharimoto.mastertool.ui.inspect.CardInspect3D
 import com.kaiharimoto.mastertool.ui.input.ShortcutRelay
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
@@ -233,8 +234,14 @@ fun DeckBuilderScreen(
                 state.onFilterChange(filter)
                 state.inspection = null
             },
+            onHold = { card -> state.heldCard = card },
             shortcuts = shortcutRelay,
         )
+    }
+
+    // Above everything, including open sheets: a Dialog stacks over them.
+    state.heldCard?.let { held ->
+        CardInspect3D(card = held, onDismiss = { state.heldCard = null })
     }
 
     if (state.filtersVisible) {

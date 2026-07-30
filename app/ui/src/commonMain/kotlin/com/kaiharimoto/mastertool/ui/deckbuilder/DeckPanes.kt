@@ -514,6 +514,10 @@ private fun DeckCard(
                 },
             )
             DropdownMenuItem(
+                text = { Text("Hold card") },
+                onClick = { menuOpen = false; state.heldCard = card },
+            )
+            DropdownMenuItem(
                 text = { Text("Remove one") },
                 onClick = { menuOpen = false; state.removeOne(card, section) },
             )

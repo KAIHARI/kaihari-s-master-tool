@@ -116,6 +116,9 @@ class DeckBuilderState(
 
     var consistencyVisible by mutableStateOf(false)
 
+    /** The card currently held in the 3D inspect, if any. */
+    var heldCard by mutableStateOf<Card?>(null)
+
     var filtersVisible by mutableStateOf(false)
 
     var statsVisible by mutableStateOf(false)

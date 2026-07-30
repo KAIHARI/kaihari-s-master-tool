@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,7 @@ fun CardDetailBody(
     onSetCount: (DeckSection, Int) -> Unit,
     onMove: (from: DeckSection, to: DeckSection) -> Unit,
     onBrowse: (CardFilter) -> Unit,
+    onHold: () -> Unit = {},
 ) {
     val home = card.requiredSection()
     val copiesHome = copiesBySection[home] ?: 0
@@ -66,6 +68,7 @@ fun CardDetailBody(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            // Tapping the art picks the card up — the 3D inspect.
             AsyncImage(
                 model = card.imageUrl ?: card.imageUrlSmall,
                 contentDescription = card.name,
@@ -74,7 +77,8 @@ fun CardDetailBody(
                     .width(200.dp)
                     .height(292.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(MasterToolPalette.SurfaceRaised),
+                    .background(MasterToolPalette.SurfaceRaised)
+                    .clickable(onClick = onHold),
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

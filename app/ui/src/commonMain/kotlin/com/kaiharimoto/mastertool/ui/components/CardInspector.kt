@@ -58,6 +58,7 @@ fun CardInspector(
     onSetCount: (Card, DeckSection, Int) -> Unit,
     onMove: (Card, DeckSection, DeckSection) -> Unit,
     onBrowse: (CardFilter) -> Unit,
+    onHold: (Card) -> Unit = {},
     shortcuts: ShortcutRelay? = null,
 ) {
     if (cards.isEmpty()) return
@@ -89,6 +90,7 @@ fun CardInspector(
                 onSetCount = onSetCount,
                 onMove = onMove,
                 onBrowse = onBrowse,
+                onHold = onHold,
                 pagerState = pagerState,
             )
         }
@@ -105,6 +107,7 @@ private fun InspectorBody(
     onSetCount: (Card, DeckSection, Int) -> Unit,
     onMove: (Card, DeckSection, DeckSection) -> Unit,
     onBrowse: (CardFilter) -> Unit,
+    onHold: (Card) -> Unit,
     pagerState: PagerState,
 ) {
     val scope = rememberCoroutineScope()
@@ -155,6 +158,7 @@ private fun InspectorBody(
                     onSetCount = { section, count -> onSetCount(card, section, count) },
                     onMove = { from, to -> onMove(card, from, to) },
                     onBrowse = onBrowse,
+                    onHold = { onHold(card) },
                 )
             }
         }
