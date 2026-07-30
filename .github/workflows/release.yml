@@ -85,9 +85,12 @@ jobs:
 
       - name: Verify the signing certificate
         env:
-          # SHA-256 of androidApp/keystore/kai-master-tool.jks. A release signed
-          # with anything else cannot install over an existing copy, so this is
-          # a hard gate rather than a warning.
+          # SHA-256 of the signing *certificate* in
+          # androidApp/keystore/kai-master-tool.jks -- not of the file, which is a
+          # different number and does not appear anywhere in this check. Read it
+          # with `keytool -list -v -keystore ... -alias kai-master-tool`. A
+          # release signed with anything else cannot install over an existing
+          # copy, so this is a hard gate rather than a warning.
           EXPECTED_SHA256: 0bb9cc076e3ac23330e27c87711ec34ca917d8c2471385c6a6b550e1301cb22c
         run: |
           set -euo pipefail
@@ -115,7 +118,13 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$APK" --clobber
           else
+            # --target is the commit this run built, not the default branch.
+            # Without it `gh release create` tags whatever main happens to be,
+            # while `actions/checkout` has already built the *dispatched* ref --
+            # so a release triggered from any branch but the default one shipped
+            # an APK whose code was not the code its own tag pointed at.
             gh release create "$TAG" "$APK" \
+              --target "$GITHUB_SHA" \
               --title "kai's master tool $TAG" \
               --generate-notes \
               $PRERELEASE
