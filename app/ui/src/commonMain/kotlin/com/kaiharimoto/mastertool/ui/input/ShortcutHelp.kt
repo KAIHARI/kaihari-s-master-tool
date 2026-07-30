@@ -36,10 +36,11 @@ import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShortcutHelpSheet(onDismiss: () -> Unit) {
+fun ShortcutHelpSheet(onDismiss: () -> Unit, shortcuts: ShortcutRelay? = null) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        SheetShortcuts(shortcuts) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -59,6 +60,7 @@ fun ShortcutHelpSheet(onDismiss: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
         }
     }
 }

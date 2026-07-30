@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.components.percent
+import com.kaiharimoto.mastertool.ui.input.SheetShortcuts
+import com.kaiharimoto.mastertool.ui.input.ShortcutRelay
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
 /**
@@ -47,10 +49,12 @@ fun DeckStatsPanel(
     section: DeckSection,
     onSectionChange: (DeckSection) -> Unit,
     onDismiss: () -> Unit,
+    shortcuts: ShortcutRelay? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        SheetShortcuts(shortcuts) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -131,6 +135,7 @@ fun DeckStatsPanel(
             if (statistics.byArchetype.isNotEmpty()) {
                 Section("Archetype") { CountChips(statistics.byArchetype.toList()) }
             }
+        }
         }
     }
 }

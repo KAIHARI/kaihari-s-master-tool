@@ -10,8 +10,8 @@ class ShortcutTableTest {
 
     private val builder = ShortcutContext()
     private val typing = ShortcutContext(textInputFocused = true)
-    private val inspecting = ShortcutContext(inspectorOpen = true, overlayOpen = true)
-    private val sheetOpen = ShortcutContext(overlayOpen = true)
+    private val inspecting = ShortcutContext(topLayer = ShortcutLayer.INSPECTOR)
+    private val sheetOpen = ShortcutContext(topLayer = ShortcutLayer.ISSUES)
 
     @Test
     fun resolvesAPlainKey() {
@@ -86,6 +86,61 @@ class ShortcutTableTest {
     @Test
     fun escapeReachesOverAnOpenSheet() {
         assertEquals(ShortcutAction.DISMISS, ShortcutTable.resolve(KeyChord("escape"), sheetOpen))
+    }
+
+    // Toggles. A toggle that can only open is not a toggle, which is what the
+    // first release of these bindings shipped as: opening the panel switched the
+    // BUILDER scope off, taking the shortcut with it.
+
+    @Test
+    fun aToggleStillFiresWhileItsOwnPanelIsOpen() {
+        assertEquals(
+            ShortcutAction.TOGGLE_STATS,
+            ShortcutTable.resolve(KeyChord("s"), ShortcutContext(topLayer = ShortcutLayer.STATS)),
+        )
+        assertEquals(
+            ShortcutAction.TOGGLE_ISSUES,
+            ShortcutTable.resolve(KeyChord("i"), ShortcutContext(topLayer = ShortcutLayer.ISSUES)),
+        )
+        assertEquals(
+            ShortcutAction.TOGGLE_FILTERS,
+            ShortcutTable.resolve(
+                KeyChord("f", ctrl = true, shift = true),
+                ShortcutContext(topLayer = ShortcutLayer.FILTERS),
+            ),
+        )
+        assertEquals(
+            ShortcutAction.TOGGLE_HELP,
+            ShortcutTable.resolve(
+                KeyChord("slash", shift = true),
+                ShortcutContext(topLayer = ShortcutLayer.HELP),
+            ),
+        )
+    }
+
+    @Test
+    fun aToggleDoesNotFireOverSomeoneElsesPanel() {
+        // "s" over the issues panel would open statistics *behind* it.
+        assertNull(ShortcutTable.resolve(KeyChord("s"), sheetOpen))
+        assertNull(
+            ShortcutTable.resolve(KeyChord("s"), ShortcutContext(topLayer = ShortcutLayer.HELP)),
+        )
+    }
+
+    @Test
+    fun onlySteppingShortcutsRepeat() {
+        // Key repeat walking the inspector or the undo stack is useful; key
+        // repeat strobing a panel open and shut is not.
+        val repeatable = ShortcutTable.all.filter { it.repeatable }.map { it.action }.toSet()
+        assertEquals(
+            setOf(
+                ShortcutAction.PREVIOUS_CARD,
+                ShortcutAction.NEXT_CARD,
+                ShortcutAction.UNDO,
+                ShortcutAction.REDO,
+            ),
+            repeatable,
+        )
     }
 
     @Test
