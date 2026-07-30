@@ -22,6 +22,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntSize
+import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
+import com.kaiharimoto.mastertool.ui.fx.SoundEffect
 
 /**
  * How long a finger must sit still before a move counts as a drag rather than a
@@ -79,6 +81,7 @@ fun DragSource(
     var lifted by remember { mutableStateOf(false) }
 
     val haptics = LocalHapticFeedback.current
+    val feedback = LocalFeedback.current
 
     // The gesture coroutine below outlives any single composition, so it must
     // read these through state or it acts on whatever list and position this
@@ -137,6 +140,7 @@ fun DragSource(
                     }
 
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    feedback.play(SoundEffect.LIFT)
                     lifted = true
 
                     val started = currentSession().copy(size = tileSize)
@@ -155,7 +159,14 @@ fun DragSource(
 
                     lifted = false
                     if (completed) {
-                        currentOnDropped(started, controller.finish())
+                        val landed = controller.finish()
+                        if (landed?.accepted == true) {
+                            feedback.play(SoundEffect.SNAP)
+                            if (feedback.isEnabled) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                        }
+                        currentOnDropped(started, landed)
                     } else {
                         controller.cancel()
                     }

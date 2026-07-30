@@ -1,9 +1,12 @@
 package com.kaiharimoto.mastertool.ui.dnd
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +48,13 @@ fun DragOverlay(controller: DragController, format: Format) {
     // finger by exactly that inset.
     var overlayOrigin by remember { mutableStateOf(Offset.Zero) }
 
+    // The pickup is sprung, not instant: the card grows into your hand with a
+    // little mass, shadow rising with it.
+    val pickup = remember(session) { Animatable(0f) }
+    LaunchedEffect(session) {
+        pickup.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 420f))
+    }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -58,13 +68,16 @@ fun DragOverlay(controller: DragController, format: Format) {
                     translationX = point.x - size.width / 2f
                     translationY = point.y - size.height / 2f
                     // Lifted off the table rather than lying on it.
-                    scaleX = 1.08f
-                    scaleY = 1.08f
-                    rotationZ = 3f
+                    val v = pickup.value
+                    val grow = 1f + 0.09f * v
+                    scaleX = grow
+                    scaleY = grow
+                    rotationZ = 3f * v
+                    shadowElevation = 18.dp.toPx() * v
                 }
-                .alpha(0.92f),
+                .alpha(0.94f),
         ) {
-            CardTile(card = session.card, format = format)
+            CardTile(card = session.card, format = format, tactile = false)
         }
     }
 }

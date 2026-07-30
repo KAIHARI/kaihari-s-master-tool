@@ -71,6 +71,11 @@ data class UiPreferences(
     val format: Format = Format.TCG,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /**
+     * Sound and haptic feedback. Null means "the platform's default" — on for
+     * a tablet in the hands, off at a desk — until the user says otherwise.
+     */
+    val feedbackEnabled: Boolean? = null,
+    /**
      * Passcodes the easter egg throws, when it has been given a set to keep.
      *
      * Empty means "whatever is in the deck right now", which is the useful

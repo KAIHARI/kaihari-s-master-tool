@@ -44,6 +44,7 @@ import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.prefs.ThemeMode
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
 import com.kaiharimoto.mastertool.ui.egg.ChibiLogo
+import com.kaiharimoto.mastertool.ui.fx.defaultFeedbackEnabled
 import com.kaiharimoto.mastertool.ui.theme.ChromaticText
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.archivoExpandedFamily
@@ -203,6 +204,19 @@ fun DeckBuilderTopBar(
                 )
                 DropdownMenuItem(
                     text = {
+                        val effective = layout.preferences.feedbackEnabled
+                            ?: defaultFeedbackEnabled()
+                        Text(if (effective) "Sound & haptics: on" else "Sound & haptics: off")
+                    },
+                    onClick = {
+                        layout.update {
+                            val effective = it.feedbackEnabled ?: defaultFeedbackEnabled()
+                            it.copy(feedbackEnabled = !effective)
+                        }
+                    },
+                )
+                DropdownMenuItem(
+                    text = {
                         Text(
                             when (layout.preferences.themeMode) {
                                 ThemeMode.SYSTEM -> "Theme: match system"
@@ -238,6 +252,7 @@ fun DeckBuilderTopBar(
                                 stacked = it.stacked,
                                 easterEggPool = it.easterEggPool,
                                 themeMode = it.themeMode,
+                                feedbackEnabled = it.feedbackEnabled,
                             )
                         }
                     },

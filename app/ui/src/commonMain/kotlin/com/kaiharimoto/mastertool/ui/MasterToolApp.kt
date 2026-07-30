@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +20,9 @@ import com.kaiharimoto.mastertool.core.remote.HttpClientFactory
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderScreen
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckLayoutState
+import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
+import com.kaiharimoto.mastertool.ui.fx.defaultFeedbackEnabled
+import com.kaiharimoto.mastertool.ui.fx.rememberFeedback
 import com.kaiharimoto.mastertool.ui.library.DeckLibraryScreen
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
 import com.kaiharimoto.mastertool.ui.update.UpdateDialog
@@ -57,7 +61,14 @@ fun MasterToolApp(deps: AppDependencies) {
         onDispose { layoutState.flush() }
     }
 
+    val feedback = rememberFeedback(
+        enabled = {
+            layoutState.preferences.feedbackEnabled ?: defaultFeedbackEnabled()
+        },
+    )
+
     MasterToolTheme(mode = layoutState.preferences.themeMode) {
+        CompositionLocalProvider(LocalFeedback provides feedback) {
         when (screen) {
             Screen.DeckBuilder -> DeckBuilderScreen(
                 state = builderState,
@@ -87,6 +98,7 @@ fun MasterToolApp(deps: AppDependencies) {
                 onOpenInBrowser = updateState::openInBrowser,
                 onDismiss = updateState::dismiss,
             )
+        }
         }
     }
 }
