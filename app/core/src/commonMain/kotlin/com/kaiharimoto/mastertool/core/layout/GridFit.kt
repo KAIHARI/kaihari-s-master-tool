@@ -26,6 +26,36 @@ data class GridFit(val columns: Int, val fits: Boolean)
  */
 object GridFitter {
 
+    /**
+     * [fit], but sized as though the section already held [baselineCount]
+     * cards.
+     *
+     * A deck pane that sizes to its contents starts with one enormous card and
+     * shrinks with every add — the view reflows exactly when the builder is
+     * trying to hold ratios steady in their head. Sizing for the section's
+     * natural capacity instead means the first card lands in a 40-card-shaped
+     * grid, nothing moves until the deck outgrows the baseline, and only then
+     * does the grid zoom out.
+     */
+    fun stableFit(
+        count: Int,
+        baselineCount: Int,
+        availableWidth: Float,
+        availableHeight: Float,
+        spacing: Float,
+        aspectRatio: Float,
+        minColumns: Int,
+        maxColumns: Int,
+    ): GridFit = fit(
+        count = maxOf(count, baselineCount),
+        availableWidth = availableWidth,
+        availableHeight = availableHeight,
+        spacing = spacing,
+        aspectRatio = aspectRatio,
+        minColumns = minColumns,
+        maxColumns = maxColumns,
+    )
+
     fun fit(
         count: Int,
         availableWidth: Float,

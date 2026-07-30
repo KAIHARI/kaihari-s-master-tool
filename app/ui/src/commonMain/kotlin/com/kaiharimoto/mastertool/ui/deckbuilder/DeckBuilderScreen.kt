@@ -27,6 +27,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.core.deck.DeckBreakdown
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.input.ShortcutAction
 import com.kaiharimoto.mastertool.core.input.ShortcutContext
@@ -109,6 +110,7 @@ fun DeckBuilderScreen(
         state.eggVisible -> ShortcutLayer.EGG
         state.inspection != null -> ShortcutLayer.INSPECTOR
         state.helpVisible -> ShortcutLayer.HELP
+        state.groupManagerVisible -> ShortcutLayer.GROUPS
         state.filtersVisible -> ShortcutLayer.FILTERS
         state.statsVisible -> ShortcutLayer.STATS
         state.issuesVisible -> ShortcutLayer.ISSUES
@@ -129,6 +131,9 @@ fun DeckBuilderScreen(
             ShortcutAction.TOGGLE_STATS -> state.statsVisible = !state.statsVisible
             ShortcutAction.TOGGLE_ISSUES -> state.issuesVisible = !state.issuesVisible
             ShortcutAction.TOGGLE_HELP -> state.helpVisible = !state.helpVisible
+            ShortcutAction.TOGGLE_BREAKDOWN -> state.breakdownVisible = !state.breakdownVisible
+            ShortcutAction.TOGGLE_GROUP_MANAGER ->
+                state.groupManagerVisible = !state.groupManagerVisible
             ShortcutAction.DISMISS -> dismissTopLayer(state) {
                 focusManager.clearFocus()
                 // Cleared focus is nobody's focus, and key events only arrive
@@ -274,6 +279,14 @@ fun DeckBuilderScreen(
         )
     }
 
+    if (state.groupManagerVisible) {
+        GroupManagerSheet(
+            state = state,
+            onDismiss = { state.groupManagerVisible = false },
+            shortcuts = shortcutRelay,
+        )
+    }
+
     if (state.eggVisible) {
         val pinned = layout.preferences.easterEggPool
 
@@ -322,6 +335,7 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
         state.eggVisible -> state.eggVisible = false
         state.inspection != null -> state.inspection = null
         state.helpVisible -> state.helpVisible = false
+        state.groupManagerVisible -> state.groupManagerVisible = false
         state.filtersVisible -> state.filtersVisible = false
         state.statsVisible -> state.statsVisible = false
         state.issuesVisible -> state.issuesVisible = false
@@ -346,6 +360,26 @@ private fun applyDrop(
     if (landed == null || !landed.accepted) return
 
     val target = landed.section
+
+    // In the breakdown lens the main grid's indices count headers and grouped
+    // cards, and position within a block is display order, not deck order — so
+    // a drop there means "this card belongs to that group", not "insert here".
+    if (target == DeckSection.MAIN && state.breakdownVisible && !stacked) {
+        val entries = DeckBreakdown.flatten(state.deck.main, state.groups)
+        val groupId = DeckBreakdown.dropGroup(entries, landed.index)
+
+        when (session.section) {
+            null -> state.addCard(session.card, DeckSection.MAIN)
+            DeckSection.MAIN -> Unit // stays put; only its group changes
+            else -> state.moveCard(session.card, session.section, DeckSection.MAIN)
+        }
+        // Assign only if the card actually made it in (add can be rejected).
+        if (state.deck.main.contains(session.card.id)) {
+            state.assignCardToGroup(session.card.id, groupId)
+        }
+        return
+    }
+
     when {
         // Dropped back on the pool: the copy leaves the deck.
         target == null -> session.section?.let { from ->

@@ -7,7 +7,10 @@ import androidx.compose.runtime.setValue
 import com.kaiharimoto.mastertool.core.data.SyncResult
 import com.kaiharimoto.mastertool.core.deck.DeckEdit
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
+import com.kaiharimoto.mastertool.core.deck.DeckGroups
+import com.kaiharimoto.mastertool.core.deck.DeckGroupsCodec
 import com.kaiharimoto.mastertool.core.deck.DeckSorter
+import com.kaiharimoto.mastertool.core.deck.StoredGroups
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
 import com.kaiharimoto.mastertool.core.deck.DeckValidation
 import com.kaiharimoto.mastertool.core.deck.DeckValidator
@@ -95,6 +98,21 @@ class DeckBuilderState(
      * having to close it to see the next is how you stop bothering.
      */
     var inspection by mutableStateOf<Inspection?>(null)
+
+    /**
+     * The deck's functional breakdown — fully manual, drawn by the user.
+     *
+     * Travels with the deck: stored under its own key in the ydkx extended
+     * payload, so a deck organised into groups opens organised, and a plain
+     * `.ydk` round-trips without gaining a payload it never had.
+     */
+    var groups by mutableStateOf(DeckGroups.EMPTY)
+        private set
+
+    /** Whether the main pane is showing the breakdown lens. */
+    var breakdownVisible by mutableStateOf(false)
+
+    var groupManagerVisible by mutableStateOf(false)
 
     var filtersVisible by mutableStateOf(false)
 
@@ -417,7 +435,12 @@ class DeckBuilderState(
         val extended: JsonObject?,
     )
 
-    private data class HistoryEntry(val deck: Deck, val identity: DeckIdentity?)
+    private data class HistoryEntry(
+        val deck: Deck,
+        val identity: DeckIdentity?,
+        /** Snapshotted only by edits that touch the breakdown, same rule as identity. */
+        val groups: StoredGroups?,
+    )
 
     private fun currentIdentity() = DeckIdentity(deckName, deckId, extended)
 
@@ -427,8 +450,19 @@ class DeckBuilderState(
         extended = identity.extended
     }
 
-    private fun pushUndo(previous: Deck, identity: DeckIdentity? = null): UndoToken {
-        undoStack.addLast(HistoryEntry(previous, identity))
+    private fun currentStoredGroups() = StoredGroups(groups, breakdownVisible)
+
+    private fun applyStoredGroups(stored: StoredGroups) {
+        groups = stored.groups
+        breakdownVisible = stored.breakdown
+    }
+
+    private fun pushUndo(
+        previous: Deck,
+        identity: DeckIdentity? = null,
+        groupsSnapshot: StoredGroups? = null,
+    ): UndoToken {
+        undoStack.addLast(HistoryEntry(previous, identity, groupsSnapshot))
         while (undoStack.size > UNDO_DEPTH) undoStack.removeFirst()
         // A new edit invalidates anything that was undone to reach this point.
         redoStack.clear()
@@ -437,21 +471,55 @@ class DeckBuilderState(
 
     fun undo() {
         val entry = undoStack.removeLastOrNull() ?: return
-        // Symmetric: only an entry that restores identity captures it going the
-        // other way, so redo can put the new deck's name back too.
-        redoStack.addLast(HistoryEntry(deck, entry.identity?.let { currentIdentity() }))
+        // Symmetric: only an entry that restores identity or groups captures
+        // them going the other way, so redo can put the new state back too.
+        redoStack.addLast(
+            HistoryEntry(
+                deck,
+                entry.identity?.let { currentIdentity() },
+                entry.groups?.let { currentStoredGroups() },
+            )
+        )
         deck = entry.deck
         entry.identity?.let(::applyIdentity)
+        entry.groups?.let(::applyStoredGroups)
         stamp()
     }
 
     fun redo() {
         val entry = redoStack.removeLastOrNull() ?: return
-        undoStack.addLast(HistoryEntry(deck, entry.identity?.let { currentIdentity() }))
+        undoStack.addLast(
+            HistoryEntry(
+                deck,
+                entry.identity?.let { currentIdentity() },
+                entry.groups?.let { currentStoredGroups() },
+            )
+        )
         deck = entry.deck
         entry.identity?.let(::applyIdentity)
+        entry.groups?.let(::applyStoredGroups)
         stamp()
     }
+
+    // ---- groups ------------------------------------------------------------
+
+    /**
+     * Every breakdown edit goes through here: undoable like a card edit, and a
+     * no-op transform stays off the history.
+     */
+    fun updateGroups(transform: (DeckGroups) -> DeckGroups) {
+        val next = transform(groups)
+        if (next == groups) return
+        pushUndo(deck, groupsSnapshot = currentStoredGroups())
+        groups = next
+    }
+
+    fun assignCardToGroup(id: CardId, groupId: String?) =
+        updateGroups { it.assign(id, groupId) }
+
+    /** The extended payload with the current breakdown written into it. */
+    private fun extendedForWrite() =
+        DeckGroupsCodec.write(extended, StoredGroups(groups, breakdownVisible))
 
     /** Undoes an edit only while it is still the most recent one. */
     private fun undoIfCurrent(token: UndoToken) {
@@ -483,18 +551,24 @@ class DeckBuilderState(
     // ---- persistence -------------------------------------------------------
 
     fun newDeck() {
-        val token = pushUndo(deck, currentIdentity())
+        val token = pushUndo(deck, currentIdentity(), currentStoredGroups())
         deck = Deck.EMPTY
         deckName = "Untitled Deck"
         deckId = null
         extended = null
+        applyStoredGroups(StoredGroups.EMPTY)
         showToast("Started a new deck.", undo = { undoIfCurrent(token) })
     }
 
     fun save(onSaved: (String) -> Unit = {}) {
         scope.launch {
             val id = deckId ?: deps.newDeckId().also { deckId = it }
-            deps.deckRepository.save(id, deckName.ifBlank { "Untitled Deck" }, deck, extended)
+            deps.deckRepository.save(
+                id,
+                deckName.ifBlank { "Untitled Deck" },
+                deck,
+                extendedForWrite(),
+            )
             showToast("Saved \"$deckName\".")
             onSaved(id)
         }
@@ -507,6 +581,7 @@ class DeckBuilderState(
             deckName = stored.entry.name
             deckId = stored.entry.id
             extended = stored.extended
+            applyStoredGroups(DeckGroupsCodec.read(stored.extended))
             undoStack.clear()
             redoStack.clear()
             stamp()
@@ -518,11 +593,12 @@ class DeckBuilderState(
             val file = deps.fileAccess.importDeck() ?: return@launch
             val parsed = YdkCodec.parse(file.content)
 
-            val token = pushUndo(deck, currentIdentity())
+            val token = pushUndo(deck, currentIdentity(), currentStoredGroups())
             deck = parsed.document.deck
             deckName = file.name.substringBeforeLast('.').ifBlank { "Imported Deck" }
             deckId = null
             extended = parsed.document.extended
+            applyStoredGroups(DeckGroupsCodec.read(parsed.document.extended))
 
             val warning = parsed.warnings.size
                 .takeIf { it > 0 }
@@ -534,8 +610,9 @@ class DeckBuilderState(
 
     fun exportToFile() {
         scope.launch {
-            val text = YdkCodec.write(deck, createdBy = "kai's master tool", extended = extended)
-            val extension = if (extended != null) "ydkx" else "ydk"
+            val payload = extendedForWrite()
+            val text = YdkCodec.write(deck, createdBy = "kai's master tool", extended = payload)
+            val extension = if (payload != null) "ydkx" else "ydk"
             val name = "${deckName.ifBlank { "deck" }}.$extension"
             if (deps.fileAccess.exportDeck(name, text)) {
                 showToast("Exported $name.")
@@ -545,8 +622,9 @@ class DeckBuilderState(
 
     fun shareDeck() {
         scope.launch {
-            val text = YdkCodec.write(deck, createdBy = "kai's master tool", extended = extended)
-            val extension = if (extended != null) "ydkx" else "ydk"
+            val payload = extendedForWrite()
+            val text = YdkCodec.write(deck, createdBy = "kai's master tool", extended = payload)
+            val extension = if (payload != null) "ydkx" else "ydk"
             deps.fileAccess.shareDeck("${deckName.ifBlank { "deck" }}.$extension", text)
         }
     }

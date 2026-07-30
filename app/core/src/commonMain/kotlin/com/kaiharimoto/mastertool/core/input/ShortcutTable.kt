@@ -40,6 +40,8 @@ enum class ShortcutAction {
     TOGGLE_STATS,
     TOGGLE_ISSUES,
     TOGGLE_HELP,
+    TOGGLE_BREAKDOWN,
+    TOGGLE_GROUP_MANAGER,
     DISMISS,
     FOCUS_MAIN,
     FOCUS_EXTRA,
@@ -75,6 +77,7 @@ enum class ShortcutLayer {
     STATS,
     ISSUES,
     HELP,
+    GROUPS,
     EGG,
 }
 
@@ -184,6 +187,14 @@ object ShortcutTable {
         Shortcut(
             KeyChord("i"), ShortcutAction.TOGGLE_ISSUES, ShortcutScope.BUILDER,
             "Deck check", togglesLayer = ShortcutLayer.ISSUES,
+        ),
+        Shortcut(
+            KeyChord("b"), ShortcutAction.TOGGLE_BREAKDOWN, ShortcutScope.BUILDER,
+            "Breakdown view — the deck split into your groups",
+        ),
+        Shortcut(
+            KeyChord("g"), ShortcutAction.TOGGLE_GROUP_MANAGER, ShortcutScope.BUILDER,
+            "Manage groups", togglesLayer = ShortcutLayer.GROUPS,
         ),
         Shortcut(
             KeyChord("1"), ShortcutAction.FOCUS_MAIN, ShortcutScope.BUILDER,
