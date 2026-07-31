@@ -22,6 +22,7 @@ import com.kaiharimoto.mastertool.ui.art.archivo_expanded_semibold
 import com.kaiharimoto.mastertool.ui.art.archivo_medium
 import com.kaiharimoto.mastertool.ui.art.archivo_regular
 import com.kaiharimoto.mastertool.ui.art.archivo_semibold
+import com.kaiharimoto.mastertool.ui.art.inter_medium
 import org.jetbrains.compose.resources.Font
 
 /**
@@ -174,6 +175,22 @@ fun archivoFamily(): FontFamily = FontFamily(
 @Composable
 fun archivoExpandedFamily(): FontFamily = FontFamily(
     Font(Res.font.archivo_expanded_semibold, FontWeight.SemiBold),
+)
+
+/**
+ * The wordmark's face: a neo-grotesque at Medium, set at its natural tracking.
+ *
+ * Helvetica Neue is the reference and cannot be shipped — it is Linotype's, and
+ * it does not exist on Android or on most Linux desktops, so asking the system
+ * for it by name would silently land on whatever that device calls its default
+ * sans and the mark would look different on every screen. Inter is the closest
+ * face that can travel with the app: same neo-grotesque skeleton, drawn for
+ * screens, SIL OFL (see `ui/licenses/Inter-OFL.txt`). Swap the file here if a
+ * licensed Helvetica Neue is ever dropped in — nothing else refers to it.
+ */
+@Composable
+fun wordmarkFamily(): FontFamily = FontFamily(
+    Font(Res.font.inter_medium, FontWeight.Medium),
 )
 
 /**

@@ -60,6 +60,11 @@ const val CARD_ASPECT_RATIO = 59f / 86f
  * gesture layer only *reads* events (Initial pass, nothing consumed), so taps,
  * long presses and drags behave exactly as before. Idle tiles cost nothing:
  * the springs only run while a pointer is on the card.
+ *
+ * [outline] is membership: a solid ring in a group's colour, for a card that
+ * has been *chosen*. [highlighted]'s turning prismatic ring means something
+ * else — "this is the one you asked for" — and wears badly on a dozen cards at
+ * once, so the two are deliberately different treatments and outline wins.
  */
 @Composable
 fun CardTile(
@@ -69,6 +74,7 @@ fun CardTile(
     copies: Int = 0,
     dimmed: Boolean = false,
     highlighted: Boolean = false,
+    outline: Color? = null,
     tactile: Boolean = true,
     onClick: () -> Unit = {},
     overlay: @Composable BoxScope.() -> Unit = {},
@@ -77,8 +83,10 @@ fun CardTile(
     val banStatus = card.banStatus(format)
 
     // A highlighted card wears the full prismatic ring, slowly turning — the
-    // "look here" treatment for reveals and flashes.
-    val prismAngle = if (highlighted) animatedPrismAngle().value else 0f
+    // "look here" treatment for reveals and flashes. An outlined one is being
+    // held in a group instead, and stays still.
+    val ringed = highlighted && outline == null
+    val prismAngle = if (ringed) animatedPrismAngle().value else 0f
 
     // Where the pointer sits on the card, normalised to -1..1 from the centre.
     // Offset.Zero doubles as "nobody is touching this".
@@ -146,7 +154,7 @@ fun CardTile(
                 },
             )
             .then(
-                if (highlighted) {
+                if (ringed) {
                     Modifier.prismaticBorder(angle = prismAngle, cornerRadius = 4.dp, stroke = 2.5.dp)
                 } else {
                     Modifier
@@ -155,10 +163,10 @@ fun CardTile(
             .clip(shape)
             .background(MasterToolPalette.SurfaceRaised)
             .then(
-                if (highlighted) {
-                    Modifier
-                } else {
-                    Modifier.border(1.dp, MaterialTheme.colorScheme.outline, shape)
+                when {
+                    outline != null -> Modifier.border(2.5.dp, outline, shape)
+                    ringed -> Modifier
+                    else -> Modifier.border(1.dp, MaterialTheme.colorScheme.outline, shape)
                 },
             )
             .clickable(onClick = onClick),

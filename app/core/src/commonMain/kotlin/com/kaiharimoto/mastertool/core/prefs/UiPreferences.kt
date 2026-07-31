@@ -61,8 +61,14 @@ data class SectionPreferences(
 data class UiPreferences(
     /** Share of the window given to search, against the deck panes. */
     val searchWeight: Float = DEFAULT_SEARCH_WEIGHT,
-    /** Cards per row in the search grid; 0 means size to fit. */
-    val searchColumns: Int = 0,
+    /**
+     * Cards per row in the search grid; 0 means size to fit.
+     *
+     * Four by default: the pool is scanned, not read, and four across is the
+     * width at which a card's art is recognisable at arm's length without the
+     * column becoming a list.
+     */
+    val searchColumns: Int = 4,
     /**
      * Whether the card database is on screen at all.
      *
@@ -155,6 +161,7 @@ data class UiPreferences(
         else -> copy(
             layoutVersion = LAYOUT_VERSION,
             fitAll = DEFAULT.fitAll,
+            searchColumns = DEFAULT.searchColumns,
             main = main.copy(columns = DEFAULT.main.columns, autoFit = true),
             extra = extra.copy(columns = DEFAULT.extra.columns, autoFit = true),
             side = side.copy(columns = DEFAULT.side.columns, autoFit = true),
@@ -169,8 +176,9 @@ data class UiPreferences(
         /**
          * 1: ten across for the main deck and fifteen for the extra and side,
          * with all three panes sized to be visible at once.
+         * 2: four across in the card pool.
          */
-        const val LAYOUT_VERSION = 1
+        const val LAYOUT_VERSION = 2
 
         val DEFAULT = UiPreferences(layoutVersion = LAYOUT_VERSION)
     }

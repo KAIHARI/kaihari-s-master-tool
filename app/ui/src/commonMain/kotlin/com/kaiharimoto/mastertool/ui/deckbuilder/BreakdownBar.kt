@@ -164,7 +164,8 @@ private fun GroupDraftEditor(state: DeckBuilderState, modifier: Modifier = Modif
                 placeholder = { Text("Group name", style = MaterialTheme.typography.bodySmall) },
                 textStyle = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier
-                    .width(190.dp)
+                    .width(180.dp)
+                    .height(46.dp)
                     .onFocusChanged { state.onTextFieldFocusChanged(it.isFocused) },
             )
 

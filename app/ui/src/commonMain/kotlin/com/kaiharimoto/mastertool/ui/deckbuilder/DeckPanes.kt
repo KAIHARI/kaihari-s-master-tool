@@ -2,6 +2,8 @@ package com.kaiharimoto.mastertool.ui.deckbuilder
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.Orientation
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridItemInfo
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -53,9 +56,13 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -66,6 +73,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.BreakdownSlot
 import com.kaiharimoto.mastertool.core.deck.DeckBreakdown
+import com.kaiharimoto.mastertool.core.deck.DeckGroup
+import com.kaiharimoto.mastertool.core.deck.DeckGroups
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.layout.DeckFit
@@ -95,41 +104,44 @@ private const val FLASH_MS = 1400L
 private val SECTION_ORDER =
     listOf(DeckSection.MAIN, DeckSection.EXTRA, DeckSection.SIDE)
 
-// The deck column's fixed furniture. These are the numbers the fitter is told
-// about, so they have to be the numbers the panes actually use — anything the
-// layout spends that the fitter does not know about is height the cards were
-// promised and did not get, which is how they ended up out of bounds.
-private val PANE_PADDING = 8.dp
-private val HEADER_HEIGHT = 34.dp
-private val HEADER_GAP = 6.dp
-private val PANE_GAP = 12.dp
-private val CARD_SPACING = 6.dp
+// The deck column's fixed furniture, kept as lean as it can be read at. Every
+// dp here is a dp the cards do not get: these are the numbers the fitter is
+// told about, so they have to be the numbers the panes actually use — anything
+// the layout spends that the fitter does not know about is height the cards
+// were promised and did not get.
+private val COLUMN_PADDING = 6.dp
+private val PANE_PADDING = 6.dp
+private val HEADER_HEIGHT = 28.dp
+private val HEADER_GAP = 4.dp
+private val PANE_GAP = 8.dp
+private val CARD_SPACING = 5.dp
 
 /**
- * How far apart two groups sit in the breakdown lens.
+ * What the gutters open to in the breakdown lens.
  *
- * Deliberately small. It is taken out of the card's own cell rather than added
- * to the grid, so the deck cannot grow past the box it was fitted to — the
- * cards on either side of a boundary draw a little narrower and the space
- * between them opens by twice this. Enough to read a run at a glance, not
- * enough to look like the deck has been rearranged.
+ * The separation is bought globally rather than per boundary: every gutter in
+ * the main deck widens by the same amount, so no card is ever a different size
+ * from its neighbours and nothing wobbles as groups change. What tells the
+ * groups apart is the plate drawn behind each run, not the size of the cards.
  */
-private val BREAKDOWN_GAP = 6.dp
+private val BREAKDOWN_SPACING = 11.dp
 
 /** The main deck's group bar: a row of group chips, or the draft editor. */
-private val LEGEND_HEIGHT = 36.dp
-private val DRAFT_BAR_HEIGHT = 112.dp
+private val LEGEND_HEIGHT = 32.dp
+private val DRAFT_BAR_HEIGHT = 88.dp
+
+/** The synthetic group a draft's selection is drawn as, before it is saved. */
+private const val DRAFT_GROUP_ID = "__draft"
 
 /**
  * The three deck sections, stacked so the whole deck is on screen at once.
  *
  * Sizing runs the other way round from how it used to. The row widths are the
  * fixed thing — ten across for the main deck, fifteen for the extra and side,
- * because that is how a decklist is read — and the card size is whatever makes
- * all three fit the column. Previously each pane chose its own column count to
- * suit a height a divider drag had handed it, which is a negotiation with no
- * settlement: the panes could not agree on a total, and the main deck spilled
- * past its box.
+ * because that is how a decklist is read — and the fitter solves for the one
+ * width all three are drawn at. Everything left over is negative space around
+ * the stack, which is why this centres it: the deck sits in the middle of the
+ * screen filling what it can, rather than growing margins inside the main pane.
  *
  * Dragging a divider still works and is still remembered — it just means "I am
  * sizing these by hand now", which switches the fitter off until the deck is
@@ -146,14 +158,22 @@ fun DeckPanes(
     BoxWithConstraints(
         modifier
             .onGloballyPositioned { layout.deckColumnHeightPx = it.size.height.toFloat() }
-            .padding(10.dp),
+            .padding(COLUMN_PADDING),
     ) {
         val density = LocalDensity.current
         val preferences = layout.preferences
 
-        // Recomputed on every layout pass, which is one division per section and
-        // means the deck re-fits the instant the window, the pool or the row
-        // width changes.
+        // Turning the lens on opens every gutter in the main deck at once. The
+        // fitter is re-solved on each frame of that spring, so the cards give
+        // up exactly the width the gutters take and the deck still fits.
+        val mainSpacing by animateDpAsState(
+            if (state.breakdownVisible) BREAKDOWN_SPACING else CARD_SPACING,
+            spring(dampingRatio = 0.72f, stiffness = 260f),
+            label = "breakdownGutters",
+        )
+
+        // Recomputed on every layout pass, which is one division and means the
+        // deck re-fits the instant the window, the pool or the row width changes.
         val plan: DeckFit? = if (preferences.fitAll) {
             with(density) {
                 DeckFitter.plan(
@@ -162,13 +182,13 @@ fun DeckPanes(
                             count = state.deck[section].displayCount(preferences.stacked),
                             columns = preferences[section].columns,
                             baselineCount = section.baselineCapacity,
+                            spacing = spacingFor(section, mainSpacing).toPx(),
                             collapsed = preferences[section].collapsed,
                             chromeHeight = chromeFor(state, preferences[section].collapsed, section).toPx(),
                         )
                     },
                     availableWidth = maxWidth.toPx(),
                     availableHeight = maxHeight.toPx(),
-                    spacing = CARD_SPACING.toPx(),
                     aspectRatio = CARD_ASPECT_RATIO,
                     paneGap = PANE_GAP.toPx(),
                 )
@@ -177,19 +197,26 @@ fun DeckPanes(
             null
         }
 
+        val stackWidth = plan?.let { with(density) { it.contentWidth.toDp() } }
         Column(
-            Modifier
-                .fillMaxSize()
+            when {
+                // Sized by hand: the panes divide the column by weight, as they did.
+                stackWidth == null -> Modifier.fillMaxSize()
+
                 // Only when even the smallest readable card does not fit — a
                 // window shorter than the deck. Scrolling is the honest answer
                 // there; drawing cards too small to read is not.
-                .then(
-                    if (plan?.fits == false) {
-                        Modifier.verticalScroll(rememberScrollState())
-                    } else {
-                        Modifier
-                    },
-                ),
+                plan?.fits == false -> Modifier
+                    .width(stackWidth)
+                    .fillMaxHeight()
+                    .align(Alignment.TopCenter)
+                    .verticalScroll(rememberScrollState())
+
+                // The stack is exactly as tall as it needs to be, so what is
+                // left over sits around it: the deck in the middle of the
+                // screen with a little air, rather than pinned to a corner.
+                else -> Modifier.width(stackWidth).align(Alignment.Center)
+            },
         ) {
             SECTION_ORDER.forEachIndexed { position, section ->
                 val sectionPreferences = preferences[section]
@@ -202,6 +229,7 @@ fun DeckPanes(
                     onDropped = onDropped,
                     section = section,
                     fit = fit,
+                    spacing = spacingFor(section, mainSpacing),
                     scrolls = plan?.fits == false,
                     modifier = when {
                         sectionPreferences.collapsed -> Modifier
@@ -233,10 +261,14 @@ private val DeckSection.baselineCapacity: Int
 private fun List<CardId>.displayCount(stacked: Boolean): Int =
     if (stacked) distinct().size else size
 
+/** Only the main deck opens its gutters, because only it wears the lens. */
+private fun spacingFor(section: DeckSection, mainSpacing: Dp): Dp =
+    if (section == DeckSection.MAIN) mainSpacing else CARD_SPACING
+
 /**
  * Everything in a pane that is not grid, to the pixel.
  *
- * The fitter subtracts this before it divides, so a bar that appears here and
+ * The fitter subtracts this before it solves, so a bar that appears here and
  * not in this sum is a bar the cards pay for.
  */
 private fun chromeFor(state: DeckBuilderState, collapsed: Boolean, section: DeckSection): Dp {
@@ -276,7 +308,7 @@ private fun PaneDivider(enabled: Boolean, onDrag: (Float) -> Unit) {
         if (enabled) {
             Box(
                 Modifier
-                    .size(width = 56.dp, height = 2.dp)
+                    .size(width = 48.dp, height = 2.dp)
                     .clip(RoundedCornerShape(1.dp))
                     .background(MaterialTheme.colorScheme.outline),
             )
@@ -292,6 +324,7 @@ private fun DeckSectionPane(
     onDropped: (DragSession, DropHover?) -> Unit,
     section: DeckSection,
     fit: SectionFit?,
+    spacing: Dp,
     scrolls: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -388,7 +421,8 @@ private fun DeckSectionPane(
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
             // Fitted: the fitter already solved for the card size, and the grid
-            // is drawn at exactly that size and centred in whatever is left.
+            // is drawn at exactly that size — it fills the pane, which is what
+            // leaves the negative space outside the stack rather than inside it.
             // Unfitted: the pane picks a column count for the height it was
             // dragged to, which is the old behaviour, kept for hand-sizing.
             val manualFit: GridFit? = if (fit == null) {
@@ -399,7 +433,7 @@ private fun DeckSectionPane(
                             baselineCount = if (layout.preferences.stacked) 0 else section.baselineCapacity,
                             availableWidth = maxWidth.toPx(),
                             availableHeight = maxHeight.toPx(),
-                            spacing = CARD_SPACING.toPx(),
+                            spacing = spacing.toPx(),
                             aspectRatio = CARD_ASPECT_RATIO,
                             minColumns = SectionPreferences.MIN_COLUMNS,
                             maxColumns = SectionPreferences.MAX_COLUMNS,
@@ -411,7 +445,7 @@ private fun DeckSectionPane(
                                 count = displayed.size,
                                 columns = preferences.columns,
                                 availableWidth = maxWidth.toPx(),
-                                spacing = CARD_SPACING.toPx(),
+                                spacing = spacing.toPx(),
                                 aspectRatio = CARD_ASPECT_RATIO,
                             ) <= maxHeight.toPx(),
                         )
@@ -430,31 +464,100 @@ private fun DeckSectionPane(
             // above this and only needs the number on the next pass.
             SideEffect { effectiveColumns = columns }
 
-            val slots = if (breakdownActive) {
+            // What the deck is broken into, and — while one is being drawn up —
+            // what has been picked for it so far. The draft is drawn as a group
+            // that does not exist yet, so selecting cards shows the piece it
+            // would make before anything is committed.
+            val draft = state.groupDraft.takeIf { section == DeckSection.MAIN }
+            val savedSlots = if (breakdownActive) {
                 DeckBreakdown.slots(displayed, state.groups, columns)
             } else {
                 emptyList()
             }
+            val draftGroups = remember(draft?.selection, draft?.color) {
+                draft?.let {
+                    DeckGroups(
+                        groups = listOf(DeckGroup(DRAFT_GROUP_ID, "", it.color, 0)),
+                        assignments = it.selection.associateWith { _ -> DRAFT_GROUP_ID },
+                    )
+                }
+            }
+            val draftSlots = draftGroups?.let { DeckBreakdown.slots(displayed, it, columns) }
 
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            val reveal by animateFloatAsState(
+                if (breakdownActive) 1f else 0f,
+                spring(dampingRatio = 0.9f, stiffness = 190f),
+                label = "breakdownReveal",
+            )
+
+            Box(
+                modifier = if (fit != null) {
+                    Modifier.fillMaxWidth().height(with(density) { fit.gridHeight.toDp() })
+                } else {
+                    Modifier.fillMaxSize()
+                },
+            ) {
+                // Behind the cards, so a run of one group reads as a single
+                // piece with the cards sitting in it. Drawn from the grid's own
+                // layout rather than from each tile: one canvas knows where
+                // every card is, and a tile drawing its own share cannot round
+                // a corner it does not own the end of.
+                if (savedSlots.isNotEmpty() || draftSlots != null) {
+                    val palette = state.groups.ordered().mapIndexed { ordinal, group ->
+                        group.id to GroupPaint(
+                            color = MasterToolPalette.Prism[group.color % MasterToolPalette.Prism.size],
+                            ordinal = ordinal,
+                        )
+                    }.toMap()
+                    val draftPaint = draft?.let {
+                        GroupPaint(
+                            MasterToolPalette.Prism[it.color % MasterToolPalette.Prism.size],
+                            ordinal = 0,
+                        )
+                    }
+
+                    Canvas(Modifier.matchParentSize()) {
+                        val items = gridState.layoutInfo.visibleItemsInfo
+                        val gap = spacing.toPx()
+
+                        // Saved groups step back while a draft is open — what is
+                        // being decided right now has to read on top of what was
+                        // decided before.
+                        drawPlates(
+                            items = items,
+                            slots = savedSlots,
+                            paint = { id -> palette[id] },
+                            spacing = gap,
+                            reveal = reveal,
+                            groupCount = palette.size,
+                            dim = if (draft != null) 0.4f else 1f,
+                        )
+
+                        if (draftSlots != null && draftPaint != null) {
+                            drawPlates(
+                                items = items,
+                                slots = draftSlots,
+                                paint = { id -> draftPaint.takeIf { id == DRAFT_GROUP_ID } },
+                                spacing = gap,
+                                reveal = 1f,
+                                groupCount = 1,
+                                dim = 1f,
+                            )
+                        }
+                    }
+                }
+
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
                     state = gridState,
-                    modifier = with(density) {
-                        if (fit != null) {
-                            Modifier
-                                .width(fit.gridWidth.toDp())
-                                .height(fit.gridHeight.toDp())
-                        } else {
-                            Modifier.fillMaxSize()
-                        }
-                    }
+                    modifier = Modifier
+                        .fillMaxSize()
                         .onGloballyPositioned {
                             geometry.gridOrigin = it.positionInRoot()
                             geometry.register(drag, section, gridState)
                         },
-                    horizontalArrangement = Arrangement.spacedBy(CARD_SPACING),
-                    verticalArrangement = Arrangement.spacedBy(CARD_SPACING),
+                    horizontalArrangement = Arrangement.spacedBy(spacing),
+                    verticalArrangement = Arrangement.spacedBy(spacing),
                 ) {
                     if (layout.preferences.stacked) {
                         // Stacks have no positional identity, so dragging one has
@@ -482,7 +585,6 @@ private fun DeckSectionPane(
                                     hover.index == stacks.size && i == stacks.lastIndex,
                                 siblings = ids,
                                 position = stack.firstIndex,
-                                slot = slots.getOrNull(i),
                             )
                         }
                     } else {
@@ -505,7 +607,6 @@ private fun DeckSectionPane(
                                     hover.index == ids.size && position == ids.lastIndex,
                                 siblings = ids,
                                 position = position,
-                                slot = slots.getOrNull(position),
                             )
                         }
                     }
@@ -524,6 +625,77 @@ private fun DeckSectionPane(
     }
 }
 
+/** A group's colour and where it sits in the order, for the reveal stagger. */
+private data class GroupPaint(val color: Color, val ordinal: Int)
+
+/**
+ * Draws one rounded plate per run of a group.
+ *
+ * The plate is bigger than the cards on it and sits underneath them, so what
+ * shows is a coloured edge around the run and colour in the gutters *within*
+ * it — the cards of a group read as one piece, and the bare gutter between two
+ * pieces is what separates them. Nothing about the cards themselves changes,
+ * which is the point: the deck is being dissected, not rearranged.
+ *
+ * The reveal is staggered by group order off a single animation, so switching
+ * the lens on deals the pieces out one after another rather than flashing them
+ * all at once.
+ */
+private fun DrawScope.drawPlates(
+    items: List<LazyGridItemInfo>,
+    slots: List<BreakdownSlot>,
+    paint: (String) -> GroupPaint?,
+    spacing: Float,
+    reveal: Float,
+    groupCount: Int,
+    dim: Float,
+) {
+    if (slots.isEmpty() || reveal <= 0.001f) return
+
+    val byIndex = items.associateBy { it.index }
+    val stagger = 0.22f
+    val span = 1f + stagger * (groupCount - 1).coerceAtLeast(0)
+
+    items.forEach { item ->
+        val slot = slots.getOrNull(item.index) ?: return@forEach
+        if (!slot.startsRun) return@forEach
+        val groupId = slot.groupId ?: return@forEach
+        val group = paint(groupId) ?: return@forEach
+
+        val progress = ((reveal * span) - stagger * group.ordinal).coerceIn(0f, 1f)
+        if (progress <= 0.001f) return@forEach
+
+        val last = byIndex[item.index + slot.runLength - 1]
+        val right = last?.let { (it.offset.x + it.size.width).toFloat() }
+            ?: (item.offset.x + slot.runLength * item.size.width + (slot.runLength - 1) * spacing)
+
+        // The plate grows out from under the cards as it appears, which is what
+        // makes the pieces look like they are being lifted apart.
+        val bleed = (spacing * 0.5f + 2.dp.toPx()) * progress
+        val left = item.offset.x - bleed
+        val top = item.offset.y - bleed
+        val size = Size(
+            width = (right - item.offset.x) + bleed * 2,
+            height = item.size.height + bleed * 2,
+        )
+        val radius = CornerRadius(6.dp.toPx() + bleed)
+
+        drawRoundRect(
+            color = group.color.copy(alpha = 0.16f * progress * dim),
+            topLeft = Offset(left, top),
+            size = size,
+            cornerRadius = radius,
+        )
+        drawRoundRect(
+            color = group.color.copy(alpha = 0.9f * progress * dim),
+            topLeft = Offset(left, top),
+            size = size,
+            cornerRadius = radius,
+            style = Stroke(width = 1.5.dp.toPx()),
+        )
+    }
+}
+
 /**
  * One card in a deck pane.
  *
@@ -534,8 +706,9 @@ private fun DeckSectionPane(
  *
  * While a group is being drawn up the tap means something else entirely: it
  * puts the card in the group, or takes it out. That is the one modal gesture in
- * the builder, and it is made obvious by the deck lifting under it — every
- * selected card sits up off the table until Save or Cancel.
+ * the builder, and it is made obvious by the card standing up off the table in
+ * the group's colour — lifted and outlined, never resized, so the deck keeps
+ * its shape while you pick through it.
  */
 @Composable
 private fun DeckCard(
@@ -552,7 +725,6 @@ private fun DeckCard(
     trailingMarker: Boolean,
     siblings: List<CardId>,
     position: Int,
-    slot: BreakdownSlot?,
 ) {
     val card: Card? = state.index.byId(id)
     var menuOpen by remember { mutableStateOf(false) }
@@ -562,24 +734,17 @@ private fun DeckCard(
         return
     }
 
-    val selecting = state.groupDraft != null && section == DeckSection.MAIN
-    val selected = selecting && state.groupDraft?.isSelected(id) == true
-    val groupColor = slot?.groupId
-        ?.let { state.groups.byId(it) }
+    val draft = state.groupDraft.takeIf { section == DeckSection.MAIN }
+    val selected = draft?.isSelected(id) == true
+    val selectionColor = draft
         ?.let { MasterToolPalette.Prism[it.color % MasterToolPalette.Prism.size] }
+        ?.takeIf { selected }
 
-    // The gap is the whole breakdown: cards stay exactly where the deck put
-    // them and the space between two groups opens up. Springing it in means the
-    // list separates rather than jumps, so you can see which cards moved apart.
-    val gapStart by animateDpAsState(
-        if (slot?.gapBefore == true) BREAKDOWN_GAP else 0.dp,
-        label = "gapStart",
+    val lift by animateFloatAsState(
+        if (selected) 1f else 0f,
+        spring(dampingRatio = 0.62f, stiffness = 380f),
+        label = "selectionLift",
     )
-    val gapEnd by animateDpAsState(
-        if (slot?.gapAfter == true) BREAKDOWN_GAP else 0.dp,
-        label = "gapEnd",
-    )
-    val lift by animateFloatAsState(if (selected) 1f else 0f, label = "selectionLift")
 
     val tile: @Composable () -> Unit = {
         HoverPreview(card) {
@@ -587,12 +752,20 @@ private fun DeckCard(
                 card = card,
                 format = state.format,
                 copies = copies,
-                highlighted = highlighted || selected,
+                highlighted = highlighted,
+                // The chosen card wears its group's colour as a solid ring. The
+                // turning prismatic one is for a card being *pointed at* — a
+                // reveal — and reads as noise on a dozen cards at once.
+                outline = selectionColor,
                 // A card being chosen for a group is not being handled, so the
                 // tilt stands down and the lift below says what is happening.
-                tactile = !selecting,
+                tactile = draft == null,
                 onClick = {
-                    if (selecting) state.toggleDraftSelection(id) else state.removeOne(card, section)
+                    if (draft != null) {
+                        state.toggleDraftSelection(id)
+                    } else {
+                        state.removeOne(card, section)
+                    }
                 },
             ) {
                 // A bar down the leading edge of the card the drop would land
@@ -607,32 +780,18 @@ private fun DeckCard(
                             .background(MasterToolPalette.AccentBright),
                     )
                 }
-
-                // Which group this card is in, as a hairline along its foot: the
-                // gaps say where the groups are, this says which is which.
-                if (groupColor != null) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(3.dp)
-                            .align(Alignment.BottomCenter)
-                            .background(groupColor),
-                    )
-                }
             }
         }
     }
 
     Box(
-        Modifier
-            .padding(start = gapStart, end = gapEnd)
-            .graphicsLayer {
-                val grow = 1f + 0.07f * lift
-                scaleX = grow
-                scaleY = grow
-                shadowElevation = lift * 16.dp.toPx()
-                shape = RoundedCornerShape(4.dp)
-            },
+        Modifier.graphicsLayer {
+            // Off the table, not bigger than it was: a selected card keeps its
+            // size so the grid it came out of stays legible behind it.
+            translationY = -6.dp.toPx() * lift
+            shadowElevation = 14.dp.toPx() * lift
+            shape = RoundedCornerShape(4.dp)
+        },
     ) {
         DragSource(
             controller = drag,
@@ -643,7 +802,7 @@ private fun DeckCard(
             onDropped = onDropped,
             // Picking cards for a group and dragging them somewhere are two
             // readings of the same movement; while a draft is open, tap wins.
-            dragEnabled = dragEnabled && !selecting,
+            dragEnabled = dragEnabled && draft == null,
             content = tile,
         )
 
@@ -735,13 +894,13 @@ private fun SectionHeader(
     ) {
         Box(
             Modifier
-                .size(width = 4.dp, height = 16.dp)
+                .size(width = 3.dp, height = 15.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(accent),
         )
         Text(
-            "  ${section.displayName} Deck",
-            style = MaterialTheme.typography.titleSmall,
+            "  ${section.displayName}",
+            style = MaterialTheme.typography.labelLarge,
         )
         Text(
             // Read from the section rather than written out, so the bounds cannot
@@ -765,7 +924,7 @@ private fun SectionHeader(
             // main forty that gets argued about in roles.
             if (section == DeckSection.MAIN) {
                 CompactButton(
-                    label = if (state.breakdownVisible) "Breakdown ·" else "Breakdown",
+                    label = "Breakdown",
                     selected = state.breakdownVisible,
                     onClick = { state.breakdownVisible = !state.breakdownVisible },
                 )
@@ -852,9 +1011,9 @@ private fun SectionHeader(
 /**
  * A header-sized icon button.
  *
- * Material's is 48dp square, which is a third of a card row spent on chrome
- * three times over. The touch target stays honest — 30dp with the pane's own
- * padding around it — and the height the fitter is told about stays real.
+ * Material's is 48dp square, which is most of a card row spent on chrome three
+ * times over. The touch target stays honest — 26dp with the pane's own padding
+ * around it — and the height the fitter is told about stays real.
  */
 @Composable
 private fun CompactIconButton(
@@ -865,7 +1024,7 @@ private fun CompactIconButton(
     IconButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(30.dp),
+        modifier = Modifier.size(26.dp),
         content = content,
     )
 }
@@ -874,8 +1033,8 @@ private fun CompactIconButton(
 private fun CompactButton(label: String, selected: Boolean, onClick: () -> Unit) {
     TextButton(
         onClick = onClick,
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-        modifier = Modifier.height(28.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+        modifier = Modifier.height(24.dp),
     ) {
         Text(
             label,

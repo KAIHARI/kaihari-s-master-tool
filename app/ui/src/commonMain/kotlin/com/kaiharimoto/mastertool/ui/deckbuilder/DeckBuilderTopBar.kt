@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kaiharimoto.mastertool.core.model.Format
@@ -49,7 +50,7 @@ import com.kaiharimoto.mastertool.ui.egg.ChibiLogo
 import com.kaiharimoto.mastertool.ui.fx.defaultFeedbackEnabled
 import com.kaiharimoto.mastertool.ui.theme.ChromaticText
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
-import com.kaiharimoto.mastertool.ui.theme.archivoExpandedFamily
+import com.kaiharimoto.mastertool.ui.theme.wordmarkFamily
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
 @Composable
@@ -67,19 +68,22 @@ fun DeckBuilderTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         ChibiLogo(onWake = { state.eggVisible = true })
 
-        // The wordmark carries the identity: expanded cut, chromatic fringe —
-        // white light through a lens, not a coloured logo.
+        // The wordmark carries the identity: a neo-grotesque at Medium, set
+        // lower case at its own tracking, wearing the chromatic fringe — white
+        // light through a lens, not a coloured logo.
         ChromaticText(
-            "KAI'S MASTER TOOL",
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontFamily = archivoExpandedFamily(),
-                letterSpacing = 1.5.sp,
+            "kai's master tool",
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontFamily = wordmarkFamily(),
+                fontWeight = FontWeight.Medium,
+                fontSize = 17.sp,
+                letterSpacing = 0.sp,
             ),
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -88,9 +92,11 @@ fun DeckBuilderTopBar(
             value = state.deckName,
             onValueChange = state::rename,
             singleLine = true,
-            label = { Text("Deck") },
+            placeholder = { Text("Deck name", style = MaterialTheme.typography.bodySmall) },
+            textStyle = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
-                .width(240.dp)
+                .width(210.dp)
+                .height(46.dp)
                 .onFocusChanged { state.onTextFieldFocusChanged(it.isFocused) },
         )
 

@@ -78,22 +78,33 @@ class DeckGroupsTest {
     }
 
     @Test
-    fun gapsOpenWhereOneGroupEndsAndTheNextBegins() {
+    fun eachUnbrokenRunOfAGroupIsOnePiece() {
         // traps | engine | traps traps
         val slots = DeckBreakdown.slots(listOf(ash, fiend, ash, maxx), groups(), columns = 10)
 
-        assertEquals(listOf(false, true, true, false), slots.map { it.gapBefore })
-        assertEquals(listOf(true, true, false, false), slots.map { it.gapAfter })
+        assertEquals(listOf(1, 1, 2, 2), slots.map { it.runLength })
+        assertEquals(listOf(0, 0, 0, 1), slots.map { it.positionInRun })
+        assertEquals(listOf(true, true, true, false), slots.map { it.startsRun })
     }
 
     @Test
-    fun aBoundaryOnARowBreakNeedsNoGap() {
-        // Three per row, with the engine card first in the second row: the row
-        // break is already the separation.
-        val slots = DeckBreakdown.slots(listOf(ash, ash, ash, fiend), groups(), columns = 3)
+    fun aPieceNeverWrapsToTheNextRow() {
+        // Four handtraps across a three-wide grid: two pieces, not one bent one.
+        val slots = DeckBreakdown.slots(listOf(ash, ash, maxx, ash), groups(), columns = 3)
 
-        assertTrue(slots.none { it.gapBefore })
-        assertTrue(slots.none { it.gapAfter })
+        assertEquals(listOf(3, 3, 3, 1), slots.map { it.runLength })
+        assertEquals(listOf(0, 1, 2, 0), slots.map { it.positionInRun })
+    }
+
+    @Test
+    fun ungroupedCardsStillGetASlotSoIndicesLineUp() {
+        val section = listOf(ash, CardId(111), CardId(222), fiend)
+        val slots = DeckBreakdown.slots(section, groups(), columns = 10)
+
+        assertEquals(section.indices.toList(), slots.map { it.index })
+        assertNull(slots[1].groupId)
+        // The two ungrouped cards are one run of their own.
+        assertEquals(2, slots[1].runLength)
     }
 
     @Test
