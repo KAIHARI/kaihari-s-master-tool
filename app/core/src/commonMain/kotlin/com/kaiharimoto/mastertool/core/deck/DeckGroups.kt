@@ -80,71 +80,22 @@ data class DeckGroups(
     /** The group a card belongs to, ignoring assignments to deleted groups. */
     fun groupOf(id: CardId): String? = assignments[id]?.takeIf { byId(it) != null }
 
+    /**
+     * The hue a new group should take: the least used one.
+     *
+     * Preference order 2,3,4,5,0,1 spends green, cyan, violet and magenta before
+     * red and amber, because those two already mean "illegal" and "warning"
+     * everywhere else in the app and a group wearing them reads as a problem.
+     */
+    fun nextColor(paletteSize: Int = 6): Int {
+        val preference = listOf(2, 3, 4, 5, 0, 1).filter { it < paletteSize }
+            .ifEmpty { (0 until paletteSize).toList() }
+        val used = groups.groupingBy { it.color }.eachCount()
+        return preference.minByOrNull { (used[it] ?: 0) * preference.size + preference.indexOf(it) }
+            ?: 0
+    }
+
     companion object {
         val EMPTY = DeckGroups(emptyList(), emptyMap())
-    }
-}
-
-/**
- * One card's place in the breakdown lens.
- *
- * The lens does not reorder anything. An earlier version split the section into
- * labelled blocks, which meant the grid you edited was not the deck you saved —
- * position in a block was display order, so a drop there could only mean
- * "assign", never "insert", and the deck's real order was invisible exactly
- * when you were reasoning about it.
- *
- * Instead the deck stays in its stored order and the groups are drawn as
- * *pieces*: each unbroken run of one group is one shape, laid over the cards it
- * covers. A run stops at the end of a row because a piece that wrapped would be
- * two shapes pretending to be one — which is why [runLength] is counted within
- * the row and never across it.
- */
-data class BreakdownSlot(
-    val index: Int,
-    val groupId: String?,
-    /** Where this card sits in its run; 0 is the card the piece starts on. */
-    val positionInRun: Int,
-    /** How many cards the whole run holds. */
-    val runLength: Int,
-) {
-    val startsRun: Boolean get() = positionInRun == 0
-}
-
-object DeckBreakdown {
-
-    /**
-     * The runs a [columns]-wide grid would draw, one slot per card.
-     *
-     * Ungrouped cards are given runs too — they are just never drawn as a piece
-     * — so the list stays index-aligned with the section and a caller can look
-     * up any position without a search.
-     */
-    fun slots(section: List<CardId>, groups: DeckGroups, columns: Int): List<BreakdownSlot> {
-        val width = columns.coerceAtLeast(1)
-        val owners = section.map(groups::groupOf)
-        val slots = ArrayList<BreakdownSlot>(section.size)
-
-        var start = 0
-        while (start < owners.size) {
-            // The run ends at a change of group, or at the end of the row —
-            // whichever comes first.
-            val rowEnd = (start / width + 1) * width
-            var end = start + 1
-            while (end < minOf(rowEnd, owners.size) && owners[end] == owners[start]) end++
-
-            val length = end - start
-            for (i in start until end) {
-                slots += BreakdownSlot(
-                    index = i,
-                    groupId = owners[start],
-                    positionInRun = i - start,
-                    runLength = length,
-                )
-            }
-            start = end
-        }
-
-        return slots
     }
 }

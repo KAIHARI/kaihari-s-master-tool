@@ -36,7 +36,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kaiharimoto.mastertool.core.deck.DeckGroup
+import com.kaiharimoto.mastertool.core.deck.GroupMarks
 import com.kaiharimoto.mastertool.core.deck.GroupPresets
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
@@ -85,9 +87,11 @@ private fun GroupLegend(state: DeckBuilderState, modifier: Modifier = Modifier) 
             Text("  New group", style = MaterialTheme.typography.labelMedium)
         }
 
+        val marks = GroupMarks.marks(groups)
         groups.forEach { group ->
             GroupChip(
                 group = group,
+                mark = marks[group.id].orEmpty(),
                 count = state.groups.countIn(main, group.id),
                 onClick = { state.editGroup(group) },
             )
@@ -111,20 +115,15 @@ private fun GroupLegend(state: DeckBuilderState, modifier: Modifier = Modifier) 
 }
 
 @Composable
-private fun GroupChip(group: DeckGroup, count: Int, onClick: () -> Unit) {
+private fun GroupChip(group: DeckGroup, mark: String, count: Int, onClick: () -> Unit) {
     val color = MasterToolPalette.Prism[group.color % MasterToolPalette.Prism.size]
 
     AssistChip(
         onClick = onClick,
         modifier = Modifier.height(30.dp),
-        leadingIcon = {
-            Box(
-                Modifier
-                    .size(width = 4.dp, height = 14.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(color),
-            )
-        },
+        // The same mark the piece wears, so finding a group on the deck is
+        // reading two letters rather than matching two hues.
+        leadingIcon = { MarkChip(mark, color) },
         label = {
             Text(
                 "${group.name}  ·  $count",
@@ -167,6 +166,11 @@ private fun GroupDraftEditor(state: DeckBuilderState, modifier: Modifier = Modif
                     .width(180.dp)
                     .height(46.dp)
                     .onFocusChanged { state.onTextFieldFocusChanged(it.isFocused) },
+            )
+
+            MarkChip(
+                mark = GroupMarks.mark(draft.name),
+                color = MasterToolPalette.Prism[draft.color % MasterToolPalette.Prism.size],
             )
 
             MasterToolPalette.Prism.forEachIndexed { index, color ->
@@ -245,6 +249,28 @@ private fun GroupDraftEditor(state: DeckBuilderState, modifier: Modifier = Modif
                 )
             }
         }
+    }
+}
+
+/** A group's two-letter mark, drawn exactly as it appears on the deck. */
+@Composable
+private fun MarkChip(mark: String, color: Color) {
+    Box(
+        Modifier
+            .size(width = 20.dp, height = 15.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(color),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            mark,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 9.sp,
+                letterSpacing = 0.4.sp,
+            ),
+            color = MasterToolPalette.Ink,
+            maxLines = 1,
+        )
     }
 }
 

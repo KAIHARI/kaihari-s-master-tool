@@ -75,6 +75,14 @@ fun CardTile(
     dimmed: Boolean = false,
     highlighted: Boolean = false,
     outline: Color? = null,
+    /**
+     * The plain grey edge every card wears by default.
+     *
+     * Switched off for a card sitting inside a drawn region, where the region's
+     * own edge is the card's edge and two lines a millimetre apart read as a
+     * printing error.
+     */
+    hairline: Boolean = true,
     tactile: Boolean = true,
     onClick: () -> Unit = {},
     overlay: @Composable BoxScope.() -> Unit = {},
@@ -165,7 +173,7 @@ fun CardTile(
             .then(
                 when {
                     outline != null -> Modifier.border(2.5.dp, outline, shape)
-                    ringed -> Modifier
+                    ringed || !hairline -> Modifier
                     else -> Modifier.border(1.dp, MaterialTheme.colorScheme.outline, shape)
                 },
             )

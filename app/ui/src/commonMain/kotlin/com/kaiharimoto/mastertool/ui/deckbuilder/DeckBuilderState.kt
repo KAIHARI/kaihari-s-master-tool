@@ -548,11 +548,29 @@ class DeckBuilderState(
     // made, and half a decision does not belong in the deck file or on the undo
     // stack. Cancel therefore costs nothing and leaves nothing behind.
 
+    /**
+     * Turns the lens on or off.
+     *
+     * On, with nothing assigned yet, there is no dissection to show — so it
+     * opens a draft instead of an empty grid, which is the only useful thing
+     * the button can mean the first time it is pressed.
+     */
+    fun toggleBreakdown() {
+        when {
+            breakdownVisible -> {
+                breakdownVisible = false
+                groupDraft = null
+            }
+            deck.main.none { groups.groupOf(it) != null } -> startGroupDraft()
+            else -> breakdownVisible = true
+        }
+    }
+
     /** Opens an empty draft, optionally with [seed] already picked. */
     fun startGroupDraft(seed: CardId? = null) {
         breakdownVisible = true
         groupDraft = GroupDraft(
-            color = groups.groups.size % 6,
+            color = groups.nextColor(),
             selection = setOfNotNull(seed),
         )
     }
@@ -608,6 +626,39 @@ class DeckBuilderState(
     }
 
     private fun mintGroupId(): String = "g-${Random.nextLong().toString(16)}"
+
+    /**
+     * Files a card into a group — the meaning of a drop while the deck is
+     * dissected, where there is no positional insert to make.
+     *
+     * One history entry for both halves: a card that arrived and joined a group
+     * came from one gesture, and undoing it should not leave the card behind
+     * without its role, or the role behind without its card.
+     */
+    fun fileIntoGroup(card: Card, from: DeckSection?, groupId: String?, insertBefore: Int) {
+        val snapshot = currentStoredGroups()
+
+        val edit = when (from) {
+            // Already in the main deck: only its role changes.
+            DeckSection.MAIN -> DeckEdit.Applied(deck)
+            null -> DeckEditor.addAt(deck, card, DeckSection.MAIN, insertBefore, format)
+            else -> DeckEditor.moveAt(
+                deck, card, from, deck[from].indexOfFirst { it == card.id },
+                DeckSection.MAIN, insertBefore, format,
+            )
+        }
+
+        when (edit) {
+            is DeckEdit.Applied -> {
+                val assigned = groups.assign(card.id, groupId)
+                if (edit.deck == deck && assigned == groups) return
+                pushUndo(deck, groupsSnapshot = snapshot)
+                deck = edit.deck
+                groups = assigned
+            }
+            is DeckEdit.Rejected -> showToast(explain(edit.reason, card))
+        }
+    }
 
     /** The extended payload with the current breakdown written into it. */
     private fun extendedForWrite() =

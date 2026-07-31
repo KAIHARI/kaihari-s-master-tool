@@ -28,6 +28,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
+import com.kaiharimoto.mastertool.core.layout.BreakdownLayout
+import com.kaiharimoto.mastertool.core.layout.BreakdownPlan
 import com.kaiharimoto.mastertool.core.input.ShortcutAction
 import com.kaiharimoto.mastertool.core.input.ShortcutContext
 import com.kaiharimoto.mastertool.core.model.CardId
@@ -97,7 +99,25 @@ fun DeckBuilderScreen(
     }
 
     val onDropped: (DragSession, DropHover?) -> Unit = { session, landed ->
-        applyDrop(state, session, landed, stacked = layout.preferences.stacked)
+        applyDrop(
+            state = state,
+            session = session,
+            landed = landed,
+            stacked = layout.preferences.stacked,
+            // The dissected main deck is the one place a drop cannot mean
+            // "insert here": the display is a permutation, so the gap between
+            // two cells names no position in the deck. It means "join this
+            // group" instead, and the plan is what says which group that is.
+            dissected = if (state.breakdownVisible && state.groupDraft == null) {
+                BreakdownLayout.plan(
+                    state.deck.main,
+                    state.groups,
+                    layout.preferences[DeckSection.MAIN].columns,
+                )
+            } else {
+                null
+            },
+        )
     }
 
     val searchFocus = remember { FocusRequester() }
@@ -133,7 +153,7 @@ fun DeckBuilderScreen(
             ShortcutAction.TOGGLE_STATS -> state.statsVisible = !state.statsVisible
             ShortcutAction.TOGGLE_ISSUES -> state.issuesVisible = !state.issuesVisible
             ShortcutAction.TOGGLE_HELP -> state.helpVisible = !state.helpVisible
-            ShortcutAction.TOGGLE_BREAKDOWN -> state.breakdownVisible = !state.breakdownVisible
+            ShortcutAction.TOGGLE_BREAKDOWN -> state.toggleBreakdown()
             ShortcutAction.TOGGLE_GROUP_MANAGER ->
                 state.groupManagerVisible = !state.groupManagerVisible
             ShortcutAction.NEW_GROUP -> state.startGroupDraft()
@@ -394,15 +414,26 @@ private fun applyDrop(
     session: DragSession,
     landed: DropHover?,
     stacked: Boolean,
+    dissected: BreakdownPlan?,
 ) {
     if (landed == null || !landed.accepted) return
 
     val target = landed.section
 
-    // The breakdown lens needs no special case any more: it draws the section in
-    // its stored order and separates the groups with space, so a grid index is a
-    // deck position there exactly as it is everywhere else, and a drop means
-    // what it always meant.
+    // Dropped on a piece of the dissected deck: the card joins that group, and
+    // lands in the deck next to the cards it now belongs with.
+    if (target == DeckSection.MAIN && dissected != null && !stacked) {
+        val cell = landed.index.coerceIn(0, (state.deck.main.size - 1).coerceAtLeast(0))
+        val piece = dissected.pieceAt(cell)
+        state.fileIntoGroup(
+            card = session.card,
+            from = session.section,
+            groupId = piece?.groupId,
+            insertBefore = BreakdownLayout.insertIndexFor(piece, state.deck.main.size),
+        )
+        return
+    }
+
     when {
         // Dropped back on the pool: the copy leaves the deck.
         target == null -> session.section?.let { from ->

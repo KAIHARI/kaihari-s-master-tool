@@ -62,58 +62,20 @@ class DeckGroupsTest {
         assertEquals("g-traps", g.assignments[ash])
     }
 
-    // ---- the breakdown lens ------------------------------------------------
-
     @Test
-    fun theLensLeavesTheDeckInTheOrderItIsStoredIn() {
-        val section = listOf(ash, fiend, ash, maxx)
-        val slots = DeckBreakdown.slots(section, groups(), columns = 10)
+    fun aNewGroupTakesTheLeastUsedHueAndAvoidsTheAlarmColours() {
+        // Red and amber mean forbidden and warning everywhere else in the app.
+        assertEquals(2, DeckGroups.EMPTY.nextColor())
 
-        // One slot per card, in deck order, each pointing back at its position.
-        assertEquals(listOf(0, 1, 2, 3), slots.map { it.index })
-        assertEquals(
-            listOf("g-traps", "g-engine", "g-traps", "g-traps"),
-            slots.map { it.groupId },
-        )
-    }
+        val greenTaken = DeckGroups.EMPTY.upsert(DeckGroup("g1", "Engine", color = 2, order = 0))
+        assertEquals(3, greenTaken.nextColor())
 
-    @Test
-    fun eachUnbrokenRunOfAGroupIsOnePiece() {
-        // traps | engine | traps traps
-        val slots = DeckBreakdown.slots(listOf(ash, fiend, ash, maxx), groups(), columns = 10)
-
-        assertEquals(listOf(1, 1, 2, 2), slots.map { it.runLength })
-        assertEquals(listOf(0, 0, 0, 1), slots.map { it.positionInRun })
-        assertEquals(listOf(true, true, true, false), slots.map { it.startsRun })
-    }
-
-    @Test
-    fun aPieceNeverWrapsToTheNextRow() {
-        // Four handtraps across a three-wide grid: two pieces, not one bent one.
-        val slots = DeckBreakdown.slots(listOf(ash, ash, maxx, ash), groups(), columns = 3)
-
-        assertEquals(listOf(3, 3, 3, 1), slots.map { it.runLength })
-        assertEquals(listOf(0, 1, 2, 0), slots.map { it.positionInRun })
-    }
-
-    @Test
-    fun ungroupedCardsStillGetASlotSoIndicesLineUp() {
-        val section = listOf(ash, CardId(111), CardId(222), fiend)
-        val slots = DeckBreakdown.slots(section, groups(), columns = 10)
-
-        assertEquals(section.indices.toList(), slots.map { it.index })
-        assertNull(slots[1].groupId)
-        // The two ungrouped cards are one run of their own.
-        assertEquals(2, slots[1].runLength)
-    }
-
-    @Test
-    fun assignmentsToDeletedGroupsReadAsUngrouped() {
-        val orphaned = groups().copy(groups = groups().groups.filterNot { it.id == "g-traps" })
-        val slots = DeckBreakdown.slots(listOf(ash, fiend), orphaned, columns = 10)
-
-        assertNull(slots[0].groupId)
-        assertEquals("g-engine", slots[1].groupId)
+        // Once every hue is spoken for it starts again rather than giving up.
+        var all = DeckGroups.EMPTY
+        listOf(2, 3, 4, 5, 0, 1).forEachIndexed { i, colour ->
+            all = all.upsert(DeckGroup("g$i", "G$i", color = colour, order = i))
+        }
+        assertEquals(2, all.nextColor())
     }
 
     // ---- codec -------------------------------------------------------------
