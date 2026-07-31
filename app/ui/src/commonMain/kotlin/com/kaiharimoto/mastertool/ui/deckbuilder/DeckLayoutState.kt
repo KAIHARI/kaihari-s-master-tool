@@ -51,12 +51,17 @@ class DeckLayoutState(
     fun start(onLoaded: (UiPreferences) -> Unit = {}) {
         scope.launch {
             val stored = repository.load()
+            // A document written by an older build keeps its own row widths
+            // forever unless something rewrites them — a changed default only
+            // ever reaches a device with nothing saved on it.
+            val current = stored.migrated()
             // The read races the user's first inputs. A divider dragged while
             // the database was still opening must not snap back when the stored
             // document finally arrives — whatever the user did wins.
             if (!edited) {
-                preferences = stored
+                preferences = current
                 onLoaded(preferences)
+                if (current != stored) scheduleSave(0L)
             }
         }
     }
@@ -123,10 +128,6 @@ class DeckLayoutState(
     /** Hides the card pool and gives the deck the whole window. */
     fun toggleSearchPane() {
         update { it.copy(searchVisible = !it.searchVisible) }
-    }
-
-    fun setAutoFit(section: DeckSection, autoFit: Boolean) {
-        updateSection(section) { it.copy(autoFit = autoFit) }
     }
 
     fun setSortMode(section: DeckSection, mode: SortMode) {

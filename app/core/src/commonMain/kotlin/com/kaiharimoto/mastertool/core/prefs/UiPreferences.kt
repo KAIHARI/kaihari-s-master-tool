@@ -102,6 +102,17 @@ data class UiPreferences(
      * default and needs no curating.
      */
     val easterEggPool: List<Int> = emptyList(),
+    /**
+     * Which generation of the layout this document was written by.
+     *
+     * The one thing a defaulted field cannot do on its own: a preference that
+     * was *stored* keeps its old value forever, so changing a default only ever
+     * reaches new installs. Bumping this is how a change to what the layout
+     * fundamentally is — row widths, whether the deck is fitted — reaches a
+     * device that already has a document on it. Everything else here stays a
+     * plain field with a default.
+     */
+    val layoutVersion: Int = 0,
 ) {
     operator fun get(section: DeckSection): SectionPreferences = when (section) {
         DeckSection.MAIN -> main
@@ -132,11 +143,35 @@ data class UiPreferences(
         side = side.sanitised(fallbackWeight = 1f),
     )
 
+    /**
+     * The same document as written by today's build.
+     *
+     * Only the layout is rebuilt — the format, the theme, the feedback setting,
+     * the pinned easter-egg pool and the search split are the person's, not the
+     * generation's, and survive untouched.
+     */
+    fun migrated(): UiPreferences = when {
+        layoutVersion >= LAYOUT_VERSION -> this
+        else -> copy(
+            layoutVersion = LAYOUT_VERSION,
+            fitAll = DEFAULT.fitAll,
+            main = main.copy(columns = DEFAULT.main.columns, autoFit = true),
+            extra = extra.copy(columns = DEFAULT.extra.columns, autoFit = true),
+            side = side.copy(columns = DEFAULT.side.columns, autoFit = true),
+        )
+    }
+
     companion object {
         const val DEFAULT_SEARCH_WEIGHT = 0.36f
         const val MIN_SEARCH_WEIGHT = 0.2f
         const val MAX_SEARCH_WEIGHT = 0.7f
 
-        val DEFAULT = UiPreferences()
+        /**
+         * 1: ten across for the main deck and fifteen for the extra and side,
+         * with all three panes sized to be visible at once.
+         */
+        const val LAYOUT_VERSION = 1
+
+        val DEFAULT = UiPreferences(layoutVersion = LAYOUT_VERSION)
     }
 }

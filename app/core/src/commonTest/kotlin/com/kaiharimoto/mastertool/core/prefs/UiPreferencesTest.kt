@@ -109,4 +109,33 @@ class UiPreferencesTest {
     fun sanitisingLeavesAReasonableDocumentAlone() {
         assertEquals(UiPreferences.DEFAULT, UiPreferences.DEFAULT.sanitised())
     }
+
+    // ---- layout generations -------------------------------------------------
+
+    @Test
+    fun anOlderDocumentIsBroughtUpToTodaysRowWidths() {
+        // The one thing a defaulted field cannot do: a device that already has
+        // a document on it keeps the row widths it was written with.
+        val old = json.decodeFromString(
+            UiPreferences.serializer(),
+            """{"searchWeight":0.5,"extra":{"weight":1.0,"columns":10}}""",
+        )
+        assertEquals(10, old.extra.columns)
+
+        val current = old.migrated()
+        assertEquals(UiPreferences.DEFAULT.extra.columns, current.extra.columns)
+        assertEquals(UiPreferences.DEFAULT.main.columns, current.main.columns)
+        assertTrue(current.fitAll)
+        // And what is the person's rather than the generation's is untouched.
+        assertEquals(0.5f, current.searchWeight)
+    }
+
+    @Test
+    fun migratingIsIdempotentAndLeavesTodaysDocumentAlone() {
+        val once = UiPreferences.DEFAULT.copy(layoutVersion = 0).migrated()
+
+        assertEquals(once, once.migrated())
+        val mine = UiPreferences.DEFAULT.copy(fitAll = false, themeMode = ThemeMode.LIGHT)
+        assertEquals(mine, mine.migrated())
+    }
 }
