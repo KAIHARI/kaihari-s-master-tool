@@ -4,439 +4,128 @@ This file guides Claude Code (claude.ai/code) when working with this repository.
 
 ## Quick Start
 
-**What this is:** kai's master tool — a Yu-Gi-Oh! deck building and tournament preparation tool.
+**What this is:** kai's master tool — a Yu-Gi-Oh! deck building and tournament
+preparation tool, being built into an immersive, 3D-feeling deck building
+simulator.
 
-This repository holds **two** implementations:
+**The project is the cross-platform app in `app/`.** Kotlin Multiplatform +
+Compose Multiplatform, targeting Android (landscape tablets, Samsung Tab
+S11-class) and desktop (macOS/Windows/Linux) from one codebase. See
+`app/README.md` for architecture and build instructions.
 
-| | Location | Status |
-|---|---|---|
-| **Legacy web tool** | `kai master tool.html` | Feature-complete, maintenance only |
-| **Cross-platform app** | `app/` | In progress — the intended future |
+**`legacy/kai master tool.html` is the archived original** — the single-file
+web tool the app replaces (~36k lines, plain HTML + Tailwind + vanilla JS).
+It is kept as a reference for the original vision and its feature set (siding
+patterns, shootout mode, sandbox board, PDF export, the prismatic hover
+effects). Open it in a browser from inside `legacy/` if you need to study it.
+Do not develop it further; maintenance only if something in it is truly broken.
 
-**Legacy web tool:** open `kai master tool.html` in a browser, hard-refresh after edits (Ctrl+Shift+R). Everything from "Project Overview" onwards in this file describes that version.
-
-**Cross-platform app:** Kotlin Multiplatform + Compose Multiplatform, targeting Android (landscape tablets), desktop (macOS/Windows/Linux) and iOS from one codebase. See `app/README.md` for its architecture and build instructions.
-
-**Key files:**
-- `app/` - The Kotlin Multiplatform rebuild
-- `kai master tool.html` - The legacy single-file application (~36,000 lines)
-- `CLAUDE.md` - This file
-- `3dchibi.glb` - 3D model for animations
-- `*.ydkx` - Sample deck files
+**Key locations:**
+- `app/core/` — pure Kotlin logic (models, deck editing, groups, hand odds,
+  motion physics, board domain), all tested in commonTest
+- `app/ui/` — Compose Multiplatform UI (androidTarget + jvm("desktop"))
+- `app/androidApp/`, `app/desktopApp/` — platform entry points
+- `legacy/` — the archived original tool and its assets
+- `ydk/`, `lab.ydkx` — sample deck files (YDKX = YDK + `#ydkx-extended` JSON)
 
 ---
+
+## Development Workflow — read this before changing anything
+
+1. **All logic goes in `:core` with commonTest tests.** Run locally:
+   `cd app && ./gradlew :core:jvmTest`. This is the only module that compiles
+   in a default Claude environment.
+2. **`:ui`/`:androidApp`/`:desktopApp` compile ONLY in CI** (Google Maven is
+   unreachable from most sandboxes; `settings.gradle.kts` auto-skips those
+   modules). Pushing to `main` or any `claude/**` branch runs
+   `.github/workflows/build-app.yml`, which is the compile check and APK
+   build. **Never trust a piped local exit code** — grep the Gradle output for
+   `BUILD SUCCESSFUL`.
+3. Every gesture ships with both a touch idiom and a pointer/keyboard idiom.
+   Keyboard shortcuts are data in `core/input/ShortcutTable.kt` (layer-aware;
+   the help sheet renders the table, so it can never drift).
+
+## Release Contract — numbers shipped to devices are permanent
+
+`.github/workflows/release.yml` (manual dispatch with a `version` input, or a
+`v*` tag) builds the signed APK and publishes the GitHub release that the
+in-app updater installs from. Two hard-learned rules:
+
+- **versionCode** is derived from the version name
+  (`100000 + major*10000 + minor*100 + patch`). It must only ever go up;
+  v1.1.0 shipped as 281 from a commit-count scheme, which is why the floor
+  exists. Never revert to commit counts.
+- **SQLite schema version is 3** and can never decrease — devices that
+  installed v1.1.0 are stamped at `user_version 3`
+  (see `core/.../db/migrations/2.sqm`). SQLDelight derives the version from
+  the number of `.sqm` files: adding a table means adding a `.sq` change AND a
+  new `.sqm`, and `MigrationTest` must prove upgrade == fresh create. Never
+  renumber or delete migration files once a signed build has shipped.
+- The APK must be signed with the committed key
+  (`androidApp/keystore/kai-master-tool.jks`); the workflow hard-gates on its
+  SHA-256.
+- Android crashes surface through the built-in crash reporter
+  (`MainActivity`): the trace persists and is shown, shareable, on next
+  launch. Keep that screen theme-free — it must render when the theme cannot.
+
+## Design Identity (locked in with the user)
+
+- **Swiss + prismatic: sharp white on true black.** Colour appears only as
+  *meaning* (card types, legality) or as *light* — the six-hue prismatic ramp
+  (`MasterToolPalette.Prism`) shown as chromatic-aberration fringes on things
+  being interacted with. Light mode is the exact inversion, same colours.
+  Primitives live in `ui/theme/Prismatic.kt`; use them sparingly — fringing
+  everything reads as decoration, fringing the thing under your finger reads
+  as light.
+- **Typeface: Archivo** (bundled, OFL; expanded cut for display moments).
+- **Tactility lives on things the user interacts with** — tilt, lift, sheen,
+  quiet card sounds, haptics. No decorative clutter, no skeuomorphic
+  inefficiency. The physical feeling to capture is handling a single card.
+- **Motion = springs.** `core/motion/` (`Springs`, `PosePhysics`) with the
+  one-`withFrameNanos`-loop recipe (see `EasterEgg.kt` and `GoldfishScreen.kt`
+  for the sanctioned perf pattern: bulk state in plain lists, per-object state
+  read inside `graphicsLayer`).
+- **Fake-3D by design:** perspective via `graphicsLayer`
+  (rotationX/Y, cameraDistance) — one tilted parent plane for tables, flat
+  overlay springs for anything that lifts off it. No 3D engine, ever.
+
+## Roadmap State
+
+Shipped: the full deck builder (drag-and-drop, breakdown groups with YDKX
+persistence, stable fit-to-40 grid, exact consistency calculator, per-card
+tactility, sound/haptics, 3D card inspect, goldfish table) and the tested
+duel-board domain (`core/board/BoardState.kt`).
+
+Next: the deck **showcase** stage, goldfish polish (deal-origin projection,
+stack shuffle/cut), and the **duel table UI** on top of `BoardState`,
+inheriting the goldfish stage pattern.
+
+**Explicitly deferred by the user — do not build on the legacy designs:**
+siding patterns and shootout mode will be redesigned from scratch in a future
+run. The only obligation today is that `YdkCodec` keeps round-tripping the
+opaque `#ydkx-extended` payload (it does — `DeckGroupsCodec` preserves
+unknown keys byte-for-byte).
 
 ## Multi-Team Trigger
 
-When the user starts a prompt with **"mt"** or **"mt:"**, they want a multi-agent team:
-
-1. Strip the "mt" prefix to get the actual task
-2. Create a team using `TeamCreate`
-3. Break into 2-4 subtasks with `TaskCreate`
-4. Spawn 2-3 general-purpose agent teammates
-5. Assign tasks and coordinate work
-6. Report results back to the user
-
----
-
-## Project Overview
-
-**Key Features:**
-- Deck builder (main/side/extra deck)
-- YDK/YDKX file import/export
-- Card database with search, filters, autocomplete
-- Siding pattern management for tournaments
-- Shootout mode (matchup testing)
-- Sandbox board simulator (2D/3D with Three.js)
-- PDF export
-- IndexedDB persistence
-
-**Tech Stack:** Plain HTML + Tailwind CSS (CDN) + vanilla JS. No framework, no build step.
-
----
-
-## Code Architecture
-
-### Module Pattern
-
-All JavaScript uses the **Revealing Module Pattern** (IIFEs):
-
-```javascript
-const ModuleName = (function() {
-    'use strict';
-
-    // Private variables/functions
-
-    return {
-        // Public API
-        publicMethod() { },
-        init() { }
-    };
-})();
-```
-
-### Core Modules (in order of appearance)
-
-| Module | Lines | Purpose |
-|---------|-------|---------|
-| Logger | ~70-163 | Debug logging with levels |
-| KeyboardManager | ~173-259 | Global keyboard shortcuts |
-| NotificationManager | ~268-487 | Toast notifications |
-| UndoManager | ~496-599 | Command pattern for undo/redo |
-| Command | ~609-622 | Base class for undoable actions |
-| SmartSearch | ~632-848 | Fuzzy search with Levenshtein distance |
-| DeckStatistics | ~857-1041 | Deck analysis & recommendations |
-| ThemeManager | ~1050-1191 | Dark/light/cyber/classic themes |
-| FilterManager | ~1200-1795 | Quick filter panel (Type, Attribute, Race, Level, ATK/DEF) |
-| BulkOperations | ~1804-1976 | Multi-card operations |
-| LongPressManager | ~1982-2264 | Long-press gesture handling |
-| UITuner | ~2271-2598 | Temporary UI fine-tuning panel |
-| BoardStateManager | ~22516-22772 | Sandbox state management |
-| SandboxCommandFactory | ~22775-22919 | Command factory for sandbox |
-| TurnManager | ~22920-23060 | Turn tracking in sandbox |
-| DragDropCoordinator | ~23061-23353 | D&D handling for sandbox |
-| BoardRenderer | ~23363-23596 | 2D/3D board rendering |
-| ZoneViewManager | ~23597-23862 | Zone visibility management |
-| ContextMenuManager | ~23865-24083 | Right-click context menus |
-| CardDetailPanel | ~24084-24181 | Card preview/inspector panel |
-| DeckSearchModal | ~24182-28289 | Card search modal |
-| StorageManager | ~28320-29103 | IndexedDB wrapper |
-
-### Other Key Components
-
-| Component | Lines | Purpose |
-|-----------|-------|---------|
-| main() | ~3121-3299 | App initialization sequence |
-| initializeUI() | ~2940-3105 | Cache DOM element references |
-| attachEventListeners() | ~3300-5500+ | All UI event bindings |
-| ShootoutManager | ~21644-22508 | Tournament/match mode logic |
-
----
-
-## Global State
-
-Key global variables (defined ~lines 50-2809):
-
-```javascript
-// Core data
-let cardDatabase = [];           // All cards from API
-let originalCardDatabase = [];    // Backup for filtering
-let easterEggCardPool = [];     // Custom card pool
-
-// Deck state
-let currentDeck = { main: [], side: [], extra: [], sidingPatterns: {} };
-let currentDeckId = null;        // 'unsaved' or offline deck ID
-let currentDeckSource = 'offline'; // 'offline' | 'unsaved'
-let isDeckDirty = false;
-
-// YDK files
-let ydkFileHandles = new Map();   // FileSystemDirectoryHandle map
-let ydkFiles = [];               // Array of loaded YDK files
-let defaultDeckName = null;       // Auto-load deck name
-let ydkFolder = null;            // Folder handle for sync
-
-// UI state
-let databaseVisible = true;
-let extraDeckVisible = true;
-let sideDeckVisible = true;
-let editMode = false;
-let cardDatabaseView = 'grid';    // 'list' or 'grid'
-let cardDatabaseSource = 'db';   // 'db' or 'all'
-let showExtraDeckCards = true;
-
-// Siding
-let sidingState = { out: {}, in: {} };
-let activeEditingPattern = null;
-let universalSidingPatterns = {}; // Deprecated format
-
-// Misc
-const UI = { /* DOM element references */ };
-```
-
----
-
-## Data Structures
-
-### Card Object (from the YGOPRODeck API)
-
-```javascript
-{
-    id: "89812483",           // Konami card ID (string)
-    name: "Ash Blossom",
-    type: "Effect Monster",
-    attribute: "FIRE",
-    level: 3,
-    atk: 0,
-    def: 1800,
-    race: "Zombie",
-    // ... other properties
-}
-```
-
-### Deck Structure
-
-```javascript
-{
-    main: ["89812483", "14558127", ...],  // Card IDs (strings)
-    side: [...],
-    extra: [...],
-    sidingPatterns: {
-        "pattern-name": {
-            goingFirst: { in: [...], out: [...] },
-            goingSecond: { in: [...], out: [...] }
-        }
-    }
-}
-```
-
-### YDK File Format
-
-Standard YDK (plain text):
-```
-#created by ...
-#main
-89812483
-14558127
-#extra
-...
-!side
-...
-```
-
-YDKX is JSON with multiple configurations and metadata.
-
----
-
-## Initialization Sequence
-
-The `main()` function (~line 3121) initializes in this order:
-
-1. Show loading overlay
-2. `ThemeManager.init()`
-3. `initializeUI()` - Cache all DOM references
-4. Load easter egg card pool
-5. `FilterManager.init()`
-6. `createFloatingHelpButton()`
-7. `attachEventListeners()`
-8. `StorageManager.init()` - IndexedDB setup
-9. Initialize resize handles
-10. `UITuner.init()`
-11. `showView('deckBuilderView')` + hide loading
-12. `loadCardDatabase()` - Fetch from API
-13. Load offline data (decks, YDK files, siding patterns)
-14. Auto-load default deck if set
-
----
-
-## Common Development Tasks
-
-### Adding a New Module
-
-```javascript
-const NewModule = (function() {
-    'use strict';
-
-    function privateHelper() { }
-
-    return {
-        publicMethod() { },
-        init() { }
-    };
-})();
-```
-
-Place before `main()`, call `NewModule.init()` in `main()`.
-
-### Adding a Keyboard Shortcut
-
-```javascript
-KeyboardManager.register('ctrl+shift+n',
-    () => doSomething(),
-    'Description shown in help'
-);
-```
-
-### Undoable Operations
-
-```javascript
-UndoManager.execute(Command.create({
-    description: 'Add card to deck',
-    execute: () => { /* do it */ },
-    undo: () => { /* revert */ }
-}));
-```
-
-### Notifications
-
-```javascript
-NotificationManager.success('Deck saved!');
-NotificationManager.error('Failed to load', 'Error');
-NotificationManager.warning('Deck is below 40 cards');
-NotificationManager.info('Info message');
-```
-
-### Logging
-
-```javascript
-Logger.debug('Detailed info', { data });
-Logger.info('General info');
-Logger.warn('Warning message');
-Logger.error('Error occurred', error);
-```
-
----
-
-## Deck Builder UI
-
-The deck builder has three resizable sections:
-- **Main Deck** (`UI.mainDeckSection`)
-- **Side Deck** (`UI.sideDeckSection`)
-- **Extra Deck** (`UI.extraDeckSection`)
-
-### Resize Functions
-
-- `initializeDeckResizeHandles()` - Initialize both handles
-- `initializeDeckResizeHandle(handleId)` - Core resize logic
-- `applyDeckSectionProportions()` - Apply proportional sizing
-- `saveDeckResizeConfiguration()` - Persist to localStorage
-- `loadDeckResizeConfiguration()` - Restore on load
-
-### Resize Behavior
-
-- `mainSide` handle: Resizes main, side+extra scale proportionally
-- `sideExtra` handle: Resizes extra, main+side scale proportionally
-- Uses `requestAnimationFrame` for 60fps
-- Minimum width: 100px per section
-
-### Deck Visibility Toggles
-
-- `toggleDatabase()` - Shows/hides card database
-- `toggleExtraDeck()` / `toggleSideDeck()` - Individual sections
-- Always preserve width ratios before layout changes
-
----
-
-## Key Functions by Category
-
-### Card Operations
-
-| Function | Purpose |
-|-----------|---------|
-| `addCardToDeck(cardId, section)` | Add card to specified deck section |
-| `removeCardFromDeck(cardId, section)` | Remove card from section |
-| `renderCardDatabase()` | Render card list |
-| `createCardElement(card)` | Create DOM element for card |
-| `renderCurrentDeck()` | Render all deck sections |
-
-### Deck Management
-
-| Function | Purpose |
-|-----------|---------|
-| `saveDeck()` | Save current deck |
-| `loadDeck(deckId)` | Load a saved deck |
-| `exportToYDK()` | Export to YDK format |
-| `importFromYDK()` | Import YDK file |
-| `newDeck()` | Create fresh deck |
-
-### Storage
-
-Use **StorageManager** for all IndexedDB operations:
-
-| Method | Purpose |
-|--------|---------|
-| `getYDKFiles()` / `saveYDKFile()` | YDK persistence |
-| `getOfflineDecks()` / `saveOfflineDeck()` | Deck storage |
-| `getSidingPatterns()` / `saveSidingPattern()` | Siding patterns |
-
----
-
-## Dependencies (CDN)
-
-- **Tailwind CSS** - Styling
-- **jsPDF** - PDF generation
-- **html2canvas** - Screenshots for PDF
-- **Three.js + GLTFLoader** - 3D rendering
-- **Google Fonts** - Inter, JetBrains Mono
-
----
-
-## Browser Compatibility
-
-Modern browsers with:
-- ES6+ (optional chaining, nullish coalescing)
-- IndexedDB
-- FileSystem Access API (optional, for YDK folder sync)
-
----
-
-## Development Workflow
-
-1. Edit `kai master tool.html` directly
-2. Hard refresh browser (Ctrl+Shift+R)
-3. Check console for errors (F12)
-4. For IndexedDB issues: DevTools > Application > IndexedDB > `ygo-evaluator-default`
-
----
+When the user starts a prompt with **"mt"** or **"mt:"**, they want a
+multi-agent team: strip the prefix, create a team, break the task into 2-4
+subtasks, spawn 2-3 general-purpose teammates, coordinate, report back.
+
+## Data Formats (unchanged from the original)
+
+- **Card**: YGOPRODeck API v7 shape (`core/model/Card.kt`); ids are Konami
+  passcodes.
+- **Deck**: ordered multisets of ids per section (main 40-60, extra/side
+  0-15, 3 copies across the whole deck) — order round-trips to `.ydk`.
+- **YDKX**: plain YDK + `#ydkx-extended` + one JSON object. The app owns the
+  `groups` key; everything else (legacy `sidingPatterns`, `notes`,
+  `configurations`) passes through untouched.
 
 ## Debugging
 
-### Console Commands
-
-```javascript
-// Check deck section widths
-console.log({
-  main: UI.mainDeckSection?.offsetWidth,
-  side: UI.sideDeckSection?.offsetWidth,
-  extra: UI.extraDeckSection?.offsetWidth
-});
-
-// Clear resize state
-localStorage.removeItem('deckResizeConfig');
-location.reload();
-
-// Enable debug logging
-Logger.setLevel('debug');
-
-// Export log history
-Logger.export();
-```
-
-### Common Issues
-
-**Deck not resizing:** Clear `deckResizeConfig` from localStorage and refresh.
-
-**Cards missing after resize:** Check `--main-deck-columns` CSS variable is updated.
-
-**IndexedDB problems:** Delete database in DevTools and refresh.
-
----
-
-## Important Notes
-
-- The app is intentionally single-file for portability
-- Card data fetched from `db.ygoprodeck.com/api/v7` on load
-- All user data persists locally (IndexedDB + localStorage)
-- No server, no authentication, fully client-side
-- Line numbers are approximate; search by function/module name
-
----
-
-## Frontend Aesthetics Guidelines
-
-When creating or modifying UI components, avoid generic "AI slop" aesthetics. Focus on:
-
-**Typography:** Choose distinctive, beautiful fonts. Avoid overused choices like Inter, Roboto, Arial, and system fonts. Even fonts like Space Grotesk have become AI clichés. Make unexpected choices.
-
-**Color & Theme:** Commit to cohesive aesthetics using CSS variables. Dominant colors with sharp accents outperform timid, evenly-distributed palettes. Draw from IDE themes, gaming aesthetics, and cultural influences for inspiration.
-
-**Motion:** Use animations deliberately for effects and micro-interactions. Prioritize CSS-only solutions. Focus on high-impact moments like staggered page load reveals with animation-delay rather than scattered micro-interactions.
-
-**Backgrounds:** Create atmosphere and depth with CSS gradients, geometric patterns, or contextual effects that match the overall aesthetic.
-
-**Avoid:**
-- Overused font families (Inter, Roboto, Arial, Space Grotesk)
-- Clichéd purple gradients on white backgrounds
-- Predictable layouts and cookie-cutter patterns
-- Generic designs that lack context-specific character
-
-Interpret creatively and make unexpected choices that feel genuinely designed for this Yu-Gi-Oh! tournament tool context. Vary between light and dark themes, different fonts, different aesthetics. Think outside the distribution!
+- Core logic: write a failing commonTest first; `./gradlew :core:jvmTest`.
+- UI on Android: the in-app crash reporter shows and shares the trace.
+- Desktop: `./gradlew :desktopApp:run` (needs Google Maven access).
+- Preferences are one JSON document in SQLite (`UiPreferences`); adding a
+  preference is a field with a default, never a schema migration.
