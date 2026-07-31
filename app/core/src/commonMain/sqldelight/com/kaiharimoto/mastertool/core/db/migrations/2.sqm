@@ -1,0 +1,15 @@
+-- 2 -> 3: nothing. This file exists to move the version number, not the schema.
+--
+-- Release v1.1.0 was built from a working branch whose migration history
+-- reached user_version 3 with the same final tables this schema defines. The
+-- cleaned-up history kept only one migration, so builds from it declared
+-- version 2 — and every device that installed v1.1.0 refused the "downgrade"
+-- with a crash on launch ("Can't downgrade database from version 3 to 2").
+--
+-- This no-op brings the derived version back to 3: installs at 3 open without
+-- running anything, installs at 2 or fresh installs pass through here and end
+-- at the same schema. Never renumber or delete migration files once a signed
+-- build has shipped — the version is part of the contract with every device
+-- that installed it.
+
+DROP TABLE IF EXISTS schemaVersionSyncNoOp;

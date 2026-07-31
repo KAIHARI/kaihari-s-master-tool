@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -28,6 +29,8 @@ import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.search.CardFilter
+import com.kaiharimoto.mastertool.ui.input.SheetShortcuts
+import com.kaiharimoto.mastertool.ui.input.ShortcutRelay
 import kotlinx.coroutines.launch
 
 /**
@@ -55,6 +58,8 @@ fun CardInspector(
     onSetCount: (Card, DeckSection, Int) -> Unit,
     onMove: (Card, DeckSection, DeckSection) -> Unit,
     onBrowse: (CardFilter) -> Unit,
+    onHold: (Card) -> Unit = {},
+    shortcuts: ShortcutRelay? = null,
 ) {
     if (cards.isEmpty()) return
 
@@ -63,7 +68,6 @@ fun CardInspector(
         initialPage = initialIndex.coerceIn(0, cards.lastIndex),
         pageCount = { cards.size },
     )
-    val scope = rememberCoroutineScope()
 
     // Two-way, and settled by both sides checking before acting: the arrow keys
     // move the stored page and the pager follows, a swipe moves the pager and the
@@ -74,6 +78,41 @@ fun CardInspector(
     LaunchedEffect(pagerState.currentPage) { onPageChanged(pagerState.currentPage) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        // The sheet is its own focus boundary; without a host inside it, the
+        // arrow keys this sheet's whole scope exists for would never arrive.
+        SheetShortcuts(shortcuts) {
+            InspectorBody(
+                cards = cards,
+                format = format,
+                copiesBySection = copiesBySection,
+                mainDeckSize = mainDeckSize,
+                openingHandOdds = openingHandOdds,
+                onSetCount = onSetCount,
+                onMove = onMove,
+                onBrowse = onBrowse,
+                onHold = onHold,
+                pagerState = pagerState,
+            )
+        }
+    }
+}
+
+@Composable
+private fun InspectorBody(
+    cards: List<Card>,
+    format: Format,
+    copiesBySection: (Card) -> Map<DeckSection, Int>,
+    mainDeckSize: Int,
+    openingHandOdds: (copies: Int, handSize: Int) -> Double,
+    onSetCount: (Card, DeckSection, Int) -> Unit,
+    onMove: (Card, DeckSection, DeckSection) -> Unit,
+    onBrowse: (CardFilter) -> Unit,
+    onHold: (Card) -> Unit,
+    pagerState: PagerState,
+) {
+    val scope = rememberCoroutineScope()
+
+    Column {
         if (cards.size > 1) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
@@ -119,6 +158,7 @@ fun CardInspector(
                     onSetCount = { section, count -> onSetCount(card, section, count) },
                     onMove = { from, to -> onMove(card, from, to) },
                     onBrowse = onBrowse,
+                    onHold = { onHold(card) },
                 )
             }
         }

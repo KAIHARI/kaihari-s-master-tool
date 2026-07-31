@@ -21,12 +21,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.model.Attribute
@@ -34,6 +36,8 @@ import com.kaiharimoto.mastertool.core.model.BanStatus
 import com.kaiharimoto.mastertool.core.model.CardCategory
 import com.kaiharimoto.mastertool.core.search.CardFilter
 import com.kaiharimoto.mastertool.core.search.CardIndex
+import com.kaiharimoto.mastertool.ui.input.SheetShortcuts
+import com.kaiharimoto.mastertool.ui.input.ShortcutRelay
 
 /**
  * An open-ended stat range needs a top end to be expressed as an `IntRange`.
@@ -61,10 +65,18 @@ fun FilterSheet(
     onChange: (CardFilter) -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
+    /**
+     * This sheet has text fields of its own, and now that shortcuts are live
+     * over it, an unguarded "s" typed into the archetype search would open the
+     * statistics panel instead of the letter.
+     */
+    onTextInputFocusChanged: (Boolean) -> Unit = {},
+    shortcuts: ShortcutRelay? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        SheetShortcuts(shortcuts) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -146,12 +158,14 @@ fun FilterSheet(
                 label = "ATK",
                 range = filter.atkRange,
                 onChange = { onChange(filter.copy(atkRange = it)) },
+                onFocusChanged = onTextInputFocusChanged,
             )
 
             StatRange(
                 label = "DEF",
                 range = filter.defRange,
                 onChange = { onChange(filter.copy(defRange = it)) },
+                onFocusChanged = onTextInputFocusChanged,
             )
 
             if (index.races.isNotEmpty()) {
@@ -173,8 +187,10 @@ fun FilterSheet(
                     onToggle = { archetype ->
                         onChange(filter.copy(archetypes = filter.archetypes.toggle(archetype)))
                     },
+                    onFocusChanged = onTextInputFocusChanged,
                 )
             }
+        }
         }
     }
 }
@@ -192,6 +208,7 @@ private fun ArchetypeGroup(
     archetypes: List<String>,
     selected: Set<String>,
     onToggle: (String) -> Unit,
+    onFocusChanged: (Boolean) -> Unit = {},
 ) {
     var query by remember { mutableStateOf("") }
 
@@ -219,7 +236,9 @@ private fun ArchetypeGroup(
                 onValueChange = { query = it },
                 singleLine = true,
                 placeholder = { Text("Search archetypes") },
-                modifier = Modifier.width(260.dp),
+                modifier = Modifier
+                    .width(260.dp)
+                    .onFocusChanged { onFocusChanged(it.isFocused) },
             )
         }
 
@@ -242,22 +261,38 @@ private fun ArchetypeGroup(
  * kind of number a deck is actually built around.
  */
 @Composable
-private fun StatRange(label: String, range: IntRange?, onChange: (IntRange?) -> Unit) {
-    // Re-derived when the range changes so "Clear all" empties the fields. The
-    // round trip is exact — an absent bound reads back as blank, not as 0 or
-    // 99999 — so typing does not fight the reset.
-    var minText by remember(range) {
+private fun StatRange(
+    label: String,
+    range: IntRange?,
+    onChange: (IntRange?) -> Unit,
+    onFocusChanged: (Boolean) -> Unit = {},
+) {
+    var minText by remember {
         mutableStateOf(range?.first?.takeIf { it != 0 }?.toString().orEmpty())
     }
-    var maxText by remember(range) {
+    var maxText by remember {
         mutableStateOf(range?.last?.takeIf { it != STAT_CEILING }?.toString().orEmpty())
     }
 
-    fun push() {
+    fun produced(): IntRange? {
         val low = minText.toIntOrNull()
         val high = maxText.toIntOrNull()
-        onChange(if (low == null && high == null) null else (low ?: 0)..(high ?: STAT_CEILING))
+        return if (low == null && high == null) null else (low ?: 0)..(high ?: STAT_CEILING)
     }
+
+    // Re-derived only when the range changed somewhere *else* — "Clear all", a
+    // pill removed. Reseeding on every change looked the same but was not: a
+    // typed "0" produces the range 0..ceiling, whose lower bound reads back as
+    // "absent", so the character vanished from the field while its filter
+    // silently stayed on.
+    LaunchedEffect(range) {
+        if (produced() != range) {
+            minText = range?.first?.takeIf { it != 0 }?.toString().orEmpty()
+            maxText = range?.last?.takeIf { it != STAT_CEILING }?.toString().orEmpty()
+        }
+    }
+
+    fun push() = onChange(produced())
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -272,7 +307,9 @@ private fun StatRange(label: String, range: IntRange?, onChange: (IntRange?) -> 
                 singleLine = true,
                 label = { Text("Min") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.width(140.dp),
+                modifier = Modifier
+                    .width(140.dp)
+                    .onFocusChanged { onFocusChanged(it.isFocused) },
             )
 
             OutlinedTextField(
@@ -281,7 +318,9 @@ private fun StatRange(label: String, range: IntRange?, onChange: (IntRange?) -> 
                 singleLine = true,
                 label = { Text("Max") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.width(140.dp),
+                modifier = Modifier
+                    .width(140.dp)
+                    .onFocusChanged { onFocusChanged(it.isFocused) },
             )
 
             if (range != null) {
@@ -353,8 +392,11 @@ fun CardFilter.pills(): List<FilterPill> = buildList {
     defRange?.let { add(FilterPill("DEF ${it.describe()}", copy(defRange = null))) }
 }
 
+// The ceiling case wins the tie: 0..ceiling means "a stated minimum of zero" —
+// a real filter, it excludes cards with no printed stat — and used to render as
+// the nonsense "≤ 99999".
 private fun IntRange.describe(): String = when {
-    first == 0 -> "≤ $last"
     last == STAT_CEILING -> "≥ $first"
+    first == 0 -> "≤ $last"
     else -> "$first–$last"
 }

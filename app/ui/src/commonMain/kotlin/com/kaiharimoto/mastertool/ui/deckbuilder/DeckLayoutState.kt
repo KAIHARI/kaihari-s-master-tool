@@ -10,6 +10,7 @@ import com.kaiharimoto.mastertool.core.prefs.SectionPreferences
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -36,16 +37,40 @@ class DeckLayoutState(
 
     private var saveJob: Job? = null
 
+    /** Whether the user has touched the layout since launch. */
+    private var edited = false
+
+    /**
+     * Survives the composition the debounced [saveJob] cannot: a save that is
+     * still waiting out its delay when the window closes gets cancelled with
+     * the rest of the UI's scope, so [flush] hands the final write to a scope
+     * nothing tears down.
+     */
+    private val flushScope = CoroutineScope(SupervisorJob())
+
     fun start(onLoaded: (UiPreferences) -> Unit = {}) {
         scope.launch {
-            preferences = repository.load()
-            onLoaded(preferences)
+            val stored = repository.load()
+            // The read races the user's first inputs. A divider dragged while
+            // the database was still opening must not snap back when the stored
+            // document finally arrives — whatever the user did wins.
+            if (!edited) {
+                preferences = stored
+                onLoaded(preferences)
+            }
         }
     }
 
-    fun update(transform: (UiPreferences) -> UiPreferences) {
+    /**
+     * [debounce] is for per-frame writers — the resize drags — where none of
+     * the intermediate values are worth a disk write. Everything discrete saves
+     * straight away, so a toggled setting is on disk before anything can
+     * happen to the process.
+     */
+    fun update(debounce: Boolean = false, transform: (UiPreferences) -> UiPreferences) {
+        edited = true
         preferences = transform(preferences).sanitised()
-        scheduleSave()
+        scheduleSave(if (debounce) SAVE_DEBOUNCE_MS else 0L)
     }
 
     fun updateSection(section: DeckSection, transform: (SectionPreferences) -> SectionPreferences) {
@@ -124,7 +149,7 @@ class DeckLayoutState(
         val newBottom = bottom.weight - applied
         if (newBottom < SectionPreferences.MIN_WEIGHT) return
 
-        update {
+        update(debounce = true) {
             it.with(above, top.copy(weight = newTop))
                 .with(below, bottom.copy(weight = newBottom))
         }
@@ -133,19 +158,22 @@ class DeckLayoutState(
     fun resizeSearchPane(deltaPx: Float) {
         val width = builderWidthPx
         if (width <= 0f) return
-        update { it.copy(searchWeight = it.searchWeight + deltaPx / width) }
+        update(debounce = true) { it.copy(searchWeight = it.searchWeight + deltaPx / width) }
     }
 
-    /**
-     * Written back well after the drag stops.
-     *
-     * A resize produces a new value every frame, and none of the intermediate
-     * ones are worth a disk write.
-     */
-    private fun scheduleSave() {
+    /** Writes anything still waiting out its debounce. Call on the way out. */
+    fun flush() {
+        val pending = saveJob ?: return
+        if (!pending.isActive) return
+        pending.cancel()
+        val snapshot = preferences
+        flushScope.launch { repository.save(snapshot) }
+    }
+
+    private fun scheduleSave(afterMs: Long) {
         saveJob?.cancel()
         saveJob = scope.launch {
-            delay(SAVE_DEBOUNCE_MS)
+            if (afterMs > 0) delay(afterMs)
             repository.save(preferences)
         }
     }

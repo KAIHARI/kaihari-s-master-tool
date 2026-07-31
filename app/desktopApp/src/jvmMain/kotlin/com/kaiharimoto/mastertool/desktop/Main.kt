@@ -70,6 +70,7 @@ private fun buildDependencies(): AppDependencies {
         updater = updater,
         newDeckId = { UUID.randomUUID().toString() },
         now = System::currentTimeMillis,
+        imageCacheDir = File(dataDirectory(), "card-art").absolutePath,
     )
 }
 

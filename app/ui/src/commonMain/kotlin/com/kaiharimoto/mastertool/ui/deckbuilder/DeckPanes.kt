@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,16 +45,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.core.deck.BreakdownEntry
+import com.kaiharimoto.mastertool.core.deck.DeckBreakdown
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.layout.GridFit
@@ -69,7 +75,9 @@ import com.kaiharimoto.mastertool.ui.dnd.DragController
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
 import com.kaiharimoto.mastertool.ui.dnd.DragSource
 import com.kaiharimoto.mastertool.ui.dnd.DropHover
+import com.kaiharimoto.mastertool.ui.theme.LocalDarkTheme
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.chromaticEdge
 import kotlinx.coroutines.delay
 
 /** How long a revealed card keeps its highlight before settling back. */
@@ -165,7 +173,12 @@ private fun DeckSectionPane(
     val accent = section.accent()
     val gridState = rememberLazyGridState()
     var flashed by remember { mutableStateOf<CardId?>(null) }
-    var gridOrigin by remember { mutableStateOf(Offset.Zero) }
+    // Written by two `onGloballyPositioned` callbacks — the pane's and its
+    // grid's — and registered from both, because they fire parent-first: the
+    // pane's callback alone would register whatever origin the grid had on the
+    // *previous* layout pass (and (0,0) on the first, which sent every drop to
+    // the wrong slot).
+    val geometry = remember { PaneGeometry() }
     // What the grid actually settled on, so the header can report it and taking
     // manual control starts from what is already on screen.
     var effectiveColumns by remember { mutableStateOf(preferences.columns) }
@@ -177,15 +190,42 @@ private fun DeckSectionPane(
         else -> MasterToolPalette.Danger
     }
 
-    // Only the pane that owns the requested section reacts; the others ignore it.
-    LaunchedEffect(state.revealRequest?.id) {
-        val request = state.revealRequest ?: return@LaunchedEffect
-        if (request.section != section) return@LaunchedEffect
+    val breakdownActive = state.breakdownVisible &&
+        section == DeckSection.MAIN && !layout.preferences.stacked
 
-        gridState.animateScrollToItem(request.position)
-        flashed = request.cardId
-        delay(FLASH_MS)
-        flashed = null
+    // Only the pane that owns the requested section reacts; the others ignore
+    // it. A collector rather than an effect keyed on the request: the request
+    // is consumed in here, and consuming the key of the effect that is
+    // handling it would cancel the scroll it was consumed to run.
+    LaunchedEffect(Unit) {
+        snapshotFlow { state.revealRequest }.collect { request ->
+            if (request == null || request.section != section) return@collect
+            // Consumed on pickup: this state holder outlives the screen, and an
+            // unconsumed request replays its scroll-and-flash every time the
+            // builder comes back from the library.
+            state.revealRequest = null
+
+            // The stored position indexes the raw list; the grid may be
+            // showing one tile per distinct card, or the breakdown's
+            // header-and-block order.
+            val item = when {
+                layout.preferences.stacked ->
+                    DeckGrouping.stacks(state.deck[section]).indexOfFirst { it.id == request.cardId }
+
+                breakdownActive ->
+                    DeckBreakdown.flatten(state.deck[section], state.groups).indexOfFirst {
+                        it is BreakdownEntry.CardEntry && it.rawIndex == request.position
+                    }
+
+                else -> request.position
+            }
+            if (item < 0) return@collect
+
+            gridState.animateScrollToItem(item)
+            flashed = request.cardId
+            delay(FLASH_MS)
+            flashed = null
+        }
     }
 
     Column(
@@ -207,7 +247,8 @@ private fun DeckSectionPane(
             // Registered whole rather than just its grid, so a collapsed or empty
             // pane is still somewhere a card can be dropped.
             .onGloballyPositioned {
-                drag.registerPane(section, it.boundsInRoot(), gridState, gridOrigin)
+                geometry.paneBounds = it.boundsInRoot()
+                geometry.register(drag, section, gridState)
             }
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -234,12 +275,24 @@ private fun DeckSectionPane(
             val density = LocalDensity.current
             val spacing = 6.dp
 
+            // The stacked view compresses to its contents; everything else is
+            // sized for the section's natural capacity, so the first card
+            // added lands in a 40-card-shaped grid and nothing reflows while
+            // ratios are being weighed. Only growing past the baseline zooms
+            // the grid out.
+            val baseline = when {
+                layout.preferences.stacked -> 0
+                section == DeckSection.MAIN -> section.minSize
+                else -> section.maxSize
+            }
+
             // Recomputed on every layout pass, which is cheap and means the grid
             // re-fits the moment the pane is resized or a card is added.
             val fit = with(density) {
                 if (preferences.autoFit) {
-                    GridFitter.fit(
+                    GridFitter.stableFit(
                         count = itemCount,
+                        baselineCount = baseline,
                         availableWidth = maxWidth.toPx(),
                         availableHeight = maxHeight.toPx(),
                         spacing = spacing.toPx(),
@@ -274,25 +327,83 @@ private fun DeckSectionPane(
                 state = gridState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .onGloballyPositioned { gridOrigin = it.positionInRoot() },
+                    .onGloballyPositioned {
+                        geometry.gridOrigin = it.positionInRoot()
+                        geometry.register(drag, section, gridState)
+                    },
                 horizontalArrangement = Arrangement.spacedBy(spacing),
                 verticalArrangement = Arrangement.spacedBy(spacing),
             ) {
-                if (layout.preferences.stacked) {
+                if (breakdownActive) {
+                    // The breakdown lens: one full-width label per group, then
+                    // its cards. Position within a block is display order —
+                    // the deck's stored order is untouched, which is why a
+                    // drop here means "assign", never "insert".
+                    val entries = DeckBreakdown.flatten(ids, state.groups)
+                    val dropTarget = hover?.takeIf { it.accepted }
+                        ?.let { DeckBreakdown.dropGroup(entries, it.index) }
+                    val dropLive = hover?.accepted == true
+
+                    entries.forEachIndexed { i, entry ->
+                        when (entry) {
+                            is BreakdownEntry.Header -> item(
+                                key = "${section.name}-hdr-${entry.groupId ?: "ungrouped"}",
+                                span = { GridItemSpan(maxLineSpan) },
+                            ) {
+                                BreakdownHeader(
+                                    entry = entry,
+                                    count = entries.count {
+                                        it is BreakdownEntry.CardEntry && it.groupId == entry.groupId
+                                    },
+                                    receiving = dropLive && dropTarget == entry.groupId,
+                                )
+                            }
+
+                            is BreakdownEntry.CardEntry -> item(
+                                key = "${section.name}-bd-$i-${entry.id.value}",
+                            ) {
+                                DeckCard(
+                                    state = state,
+                                    drag = drag,
+                                    dragEnabled = true,
+                                    competesWithScroll = competesWithScroll,
+                                    onDropped = onDropped,
+                                    section = section,
+                                    id = entry.id,
+                                    copies = state.copiesIn(entry.id, section),
+                                    highlighted = flashed == entry.id,
+                                    insertionMarker = false,
+                                    trailingMarker = false,
+                                    siblings = ids,
+                                    position = entry.rawIndex,
+                                )
+                            }
+                        }
+                    }
+                } else if (layout.preferences.stacked) {
                     // Stacks have no positional identity, so dragging one has
-                    // nothing coherent to mean; the stepper does that job instead.
+                    // nothing coherent to mean; the stepper does that job
+                    // instead. The long-press menu still applies, which is why
+                    // the tile keeps its gesture handling with only the drag
+                    // switched off.
                     items(stacks.size, key = { "${section.name}-stack-${stacks[it].id.value}" }) { i ->
                         val stack = stacks[i]
                         DeckCard(
                             state = state,
-                            drag = null,
+                            drag = drag,
+                            dragEnabled = false,
                             competesWithScroll = competesWithScroll,
                             onDropped = onDropped,
                             section = section,
                             id = stack.id,
                             copies = stack.count,
                             highlighted = flashed == stack.id,
-                            insertionMarker = false,
+                            // The resolver's index is a grid index, which here
+                            // counts stacks; the drop itself is translated back
+                            // to a list position when it lands.
+                            insertionMarker = hover?.accepted == true && hover.index == i,
+                            trailingMarker = hover?.accepted == true &&
+                                hover.index == stacks.size && i == stacks.lastIndex,
                             siblings = ids,
                             position = stack.firstIndex,
                         )
@@ -303,6 +414,7 @@ private fun DeckSectionPane(
                         DeckCard(
                             state = state,
                             drag = drag,
+                            dragEnabled = true,
                             competesWithScroll = competesWithScroll,
                             onDropped = onDropped,
                             section = section,
@@ -310,6 +422,10 @@ private fun DeckSectionPane(
                             copies = state.copiesIn(ids[position], section),
                             highlighted = flashed == ids[position],
                             insertionMarker = hover?.accepted == true && hover.index == position,
+                            // "Append at the end" resolves to one past the last
+                            // index, which no card's leading edge can show.
+                            trailingMarker = hover?.accepted == true &&
+                                hover.index == ids.size && position == ids.lastIndex,
                             siblings = ids,
                             position = position,
                         )
@@ -331,7 +447,8 @@ private fun DeckSectionPane(
 @Composable
 private fun DeckCard(
     state: DeckBuilderState,
-    drag: DragController?,
+    drag: DragController,
+    dragEnabled: Boolean,
     competesWithScroll: Boolean,
     onDropped: (DragSession, DropHover?) -> Unit,
     section: DeckSection,
@@ -339,6 +456,7 @@ private fun DeckCard(
     copies: Int,
     highlighted: Boolean,
     insertionMarker: Boolean,
+    trailingMarker: Boolean,
     siblings: List<CardId>,
     position: Int,
 ) {
@@ -359,13 +477,15 @@ private fun DeckCard(
                 highlighted = highlighted,
                 onClick = { state.removeOne(card, section) },
             ) {
-                // A bar down the leading edge of the card the drop would land before.
-                if (insertionMarker) {
+                // A bar down the leading edge of the card the drop would land
+                // before — or down the trailing edge of the last card, for a
+                // drop that appends.
+                if (insertionMarker || trailingMarker) {
                     Box(
                         Modifier
                             .fillMaxHeight()
                             .width(3.dp)
-                            .align(Alignment.CenterStart)
+                            .align(if (insertionMarker) Alignment.CenterStart else Alignment.CenterEnd)
                             .background(MasterToolPalette.AccentBright),
                     )
                 }
@@ -374,19 +494,16 @@ private fun DeckCard(
     }
 
     Box {
-        if (drag == null) {
-            tile()
-        } else {
-            DragSource(
-                controller = drag,
-                key = "${section.name}-$position-${id.value}",
-                competesWithScroll = competesWithScroll,
-                session = { DragSession(card, section, position, IntSize.Zero) },
-                onLongPress = { menuOpen = true },
-                onDropped = onDropped,
-                content = tile,
-            )
-        }
+        DragSource(
+            controller = drag,
+            key = "${section.name}-$position-${id.value}",
+            competesWithScroll = competesWithScroll,
+            session = { DragSession(card, section, position, IntSize.Zero) },
+            onLongPress = { menuOpen = true },
+            onDropped = onDropped,
+            dragEnabled = dragEnabled,
+            content = tile,
+        )
 
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
@@ -395,6 +512,10 @@ private fun DeckCard(
                     menuOpen = false
                     state.inspect(siblings.mapNotNull { state.index.byId(it) }, position)
                 },
+            )
+            DropdownMenuItem(
+                text = { Text("Hold card") },
+                onClick = { menuOpen = false; state.heldCard = card },
             )
             DropdownMenuItem(
                 text = { Text("Remove one") },
@@ -414,6 +535,40 @@ private fun DeckCard(
                 text = { Text("Move one to ${elsewhere.displayName}") },
                 onClick = { menuOpen = false; state.moveCard(card, section, elsewhere) },
             )
+
+            // The pointer/keyboard idiom for assignment; dragging onto a block
+            // in the breakdown is the touch one.
+            if (section == DeckSection.MAIN) {
+                HorizontalDivider()
+
+                state.groups.ordered().forEach { group ->
+                    val assigned = state.groups.assignments[id] == group.id
+                    DropdownMenuItem(
+                        text = { Text(if (assigned) "✓ ${group.name}" else group.name) },
+                        leadingIcon = {
+                            Box(
+                                Modifier
+                                    .size(width = 4.dp, height = 14.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(
+                                        MasterToolPalette.Prism[
+                                            group.color % MasterToolPalette.Prism.size
+                                        ]
+                                    ),
+                            )
+                        },
+                        onClick = {
+                            menuOpen = false
+                            state.assignCardToGroup(id, if (assigned) null else group.id)
+                        },
+                    )
+                }
+
+                DropdownMenuItem(
+                    text = { Text("Manage groups…") },
+                    onClick = { menuOpen = false; state.groupManagerVisible = true },
+                )
+            }
         }
     }
 }
@@ -505,6 +660,29 @@ private fun SectionHeader(
                             },
                         )
                     }
+
+                    if (section == DeckSection.MAIN) {
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (state.breakdownVisible) {
+                                        "✓ Breakdown view"
+                                    } else {
+                                        "Breakdown view"
+                                    }
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                state.breakdownVisible = !state.breakdownVisible
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Manage groups…") },
+                            onClick = { menuOpen = false; state.groupManagerVisible = true },
+                        )
+                    }
                 }
             }
         }
@@ -519,6 +697,72 @@ private fun SectionHeader(
                 },
             )
         }
+    }
+}
+
+/**
+ * One group's label row in the breakdown: colour chip, name, count.
+ *
+ * While an accepted drag hovers over its block the row wears the chromatic
+ * edge — the light lands on the group about to receive the card.
+ */
+@Composable
+private fun BreakdownHeader(
+    entry: BreakdownEntry.Header,
+    count: Int,
+    receiving: Boolean,
+) {
+    val dark = LocalDarkTheme.current
+    val color = entry.color?.let { MasterToolPalette.Prism[it % MasterToolPalette.Prism.size] }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (receiving) {
+                    Modifier.chromaticEdge(dark = dark, cornerRadius = 4.dp)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(width = 4.dp, height = 14.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(color ?: MaterialTheme.colorScheme.onSurfaceVariant),
+        )
+        Text(
+            "  ${entry.name}",
+            style = MaterialTheme.typography.labelLarge,
+            color = color ?: MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "  ·  $count",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * A drop target's geometry, assembled across two layout callbacks.
+ *
+ * The pane's bounds and its grid's origin arrive in separate
+ * `onGloballyPositioned` callbacks, and those fire parent-first — so either one
+ * alone would register the other's value from the previous layout pass.
+ * Both writers register, and whichever ran last in a pass wins with a fully
+ * current pair.
+ */
+private class PaneGeometry {
+    var paneBounds: Rect = Rect.Zero
+    var gridOrigin: Offset = Offset.Zero
+
+    fun register(drag: DragController, section: DeckSection, gridState: LazyGridState) {
+        if (paneBounds == Rect.Zero) return
+        drag.registerPane(section, paneBounds, gridState, gridOrigin)
     }
 }
 

@@ -25,6 +25,36 @@ import com.kaiharimoto.mastertool.core.input.ShortcutContext
 import com.kaiharimoto.mastertool.core.input.ShortcutTable
 
 /**
+ * The keyboard story of one surface, bundled so it can travel.
+ *
+ * A modal sheet composes into its own window or popup, outside the main
+ * hierarchy's focus chain — key events over a sheet never reach the builder's
+ * [ShortcutHost]. Passing this into each sheet lets the sheet stand up its own
+ * host *inside* that focus boundary, resolving against the same table and
+ * feeding the same handler, so a shortcut means the same thing wherever the
+ * focus happens to be.
+ */
+class ShortcutRelay(
+    val context: ShortcutContext,
+    val onAction: (ShortcutAction) -> Unit,
+)
+
+/** Wraps a sheet's content so shortcuts keep working while it is open. */
+@Composable
+fun SheetShortcuts(relay: ShortcutRelay?, content: @Composable () -> Unit) {
+    if (relay == null) {
+        content()
+    } else {
+        ShortcutHost(
+            context = relay.context,
+            onAction = relay.onAction,
+            modifier = Modifier,
+            content = content,
+        )
+    }
+}
+
+/**
  * The one place a key press is turned into an action.
  *
  * `onPreviewKeyEvent` sees the event before the focused child does, which is
@@ -33,6 +63,12 @@ import com.kaiharimoto.mastertool.core.input.ShortcutTable
  * field has focus only the handful of shortcuts marked as safe there get through,
  * and everything else falls to the field.
  *
+ * Key repeat is resolved here rather than in the table's data: the platforms do
+ * not agree on how a repeat is reported, so it is tracked as "a second key-down
+ * with no key-up in between". A repeat of a repeatable shortcut fires again; a
+ * repeat of anything else is swallowed whole, so holding `s` cannot strobe the
+ * statistics panel open and shut at the repeat rate.
+ *
  * All this composable does is name the key. Deciding what a chord means lives in
  * `:core`, where it is a pure function with tests.
  */
@@ -40,25 +76,39 @@ import com.kaiharimoto.mastertool.core.input.ShortcutTable
 fun ShortcutHost(
     context: ShortcutContext,
     onAction: (ShortcutAction) -> Unit,
+    modifier: Modifier = Modifier.fillMaxSize(),
+    focusRequester: FocusRequester = remember { FocusRequester() },
     content: @Composable () -> Unit,
 ) {
-    val focusRequester = remember { FocusRequester() }
-
     // Key events only arrive somewhere focused. Taking focus at the root means
     // shortcuts work before anything has been clicked.
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
+    val heldKeys = remember { mutableSetOf<Key>() }
+
     Box(
-        Modifier
-            .fillMaxSize()
+        modifier
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.type) {
+                    KeyEventType.KeyUp -> {
+                        heldKeys.remove(event.key)
+                        return@onPreviewKeyEvent false
+                    }
+                    KeyEventType.KeyDown -> Unit
+                    else -> return@onPreviewKeyEvent false
+                }
+
+                val isRepeat = !heldKeys.add(event.key)
+
                 val chord = event.toChord() ?: return@onPreviewKeyEvent false
-                val action = ShortcutTable.resolve(chord, context)
+                val shortcut = ShortcutTable.resolveShortcut(chord, context)
                     ?: return@onPreviewKeyEvent false
-                onAction(action)
+
+                if (!isRepeat || shortcut.repeatable) onAction(shortcut.action)
+                // Consumed either way: a swallowed repeat must not fall through
+                // to whatever is underneath.
                 true
             },
     ) {
@@ -93,7 +143,10 @@ private fun Key.chordName(): String? = when (this) {
     Key.One -> "1"
     Key.Two -> "2"
     Key.Three -> "3"
+    Key.B -> "b"
+    Key.C -> "c"
     Key.F -> "f"
+    Key.G -> "g"
     Key.I -> "i"
     Key.S -> "s"
     Key.Z -> "z"

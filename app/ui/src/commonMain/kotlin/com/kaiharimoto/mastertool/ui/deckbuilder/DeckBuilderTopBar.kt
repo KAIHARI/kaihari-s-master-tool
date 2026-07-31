@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
@@ -38,10 +39,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kaiharimoto.mastertool.core.model.Format
+import com.kaiharimoto.mastertool.core.prefs.ThemeMode
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
 import com.kaiharimoto.mastertool.ui.egg.ChibiLogo
+import com.kaiharimoto.mastertool.ui.fx.defaultFeedbackEnabled
+import com.kaiharimoto.mastertool.ui.theme.ChromaticText
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.archivoExpandedFamily
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
 @Composable
@@ -50,6 +56,7 @@ fun DeckBuilderTopBar(
     layout: DeckLayoutState,
     updateState: UpdateState,
     onOpenLibrary: () -> Unit,
+    onOpenGoldfish: () -> Unit = {},
 ) {
     val validation = state.validation
     var menuOpen by remember { mutableStateOf(false) }
@@ -64,10 +71,15 @@ fun DeckBuilderTopBar(
     ) {
         ChibiLogo(onWake = { state.eggVisible = true })
 
-        Text(
-            "kai's master tool",
-            style = MaterialTheme.typography.titleMedium,
-            color = MasterToolPalette.Accent,
+        // The wordmark carries the identity: expanded cut, chromatic fringe —
+        // white light through a lens, not a coloured logo.
+        ChromaticText(
+            "KAI'S MASTER TOOL",
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontFamily = archivoExpandedFamily(),
+                letterSpacing = 1.5.sp,
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
         )
 
         OutlinedTextField(
@@ -141,8 +153,14 @@ fun DeckBuilderTopBar(
         IconButton(onClick = { state.statsVisible = true }) {
             Icon(Icons.Filled.BarChart, contentDescription = "Deck statistics")
         }
+        IconButton(onClick = { state.consistencyVisible = true }) {
+            Icon(Icons.Filled.Percent, contentDescription = "Opening-hand odds")
+        }
         IconButton(onClick = { state.save() }) {
             Icon(Icons.Filled.Save, contentDescription = "Save deck")
+        }
+        TextButton(onClick = onOpenGoldfish, enabled = state.deck.main.size >= 5) {
+            Text("Goldfish")
         }
         TextButton(onClick = onOpenLibrary) { Text("Library") }
 
@@ -189,12 +207,57 @@ fun DeckBuilderTopBar(
                     },
                 )
                 DropdownMenuItem(
+                    text = {
+                        val effective = layout.preferences.feedbackEnabled
+                            ?: defaultFeedbackEnabled()
+                        Text(if (effective) "Sound & haptics: on" else "Sound & haptics: off")
+                    },
+                    onClick = {
+                        layout.update {
+                            val effective = it.feedbackEnabled ?: defaultFeedbackEnabled()
+                            it.copy(feedbackEnabled = !effective)
+                        }
+                    },
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            when (layout.preferences.themeMode) {
+                                ThemeMode.SYSTEM -> "Theme: match system"
+                                ThemeMode.DARK -> "Theme: dark"
+                                ThemeMode.LIGHT -> "Theme: light"
+                            }
+                        )
+                    },
+                    onClick = {
+                        // Cycles rather than opening a submenu: three values, and
+                        // the whole screen previews the choice instantly.
+                        layout.update {
+                            it.copy(
+                                themeMode = when (it.themeMode) {
+                                    ThemeMode.SYSTEM -> ThemeMode.DARK
+                                    ThemeMode.DARK -> ThemeMode.LIGHT
+                                    ThemeMode.LIGHT -> ThemeMode.SYSTEM
+                                }
+                            )
+                        }
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text("Reset layout") },
                     onClick = {
                         menuOpen = false
                         layout.update {
-                            // Keep what is about the deck, reset what is about the room.
-                            UiPreferences.DEFAULT.copy(format = it.format, stacked = it.stacked)
+                            // Keep what is about the deck or the person — the
+                            // format, the stacked view, the pinned easter-egg
+                            // pool, the theme — and reset what is about the room.
+                            UiPreferences.DEFAULT.copy(
+                                format = it.format,
+                                stacked = it.stacked,
+                                easterEggPool = it.easterEggPool,
+                                themeMode = it.themeMode,
+                                feedbackEnabled = it.feedbackEnabled,
+                            )
                         }
                     },
                 )

@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckIssue
 import com.kaiharimoto.mastertool.core.deck.DeckValidation
+import com.kaiharimoto.mastertool.ui.input.SheetShortcuts
+import com.kaiharimoto.mastertool.ui.input.ShortcutRelay
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
 /**
@@ -41,10 +43,12 @@ fun IssuesPanel(
     validation: DeckValidation,
     onReveal: (DeckIssue) -> Unit,
     onDismiss: () -> Unit,
+    shortcuts: ShortcutRelay? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        SheetShortcuts(shortcuts) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -84,6 +88,7 @@ fun IssuesPanel(
                 )
                 warnings.forEach { IssueRow(it, MasterToolPalette.Warning, onReveal) }
             }
+        }
         }
     }
 }

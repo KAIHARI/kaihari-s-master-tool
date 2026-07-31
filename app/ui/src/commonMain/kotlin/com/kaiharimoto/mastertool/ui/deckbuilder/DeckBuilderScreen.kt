@@ -27,6 +27,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.core.deck.DeckBreakdown
+import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.input.ShortcutAction
 import com.kaiharimoto.mastertool.core.input.ShortcutContext
 import com.kaiharimoto.mastertool.core.model.CardId
@@ -37,8 +39,11 @@ import com.kaiharimoto.mastertool.ui.dnd.DragController
 import com.kaiharimoto.mastertool.ui.dnd.DragOverlay
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
 import com.kaiharimoto.mastertool.ui.dnd.DropHover
+import com.kaiharimoto.mastertool.core.input.ShortcutLayer
 import com.kaiharimoto.mastertool.ui.input.ShortcutHelpSheet
 import com.kaiharimoto.mastertool.ui.input.ShortcutHost
+import com.kaiharimoto.mastertool.ui.inspect.CardInspect3D
+import com.kaiharimoto.mastertool.ui.input.ShortcutRelay
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
 /**
@@ -56,6 +61,7 @@ fun DeckBuilderScreen(
     layout: DeckLayoutState,
     updateState: UpdateState,
     onOpenLibrary: () -> Unit,
+    onOpenGoldfish: () -> Unit = {},
 ) {
     val snackbarHost = remember { SnackbarHostState() }
     val density = LocalDensity.current
@@ -70,13 +76,19 @@ fun DeckBuilderScreen(
 
     LaunchedEffect(state.toast?.id) {
         val toast = state.toast ?: return@LaunchedEffect
-        val result = snackbarHost.showSnackbar(
-            message = toast.message,
-            actionLabel = if (toast.undo != null) "Undo" else null,
-            withDismissAction = toast.undo == null,
-        )
-        if (result == SnackbarResult.ActionPerformed) toast.undo?.invoke()
-        state.consumeToast()
+        try {
+            val result = snackbarHost.showSnackbar(
+                message = toast.message,
+                actionLabel = if (toast.undo != null) "Undo" else null,
+                withDismissAction = toast.undo == null,
+            )
+            if (result == SnackbarResult.ActionPerformed) toast.undo?.invoke()
+        } finally {
+            // Consumed even when this effect is cancelled mid-show — the state
+            // holder outlives the screen, and an unconsumed toast replayed
+            // itself every time the builder came back from the library.
+            state.consumeToast()
+        }
     }
 
     LaunchedEffect(updateState.message) {
@@ -86,39 +98,77 @@ fun DeckBuilderScreen(
     }
 
     val onDropped: (DragSession, DropHover?) -> Unit = { session, landed ->
-        applyDrop(state, session, landed)
+        applyDrop(state, session, landed, stacked = layout.preferences.stacked)
     }
 
     val searchFocus = remember { FocusRequester() }
+    val hostFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
-    val overlayOpen = state.inspection != null || state.filtersVisible ||
-        state.statsVisible || state.issuesVisible || state.helpVisible || state.eggVisible
+    // At most one thing covers the builder; resolution needs to know which,
+    // because a toggle stays live while its own panel is the one on top. The
+    // order here matches dismissTopLayer, topmost first.
+    val topLayer = when {
+        state.eggVisible -> ShortcutLayer.EGG
+        state.inspection != null -> ShortcutLayer.INSPECTOR
+        state.helpVisible -> ShortcutLayer.HELP
+        state.groupManagerVisible -> ShortcutLayer.GROUPS
+        state.consistencyVisible -> ShortcutLayer.CONSISTENCY
+        state.filtersVisible -> ShortcutLayer.FILTERS
+        state.statsVisible -> ShortcutLayer.STATS
+        state.issuesVisible -> ShortcutLayer.ISSUES
+        else -> ShortcutLayer.BUILDER
+    }
+
+    val shortcutContext = ShortcutContext(
+        textInputFocused = state.textInputFocused,
+        topLayer = topLayer,
+    )
+    val onShortcut: (ShortcutAction) -> Unit = { action ->
+        when (action) {
+            ShortcutAction.SAVE -> state.save()
+            ShortcutAction.UNDO -> state.undo()
+            ShortcutAction.REDO -> state.redo()
+            ShortcutAction.FOCUS_SEARCH -> searchFocus.requestFocus()
+            ShortcutAction.TOGGLE_FILTERS -> state.filtersVisible = !state.filtersVisible
+            ShortcutAction.TOGGLE_STATS -> state.statsVisible = !state.statsVisible
+            ShortcutAction.TOGGLE_ISSUES -> state.issuesVisible = !state.issuesVisible
+            ShortcutAction.TOGGLE_HELP -> state.helpVisible = !state.helpVisible
+            ShortcutAction.TOGGLE_BREAKDOWN -> state.breakdownVisible = !state.breakdownVisible
+            ShortcutAction.TOGGLE_GROUP_MANAGER ->
+                state.groupManagerVisible = !state.groupManagerVisible
+            ShortcutAction.TOGGLE_CONSISTENCY ->
+                state.consistencyVisible = !state.consistencyVisible
+            ShortcutAction.DISMISS -> dismissTopLayer(state) {
+                focusManager.clearFocus()
+                // Cleared focus is nobody's focus, and key events only arrive
+                // somewhere focused — without this, the Escape that cleared the
+                // search box also switched the keyboard off for good.
+                hostFocus.requestFocus()
+            }
+            ShortcutAction.FOCUS_MAIN -> layout.focusSection(DeckSection.MAIN)
+            ShortcutAction.FOCUS_EXTRA -> layout.focusSection(DeckSection.EXTRA)
+            ShortcutAction.FOCUS_SIDE -> layout.focusSection(DeckSection.SIDE)
+            ShortcutAction.PREVIOUS_CARD -> state.pageInspection(-1)
+            ShortcutAction.NEXT_CARD -> state.pageInspection(1)
+        }
+    }
+    // Sheets compose into their own focus boundary, so each stands up its own
+    // host inside it — same context, same handler, same table.
+    val shortcutRelay = ShortcutRelay(shortcutContext, onShortcut)
+
+    // A closing sheet takes its focus with it. Reclaim the keyboard for the
+    // builder — unless the user is typing, in which case the field keeps it.
+    LaunchedEffect(topLayer) {
+        if (topLayer == ShortcutLayer.BUILDER && !state.textInputFocused) {
+            hostFocus.requestFocus()
+        }
+    }
 
     ShortcutHost(
-        context = ShortcutContext(
-            textInputFocused = state.textInputFocused,
-            inspectorOpen = state.inspection != null,
-            overlayOpen = overlayOpen,
-        ),
-        onAction = { action ->
-            when (action) {
-                ShortcutAction.SAVE -> state.save()
-                ShortcutAction.UNDO -> state.undo()
-                ShortcutAction.REDO -> state.redo()
-                ShortcutAction.FOCUS_SEARCH -> searchFocus.requestFocus()
-                ShortcutAction.TOGGLE_FILTERS -> state.filtersVisible = !state.filtersVisible
-                ShortcutAction.TOGGLE_STATS -> state.statsVisible = !state.statsVisible
-                ShortcutAction.TOGGLE_ISSUES -> state.issuesVisible = !state.issuesVisible
-                ShortcutAction.TOGGLE_HELP -> state.helpVisible = !state.helpVisible
-                ShortcutAction.DISMISS -> dismissTopLayer(state) { focusManager.clearFocus() }
-                ShortcutAction.FOCUS_MAIN -> layout.focusSection(DeckSection.MAIN)
-                ShortcutAction.FOCUS_EXTRA -> layout.focusSection(DeckSection.EXTRA)
-                ShortcutAction.FOCUS_SIDE -> layout.focusSection(DeckSection.SIDE)
-                ShortcutAction.PREVIOUS_CARD -> state.pageInspection(-1)
-                ShortcutAction.NEXT_CARD -> state.pageInspection(1)
-            }
-        },
+        context = shortcutContext,
+        onAction = onShortcut,
+        focusRequester = hostFocus,
     ) {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHost) },
@@ -128,7 +178,7 @@ fun DeckBuilderScreen(
             // clipped by the grid it was lifted out of.
             Box(Modifier.fillMaxSize().padding(padding)) {
                 Column(Modifier.fillMaxSize()) {
-                    DeckBuilderTopBar(state, layout, updateState, onOpenLibrary)
+                    DeckBuilderTopBar(state, layout, updateState, onOpenLibrary, onOpenGoldfish)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
                     Row(
@@ -185,7 +235,14 @@ fun DeckBuilderScreen(
                 state.onFilterChange(filter)
                 state.inspection = null
             },
+            onHold = { card -> state.heldCard = card },
+            shortcuts = shortcutRelay,
         )
+    }
+
+    // Above everything, including open sheets: a Dialog stacks over them.
+    state.heldCard?.let { held ->
+        CardInspect3D(card = held, onDismiss = { state.heldCard = null })
     }
 
     if (state.filtersVisible) {
@@ -195,6 +252,8 @@ fun DeckBuilderScreen(
             onChange = state::onFilterChange,
             onClear = state::clearFilters,
             onDismiss = { state.filtersVisible = false },
+            onTextInputFocusChanged = state::onTextFieldFocusChanged,
+            shortcuts = shortcutRelay,
         )
     }
 
@@ -204,6 +263,7 @@ fun DeckBuilderScreen(
             section = state.statsSection,
             onSectionChange = { state.statsSection = it },
             onDismiss = { state.statsVisible = false },
+            shortcuts = shortcutRelay,
         )
     }
 
@@ -219,11 +279,31 @@ fun DeckBuilderScreen(
                 }
             },
             onDismiss = { state.issuesVisible = false },
+            shortcuts = shortcutRelay,
         )
     }
 
     if (state.helpVisible) {
-        ShortcutHelpSheet(onDismiss = { state.helpVisible = false })
+        ShortcutHelpSheet(
+            onDismiss = { state.helpVisible = false },
+            shortcuts = shortcutRelay,
+        )
+    }
+
+    if (state.groupManagerVisible) {
+        GroupManagerSheet(
+            state = state,
+            onDismiss = { state.groupManagerVisible = false },
+            shortcuts = shortcutRelay,
+        )
+    }
+
+    if (state.consistencyVisible) {
+        ConsistencyDialog(
+            state = state,
+            onDismiss = { state.consistencyVisible = false },
+            shortcuts = shortcutRelay,
+        )
     }
 
     if (state.eggVisible) {
@@ -274,6 +354,8 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
         state.eggVisible -> state.eggVisible = false
         state.inspection != null -> state.inspection = null
         state.helpVisible -> state.helpVisible = false
+        state.groupManagerVisible -> state.groupManagerVisible = false
+        state.consistencyVisible -> state.consistencyVisible = false
         state.filtersVisible -> state.filtersVisible = false
         state.statsVisible -> state.statsVisible = false
         state.issuesVisible -> state.issuesVisible = false
@@ -289,26 +371,69 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
  * and the stepper use — so a drop is undoable, and a drop the rules refuse says
  * so in the same words as any other rejected edit.
  */
-private fun applyDrop(state: DeckBuilderState, session: DragSession, landed: DropHover?) {
+private fun applyDrop(
+    state: DeckBuilderState,
+    session: DragSession,
+    landed: DropHover?,
+    stacked: Boolean,
+) {
     if (landed == null || !landed.accepted) return
 
     val target = landed.section
+
+    // In the breakdown lens the main grid's indices count headers and grouped
+    // cards, and position within a block is display order, not deck order — so
+    // a drop there means "this card belongs to that group", not "insert here".
+    if (target == DeckSection.MAIN && state.breakdownVisible && !stacked) {
+        val entries = DeckBreakdown.flatten(state.deck.main, state.groups)
+        val groupId = DeckBreakdown.dropGroup(entries, landed.index)
+
+        when (session.section) {
+            null -> state.addCard(session.card, DeckSection.MAIN)
+            DeckSection.MAIN -> Unit // stays put; only its group changes
+            else -> state.moveCard(session.card, session.section, DeckSection.MAIN)
+        }
+        // Assign only if the card actually made it in (add can be rejected).
+        if (state.deck.main.contains(session.card.id)) {
+            state.assignCardToGroup(session.card.id, groupId)
+        }
+        return
+    }
+
     when {
         // Dropped back on the pool: the copy leaves the deck.
         target == null -> session.section?.let { from ->
             state.removeAt(session.card, from, session.index)
         }
 
-        session.section == null -> state.addCardAt(session.card, target, landed.index)
+        session.section == null -> state.addCardAt(
+            session.card,
+            target,
+            // The resolver reports a grid index. In the stacked view the grid
+            // shows one tile per distinct card, so that index counts stacks and
+            // has to be mapped back onto the list the deck actually stores —
+            // fed in raw, it would land the card inside another card's copies.
+            if (stacked) stackIndexToListIndex(state.deck[target], landed.index) else landed.index,
+        )
 
         else -> state.moveCardTo(
             card = session.card,
             from = session.section,
             fromIndex = session.index,
             to = target,
-            insertBefore = landed.index,
+            insertBefore = if (stacked) {
+                stackIndexToListIndex(state.deck[target], landed.index)
+            } else {
+                landed.index
+            },
         )
     }
+}
+
+/** "Before the Nth stack" as a position in the flat list the deck stores. */
+private fun stackIndexToListIndex(ids: List<CardId>, stackIndex: Int): Int {
+    val stacks = DeckGrouping.stacks(ids)
+    return if (stackIndex >= stacks.size) ids.size else stacks[stackIndex].firstIndex
 }
 
 @Composable

@@ -40,6 +40,9 @@ enum class ShortcutAction {
     TOGGLE_STATS,
     TOGGLE_ISSUES,
     TOGGLE_HELP,
+    TOGGLE_BREAKDOWN,
+    TOGGLE_GROUP_MANAGER,
+    TOGGLE_CONSISTENCY,
     DISMISS,
     FOCUS_MAIN,
     FOCUS_EXTRA,
@@ -60,12 +63,30 @@ enum class ShortcutScope {
     ANYWHERE,
 }
 
+/**
+ * What is on top of the builder right now — at most one thing ever is.
+ *
+ * One value rather than a flag per sheet, because the flags version could not
+ * express the thing that matters most to a toggle: whether the panel covering
+ * the builder is *this shortcut's own*. "Press `s` again to close statistics"
+ * needs the table to know the statistics sheet is what is open.
+ */
+enum class ShortcutLayer {
+    BUILDER,
+    INSPECTOR,
+    FILTERS,
+    STATS,
+    ISSUES,
+    HELP,
+    GROUPS,
+    CONSISTENCY,
+    EGG,
+}
+
 /** What is on screen, which decides which shortcuts are live. */
 data class ShortcutContext(
     val textInputFocused: Boolean = false,
-    val inspectorOpen: Boolean = false,
-    /** Any sheet or dialog is covering the builder, the inspector included. */
-    val overlayOpen: Boolean = false,
+    val topLayer: ShortcutLayer = ShortcutLayer.BUILDER,
 )
 
 data class Shortcut(
@@ -80,6 +101,22 @@ data class Shortcut(
      * deck name opens the statistics panel and the issue list on the way past.
      */
     val allowedInTextInput: Boolean = false,
+    /**
+     * The layer this shortcut opens and closes, if it is a toggle.
+     *
+     * A toggle stays live while its own panel is on top — that is the whole
+     * "toggle" contract. Without this, opening the panel deactivated the scope
+     * the shortcut lived in, and every toggle could open but never close.
+     */
+    val togglesLayer: ShortcutLayer? = null,
+    /**
+     * Whether holding the key down should keep firing the action.
+     *
+     * On for stepping actions like paging and undo, where key repeat is how a
+     * keyboard says "keep going". Off for everything that opens or closes
+     * something, where repeat would strobe it.
+     */
+    val repeatable: Boolean = false,
 )
 
 /**
@@ -100,14 +137,15 @@ data class Shortcut(
 object ShortcutTable {
 
     val all: List<Shortcut> = listOf(
-        // Paging the inspector has to beat anything else bound to the arrows.
+        // Paging the inspector has to beat anything else bound to the arrows,
+        // and holding an arrow is how you walk a long result list.
         Shortcut(
             KeyChord("left"), ShortcutAction.PREVIOUS_CARD, ShortcutScope.INSPECTOR,
-            "Previous card",
+            "Previous card", repeatable = true,
         ),
         Shortcut(
             KeyChord("right"), ShortcutAction.NEXT_CARD, ShortcutScope.INSPECTOR,
-            "Next card",
+            "Next card", repeatable = true,
         ),
 
         // Available even while typing: these are the ones you reach for without
@@ -128,21 +166,42 @@ object ShortcutTable {
         // Undo is deliberately not allowed while typing: renaming a deck is not a
         // deck edit and does not go on the stack, so undo there would silently
         // revert a card change instead of the text in front of you.
-        Shortcut(KeyChord("z", ctrl = true), ShortcutAction.UNDO, ShortcutScope.BUILDER, "Undo"),
+        Shortcut(
+            KeyChord("z", ctrl = true), ShortcutAction.UNDO, ShortcutScope.BUILDER,
+            "Undo", repeatable = true,
+        ),
         Shortcut(
             KeyChord("z", ctrl = true, shift = true), ShortcutAction.REDO, ShortcutScope.BUILDER,
-            "Redo",
+            "Redo", repeatable = true,
         ),
         Shortcut(
             KeyChord("f", ctrl = true, shift = true), ShortcutAction.TOGGLE_FILTERS,
-            ShortcutScope.BUILDER, "Filters",
+            ShortcutScope.BUILDER, "Filters", togglesLayer = ShortcutLayer.FILTERS,
         ),
         Shortcut(
             KeyChord("slash"), ShortcutAction.FOCUS_SEARCH, ShortcutScope.BUILDER,
             "Jump to the search box",
         ),
-        Shortcut(KeyChord("s"), ShortcutAction.TOGGLE_STATS, ShortcutScope.BUILDER, "Statistics"),
-        Shortcut(KeyChord("i"), ShortcutAction.TOGGLE_ISSUES, ShortcutScope.BUILDER, "Deck check"),
+        Shortcut(
+            KeyChord("s"), ShortcutAction.TOGGLE_STATS, ShortcutScope.BUILDER,
+            "Statistics", togglesLayer = ShortcutLayer.STATS,
+        ),
+        Shortcut(
+            KeyChord("i"), ShortcutAction.TOGGLE_ISSUES, ShortcutScope.BUILDER,
+            "Deck check", togglesLayer = ShortcutLayer.ISSUES,
+        ),
+        Shortcut(
+            KeyChord("b"), ShortcutAction.TOGGLE_BREAKDOWN, ShortcutScope.BUILDER,
+            "Breakdown view — the deck split into your groups",
+        ),
+        Shortcut(
+            KeyChord("g"), ShortcutAction.TOGGLE_GROUP_MANAGER, ShortcutScope.BUILDER,
+            "Manage groups", togglesLayer = ShortcutLayer.GROUPS,
+        ),
+        Shortcut(
+            KeyChord("c"), ShortcutAction.TOGGLE_CONSISTENCY, ShortcutScope.BUILDER,
+            "Opening-hand odds over your groups", togglesLayer = ShortcutLayer.CONSISTENCY,
+        ),
         Shortcut(
             KeyChord("1"), ShortcutAction.FOCUS_MAIN, ShortcutScope.BUILDER,
             "Give the Main deck the whole column",
@@ -157,20 +216,29 @@ object ShortcutTable {
         ),
         Shortcut(
             KeyChord("slash", shift = true), ShortcutAction.TOGGLE_HELP, ShortcutScope.BUILDER,
-            "This list",
+            "This list", togglesLayer = ShortcutLayer.HELP,
         ),
     )
 
     fun resolve(chord: KeyChord, context: ShortcutContext): ShortcutAction? =
+        resolveShortcut(chord, context)?.action
+
+    /** The full entry, for callers that also need [Shortcut.repeatable]. */
+    fun resolveShortcut(chord: KeyChord, context: ShortcutContext): Shortcut? =
         all.asSequence()
             .filter { it.chord == chord }
             .filter { !context.textInputFocused || it.allowedInTextInput }
             .firstOrNull { it.isActive(context) }
-            ?.action
 
-    private fun Shortcut.isActive(context: ShortcutContext): Boolean = when (scope) {
-        ShortcutScope.ANYWHERE -> true
-        ShortcutScope.INSPECTOR -> context.inspectorOpen
-        ShortcutScope.BUILDER -> !context.overlayOpen
+    private fun Shortcut.isActive(context: ShortcutContext): Boolean {
+        // A toggle's own panel being on top is exactly when "press it again to
+        // close" has to work.
+        if (togglesLayer != null && togglesLayer == context.topLayer) return true
+
+        return when (scope) {
+            ShortcutScope.ANYWHERE -> true
+            ShortcutScope.INSPECTOR -> context.topLayer == ShortcutLayer.INSPECTOR
+            ShortcutScope.BUILDER -> context.topLayer == ShortcutLayer.BUILDER
+        }
     }
 }

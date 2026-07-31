@@ -25,10 +25,22 @@ class UiPreferencesTest {
         val prefs = UiPreferences.DEFAULT.copy(
             searchWeight = 0.4f,
             stacked = true,
+            themeMode = ThemeMode.LIGHT,
         ).with(DeckSection.MAIN, SectionPreferences(2.5f, 12, sortMode = SortMode.TYPE))
 
         val text = json.encodeToString(UiPreferences.serializer(), prefs)
         assertEquals(prefs, json.decodeFromString(UiPreferences.serializer(), text))
+    }
+
+    @Test
+    fun themeModeDefaultsToSystemOnAnOlderDocument() {
+        // Documents written before the theme preference existed must not force a
+        // scheme; following the system is the only honest default.
+        val old = """{"searchWeight":0.5}"""
+        assertEquals(
+            ThemeMode.SYSTEM,
+            json.decodeFromString(UiPreferences.serializer(), old).themeMode,
+        )
     }
 
     @Test

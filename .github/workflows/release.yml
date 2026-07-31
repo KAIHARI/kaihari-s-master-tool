@@ -49,8 +49,14 @@ jobs:
           NAME="${RAW#v}"
 
           # versionCode must increase monotonically or Android refuses the
-          # update. Commit count does that automatically and reproducibly.
-          CODE="$(git rev-list --count HEAD)"
+          # update with "package appears to be invalid". Commit count is NOT
+          # monotonic across branches — v1.1.0 shipped as 281 from a
+          # 281-commit working branch, after which a 61-commit branch produced
+          # 61 and every device refused it. Deriving the code from the version
+          # itself is monotonic exactly as long as releases are, and the
+          # +100000 floor keeps it above anything the old scheme ever emitted.
+          IFS=. read -r MAJOR MINOR PATCH <<< "$NAME"
+          CODE=$((100000 + MAJOR * 10000 + MINOR * 100 + PATCH))
 
           echo "name=$NAME"   >> "$GITHUB_OUTPUT"
           echo "tag=v$NAME"   >> "$GITHUB_OUTPUT"

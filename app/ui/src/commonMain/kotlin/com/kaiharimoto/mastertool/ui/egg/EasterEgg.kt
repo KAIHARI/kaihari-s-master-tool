@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -101,20 +102,33 @@ fun EasterEgg(
         var thrown by remember { mutableStateOf(0) }
         val random = remember { Random(1) }
 
-        LaunchedEffect(bounds.width, bounds.height) {
-            if (bounds.width <= 0f || bounds.height <= 0f) return@LaunchedEffect
+        // The loop is keyed on nothing and reads the bounds each frame: keyed on
+        // the size, a window resize restarted the effect, teleporting the chibi
+        // back to centre mid-flight. Resizing now just moves the walls.
+        val currentBounds by rememberUpdatedState(bounds)
 
-            chibi.value = Sprite(
-                x = bounds.width / 2f,
-                y = bounds.height / 3f,
-                vx = 260f,
-                vy = -120f,
-                radius = chibiRadius,
-            )
-
+        LaunchedEffect(Unit) {
             var previous = 0L
+            var seeded = false
             while (true) {
                 withFrameNanos { now ->
+                    val bounds = currentBounds
+                    if (bounds.width <= 0f || bounds.height <= 0f) {
+                        previous = now
+                        return@withFrameNanos
+                    }
+
+                    if (!seeded) {
+                        seeded = true
+                        chibi.value = Sprite(
+                            x = bounds.width / 2f,
+                            y = bounds.height / 3f,
+                            vx = 260f,
+                            vy = -120f,
+                            radius = chibiRadius,
+                        )
+                    }
+
                     val dt = if (previous == 0L) 0f else (now - previous) / 1_000_000_000f
                     previous = now
 

@@ -8,45 +8,83 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kaiharimoto.mastertool.core.prefs.ThemeMode
+import com.kaiharimoto.mastertool.ui.art.Res
+import com.kaiharimoto.mastertool.ui.art.archivo_bold
+import com.kaiharimoto.mastertool.ui.art.archivo_expanded_semibold
+import com.kaiharimoto.mastertool.ui.art.archivo_medium
+import com.kaiharimoto.mastertool.ui.art.archivo_regular
+import com.kaiharimoto.mastertool.ui.art.archivo_semibold
+import org.jetbrains.compose.resources.Font
 
 /**
- * Swiss Prismatic, carried over from the tool this replaces.
+ * Swiss Prismatic, second edition.
  *
- * The values are the ones in `offline/swiss-prismatic-theme.css`, so the rebuilt
- * app looks like the thing people already use rather than like a different
- * program that happens to open the same files: deep slate, one indigo accent, and
- * the card-type and attribute colours the original assigned.
+ * Sharp white on true black. Colour is reserved for two jobs: meaning (card
+ * types, attributes, legality) and light (the prismatic ramp, which appears
+ * only as chromatic fringing on things being interacted with). Everything else
+ * is achromatic, which is what makes the fringes read as light rather than as
+ * decoration.
+ *
+ * Light mode is the exact inversion — sharp black on white — with the *same*
+ * chromatic colours; only the compositing flips (additive fringes on black,
+ * multiplied fringes on white — see Prismatic.kt).
  *
  * Geometry stays close to square on purpose — cards are rectangles, and a deck
  * builder full of heavily rounded chrome fights the content it is displaying.
  */
 object MasterToolPalette {
-    // --color-primary and friends.
-    val Accent = Color(0xFF6366F1)
-    val AccentBright = Color(0xFF818CF8)
-    val AccentDeep = Color(0xFF4338CA)
+    // The interactive accent is indigo-white: bright enough to read on black
+    // chrome, quiet enough not to compete with card art.
+    val Accent = Color(0xFFB8BEFF)
+    val AccentBright = Color(0xFFD6D9FF)
+    val AccentDeep = Color(0xFF6A72E8)
 
-    // --color-bg / --color-surface-*.
-    val Background = Color(0xFF0F172A)
-    val Surface = Color(0xFF1E293B)
-    val SurfaceRaised = Color(0xFF334155)
-    val SurfaceHigh = Color(0xFF475569)
+    // True-black stage with near-neutral lifts. Surfaces are separated by
+    // luminance alone; hairlines do the rest.
+    val Background = Color(0xFF060608)
+    val Surface = Color(0xFF0E0E12)
+    val SurfaceRaised = Color(0xFF1A1A21)
+    val SurfaceHigh = Color(0xFF26262F)
 
-    val Line = Color(0xFF334155)
-    val LineLight = Color(0xFF475569)
+    val Line = Color(0xFF26262F)
+    val LineLight = Color(0xFF3A3A46)
 
-    val Text = Color(0xFFF1F5F9)
-    val TextMuted = Color(0xFF94A3B8)
-    val Ink = Color(0xFF0F172A)
+    val Text = Color(0xFFFFFFFF)
+    val TextMuted = Color(0xFF9C9CAB)
+    val Ink = Color(0xFF060608)
 
-    val Success = Color(0xFF10B981)
-    val Warning = Color(0xFFF59E0B)
-    val Danger = Color(0xFFEF4444)
-    val Info = Color(0xFF3B82F6)
+    val Success = Color(0xFF2CE08B)
+    val Warning = Color(0xFFFFB020)
+    val Danger = Color(0xFFFF4D4D)
+    val Info = Color(0xFF39B8FF)
+
+    /**
+     * The prismatic ramp: the six hues chromatic aberration splits white into.
+     *
+     * Used for fringe drawing (Prismatic.kt) and as the palette user-defined
+     * deck groups pick from — indices into this list, never raw hex, so groups
+     * stay coherent when the theme evolves.
+     */
+    val Prism = listOf(
+        Color(0xFFFF4D6A), // red
+        Color(0xFFFFB020), // amber
+        Color(0xFF2CE08B), // green
+        Color(0xFF35E0FF), // cyan
+        Color(0xFF8A7CFF), // violet
+        Color(0xFFFF5FD2), // magenta
+    )
+
+    /** The two fringe primaries for the aberration effect itself. */
+    val FringeWarm = Color(0xFFFF3B4D)
+    val FringeCool = Color(0xFF2BD9FF)
 
     /**
      * Card types, as the original coloured them.
@@ -75,11 +113,22 @@ object MasterToolPalette {
     val AttributeDivine = Color(0xFFFCD34D)
 }
 
+/**
+ * True when the current scheme is the dark (white-on-black) one.
+ *
+ * The prismatic primitives need this — the fringes are additive on black and
+ * multiplied on white — and reading it from a local keeps them plain modifier
+ * functions instead of composables.
+ */
+val LocalDarkTheme = staticCompositionLocalOf { true }
+
 private val DarkColors = darkColorScheme(
-    primary = MasterToolPalette.Accent,
-    onPrimary = Color.White,
-    secondary = MasterToolPalette.Info,
-    onSecondary = Color.White,
+    // White is the accent: primary actions are white on black, the sharpest
+    // contrast the screen can produce. Colour is spent elsewhere.
+    primary = MasterToolPalette.Text,
+    onPrimary = MasterToolPalette.Ink,
+    secondary = MasterToolPalette.Accent,
+    onSecondary = MasterToolPalette.Ink,
     background = MasterToolPalette.Background,
     onBackground = MasterToolPalette.Text,
     surface = MasterToolPalette.Surface,
@@ -90,41 +139,80 @@ private val DarkColors = darkColorScheme(
     error = MasterToolPalette.Danger,
 )
 
-/** The original's `[data-theme="light"]` block, same slate ramp inverted. */
+/** The exact inversion: sharp black on white, same chromatic colours. */
 private val LightColors = lightColorScheme(
-    primary = MasterToolPalette.AccentDeep,
-    onPrimary = Color.White,
-    secondary = MasterToolPalette.Info,
-    background = Color(0xFFF8FAFC),
-    onBackground = Color(0xFF1E293B),
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF1E293B),
-    surfaceVariant = Color(0xFFF1F5F9),
-    onSurfaceVariant = Color(0xFF64748B),
-    outline = Color(0xFFCBD5E1),
+    primary = Color(0xFF0A0A0D),
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = MasterToolPalette.AccentDeep,
+    onSecondary = Color(0xFFFFFFFF),
+    background = Color(0xFFFFFFFF),
+    onBackground = Color(0xFF0A0A0D),
+    surface = Color(0xFFF6F6F8),
+    onSurface = Color(0xFF0A0A0D),
+    surfaceVariant = Color(0xFFECECF0),
+    onSurfaceVariant = Color(0xFF5C5C6B),
+    outline = Color(0xFFD8D8E0),
     error = MasterToolPalette.Danger,
+)
+
+/**
+ * Archivo, bundled.
+ *
+ * A grotesk with punchy caps and solid numerals — ratios, odds and copy counts
+ * are half of what this app sets in type. The expanded cut is a separate
+ * family used only for display moments (the wordmark, big numerals), where its
+ * width is the identity.
+ */
+@Composable
+fun archivoFamily(): FontFamily = FontFamily(
+    Font(Res.font.archivo_regular, FontWeight.Normal),
+    Font(Res.font.archivo_medium, FontWeight.Medium),
+    Font(Res.font.archivo_semibold, FontWeight.SemiBold),
+    Font(Res.font.archivo_bold, FontWeight.Bold),
+)
+
+@Composable
+fun archivoExpandedFamily(): FontFamily = FontFamily(
+    Font(Res.font.archivo_expanded_semibold, FontWeight.SemiBold),
 )
 
 /**
  * Type scale tuned for arm's length on a 14-inch tablet: larger base sizes than
  * the Material defaults, with tight tracking on headings so long card names stay
  * on one line.
- *
- * The original set Inter, which is not bundled here — adding a font resource
- * would mean taking back the Compose resources dependency this project
- * deliberately dropped, for a face most platforms already approximate. The
- * colour system is what reads as the original; the letterforms are not.
  */
-private val AppTypography = Typography().run {
-    copy(
-        headlineMedium = headlineMedium.copy(
+@Composable
+private fun appTypography(): Typography {
+    val archivo = archivoFamily()
+    val base = Typography()
+
+    fun androidx.compose.ui.text.TextStyle.archivo() = copy(fontFamily = archivo)
+
+    return Typography(
+        displayLarge = base.displayLarge.archivo(),
+        displayMedium = base.displayMedium.archivo(),
+        displaySmall = base.displaySmall.archivo(),
+        headlineLarge = base.headlineLarge.archivo(),
+        headlineMedium = base.headlineMedium.archivo().copy(
             fontWeight = FontWeight.SemiBold,
             letterSpacing = (-0.5).sp,
         ),
-        titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.25).sp),
-        titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold),
-        labelLarge = labelLarge.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp),
-        bodyMedium = bodyMedium.copy(fontSize = 15.sp),
+        headlineSmall = base.headlineSmall.archivo().copy(fontWeight = FontWeight.SemiBold),
+        titleLarge = base.titleLarge.archivo().copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.25).sp,
+        ),
+        titleMedium = base.titleMedium.archivo().copy(fontWeight = FontWeight.SemiBold),
+        titleSmall = base.titleSmall.archivo().copy(fontWeight = FontWeight.SemiBold),
+        bodyLarge = base.bodyLarge.archivo(),
+        bodyMedium = base.bodyMedium.archivo().copy(fontSize = 15.sp),
+        bodySmall = base.bodySmall.archivo(),
+        labelLarge = base.labelLarge.archivo().copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.4.sp,
+        ),
+        labelMedium = base.labelMedium.archivo(),
+        labelSmall = base.labelSmall.archivo(),
     )
 }
 
@@ -139,13 +227,21 @@ private val AppShapes = Shapes(
 
 @Composable
 fun MasterToolTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    mode: ThemeMode = ThemeMode.SYSTEM,
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = AppTypography,
-        shapes = AppShapes,
-        content = content,
-    )
+    val darkTheme = when (mode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+    }
+
+    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = appTypography(),
+            shapes = AppShapes,
+            content = content,
+        )
+    }
 }
