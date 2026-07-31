@@ -44,6 +44,39 @@ Do not develop it further; maintenance only if something in it is truly broken.
 3. Every gesture ships with both a touch idiom and a pointer/keyboard idiom.
    Keyboard shortcuts are data in `core/input/ShortcutTable.kt` (layer-aware;
    the help sheet renders the table, so it can never drift).
+4. **Finish by shipping it.** See *Ship Every Change* below — the user tests on
+   the tablet, so work that is only on a branch is work they cannot see.
+
+## Ship Every Change — standing instruction from the user
+
+The device is the only place this app can really be judged, and a debug APK
+cannot install over the signed one. So the default end of a piece of work is a
+release, not a branch. Standing permission is granted for all of it — do not
+stop to ask.
+
+Every time, in this order:
+
+1. Push the work to the `claude/**` branch and wait for `build-app.yml` to go
+   green on all three jobs (core tests, desktop, Android APK). A red build is
+   the one thing that stops the rest.
+2. Fast-forward `main` onto the branch and push it. Releases build from `main`.
+3. Read the current version — `get_latest_release`, or the newest `v*` tag —
+   and dispatch `release.yml` on `main` with the **next patch** number
+   (v1.2.3 → v1.2.4). Bump the minor instead only when the user asks, or when
+   the patch would reach 100: the versionCode formula gives 1.2.100 and 1.3.0
+   the same code, so the patch digit must stay under it.
+4. Confirm the release actually published — the tag exists and the
+   `kai-master-tool-<version>.apk` asset is attached — before telling the user
+   it is ready. The signing gate can fail the run *after* the APK builds, and
+   "dispatched" is not "shipped".
+
+Note in the release notes when a build changes stored preferences, the schema,
+or the deck-file payload, so a surprise on the tablet has an explanation
+waiting.
+
+Two things to say out loud rather than silently skip: a change that cannot
+reach the device (docs, this file, tests only) does not need a release, and a
+version number, once published, is spent forever — there is no reissuing one.
 
 ## Release Contract — numbers shipped to devices are permanent
 
@@ -91,10 +124,23 @@ in-app updater installs from. Two hard-learned rules:
 
 ## Roadmap State
 
-Shipped: the full deck builder (drag-and-drop, breakdown groups with YDKX
-persistence, stable fit-to-40 grid, exact consistency calculator, per-card
-tactility, sound/haptics, 3D card inspect, goldfish table) and the tested
-duel-board domain (`core/board/BoardState.kt`).
+Shipped: the full deck builder (drag-and-drop, exact consistency calculator,
+per-card tactility, sound/haptics, 3D card inspect, goldfish table) and the
+tested duel-board domain (`core/board/BoardState.kt`).
+
+Two parts of the builder are worth knowing before touching them, because both
+replaced an earlier design that looked reasonable and was not:
+
+- **Layout is solved, not negotiated.** `core/layout/DeckFit.kt` sizes all
+  three panes in one pass: row widths are the input (main 10, extra/side 15),
+  row counts follow from the deck, and card size is the single free variable.
+  Per-pane auto-fitting against divider-dragged heights is what put cards out
+  of bounds; do not go back to it. Anything the panes spend on chrome must be
+  declared to the fitter or the cards pay for it.
+- **The breakdown never reorders the deck.** Groups are drawn as gaps in the
+  stored order (`DeckBreakdown.slots`), so a grid index is always a deck
+  position and a drop always means insert. Assignment is a selection gesture:
+  `GroupDraft` in core, tapped out on the deck itself.
 
 Next: the deck **showcase** stage, goldfish polish (deal-origin projection,
 stack shuffle/cut), and the **duel table UI** on top of `BoardState`,
