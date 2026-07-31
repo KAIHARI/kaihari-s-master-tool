@@ -502,6 +502,13 @@ private fun DeckSectionPane(
 
             val marks = remember(state.groups) { GroupMarks.marks(state.groups.ordered()) }
 
+            // Read out here, where the constraints scope is the innermost one.
+            // Inside the Box below, `maxWidth` is ambiguous — a BoxScope shadows
+            // the BoxWithConstraintsScope it came from — and the geometry is the
+            // same number either way, so it is taken once and carried in.
+            val cardWidth = (maxWidth - spacing * (columns - 1)) / columns
+            val cardHeight = cardWidth / CARD_ASPECT_RATIO
+
             Box(
                 modifier = if (fit != null) {
                     Modifier.fillMaxWidth().height(with(density) { fit.gridHeight.toDp() })
@@ -514,8 +521,6 @@ private fun DeckSectionPane(
                 // grid's own layout info, so the geometry is exact and does not
                 // depend on what the lazy layout happens to have measured.
                 if (plan != null) {
-                    val cardWidth = (maxWidth - spacing * (columns - 1)) / columns
-                    val cardHeight = cardWidth / CARD_ASPECT_RATIO
                     val draftColor = draft?.let {
                         MasterToolPalette.Prism[it.color % MasterToolPalette.Prism.size]
                     }
