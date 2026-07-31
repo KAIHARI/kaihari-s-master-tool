@@ -52,20 +52,6 @@ class DeckGroupsTest {
     }
 
     @Test
-    fun partitionKeepsDeckOrderWithinGroupsAndShowsEmptyGroups() {
-        val section = listOf(ash, fiend, ash, maxx, CardId(111))
-        val blocks = groups().upsert(DeckGroup("g-empty", "Board breakers", 5, 2))
-            .partition(section)
-
-        assertEquals(listOf("g-engine", "g-traps", "g-empty", null), blocks.map { it.group?.id })
-        assertEquals(listOf(fiend), blocks[0].ids)
-        // Both Ash copies, in deck order, then Maxx.
-        assertEquals(listOf(ash, ash, maxx), blocks[1].ids)
-        assertTrue(blocks[2].ids.isEmpty())
-        assertEquals(listOf(CardId(111)), blocks[3].ids)
-    }
-
-    @Test
     fun pruningDropsDeadAssignments() {
         val g = groups()
             .copy(assignments = groups().assignments + (CardId(999) to "g-gone"))
@@ -76,31 +62,47 @@ class DeckGroupsTest {
         assertEquals("g-traps", g.assignments[ash])
     }
 
-    // ---- breakdown flattening & drop maths ---------------------------------
+    // ---- the breakdown lens ------------------------------------------------
 
     @Test
-    fun flattenGivesEveryCopyItsRawIndex() {
-        val section = listOf(ash, fiend, ash)
-        val entries = DeckBreakdown.flatten(section, groups())
+    fun theLensLeavesTheDeckInTheOrderItIsStoredIn() {
+        val section = listOf(ash, fiend, ash, maxx)
+        val slots = DeckBreakdown.slots(section, groups(), columns = 10)
 
-        val cards = entries.filterIsInstance<BreakdownEntry.CardEntry>()
-        // Engine block first: fiend at raw index 1. Then both Ash copies, raw 0 and 2.
-        assertEquals(listOf(1, 0, 2), cards.map { it.rawIndex })
+        // One slot per card, in deck order, each pointing back at its position.
+        assertEquals(listOf(0, 1, 2, 3), slots.map { it.index })
         assertEquals(
-            listOf("g-engine", "g-traps", "g-traps"),
-            cards.map { it.groupId },
+            listOf("g-traps", "g-engine", "g-traps", "g-traps"),
+            slots.map { it.groupId },
         )
     }
 
     @Test
-    fun droppingOnAHeaderJoinsTheGroupItOpens() {
-        val entries = DeckBreakdown.flatten(listOf(ash, fiend), groups())
-        // entries: [Header(engine), fiend, Header(traps), ash, Header(null)]
-        assertEquals("g-engine", DeckBreakdown.dropGroup(entries, 0))
-        assertEquals("g-traps", DeckBreakdown.dropGroup(entries, 2))
-        assertEquals("g-traps", DeckBreakdown.dropGroup(entries, 3))
-        // Past the end lands in the final (Ungrouped) block.
-        assertNull(DeckBreakdown.dropGroup(entries, entries.size))
+    fun gapsOpenWhereOneGroupEndsAndTheNextBegins() {
+        // traps | engine | traps traps
+        val slots = DeckBreakdown.slots(listOf(ash, fiend, ash, maxx), groups(), columns = 10)
+
+        assertEquals(listOf(false, true, true, false), slots.map { it.gapBefore })
+        assertEquals(listOf(true, true, false, false), slots.map { it.gapAfter })
+    }
+
+    @Test
+    fun aBoundaryOnARowBreakNeedsNoGap() {
+        // Three per row, with the engine card first in the second row: the row
+        // break is already the separation.
+        val slots = DeckBreakdown.slots(listOf(ash, ash, ash, fiend), groups(), columns = 3)
+
+        assertTrue(slots.none { it.gapBefore })
+        assertTrue(slots.none { it.gapAfter })
+    }
+
+    @Test
+    fun assignmentsToDeletedGroupsReadAsUngrouped() {
+        val orphaned = groups().copy(groups = groups().groups.filterNot { it.id == "g-traps" })
+        val slots = DeckBreakdown.slots(listOf(ash, fiend), orphaned, columns = 10)
+
+        assertNull(slots[0].groupId)
+        assertEquals("g-engine", slots[1].groupId)
     }
 
     // ---- codec -------------------------------------------------------------

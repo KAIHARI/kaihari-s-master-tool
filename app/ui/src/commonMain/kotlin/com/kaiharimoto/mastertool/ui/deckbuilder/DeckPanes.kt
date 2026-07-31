@@ -1,5 +1,7 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.Orientation
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -19,11 +22,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandLess
@@ -51,18 +55,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.kaiharimoto.mastertool.core.deck.BreakdownEntry
+import com.kaiharimoto.mastertool.core.deck.BreakdownSlot
 import com.kaiharimoto.mastertool.core.deck.DeckBreakdown
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.layout.DeckFit
+import com.kaiharimoto.mastertool.core.layout.DeckFitter
 import com.kaiharimoto.mastertool.core.layout.GridFit
 import com.kaiharimoto.mastertool.core.layout.GridFitter
+import com.kaiharimoto.mastertool.core.layout.SectionFit
+import com.kaiharimoto.mastertool.core.layout.SectionFitRequest
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.DeckSection
@@ -75,9 +86,7 @@ import com.kaiharimoto.mastertool.ui.dnd.DragController
 import com.kaiharimoto.mastertool.ui.dnd.DragSession
 import com.kaiharimoto.mastertool.ui.dnd.DragSource
 import com.kaiharimoto.mastertool.ui.dnd.DropHover
-import com.kaiharimoto.mastertool.ui.theme.LocalDarkTheme
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
-import com.kaiharimoto.mastertool.ui.theme.chromaticEdge
 import kotlinx.coroutines.delay
 
 /** How long a revealed card keeps its highlight before settling back. */
@@ -86,14 +95,45 @@ private const val FLASH_MS = 1400L
 private val SECTION_ORDER =
     listOf(DeckSection.MAIN, DeckSection.EXTRA, DeckSection.SIDE)
 
+// The deck column's fixed furniture. These are the numbers the fitter is told
+// about, so they have to be the numbers the panes actually use — anything the
+// layout spends that the fitter does not know about is height the cards were
+// promised and did not get, which is how they ended up out of bounds.
+private val PANE_PADDING = 8.dp
+private val HEADER_HEIGHT = 34.dp
+private val HEADER_GAP = 6.dp
+private val PANE_GAP = 12.dp
+private val CARD_SPACING = 6.dp
+
 /**
- * The three deck sections, stacked and resizable.
+ * How far apart two groups sit in the breakdown lens.
  *
- * The panes trade height across a divider rather than each being sized on its
- * own, so dragging one boundary leaves everything on the far side of it where it
- * was. A collapsed pane keeps its header — it is still a drop target and still
- * says how many cards it holds — and drops out of the weighting entirely, which
- * is what makes collapsing the Side deck actually give its space to the Main.
+ * Deliberately small. It is taken out of the card's own cell rather than added
+ * to the grid, so the deck cannot grow past the box it was fitted to — the
+ * cards on either side of a boundary draw a little narrower and the space
+ * between them opens by twice this. Enough to read a run at a glance, not
+ * enough to look like the deck has been rearranged.
+ */
+private val BREAKDOWN_GAP = 6.dp
+
+/** The main deck's group bar: a row of group chips, or the draft editor. */
+private val LEGEND_HEIGHT = 36.dp
+private val DRAFT_BAR_HEIGHT = 112.dp
+
+/**
+ * The three deck sections, stacked so the whole deck is on screen at once.
+ *
+ * Sizing runs the other way round from how it used to. The row widths are the
+ * fixed thing — ten across for the main deck, fifteen for the extra and side,
+ * because that is how a decklist is read — and the card size is whatever makes
+ * all three fit the column. Previously each pane chose its own column count to
+ * suit a height a divider drag had handed it, which is a negotiation with no
+ * settlement: the panes could not agree on a total, and the main deck spilled
+ * past its box.
+ *
+ * Dragging a divider still works and is still remembered — it just means "I am
+ * sizing these by hand now", which switches the fitter off until the deck is
+ * fitted again from the header.
  */
 @Composable
 fun DeckPanes(
@@ -103,32 +143,117 @@ fun DeckPanes(
     onDropped: (DragSession, DropHover?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    BoxWithConstraints(
         modifier
             .onGloballyPositioned { layout.deckColumnHeightPx = it.size.height.toFloat() }
-            .padding(12.dp),
+            .padding(10.dp),
     ) {
-        SECTION_ORDER.forEachIndexed { position, section ->
-            val preferences = layout.preferences[section]
+        val density = LocalDensity.current
+        val preferences = layout.preferences
 
-            DeckSectionPane(
-                state = state,
-                layout = layout,
-                drag = drag,
-                onDropped = onDropped,
-                section = section,
-                modifier = if (preferences.collapsed) Modifier else Modifier.weight(preferences.weight),
-            )
-
-            val next = SECTION_ORDER.getOrNull(position + 1)
-            if (next != null) {
-                PaneDivider(
-                    enabled = !preferences.collapsed && !layout.preferences[next].collapsed,
-                    onDrag = { delta -> layout.resizePanes(section, next, delta) },
+        // Recomputed on every layout pass, which is one division per section and
+        // means the deck re-fits the instant the window, the pool or the row
+        // width changes.
+        val plan: DeckFit? = if (preferences.fitAll) {
+            with(density) {
+                DeckFitter.plan(
+                    requests = SECTION_ORDER.map { section ->
+                        SectionFitRequest(
+                            count = state.deck[section].displayCount(preferences.stacked),
+                            columns = preferences[section].columns,
+                            baselineCount = section.baselineCapacity,
+                            collapsed = preferences[section].collapsed,
+                            chromeHeight = chromeFor(state, preferences[section].collapsed, section).toPx(),
+                        )
+                    },
+                    availableWidth = maxWidth.toPx(),
+                    availableHeight = maxHeight.toPx(),
+                    spacing = CARD_SPACING.toPx(),
+                    aspectRatio = CARD_ASPECT_RATIO,
+                    paneGap = PANE_GAP.toPx(),
                 )
+            }
+        } else {
+            null
+        }
+
+        Column(
+            Modifier
+                .fillMaxSize()
+                // Only when even the smallest readable card does not fit — a
+                // window shorter than the deck. Scrolling is the honest answer
+                // there; drawing cards too small to read is not.
+                .then(
+                    if (plan?.fits == false) {
+                        Modifier.verticalScroll(rememberScrollState())
+                    } else {
+                        Modifier
+                    },
+                ),
+        ) {
+            SECTION_ORDER.forEachIndexed { position, section ->
+                val sectionPreferences = preferences[section]
+                val fit = plan?.sections?.get(position)
+
+                DeckSectionPane(
+                    state = state,
+                    layout = layout,
+                    drag = drag,
+                    onDropped = onDropped,
+                    section = section,
+                    fit = fit,
+                    scrolls = plan?.fits == false,
+                    modifier = when {
+                        sectionPreferences.collapsed -> Modifier
+                        fit != null -> Modifier.height(with(density) { fit.paneHeight.toDp() })
+                        else -> Modifier.weight(sectionPreferences.weight)
+                    },
+                )
+
+                if (position < SECTION_ORDER.lastIndex) {
+                    val next = SECTION_ORDER[position + 1]
+                    PaneDivider(
+                        // A divider under a fitted column has nothing to trade:
+                        // taking hold of it is the decision to size by hand, and
+                        // the drag that follows lands on real weights.
+                        enabled = !sectionPreferences.collapsed && !preferences[next].collapsed,
+                        onDrag = { delta -> layout.resizePanes(section, next, delta) },
+                    )
+                }
             }
         }
     }
+}
+
+/** The capacity a section is sized for before it holds that many cards. */
+private val DeckSection.baselineCapacity: Int
+    get() = if (this == DeckSection.MAIN) minSize else maxSize
+
+/** How many tiles the section draws, which the stacked view compresses. */
+private fun List<CardId>.displayCount(stacked: Boolean): Int =
+    if (stacked) distinct().size else size
+
+/**
+ * Everything in a pane that is not grid, to the pixel.
+ *
+ * The fitter subtracts this before it divides, so a bar that appears here and
+ * not in this sum is a bar the cards pay for.
+ */
+private fun chromeFor(state: DeckBuilderState, collapsed: Boolean, section: DeckSection): Dp {
+    if (collapsed) return PANE_PADDING * 2 + HEADER_HEIGHT
+
+    var chrome = PANE_PADDING * 2 + HEADER_HEIGHT + HEADER_GAP
+    val bar = barHeightFor(state, section)
+    if (bar > 0.dp) chrome += bar + HEADER_GAP
+    return chrome
+}
+
+/** How tall the main deck's group bar is right now, and zero everywhere else. */
+private fun barHeightFor(state: DeckBuilderState, section: DeckSection): Dp = when {
+    section != DeckSection.MAIN -> 0.dp
+    state.groupDraft != null -> DRAFT_BAR_HEIGHT
+    state.breakdownVisible -> LEGEND_HEIGHT
+    else -> 0.dp
 }
 
 @Composable
@@ -138,7 +263,7 @@ private fun PaneDivider(enabled: Boolean, onDrag: (Float) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (enabled) 16.dp else 8.dp)
+            .height(PANE_GAP)
             .then(
                 if (enabled) {
                     Modifier.draggable(draggableState, Orientation.Vertical)
@@ -151,8 +276,8 @@ private fun PaneDivider(enabled: Boolean, onDrag: (Float) -> Unit) {
         if (enabled) {
             Box(
                 Modifier
-                    .size(width = 56.dp, height = 3.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .size(width = 56.dp, height = 2.dp)
+                    .clip(RoundedCornerShape(1.dp))
                     .background(MaterialTheme.colorScheme.outline),
             )
         }
@@ -166,12 +291,15 @@ private fun DeckSectionPane(
     drag: DragController,
     onDropped: (DragSession, DropHover?) -> Unit,
     section: DeckSection,
+    fit: SectionFit?,
+    scrolls: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val ids = state.deck[section]
     val preferences = layout.preferences[section]
     val accent = section.accent()
     val gridState = rememberLazyGridState()
+    val density = LocalDensity.current
     var flashed by remember { mutableStateOf<CardId?>(null) }
     // Written by two `onGloballyPositioned` callbacks — the pane's and its
     // grid's — and registered from both, because they fire parent-first: the
@@ -179,8 +307,7 @@ private fun DeckSectionPane(
     // *previous* layout pass (and (0,0) on the first, which sent every drop to
     // the wrong slot).
     val geometry = remember { PaneGeometry() }
-    // What the grid actually settled on, so the header can report it and taking
-    // manual control starts from what is already on screen.
+    // What the grid actually settled on, so the header can report it.
     var effectiveColumns by remember { mutableStateOf(preferences.columns) }
 
     val hover = drag.hover?.takeIf { it.section == section }
@@ -189,9 +316,6 @@ private fun DeckSectionPane(
         hover.accepted -> accent
         else -> MasterToolPalette.Danger
     }
-
-    val breakdownActive = state.breakdownVisible &&
-        section == DeckSection.MAIN && !layout.preferences.stacked
 
     // Only the pane that owns the requested section reacts; the others ignore
     // it. A collector rather than an effect keyed on the request: the request
@@ -205,19 +329,13 @@ private fun DeckSectionPane(
             // builder comes back from the library.
             state.revealRequest = null
 
-            // The stored position indexes the raw list; the grid may be
-            // showing one tile per distinct card, or the breakdown's
-            // header-and-block order.
-            val item = when {
-                layout.preferences.stacked ->
-                    DeckGrouping.stacks(state.deck[section]).indexOfFirst { it.id == request.cardId }
-
-                breakdownActive ->
-                    DeckBreakdown.flatten(state.deck[section], state.groups).indexOfFirst {
-                        it is BreakdownEntry.CardEntry && it.rawIndex == request.position
-                    }
-
-                else -> request.position
+            // The stored position indexes the raw list, which is also the grid's
+            // order — the breakdown lens no longer reorders anything. Only the
+            // stacked view draws something else.
+            val item = if (layout.preferences.stacked) {
+                DeckGrouping.stacks(state.deck[section]).indexOfFirst { it.id == request.cardId }
+            } else {
+                request.position
             }
             if (item < 0) return@collect
 
@@ -250,186 +368,156 @@ private fun DeckSectionPane(
                 geometry.paneBounds = it.boundsInRoot()
                 geometry.register(drag, section, gridState)
             }
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(PANE_PADDING),
+        verticalArrangement = Arrangement.spacedBy(HEADER_GAP),
     ) {
         SectionHeader(state, layout, section, ids.size, preferences, effectiveColumns, accent)
 
         if (preferences.collapsed) return@Column
 
-        if (ids.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "Tap a card on the left to add it here",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            return@Column
+        // The main deck's group bar: the legend of what has been drawn up, or
+        // the group being drawn up right now.
+        val barHeight = barHeightFor(state, section)
+        if (barHeight > 0.dp) {
+            BreakdownBar(state, Modifier.fillMaxWidth().height(barHeight))
         }
 
         val stacks = if (layout.preferences.stacked) DeckGrouping.stacks(ids) else emptyList()
-        val itemCount = if (layout.preferences.stacked) stacks.size else ids.size
+        val displayed = if (layout.preferences.stacked) stacks.map { it.id } else ids
+        val breakdownActive = state.breakdownVisible && section == DeckSection.MAIN
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            val density = LocalDensity.current
-            val spacing = 6.dp
-
-            // The stacked view compresses to its contents; everything else is
-            // sized for the section's natural capacity, so the first card
-            // added lands in a 40-card-shaped grid and nothing reflows while
-            // ratios are being weighed. Only growing past the baseline zooms
-            // the grid out.
-            val baseline = when {
-                layout.preferences.stacked -> 0
-                section == DeckSection.MAIN -> section.minSize
-                else -> section.maxSize
-            }
-
-            // Recomputed on every layout pass, which is cheap and means the grid
-            // re-fits the moment the pane is resized or a card is added.
-            val fit = with(density) {
-                if (preferences.autoFit) {
-                    GridFitter.stableFit(
-                        count = itemCount,
-                        baselineCount = baseline,
-                        availableWidth = maxWidth.toPx(),
-                        availableHeight = maxHeight.toPx(),
-                        spacing = spacing.toPx(),
-                        aspectRatio = CARD_ASPECT_RATIO,
-                        minColumns = SectionPreferences.MIN_COLUMNS,
-                        maxColumns = SectionPreferences.MAX_COLUMNS,
-                    )
-                } else {
-                    GridFit(
-                        columns = preferences.columns,
-                        fits = GridFitter.requiredHeight(
-                            count = itemCount,
-                            columns = preferences.columns,
+            // Fitted: the fitter already solved for the card size, and the grid
+            // is drawn at exactly that size and centred in whatever is left.
+            // Unfitted: the pane picks a column count for the height it was
+            // dragged to, which is the old behaviour, kept for hand-sizing.
+            val manualFit: GridFit? = if (fit == null) {
+                with(density) {
+                    if (preferences.autoFit) {
+                        GridFitter.stableFit(
+                            count = displayed.size,
+                            baselineCount = if (layout.preferences.stacked) 0 else section.baselineCapacity,
                             availableWidth = maxWidth.toPx(),
-                            spacing = spacing.toPx(),
+                            availableHeight = maxHeight.toPx(),
+                            spacing = CARD_SPACING.toPx(),
                             aspectRatio = CARD_ASPECT_RATIO,
-                        ) <= maxHeight.toPx(),
-                    )
+                            minColumns = SectionPreferences.MIN_COLUMNS,
+                            maxColumns = SectionPreferences.MAX_COLUMNS,
+                        )
+                    } else {
+                        GridFit(
+                            columns = preferences.columns,
+                            fits = GridFitter.requiredHeight(
+                                count = displayed.size,
+                                columns = preferences.columns,
+                                availableWidth = maxWidth.toPx(),
+                                spacing = CARD_SPACING.toPx(),
+                                aspectRatio = CARD_ASPECT_RATIO,
+                            ) <= maxHeight.toPx(),
+                        )
+                    }
                 }
+            } else {
+                null
             }
 
+            val columns = fit?.columns ?: manualFit!!.columns
             // Nothing to scroll means nothing for a drag to be mistaken for, so
             // the card can be picked up the instant the finger moves.
-            val competesWithScroll = !fit.fits
+            val competesWithScroll = if (fit != null) scrolls else !manualFit!!.fits
 
             // Written after composition rather than during it — the header sits
             // above this and only needs the number on the next pass.
-            SideEffect { effectiveColumns = fit.columns }
+            SideEffect { effectiveColumns = columns }
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(fit.columns),
-                state = gridState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .onGloballyPositioned {
-                        geometry.gridOrigin = it.positionInRoot()
-                        geometry.register(drag, section, gridState)
-                    },
-                horizontalArrangement = Arrangement.spacedBy(spacing),
-                verticalArrangement = Arrangement.spacedBy(spacing),
-            ) {
-                if (breakdownActive) {
-                    // The breakdown lens: one full-width label per group, then
-                    // its cards. Position within a block is display order —
-                    // the deck's stored order is untouched, which is why a
-                    // drop here means "assign", never "insert".
-                    val entries = DeckBreakdown.flatten(ids, state.groups)
-                    val dropTarget = hover?.takeIf { it.accepted }
-                        ?.let { DeckBreakdown.dropGroup(entries, it.index) }
-                    val dropLive = hover?.accepted == true
+            val slots = if (breakdownActive) {
+                DeckBreakdown.slots(displayed, state.groups, columns)
+            } else {
+                emptyList()
+            }
 
-                    entries.forEachIndexed { i, entry ->
-                        when (entry) {
-                            is BreakdownEntry.Header -> item(
-                                key = "${section.name}-hdr-${entry.groupId ?: "ungrouped"}",
-                                span = { GridItemSpan(maxLineSpan) },
-                            ) {
-                                BreakdownHeader(
-                                    entry = entry,
-                                    count = entries.count {
-                                        it is BreakdownEntry.CardEntry && it.groupId == entry.groupId
-                                    },
-                                    receiving = dropLive && dropTarget == entry.groupId,
-                                )
-                            }
-
-                            is BreakdownEntry.CardEntry -> item(
-                                key = "${section.name}-bd-$i-${entry.id.value}",
-                            ) {
-                                DeckCard(
-                                    state = state,
-                                    drag = drag,
-                                    dragEnabled = true,
-                                    competesWithScroll = competesWithScroll,
-                                    onDropped = onDropped,
-                                    section = section,
-                                    id = entry.id,
-                                    copies = state.copiesIn(entry.id, section),
-                                    highlighted = flashed == entry.id,
-                                    insertionMarker = false,
-                                    trailingMarker = false,
-                                    siblings = ids,
-                                    position = entry.rawIndex,
-                                )
-                            }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    state = gridState,
+                    modifier = with(density) {
+                        if (fit != null) {
+                            Modifier
+                                .width(fit.gridWidth.toDp())
+                                .height(fit.gridHeight.toDp())
+                        } else {
+                            Modifier.fillMaxSize()
                         }
                     }
-                } else if (layout.preferences.stacked) {
-                    // Stacks have no positional identity, so dragging one has
-                    // nothing coherent to mean; the stepper does that job
-                    // instead. The long-press menu still applies, which is why
-                    // the tile keeps its gesture handling with only the drag
-                    // switched off.
-                    items(stacks.size, key = { "${section.name}-stack-${stacks[it].id.value}" }) { i ->
-                        val stack = stacks[i]
-                        DeckCard(
-                            state = state,
-                            drag = drag,
-                            dragEnabled = false,
-                            competesWithScroll = competesWithScroll,
-                            onDropped = onDropped,
-                            section = section,
-                            id = stack.id,
-                            copies = stack.count,
-                            highlighted = flashed == stack.id,
-                            // The resolver's index is a grid index, which here
-                            // counts stacks; the drop itself is translated back
-                            // to a list position when it lands.
-                            insertionMarker = hover?.accepted == true && hover.index == i,
-                            trailingMarker = hover?.accepted == true &&
-                                hover.index == stacks.size && i == stacks.lastIndex,
-                            siblings = ids,
-                            position = stack.firstIndex,
-                        )
+                        .onGloballyPositioned {
+                            geometry.gridOrigin = it.positionInRoot()
+                            geometry.register(drag, section, gridState)
+                        },
+                    horizontalArrangement = Arrangement.spacedBy(CARD_SPACING),
+                    verticalArrangement = Arrangement.spacedBy(CARD_SPACING),
+                ) {
+                    if (layout.preferences.stacked) {
+                        // Stacks have no positional identity, so dragging one has
+                        // nothing coherent to mean; the stepper does that job
+                        // instead. The long-press menu still applies, which is why
+                        // the tile keeps its gesture handling with only the drag
+                        // switched off.
+                        items(stacks.size, key = { "${section.name}-stack-${stacks[it].id.value}" }) { i ->
+                            val stack = stacks[i]
+                            DeckCard(
+                                state = state,
+                                drag = drag,
+                                dragEnabled = false,
+                                competesWithScroll = competesWithScroll,
+                                onDropped = onDropped,
+                                section = section,
+                                id = stack.id,
+                                copies = stack.count,
+                                highlighted = flashed == stack.id,
+                                // The resolver's index is a grid index, which here
+                                // counts stacks; the drop itself is translated back
+                                // to a list position when it lands.
+                                insertionMarker = hover?.accepted == true && hover.index == i,
+                                trailingMarker = hover?.accepted == true &&
+                                    hover.index == stacks.size && i == stacks.lastIndex,
+                                siblings = ids,
+                                position = stack.firstIndex,
+                                slot = slots.getOrNull(i),
+                            )
+                        }
+                    } else {
+                        // Indexed keys because a deck legitimately holds duplicates.
+                        items(ids.size, key = { "${section.name}-$it-${ids[it].value}" }) { position ->
+                            DeckCard(
+                                state = state,
+                                drag = drag,
+                                dragEnabled = true,
+                                competesWithScroll = competesWithScroll,
+                                onDropped = onDropped,
+                                section = section,
+                                id = ids[position],
+                                copies = state.copiesIn(ids[position], section),
+                                highlighted = flashed == ids[position],
+                                insertionMarker = hover?.accepted == true && hover.index == position,
+                                // "Append at the end" resolves to one past the last
+                                // index, which no card's leading edge can show.
+                                trailingMarker = hover?.accepted == true &&
+                                    hover.index == ids.size && position == ids.lastIndex,
+                                siblings = ids,
+                                position = position,
+                                slot = slots.getOrNull(position),
+                            )
+                        }
                     }
-                } else {
-                    // Indexed keys because a deck legitimately holds duplicates.
-                    items(ids.size, key = { "${section.name}-$it-${ids[it].value}" }) { position ->
-                        DeckCard(
-                            state = state,
-                            drag = drag,
-                            dragEnabled = true,
-                            competesWithScroll = competesWithScroll,
-                            onDropped = onDropped,
-                            section = section,
-                            id = ids[position],
-                            copies = state.copiesIn(ids[position], section),
-                            highlighted = flashed == ids[position],
-                            insertionMarker = hover?.accepted == true && hover.index == position,
-                            // "Append at the end" resolves to one past the last
-                            // index, which no card's leading edge can show.
-                            trailingMarker = hover?.accepted == true &&
-                                hover.index == ids.size && position == ids.lastIndex,
-                            siblings = ids,
-                            position = position,
-                        )
-                    }
+                }
+
+                if (ids.isEmpty()) {
+                    Text(
+                        "Tap a card on the left to add it here",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
                 }
             }
         }
@@ -443,6 +531,11 @@ private fun DeckSectionPane(
  * can put straight back. Everything less common — and everything that cannot be
  * undone by tapping again — is behind the long-press menu rather than behind a
  * second gesture nobody would find.
+ *
+ * While a group is being drawn up the tap means something else entirely: it
+ * puts the card in the group, or takes it out. That is the one modal gesture in
+ * the builder, and it is made obvious by the deck lifting under it — every
+ * selected card sits up off the table until Save or Cancel.
  */
 @Composable
 private fun DeckCard(
@@ -459,6 +552,7 @@ private fun DeckCard(
     trailingMarker: Boolean,
     siblings: List<CardId>,
     position: Int,
+    slot: BreakdownSlot?,
 ) {
     val card: Card? = state.index.byId(id)
     var menuOpen by remember { mutableStateOf(false) }
@@ -468,14 +562,38 @@ private fun DeckCard(
         return
     }
 
+    val selecting = state.groupDraft != null && section == DeckSection.MAIN
+    val selected = selecting && state.groupDraft?.isSelected(id) == true
+    val groupColor = slot?.groupId
+        ?.let { state.groups.byId(it) }
+        ?.let { MasterToolPalette.Prism[it.color % MasterToolPalette.Prism.size] }
+
+    // The gap is the whole breakdown: cards stay exactly where the deck put
+    // them and the space between two groups opens up. Springing it in means the
+    // list separates rather than jumps, so you can see which cards moved apart.
+    val gapStart by animateDpAsState(
+        if (slot?.gapBefore == true) BREAKDOWN_GAP else 0.dp,
+        label = "gapStart",
+    )
+    val gapEnd by animateDpAsState(
+        if (slot?.gapAfter == true) BREAKDOWN_GAP else 0.dp,
+        label = "gapEnd",
+    )
+    val lift by animateFloatAsState(if (selected) 1f else 0f, label = "selectionLift")
+
     val tile: @Composable () -> Unit = {
         HoverPreview(card) {
             CardTile(
                 card = card,
                 format = state.format,
                 copies = copies,
-                highlighted = highlighted,
-                onClick = { state.removeOne(card, section) },
+                highlighted = highlighted || selected,
+                // A card being chosen for a group is not being handled, so the
+                // tilt stands down and the lift below says what is happening.
+                tactile = !selecting,
+                onClick = {
+                    if (selecting) state.toggleDraftSelection(id) else state.removeOne(card, section)
+                },
             ) {
                 // A bar down the leading edge of the card the drop would land
                 // before — or down the trailing edge of the last card, for a
@@ -489,11 +607,33 @@ private fun DeckCard(
                             .background(MasterToolPalette.AccentBright),
                     )
                 }
+
+                // Which group this card is in, as a hairline along its foot: the
+                // gaps say where the groups are, this says which is which.
+                if (groupColor != null) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(groupColor),
+                    )
+                }
             }
         }
     }
 
-    Box {
+    Box(
+        Modifier
+            .padding(start = gapStart, end = gapEnd)
+            .graphicsLayer {
+                val grow = 1f + 0.07f * lift
+                scaleX = grow
+                scaleY = grow
+                shadowElevation = lift * 16.dp.toPx()
+                shape = RoundedCornerShape(4.dp)
+            },
+    ) {
         DragSource(
             controller = drag,
             key = "${section.name}-$position-${id.value}",
@@ -501,7 +641,9 @@ private fun DeckCard(
             session = { DragSession(card, section, position, IntSize.Zero) },
             onLongPress = { menuOpen = true },
             onDropped = onDropped,
-            dragEnabled = dragEnabled,
+            // Picking cards for a group and dragging them somewhere are two
+            // readings of the same movement; while a draft is open, tap wins.
+            dragEnabled = dragEnabled && !selecting,
             content = tile,
         )
 
@@ -536,8 +678,8 @@ private fun DeckCard(
                 onClick = { menuOpen = false; state.moveCard(card, section, elsewhere) },
             )
 
-            // The pointer/keyboard idiom for assignment; dragging onto a block
-            // in the breakdown is the touch one.
+            // The pointer/keyboard idiom for assignment; tapping cards into an
+            // open draft is the touch one.
             if (section == DeckSection.MAIN) {
                 HorizontalDivider()
 
@@ -565,8 +707,8 @@ private fun DeckCard(
                 }
 
                 DropdownMenuItem(
-                    text = { Text("Manage groups…") },
-                    onClick = { menuOpen = false; state.groupManagerVisible = true },
+                    text = { Text("New group from here…") },
+                    onClick = { menuOpen = false; state.startGroupDraft(seed = id) },
                 )
             }
         }
@@ -581,22 +723,25 @@ private fun SectionHeader(
     count: Int,
     preferences: SectionPreferences,
     columns: Int,
-    accent: androidx.compose.ui.graphics.Color,
+    accent: Color,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val overCapacity = count > section.maxSize
     val underMinimum = count < section.minSize
 
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(HEADER_HEIGHT),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
             Modifier
-                .size(width = 4.dp, height = 18.dp)
+                .size(width = 4.dp, height = 16.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(accent),
         )
         Text(
             "  ${section.displayName} Deck",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
         )
         Text(
             // Read from the section rather than written out, so the bounds cannot
@@ -616,37 +761,34 @@ private fun SectionHeader(
         Box(Modifier.weight(1f))
 
         if (!preferences.collapsed) {
-            // Sized to fit by default. The steppers always work and always start
-            // from what is on screen; reaching for one is itself the decision to
-            // take over, so there is no mode to switch first.
-            IconButton(
+            // The breakdown belongs to the main deck and nowhere else: it is the
+            // main forty that gets argued about in roles.
+            if (section == DeckSection.MAIN) {
+                CompactButton(
+                    label = if (state.breakdownVisible) "Breakdown ·" else "Breakdown",
+                    selected = state.breakdownVisible,
+                    onClick = { state.breakdownVisible = !state.breakdownVisible },
+                )
+            }
+
+            // Ten across, fifteen across — the row width is the setting, and the
+            // cards are sized to whatever makes it fit.
+            CompactIconButton(
                 onClick = { layout.setColumns(section, columns - 1) },
                 enabled = columns > SectionPreferences.MIN_COLUMNS,
             ) {
                 Icon(Icons.Filled.Remove, contentDescription = "Fewer, larger cards per row")
             }
             Text(columns.toString(), style = MaterialTheme.typography.labelMedium)
-            IconButton(
+            CompactIconButton(
                 onClick = { layout.setColumns(section, columns + 1) },
                 enabled = columns < SectionPreferences.MAX_COLUMNS,
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "More, smaller cards per row")
             }
 
-            if (preferences.autoFit) {
-                Text(
-                    "Auto",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                TextButton(onClick = { layout.setAutoFit(section, true) }) {
-                    Text("Auto", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-
             Box {
-                IconButton(onClick = { menuOpen = true }) {
+                CompactIconButton(onClick = { menuOpen = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = "${section.displayName} deck options")
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -661,22 +803,29 @@ private fun SectionHeader(
                         )
                     }
 
+                    HorizontalDivider()
+
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (layout.preferences.fitAll) {
+                                    "✓ Fit the whole deck on screen"
+                                } else {
+                                    "Fit the whole deck on screen"
+                                }
+                            )
+                        },
+                        onClick = {
+                            menuOpen = false
+                            layout.setFitAll(!layout.preferences.fitAll)
+                        },
+                    )
+
                     if (section == DeckSection.MAIN) {
                         HorizontalDivider()
                         DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (state.breakdownVisible) {
-                                        "✓ Breakdown view"
-                                    } else {
-                                        "Breakdown view"
-                                    }
-                                )
-                            },
-                            onClick = {
-                                menuOpen = false
-                                state.breakdownVisible = !state.breakdownVisible
-                            },
+                            text = { Text("New group…") },
+                            onClick = { menuOpen = false; state.startGroupDraft() },
                         )
                         DropdownMenuItem(
                             text = { Text("Manage groups…") },
@@ -687,7 +836,7 @@ private fun SectionHeader(
             }
         }
 
-        IconButton(onClick = { layout.toggleCollapsed(section) }) {
+        CompactIconButton(onClick = { layout.toggleCollapsed(section) }) {
             Icon(
                 if (preferences.collapsed) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
                 contentDescription = if (preferences.collapsed) {
@@ -701,48 +850,41 @@ private fun SectionHeader(
 }
 
 /**
- * One group's label row in the breakdown: colour chip, name, count.
+ * A header-sized icon button.
  *
- * While an accepted drag hovers over its block the row wears the chromatic
- * edge — the light lands on the group about to receive the card.
+ * Material's is 48dp square, which is a third of a card row spent on chrome
+ * three times over. The touch target stays honest — 30dp with the pane's own
+ * padding around it — and the height the fitter is told about stays real.
  */
 @Composable
-private fun BreakdownHeader(
-    entry: BreakdownEntry.Header,
-    count: Int,
-    receiving: Boolean,
+private fun CompactIconButton(
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
 ) {
-    val dark = LocalDarkTheme.current
-    val color = entry.color?.let { MasterToolPalette.Prism[it % MasterToolPalette.Prism.size] }
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(30.dp),
+        content = content,
+    )
+}
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (receiving) {
-                    Modifier.chromaticEdge(dark = dark, cornerRadius = 4.dp)
-                } else {
-                    Modifier
-                },
-            )
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+@Composable
+private fun CompactButton(label: String, selected: Boolean, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+        modifier = Modifier.height(28.dp),
     ) {
-        Box(
-            Modifier
-                .size(width = 4.dp, height = 14.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(color ?: MaterialTheme.colorScheme.onSurfaceVariant),
-        )
         Text(
-            "  ${entry.name}",
-            style = MaterialTheme.typography.labelLarge,
-            color = color ?: MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            "  ·  $count",
+            label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
         )
     }
 }

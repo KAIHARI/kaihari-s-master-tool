@@ -27,7 +27,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
-import com.kaiharimoto.mastertool.core.deck.DeckBreakdown
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.input.ShortcutAction
 import com.kaiharimoto.mastertool.core.input.ShortcutContext
@@ -137,6 +136,8 @@ fun DeckBuilderScreen(
             ShortcutAction.TOGGLE_BREAKDOWN -> state.breakdownVisible = !state.breakdownVisible
             ShortcutAction.TOGGLE_GROUP_MANAGER ->
                 state.groupManagerVisible = !state.groupManagerVisible
+            ShortcutAction.NEW_GROUP -> state.startGroupDraft()
+            ShortcutAction.TOGGLE_SEARCH_PANE -> layout.toggleSearchPane()
             ShortcutAction.TOGGLE_CONSISTENCY ->
                 state.consistencyVisible = !state.consistencyVisible
             ShortcutAction.DISMISS -> dismissTopLayer(state) {
@@ -186,16 +187,24 @@ fun DeckBuilderScreen(
                             .fillMaxSize()
                             .onGloballyPositioned { layout.builderWidthPx = it.size.width.toFloat() },
                     ) {
-                        SearchPane(
-                            state = state,
-                            layout = layout,
-                            drag = drag,
-                            searchFocus = searchFocus,
-                            onDropped = onDropped,
-                            modifier = Modifier.weight(layout.preferences.searchWeight).fillMaxHeight(),
-                        )
+                        // The pool is where cards come from; once they are in,
+                        // it is the thing between you and the list. Switching it
+                        // off hands its width to the deck, and the deck is
+                        // re-fitted into it on the same frame.
+                        if (layout.preferences.searchVisible) {
+                            SearchPane(
+                                state = state,
+                                layout = layout,
+                                drag = drag,
+                                searchFocus = searchFocus,
+                                onDropped = onDropped,
+                                modifier = Modifier
+                                    .weight(layout.preferences.searchWeight)
+                                    .fillMaxHeight(),
+                            )
 
-                        SearchDeckDivider(onDrag = layout::resizeSearchPane)
+                            SearchDeckDivider(onDrag = layout::resizeSearchPane)
+                        }
 
                         DeckPanes(
                             state = state,
@@ -203,7 +212,13 @@ fun DeckBuilderScreen(
                             drag = drag,
                             onDropped = onDropped,
                             modifier = Modifier
-                                .weight(1f - layout.preferences.searchWeight)
+                                .weight(
+                                    if (layout.preferences.searchVisible) {
+                                        1f - layout.preferences.searchWeight
+                                    } else {
+                                        1f
+                                    }
+                                )
                                 .fillMaxHeight(),
                         )
                     }
@@ -359,6 +374,9 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
         state.filtersVisible -> state.filtersVisible = false
         state.statsVisible -> state.statsVisible = false
         state.issuesVisible -> state.issuesVisible = false
+        // Before the search box, because a draft is a mode: while one is open
+        // it is what Escape obviously means.
+        state.groupDraft != null -> state.cancelGroupDraft()
         state.query.isNotEmpty() -> state.onQueryChange("")
         else -> clearFocus()
     }
@@ -367,7 +385,7 @@ private fun dismissTopLayer(state: DeckBuilderState, clearFocus: () -> Unit) {
 /**
  * Turns a completed drag into a deck edit.
  *
- * Four outcomes, and every one of them routes through the same editor that tap
+ * Three outcomes, and every one of them routes through the same editor that tap
  * and the stepper use — so a drop is undoable, and a drop the rules refuse says
  * so in the same words as any other rejected edit.
  */
@@ -381,25 +399,10 @@ private fun applyDrop(
 
     val target = landed.section
 
-    // In the breakdown lens the main grid's indices count headers and grouped
-    // cards, and position within a block is display order, not deck order — so
-    // a drop there means "this card belongs to that group", not "insert here".
-    if (target == DeckSection.MAIN && state.breakdownVisible && !stacked) {
-        val entries = DeckBreakdown.flatten(state.deck.main, state.groups)
-        val groupId = DeckBreakdown.dropGroup(entries, landed.index)
-
-        when (session.section) {
-            null -> state.addCard(session.card, DeckSection.MAIN)
-            DeckSection.MAIN -> Unit // stays put; only its group changes
-            else -> state.moveCard(session.card, session.section, DeckSection.MAIN)
-        }
-        // Assign only if the card actually made it in (add can be rejected).
-        if (state.deck.main.contains(session.card.id)) {
-            state.assignCardToGroup(session.card.id, groupId)
-        }
-        return
-    }
-
+    // The breakdown lens needs no special case any more: it draws the section in
+    // its stored order and separates the groups with space, so a grid index is a
+    // deck position there exactly as it is everywhere else, and a drop means
+    // what it always meant.
     when {
         // Dropped back on the pool: the copy leaves the deck.
         target == null -> session.section?.let { from ->

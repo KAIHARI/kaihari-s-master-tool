@@ -42,6 +42,8 @@ enum class ShortcutAction {
     TOGGLE_HELP,
     TOGGLE_BREAKDOWN,
     TOGGLE_GROUP_MANAGER,
+    NEW_GROUP,
+    TOGGLE_SEARCH_PANE,
     TOGGLE_CONSISTENCY,
     DISMISS,
     FOCUS_MAIN,
@@ -192,11 +194,19 @@ object ShortcutTable {
         ),
         Shortcut(
             KeyChord("b"), ShortcutAction.TOGGLE_BREAKDOWN, ShortcutScope.BUILDER,
-            "Breakdown view — the deck split into your groups",
+            "Breakdown view — your groups drawn as gaps in the deck",
+        ),
+        Shortcut(
+            KeyChord("n"), ShortcutAction.NEW_GROUP, ShortcutScope.BUILDER,
+            "New group — then tap the cards that belong to it",
         ),
         Shortcut(
             KeyChord("g"), ShortcutAction.TOGGLE_GROUP_MANAGER, ShortcutScope.BUILDER,
             "Manage groups", togglesLayer = ShortcutLayer.GROUPS,
+        ),
+        Shortcut(
+            KeyChord("d"), ShortcutAction.TOGGLE_SEARCH_PANE, ShortcutScope.BUILDER,
+            "Show or hide the card database",
         ),
         Shortcut(
             KeyChord("c"), ShortcutAction.TOGGLE_CONSISTENCY, ShortcutScope.BUILDER,

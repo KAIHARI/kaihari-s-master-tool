@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import com.kaiharimoto.mastertool.core.data.SyncResult
 import com.kaiharimoto.mastertool.core.deck.DeckEdit
 import com.kaiharimoto.mastertool.core.deck.DeckEditor
+import com.kaiharimoto.mastertool.core.deck.DeckGroup
 import com.kaiharimoto.mastertool.core.deck.DeckGroups
 import com.kaiharimoto.mastertool.core.deck.DeckGroupsCodec
 import com.kaiharimoto.mastertool.core.deck.DeckSorter
@@ -14,6 +15,9 @@ import com.kaiharimoto.mastertool.core.deck.StoredGroups
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
 import com.kaiharimoto.mastertool.core.deck.DeckValidation
 import com.kaiharimoto.mastertool.core.deck.DeckValidator
+import com.kaiharimoto.mastertool.core.deck.GroupDraft
+import com.kaiharimoto.mastertool.core.deck.GroupDrafts
+import com.kaiharimoto.mastertool.core.deck.GroupPresets
 import com.kaiharimoto.mastertool.core.deck.RejectionReason
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.model.Card
@@ -30,6 +34,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.random.Random
 import kotlinx.serialization.json.JsonObject
 
 /** A transient message shown in the snackbar, optionally with an undo action. */
@@ -111,6 +116,18 @@ class DeckBuilderState(
 
     /** Whether the main pane is showing the breakdown lens. */
     var breakdownVisible by mutableStateOf(false)
+
+    /**
+     * The group being drawn up right now, if any.
+     *
+     * Its presence is a mode: while it is open, tapping a card in the main deck
+     * puts that card in the group instead of removing a copy. That is the only
+     * modal gesture in the builder, and it is worth it — assignment is a
+     * multi-card decision ("these six are my handtraps"), and making it one card
+     * at a time through a menu is how the breakdown went unused.
+     */
+    var groupDraft by mutableStateOf<GroupDraft?>(null)
+        private set
 
     var groupManagerVisible by mutableStateOf(false)
 
@@ -460,6 +477,9 @@ class DeckBuilderState(
     private fun applyStoredGroups(stored: StoredGroups) {
         groups = stored.groups
         breakdownVisible = stored.breakdown
+        // A draft is about the cards in front of you. Loading, importing or
+        // starting a new deck replaces those, so it cannot mean anything now.
+        groupDraft = null
     }
 
     private fun pushUndo(
@@ -521,6 +541,73 @@ class DeckBuilderState(
 
     fun assignCardToGroup(id: CardId, groupId: String?) =
         updateGroups { it.assign(id, groupId) }
+
+    // ---- the group draft ---------------------------------------------------
+    //
+    // Nothing here touches the breakdown until Save: a draft is a decision being
+    // made, and half a decision does not belong in the deck file or on the undo
+    // stack. Cancel therefore costs nothing and leaves nothing behind.
+
+    /** Opens an empty draft, optionally with [seed] already picked. */
+    fun startGroupDraft(seed: CardId? = null) {
+        breakdownVisible = true
+        groupDraft = GroupDraft(
+            color = groups.groups.size % 6,
+            selection = setOfNotNull(seed),
+        )
+    }
+
+    /** Reopens an existing group with everything already in it selected. */
+    fun editGroup(group: DeckGroup) {
+        breakdownVisible = true
+        groupDraft = GroupDrafts.edit(groups, group, deck.main)
+    }
+
+    fun setDraftName(value: String) {
+        groupDraft = groupDraft?.copy(name = value)
+    }
+
+    fun setDraftColor(color: Int) {
+        groupDraft = groupDraft?.copy(color = color)
+    }
+
+    /** One tap for a name and a colour, which is what the presets are for. */
+    fun applyPreset(preset: GroupPresets.Preset) {
+        groupDraft = groupDraft?.copy(name = preset.name, color = preset.color)
+    }
+
+    fun toggleDraftSelection(id: CardId) {
+        groupDraft = groupDraft?.toggle(id)
+    }
+
+    fun cancelGroupDraft() {
+        groupDraft = null
+    }
+
+    fun saveGroupDraft() {
+        val draft = groupDraft ?: return
+        val name = draft.name.trim()
+        updateGroups { GroupDrafts.commit(it, draft, ::mintGroupId) }
+        groupDraft = null
+        showToast(
+            if (name.isBlank()) {
+                "Saved a group of ${draft.selection.size}."
+            } else {
+                "$name — ${draft.selection.size} card${if (draft.selection.size == 1) "" else "s"}."
+            }
+        )
+    }
+
+    /** Deletes the group the draft was opened on, freeing its cards. */
+    fun deleteDraftGroup() {
+        val id = groupDraft?.editingId ?: return
+        val name = groups.byId(id)?.name
+        updateGroups { it.remove(id) }
+        groupDraft = null
+        showToast("Deleted ${name ?: "the group"}.")
+    }
+
+    private fun mintGroupId(): String = "g-${Random.nextLong().toString(16)}"
 
     /** The extended payload with the current breakdown written into it. */
     private fun extendedForWrite() =

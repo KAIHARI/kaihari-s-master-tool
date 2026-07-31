@@ -104,9 +104,25 @@ class DeckLayoutState(
         }
     }
 
-    /** Reaching for the density control is itself the decision to size by hand. */
+    /**
+     * Sets how many cards a row of [section] holds.
+     *
+     * Under the fitter this is the whole setting — the row width is chosen, and
+     * the card size follows from it. By hand it also means "stop choosing the
+     * count for me", which is what [SectionPreferences.autoFit] is.
+     */
     fun setColumns(section: DeckSection, columns: Int) {
         updateSection(section) { it.copy(columns = columns, autoFit = false) }
+    }
+
+    /** Whether the three panes are sized to show the whole deck at once. */
+    fun setFitAll(value: Boolean) {
+        update { it.copy(fitAll = value) }
+    }
+
+    /** Hides the card pool and gives the deck the whole window. */
+    fun toggleSearchPane() {
+        update { it.copy(searchVisible = !it.searchVisible) }
     }
 
     fun setAutoFit(section: DeckSection, autoFit: Boolean) {
@@ -150,7 +166,11 @@ class DeckLayoutState(
         if (newBottom < SectionPreferences.MIN_WEIGHT) return
 
         update(debounce = true) {
-            it.with(above, top.copy(weight = newTop))
+            // Taking hold of a divider is the decision to size the panes by
+            // hand: the fitter owns every height while it is on, so a drag under
+            // it would move nothing and read as broken.
+            it.copy(fitAll = false)
+                .with(above, top.copy(weight = newTop))
                 .with(below, bottom.copy(weight = newBottom))
         }
     }

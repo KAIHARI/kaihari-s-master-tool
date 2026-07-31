@@ -73,88 +73,63 @@ data class DeckGroups(
         )
     }
 
-    /**
-     * Splits a section into display blocks: one per group in order, each
-     * holding its cards in the order the deck stores them, then everything
-     * unassigned. Groups with no cards still appear — an empty block is where
-     * a card gets dropped to join it.
-     */
-    fun partition(section: List<CardId>): List<GroupBlock> {
-        val blocks = ordered().map { group ->
-            GroupBlock(group, section.filter { assignments[it] == group.id })
-        }
-        val ungrouped = section.filter { assignments[it] !in groups.map { g -> g.id }.toSet() }
-        return blocks + GroupBlock(group = null, ids = ungrouped)
-    }
+    /** How many cards of [section] belong to [groupId]. */
+    fun countIn(section: List<CardId>, groupId: String): Int =
+        section.count { assignments[it] == groupId }
+
+    /** The group a card belongs to, ignoring assignments to deleted groups. */
+    fun groupOf(id: CardId): String? = assignments[id]?.takeIf { byId(it) != null }
 
     companion object {
         val EMPTY = DeckGroups(emptyList(), emptyMap())
     }
 }
 
-/** One rendered block of the breakdown. A null [group] is the Ungrouped tail. */
-data class GroupBlock(
-    val group: DeckGroup?,
-    val ids: List<CardId>,
-)
-
 /**
- * The breakdown flattened to what a grid actually renders: a full-width header
- * then that block's cards, repeated. Kept in core because the drop maths needs
- * it — "which group did this land in" is a question about this list, and it
- * has to answer the same way the screen drew it.
+ * One card's place in the breakdown lens.
+ *
+ * The lens does not reorder anything. An earlier version split the section into
+ * labelled blocks, which meant the grid you edited was not the deck you saved —
+ * position in a block was display order, so a drop there could only mean
+ * "assign", never "insert", and the deck's real order was invisible exactly
+ * when you were reasoning about it. Here the deck stays in its stored order and
+ * the groups are drawn as *space*: a gap opens where one run of a group ends
+ * and the next begins, so the shape of the list is readable without a single
+ * card having moved.
  */
-sealed interface BreakdownEntry {
-    val groupId: String?
-
-    data class Header(override val groupId: String?, val name: String, val color: Int?) :
-        BreakdownEntry
-
-    data class CardEntry(
-        val id: CardId,
-        /** Position of this copy in the raw section list. */
-        val rawIndex: Int,
-        override val groupId: String?,
-    ) : BreakdownEntry
-}
+data class BreakdownSlot(
+    val index: Int,
+    val groupId: String?,
+    /** A gap opens to the left of this card. */
+    val gapBefore: Boolean,
+    /** A gap opens to its right. */
+    val gapAfter: Boolean,
+)
 
 object DeckBreakdown {
 
-    fun flatten(section: List<CardId>, groups: DeckGroups): List<BreakdownEntry> {
-        // Raw indices per id, consumed first-to-last so duplicate copies keep
-        // distinct positions.
-        val remaining = HashMap<CardId, ArrayDeque<Int>>()
-        section.forEachIndexed { index, id ->
-            remaining.getOrPut(id) { ArrayDeque() }.addLast(index)
-        }
-
-        val entries = mutableListOf<BreakdownEntry>()
-        groups.partition(section).forEach { block ->
-            entries += BreakdownEntry.Header(
-                groupId = block.group?.id,
-                name = block.group?.name ?: "Ungrouped",
-                color = block.group?.color,
-            )
-            block.ids.forEach { id ->
-                val rawIndex = remaining.getValue(id).removeFirst()
-                entries += BreakdownEntry.CardEntry(id, rawIndex, block.group?.id)
-            }
-        }
-        return entries
-    }
-
     /**
-     * Which group a drop at [insertionIndex] (a "before this entry" index into
-     * [entries], `0..entries.size`) lands in.
+     * Where the gaps fall for a [columns]-wide grid.
      *
-     * Dropping onto a header joins the group it heads; past the end joins the
-     * final block. Returns the group id, or null for Ungrouped.
+     * A boundary that already lands on a row break needs no gap — the row break
+     * is the separation — which is what keeps the effect subtle on a deck where
+     * every other card belongs to something different.
      */
-    fun dropGroup(entries: List<BreakdownEntry>, insertionIndex: Int): String? {
-        if (entries.isEmpty()) return null
-        val at = insertionIndex.coerceIn(0, entries.size)
-        // Before a header means "into the block it opens"; anywhere else means
-        // "into the block this position is inside".
-        return if (at < entries.size) entries[at].groupId else entries.last().groupId
+    fun slots(section: List<CardId>, groups: DeckGroups, columns: Int): List<BreakdownSlot> {
+        val width = columns.coerceAtLeast(1)
+        val owners = section.map(groups::groupOf)
+
+        return owners.mapIndexed { index, owner ->
+            BreakdownSlot(
+                index = index,
+                groupId = owner,
+                gapBefore = index > 0 &&
+                    index % width != 0 &&
+                    owners[index - 1] != owner,
+                gapAfter = index < owners.lastIndex &&
+                    (index + 1) % width != 0 &&
+                    owners[index + 1] != owner,
+            )
+        }
     }
 }

@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Percent
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
@@ -150,6 +152,18 @@ fun DeckBuilderTopBar(
         IconButton(onClick = state::redo, enabled = state.canRedo) {
             Icon(Icons.Filled.Redo, contentDescription = "Redo")
         }
+        // The one control that changes what the window is for: with the pool
+        // hidden the deck takes the whole width and re-fits into it.
+        IconButton(onClick = layout::toggleSearchPane) {
+            Icon(
+                if (layout.preferences.searchVisible) Icons.Filled.SearchOff else Icons.Filled.Search,
+                contentDescription = if (layout.preferences.searchVisible) {
+                    "Hide the card database"
+                } else {
+                    "Show the card database"
+                },
+            )
+        }
         IconButton(onClick = { state.statsVisible = true }) {
             Icon(Icons.Filled.BarChart, contentDescription = "Deck statistics")
         }
@@ -191,6 +205,21 @@ fun DeckBuilderTopBar(
 
                 HorizontalDivider()
 
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (layout.preferences.fitAll) {
+                                "✓ Fit the whole deck on screen"
+                            } else {
+                                "Fit the whole deck on screen"
+                            }
+                        )
+                    },
+                    onClick = {
+                        menuOpen = false
+                        layout.setFitAll(!layout.preferences.fitAll)
+                    },
+                )
                 DropdownMenuItem(
                     text = {
                         Text(

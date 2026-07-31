@@ -38,15 +38,18 @@ import com.kaiharimoto.mastertool.core.deck.DeckGroup
 import com.kaiharimoto.mastertool.ui.input.SheetShortcuts
 import com.kaiharimoto.mastertool.ui.input.ShortcutRelay
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
-import kotlin.random.Random
 
 /**
- * Where the breakdown's groups are drawn up: name, colour, order.
+ * Housekeeping for groups that already exist: rename, recolour, reorder, delete.
+ *
+ * Making a group happens at the deck, not here — name it and tap the cards it
+ * holds, with the deck in front of you. This sheet is for the things that are
+ * about the list of groups rather than about any card, which is why "New group"
+ * closes it and hands you back to the deck.
  *
  * Colours are the six prismatic hues and nothing else — a fixed swatch row,
- * not a picker. Six functional groups is already more than most decklists
- * distinguish, and a bounded palette is what keeps the breakdown looking like
- * the app rather than like a whiteboard.
+ * not a picker. A bounded palette is what keeps the breakdown looking like the
+ * app rather than like a whiteboard.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,17 +77,8 @@ fun GroupManagerSheet(
                 ) {
                     Text("Groups", style = MaterialTheme.typography.headlineSmall)
                     TextButton(onClick = {
-                        state.updateGroups { groups ->
-                            val order = groups.groups.size
-                            groups.upsert(
-                                DeckGroup(
-                                    id = "g-${Random.nextLong().toString(16)}",
-                                    name = "Group ${order + 1}",
-                                    color = order % MasterToolPalette.Prism.size,
-                                    order = order,
-                                )
-                            )
-                        }
+                        onDismiss()
+                        state.startGroupDraft()
                     }) {
                         Icon(Icons.Filled.Add, contentDescription = null)
                         Text("  New group")
@@ -94,8 +88,8 @@ fun GroupManagerSheet(
                 if (state.groups.groups.isEmpty()) {
                     Text(
                         "Split the deck by what each card is for — engine, handtraps, " +
-                            "starters, extenders. Assignment is yours alone: long-press a " +
-                            "card, or drag it onto a group in the breakdown view.",
+                            "starters, extenders. Assignment is yours alone: name a group, " +
+                            "then tap the cards in the Main deck that belong to it.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -63,9 +63,29 @@ data class UiPreferences(
     val searchWeight: Float = DEFAULT_SEARCH_WEIGHT,
     /** Cards per row in the search grid; 0 means size to fit. */
     val searchColumns: Int = 0,
+    /**
+     * Whether the card database is on screen at all.
+     *
+     * Switching it off is the "now I am looking at the deck" move: the pool is
+     * where cards come from, and once they are in, it is just the thing between
+     * you and the list. The deck column takes the whole window instead.
+     */
+    val searchVisible: Boolean = true,
+    /**
+     * Size the three panes from their row widths so all of them are visible.
+     *
+     * The alternative — each pane taking a share of the column height and
+     * choosing its own column count to suit — is what put cards out of bounds:
+     * three panes sized against heights a divider drag handed them cannot agree
+     * on a total. On by default; dragging a divider is what turns it off.
+     */
+    val fitAll: Boolean = true,
+    // Ten across for the main deck and fifteen for the extra and side: the row
+    // widths a decklist is read in — four rows of ten is forty at a glance, and
+    // an extra or side deck is one row of its own maximum.
     val main: SectionPreferences = SectionPreferences(weight = 2f, columns = 10),
-    val extra: SectionPreferences = SectionPreferences(weight = 1f, columns = 10),
-    val side: SectionPreferences = SectionPreferences(weight = 1f, columns = 10),
+    val extra: SectionPreferences = SectionPreferences(weight = 1f, columns = 15),
+    val side: SectionPreferences = SectionPreferences(weight = 1f, columns = 15),
     /** Show one tile per distinct card with a count, rather than one per copy. */
     val stacked: Boolean = false,
     val format: Format = Format.TCG,
