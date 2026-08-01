@@ -50,6 +50,12 @@ card you cannot read. When something must be coloured, colour the space around
 it — the frame, the gutter, the edge — at full strength. Translucency is for
 light effects (sheen, fringe), never for identity.
 
+**A fact gets one colour, forever.** Card type and legality were coloured long
+before any lens existed — the statistics panel's type split, the ban badge in
+the corner of a card. When a new view shows the same fact it takes the colour
+that fact already has (`KeyPaint.Tone`), never a fresh one, or the screen ends
+up with two different reds meaning one thing.
+
 **Six hues is a hard limit, so colour never carries a name alone.** Groups also
 carry a two-letter mark (`GroupMarks`), rendered identically on the deck, in the
 legend and in menus. Reading beats hue-matching at arm's length.
@@ -176,11 +182,27 @@ can only ever show back the bookkeeping they already did; one pointed at facts
 the card database already knows has something to say about a list imported ten
 seconds ago, which is when a reading is worth most.
 
-**Paint says what kind of difference it is.** A key is painted either `Hue` —
-nominal, off the prismatic ramp, *these are different* — or `Grey` — ordinal,
-read as a scale. Copies is grey, brightest for singletons, because the singleton
-is the card you are looking for. Archetype takes hues 2–5 and never 0 or 1,
-which mean illegal and warning everywhere else.
+**Paint says what kind of difference it is.** A key is painted `Hue` — nominal,
+off the prismatic ramp, *these are different* — or `Grey` — ordinal, read as a
+scale — or `Tone`, a fact the app already agreed a colour for. Copies is grey,
+brightest for singletons, because the singleton is the card you are looking for.
+Archetype takes hues 2–5 and never 0 or 1, which mean illegal and warning
+everywhere else. Type and Legality are tones.
+
+**A reading is worth drawing because of the number next to it.** "Twelve
+starters" is a fact about a list; "twelve starters, 89%" is an argument about a
+deck, and the ratio was only ever being chosen to move that number. Every key
+carries its exact opening rate, hypergeometric over the same counts the blocks
+are drawn from, so the bar can never disagree with the deck beneath it. It never
+rounds to a certainty it does not have: 99.7% reads `>99%`, because `100%` is a
+promise.
+
+**A question is stated once and kept.** Goals live in the deck file beside the
+groups they are written in terms of, keyed by id so renaming a role does not
+detach the question from it. They sit pinned right of the keys under every lens
+— left is how you are reading, middle is what that reading found, right is
+whether the deck does what you asked. A question you have to rebuild from memory
+is one you stop asking.
 
 **The deck is a mosaic that cracks.** 2dp between cards, near enough to touching
 that a row reads as one surface. A lens does not open every gutter — only the

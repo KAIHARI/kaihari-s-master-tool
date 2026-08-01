@@ -155,9 +155,20 @@ replaced an earlier design that looked reasonable and was not:
   Rearranging the display to make tidier blocks was tried twice and rejected
   by the user both times; see `docs/DESIGN.md` §9.
 
-Next: the deck **showcase** stage, goldfish polish (deal-origin projection,
-stack shuffle/cut), and the **duel table UI** on top of `BoardState`,
-inheriting the goldfish stage pattern.
+The breakdown is now a **lens** (`core/deck/DeckLens.kt`): the partition is a
+parameter, so the same machinery draws the user's roles, the deck's archetypes,
+its type split, its copy counts and its banlist exposure. Every key reports its
+exact opening rate (`core/hand/LensOdds.kt`), and the consistency question is
+stored *with the deck* as a `HandGoal` rather than rebuilt in a sheet each time.
+
+Next, chosen with the user: the **duel table UI** on top of `BoardState`,
+inheriting the goldfish stage pattern. `core/board/BoardState.kt` is a complete,
+tested sandbox — draw, play from hand/extra/graveyard, move, flip, banish,
+attach and detach materials, counters, life points, phases — with no UI at all,
+and it is the gate on everything about *piloting* a deck rather than building
+one. Zone geometry should be solved in core the way `DeckFit` is, not negotiated
+in the composable. After that: the deck **showcase** stage and goldfish polish
+(deal-origin projection, stack shuffle/cut).
 
 **Explicitly deferred by the user — do not build on the legacy designs:**
 siding patterns and shootout mode will be redesigned from scratch in a future
