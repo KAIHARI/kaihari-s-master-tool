@@ -512,6 +512,12 @@ private fun DeckSectionPane(
                 }
             }
 
+            // Read out here, where the constraints scope is the innermost one:
+            // inside the Box below a BoxScope shadows it, and the geometry is
+            // the same number either way.
+            val cardWidth = (maxWidth - spacing * (columns - 1)) / columns
+            val cardHeight = cardWidth / CARD_ASPECT_RATIO
+
             Box(
                 modifier = if (fit != null) {
                     Modifier.fillMaxWidth().height(with(density) { fit.gridHeight.toDp() })
