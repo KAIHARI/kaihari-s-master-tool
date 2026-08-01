@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -68,14 +67,15 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kaiharimoto.mastertool.core.deck.DeckGroup
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.deck.GroupMarks
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.layout.BreakdownLayout
+import com.kaiharimoto.mastertool.core.layout.CellEdges
 import com.kaiharimoto.mastertool.core.layout.DeckFit
 import com.kaiharimoto.mastertool.core.layout.DeckFitter
 import com.kaiharimoto.mastertool.core.layout.GridPoint
@@ -115,34 +115,25 @@ private val PANE_PADDING = 6.dp
 private val HEADER_HEIGHT = 28.dp
 private val HEADER_GAP = 4.dp
 private val PANE_GAP = 8.dp
-private val CARD_SPACING = 5.dp
+private val CARD_SPACING = 2.dp
 
 /**
- * What the gutters open to in the breakdown lens.
+ * How far a card pulls back from a neighbour in another group.
  *
- * The separation is bought globally rather than per boundary: every gutter in
- * the main deck widens by the same amount, so no card is ever a different size
- * from its neighbours and nothing wobbles as groups change. Half of that gutter
- * belongs to the piece a card is in and half is the cut between pieces, which
- * is what makes a group read as a slab and the space between two groups read as
- * a channel.
+ * The deck is a mosaic — two dp between cards, near enough to touching that a
+ * row reads as one surface. The lens does not open every gutter; it opens only
+ * the ones where two groups meet, and this is how far each of the two cards
+ * gives way. The deck therefore cracks along exactly the lines the groups draw
+ * and nowhere else, which is the whole idea: a group is a block of the deck you
+ * can see the shape of, not a tint over some cards.
  */
-private val BREAKDOWN_SPACING = 10.dp
+private val CRACK = 4.dp
 
-/** How far inside a cell's own half-gutter a piece's edge sits. */
-private val CELL_INSET = 3.dp
-private val PIECE_STROKE = 1.5.dp
-private val REMAINDER_STROKE = 1.dp
-private const val PIECE_FILL_ALPHA = 0.26f
-private const val DRAFT_ALPHA = 0.38f
-private const val SAVED_ALPHA = 0.20f
+/** How far inside the cell a block's colour stops. */
+private val CELL_INSET = 1.5.dp
 
-/** How a card travels when the deck is dissected or put back together. */
-private val REFLOW_SPRING = spring(
-    dampingRatio = 0.78f,
-    stiffness = 260f,
-    visibilityThreshold = IntOffset(1, 1),
-)
+/** The group a draft's selection is drawn as, before it has been saved. */
+private const val DRAFT_GROUP_ID = "__draft"
 
 /** The main deck's group bar: a row of group chips, or the draft editor. */
 private val LEGEND_HEIGHT = 32.dp
@@ -481,42 +472,59 @@ private fun DeckSectionPane(
             // above this and only needs the number on the next pass.
             SideEffect { effectiveColumns = columns }
 
-            // The lens has two states and they answer two different needs. While
-            // a group is being picked out the deck stays exactly as it is
-            // stored, because cards must not move under the finger choosing
-            // them. Once it is saved the deck is dissected: the display — never
-            // the file — is rearranged so each group's cards sit together.
+            // Nothing is rearranged. The lens is geometry over the deck as it
+            // is stored, and a card being picked for a group joins that group's
+            // block immediately — drawn as a group that does not exist yet, so
+            // the shape you are making is visible while you make it.
             val draft = state.groupDraft.takeIf { section == DeckSection.MAIN }
-            val plan = when {
-                !breakdownActive -> null
-                draft != null -> BreakdownLayout.identity(displayed, state.groups, columns)
-                else -> BreakdownLayout.plan(displayed, state.groups, columns)
-            }
-
-            // Which card is drawn in which cell, walked over the WHOLE grid
-            // rather than over the deck. A deck that does not divide by the row
-            // width leaves a short last row, and on a row the snake runs right
-            // to left the empty cells are the ones on the left — so a cell can
-            // legitimately hold nothing, and -1 says so. Reading only as many
-            // cells as there are cards drew some cards twice, which reached the
-            // grid as two items sharing one key.
-            val order = remember(plan, displayed.size, columns) {
-                if (plan == null) {
-                    displayed.indices.toList()
-                } else {
-                    val cells = BreakdownLayout.gridCells(displayed.size, columns)
-                    (0 until cells).map { cell -> plan.deckIndexAt(cell) ?: -1 }
+            val lensGroups = remember(state.groups, draft?.selection, draft?.color) {
+                when (draft) {
+                    null -> state.groups
+                    else -> {
+                        val provisional = DeckGroup(
+                            id = DRAFT_GROUP_ID,
+                            name = draft.name,
+                            color = draft.color,
+                            order = -1,
+                        )
+                        draft.selection.fold(state.groups.upsert(provisional)) { groups, id ->
+                            groups.assign(id, DRAFT_GROUP_ID)
+                        }
+                    }
                 }
             }
 
-            val marks = remember(state.groups) { GroupMarks.marks(state.groups.ordered()) }
+            val plan = if (breakdownActive) {
+                remember(displayed, lensGroups, columns) {
+                    BreakdownLayout.plan(displayed, lensGroups, columns)
+                }
+            } else {
+                null
+            }
 
-            // Read out here, where the constraints scope is the innermost one.
-            // Inside the Box below, `maxWidth` is ambiguous — a BoxScope shadows
-            // the BoxWithConstraintsScope it came from — and the geometry is the
-            // same number either way, so it is taken once and carried in.
-            val cardWidth = (maxWidth - spacing * (columns - 1)) / columns
-            val cardHeight = cardWidth / CARD_ASPECT_RATIO
+            // One spring for the whole mode: the deck breaking apart, and the
+            // colour arriving with it.
+            val crack by animateFloatAsState(
+                if (plan != null) 1f else 0f,
+                spring(dampingRatio = 0.68f, stiffness = 240f),
+                label = "breakdownCrack",
+            )
+
+            val marks = remember(lensGroups) { GroupMarks.marks(lensGroups.ordered()) }
+
+            // Where each block's mark sits: the first cell of every run of
+            // cards that touch, so a group split across the deck names each of
+            // its pieces rather than leaving the others anonymous.
+            val markCells = remember(plan) {
+                buildMap {
+                    plan?.pieces?.forEach { piece ->
+                        if (piece.groupId == null) return@forEach
+                        BreakdownLayout.blocks(piece.cells, plan.columns).forEach { block ->
+                            put(block.first(), piece.groupId)
+                        }
+                    }
+                }
+            }
 
             Box(
                 modifier = if (fit != null) {
@@ -525,23 +533,11 @@ private fun DeckSectionPane(
                     Modifier.fillMaxSize()
                 },
             ) {
-                // Behind the cards: one shape per group, traced from the cells
-                // its cards occupy. Drawn from the plan rather than from the
-                // grid's own layout info, so the geometry is exact and does not
-                // depend on what the lazy layout happens to have measured.
-                if (plan != null) {
-                    val draftColor = draft?.let {
-                        MasterToolPalette.Prism[it.color % MasterToolPalette.Prism.size]
-                    }
-                    val draftCells = remember(plan, draft?.selection, displayed) {
-                        draft?.selection.orEmpty().let { selection ->
-                            displayed.indices
-                                .filter { displayed[it] in selection }
-                                .mapNotNull(plan::cellOfDeckIndex)
-                        }
-                    }
-                    val remainderColor = MasterToolPalette.LineLight
-
+                // Behind the cards: one solid shape per block. What shows is
+                // the colour standing in the space the crack opened, and the
+                // two dp between cards of the same group — so a block reads as
+                // one object with a bold edge, not as cards with a tint.
+                if (plan != null && crack > 0.01f) {
                     Canvas(Modifier.matchParentSize()) {
                         val metrics = CellMetrics(
                             cardWidth = cardWidth.toPx(),
@@ -552,50 +548,18 @@ private fun DeckSectionPane(
                         )
 
                         plan.pieces.forEach { piece ->
-                            val color = if (piece.isRemainder) {
-                                remainderColor
-                            } else {
-                                MasterToolPalette.Prism[piece.colorIndex % MasterToolPalette.Prism.size]
-                            }
-                            // Dissected, a group is one region and wears its
-                            // colour; picking, the same call draws one seat per
-                            // chosen card, because the cells are scattered and
-                            // the union of scattered cells is scattered seats.
+                            // The part of the deck with no role yet is drawn in
+                            // no colour at all: it is what is left, and it
+                            // should look like what is left.
+                            if (piece.isRemainder) return@forEach
+                            val color = MasterToolPalette.Prism[
+                                piece.colorIndex % MasterToolPalette.Prism.size
+                            ]
                             drawRegion(
                                 cells = piece.cells,
                                 metrics = metrics,
                                 color = color,
-                                // The part you have not dissected yet is drawn
-                                // in no colour at all — it should look unfinished.
-                                fillAlpha = when {
-                                    piece.isRemainder -> 0f
-                                    draft != null -> SAVED_ALPHA
-                                    else -> PIECE_FILL_ALPHA
-                                },
-                                strokeAlpha = when {
-                                    piece.isRemainder -> 0.5f
-                                    draft != null -> 0f
-                                    else -> 0.9f
-                                },
-                                strokeWidth = if (piece.isRemainder) {
-                                    REMAINDER_STROKE.toPx()
-                                } else {
-                                    PIECE_STROKE.toPx()
-                                },
-                            )
-                        }
-
-                        // The group being drawn up, over everything: its cards
-                        // fuse into one shape wherever they happen to touch, and
-                        // read as one deliberate mark each where they do not.
-                        if (draftColor != null && draftCells.isNotEmpty()) {
-                            drawRegion(
-                                cells = draftCells,
-                                metrics = metrics,
-                                color = draftColor,
-                                fillAlpha = DRAFT_ALPHA,
-                                strokeAlpha = 0f,
-                                strokeWidth = 0f,
+                                alpha = crack,
                             )
                         }
                     }
@@ -637,36 +601,14 @@ private fun DeckSectionPane(
                                 siblings = ids,
                                 position = stack.firstIndex,
                                 mark = null,
-                                modifier = Modifier.animateItem(placementSpec = REFLOW_SPRING),
                             )
                         }
                     } else {
-                        // One item per cell, holding whichever card the plan puts
-                        // there. The key travels with the card rather than with
-                        // the cell, so when the plan changes the grid animates
-                        // every card to where it now belongs instead of redrawing
-                        // in place — the dissection, done by the layout itself.
-                        items(
-                            count = order.size,
-                            key = { cell ->
-                                val position = order[cell]
-                                if (position < 0) {
-                                    "${section.name}-gap-$cell"
-                                } else {
-                                    "${section.name}-$position-${ids[position].value}"
-                                }
-                            },
-                        ) { cell ->
-                            val position = order[cell]
-                            // A cell the snake turned past: it holds the row's
-                            // shape open so the cards after it stay in the
-                            // columns their piece was traced against.
-                            if (position < 0) {
-                                Spacer(Modifier.fillMaxWidth().aspectRatio(CARD_ASPECT_RATIO))
-                                return@items
-                            }
-
-                            val piece = plan?.pieceAt(cell)
+                        // Deck order, exactly as stored — the grid is the same
+                        // one the lens is off. Indexed keys because a deck
+                        // legitimately holds duplicates.
+                        items(ids.size, key = { "${section.name}-$it-${ids[it].value}" }) { position ->
+                            val group = plan?.groupAt(position)
                             DeckCard(
                                 state = state,
                                 drag = drag,
@@ -677,22 +619,20 @@ private fun DeckSectionPane(
                                 id = ids[position],
                                 copies = state.copiesIn(ids[position], section),
                                 highlighted = flashed == ids[position],
-                                // A dissected deck has no positional insert to
-                                // mark — a drop there means "join this group".
-                                insertionMarker = plan == null &&
-                                    hover?.accepted == true && hover.index == position,
-                                trailingMarker = plan == null && hover?.accepted == true &&
+                                insertionMarker = hover?.accepted == true && hover.index == position,
+                                // "Append at the end" resolves to one past the last
+                                // index, which no card's leading edge can show.
+                                trailingMarker = hover?.accepted == true &&
                                     hover.index == ids.size && position == ids.lastIndex,
                                 siblings = ids,
                                 position = position,
-                                // One mark per piece, on the card the piece
-                                // starts at: enough to name it, not enough to
-                                // clutter the deck.
-                                mark = piece?.groupId
-                                    ?.takeIf { piece.cells.firstOrNull() == cell }
-                                    ?.let { marks[it] },
-                                hairline = piece == null || piece.isRemainder,
-                                modifier = Modifier.animateItem(placementSpec = REFLOW_SPRING),
+                                mark = markCells[position]?.let { marks[it] },
+                                // Inside a block the block's own edge is the
+                                // card's edge; two lines a millimetre apart read
+                                // as a printing error.
+                                hairline = group == null,
+                                edges = plan?.edgesAt(position) ?: CellEdges.NONE,
+                                crack = crack,
                             )
                         }
                     }
@@ -729,29 +669,30 @@ private data class CellMetrics(
 }
 
 /**
- * Draws a set of cells as one shape per connected cluster.
+ * Draws a set of cells as one solid shape per cluster of cards that touch.
  *
- * The outline is traced in [GridRegion] — pure integer geometry, so two cards
- * that touch produce one boundary with the edge between them gone, rather than
- * two rectangles with a seam down the middle. Each edge is then pulled inward by
- * [CellMetrics.inset], which is what leaves a channel of bare background between
- * one piece and the next: the gutter inside a group is filled with the group's
- * colour, the gutter between groups is not, and that difference is the cut.
+ * The outline is traced in [GridRegion] — pure integer geometry, so cards that
+ * touch produce one boundary with the edge between them gone, rather than
+ * rectangles with seams down the middle. Each edge is then pulled inward by
+ * [CellMetrics.inset], which is what leaves bare background between one block
+ * and the next.
  *
- * Corners stay square. The app's geometry is square everywhere else, and a
- * rounded rectilinear polygon needs its radius clamped per corner against the
- * shortest adjacent edge — which for a one-card-wide step is most of the edge,
- * so the shape stops being the shape.
+ * The colour is solid. A wash under a card is a colour you cannot name and a
+ * card you cannot read; a solid edge standing in the space the crack opened is
+ * both unmistakable and quiet, because it only occupies space the cards gave up.
+ *
+ * Corners stay square: everything else in this app is square, and a rounded
+ * rectilinear polygon needs its radius clamped per corner against the shortest
+ * adjacent edge — which for a one-card step is most of that edge, so the shape
+ * stops being the shape.
  */
 private fun DrawScope.drawRegion(
     cells: List<Int>,
     metrics: CellMetrics,
     color: Color,
-    fillAlpha: Float,
-    strokeAlpha: Float,
-    strokeWidth: Float,
+    alpha: Float,
 ) {
-    if (cells.isEmpty() || (fillAlpha <= 0f && strokeAlpha <= 0f)) return
+    if (cells.isEmpty() || alpha <= 0f) return
 
     val rings = GridRegion.outline(cells, metrics.columns)
     if (rings.isEmpty()) return
@@ -779,10 +720,7 @@ private fun DrawScope.drawRegion(
         path.close()
     }
 
-    if (fillAlpha > 0f) drawPath(path, color.copy(alpha = fillAlpha))
-    if (strokeAlpha > 0f && strokeWidth > 0f) {
-        drawPath(path, color.copy(alpha = strokeAlpha), style = Stroke(width = strokeWidth))
-    }
+    drawPath(path, color.copy(alpha = alpha))
 }
 
 /**
@@ -829,6 +767,8 @@ private fun DeckCard(
     position: Int,
     mark: String?,
     hairline: Boolean = true,
+    edges: CellEdges = CellEdges.NONE,
+    crack: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
     val card: Card? = state.index.byId(id)
@@ -931,8 +871,18 @@ private fun DeckCard(
         }
     }
 
+    // The card gives way only on the sides that face another group, so a block
+    // of cards stays flush and the deck opens along the group lines alone.
+    val opening = CRACK * crack
     Box(
-        modifier.graphicsLayer {
+        modifier
+            .padding(
+                start = if (edges.start) opening else 0.dp,
+                top = if (edges.top) opening else 0.dp,
+                end = if (edges.end) opening else 0.dp,
+                bottom = if (edges.bottom) opening else 0.dp,
+            )
+            .graphicsLayer {
             // Off the table, not bigger than it was: a selected card keeps its
             // size so the grid it came out of stays legible behind it, and the
             // shape the selection is drawing does not breathe.

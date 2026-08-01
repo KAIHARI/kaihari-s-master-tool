@@ -4,21 +4,16 @@ import com.kaiharimoto.mastertool.core.deck.DeckGroups
 import com.kaiharimoto.mastertool.core.model.CardId
 
 /**
- * One group, drawn as one shape.
+ * One group, drawn as one block of the deck.
  *
- * [cells] are grid cells (row-major, `row * columns + col`) — where the cards
- * are on screen. [deckIndices] are where those same cards live in the stored
- * deck. The two are different orders on purpose, and keeping both here is what
- * lets a drop on a piece be translated back into a real deck position.
- *
+ * [cells] are positions in the section — which, because the breakdown never
+ * moves a card, are both where the cards are stored and where they are drawn.
  * A null [groupId] is the remainder: everything not yet given a role.
  */
 data class BreakdownPiece(
     val groupId: String?,
     val ordinal: Int,
     val colorIndex: Int,
-    val slots: List<Int>,
-    val deckIndices: List<Int>,
     val cells: List<Int>,
 ) {
     val size: Int get() = cells.size
@@ -26,108 +21,93 @@ data class BreakdownPiece(
 }
 
 /**
- * Where every card is drawn, and what shape each group makes.
+ * Which sides of a card face a different group.
  *
- * [displayToDeck] and [deckToDisplay] are inverse permutations of the same
- * section — the display is rearranged, the stored deck is not touched.
+ * This is the whole breakdown, per card. A side that faces the same group is
+ * not an edge — the two cards are part of one block and sit flush against each
+ * other. A side that faces a different group, or the outside of the deck, is
+ * where the block ends, and that is where the deck cracks open.
  */
-data class BreakdownPlan(
-    val columns: Int,
-    /**
-     * Whether the rows alternate direction.
-     *
-     * True only when the deck is dissected. While a group is being picked out
-     * the deck is shown exactly as it is stored, and a stored order shown with
-     * every other row reversed is not the order anybody asked to see.
-     */
-    val serpentine: Boolean,
-    val displayToDeck: List<Int>,
-    val deckToDisplay: List<Int>,
-    val pieces: List<BreakdownPiece>,
-    /** Which piece owns each grid cell, for hit-testing a drop. */
-    val pieceOfCell: Map<Int, Int>,
+data class CellEdges(
+    val start: Boolean,
+    val top: Boolean,
+    val end: Boolean,
+    val bottom: Boolean,
 ) {
-    fun cellOfSlot(slot: Int): Int =
-        if (serpentine) BreakdownLayout.cellOfSlot(slot, columns) else slot
-
-    fun slotOfCell(cell: Int): Int =
-        if (serpentine) BreakdownLayout.slotOfCell(cell, columns) else cell
-
-    /** The card drawn in [cell], as a position in the stored deck. */
-    fun deckIndexAt(cell: Int): Int? = displayToDeck.getOrNull(slotOfCell(cell))
-
-    fun cellOfDeckIndex(deckIndex: Int): Int? =
-        deckToDisplay.getOrNull(deckIndex)?.let(::cellOfSlot)
-
-    fun pieceAt(cell: Int): BreakdownPiece? = pieceOfCell[cell]?.let(pieces::getOrNull)
+    val any: Boolean get() = start || top || end || bottom
 
     companion object {
-        val EMPTY = BreakdownPlan(1, false, emptyList(), emptyList(), emptyList(), emptyMap())
+        val NONE = CellEdges(start = false, top = false, end = false, bottom = false)
+        val ALL = CellEdges(start = true, top = true, end = true, bottom = true)
+    }
+}
+
+/** The deck's groups, as blocks over the grid the deck is already drawn in. */
+data class BreakdownPlan(
+    val columns: Int,
+    val count: Int,
+    val pieces: List<BreakdownPiece>,
+    private val groupOfCell: List<String?>,
+) {
+    fun pieceAt(cell: Int): BreakdownPiece? {
+        val group = groupOfCell.getOrNull(cell) ?: return pieces.firstOrNull { it.isRemainder }
+        return pieces.firstOrNull { it.groupId == group }
+    }
+
+    fun groupAt(cell: Int): String? = groupOfCell.getOrNull(cell)
+
+    /**
+     * Which sides of [cell] are the edge of its block.
+     *
+     * A neighbour off the end of the deck counts as a different group, so the
+     * outermost cards are framed like any other edge and every block is inset
+     * from its surroundings by the same amount, wherever it sits.
+     */
+    fun edgesAt(cell: Int): CellEdges {
+        if (cell !in 0 until count) return CellEdges.NONE
+        val group = groupOfCell.getOrNull(cell)
+        val column = cell % columns
+
+        fun sameAs(other: Int, sameRow: Boolean): Boolean {
+            if (other !in 0 until count) return false
+            if (sameRow && other / columns != cell / columns) return false
+            return groupOfCell.getOrNull(other) == group
+        }
+
+        return CellEdges(
+            start = column == 0 || !sameAs(cell - 1, sameRow = true),
+            top = !sameAs(cell - columns, sameRow = false),
+            end = column == columns - 1 || !sameAs(cell + 1, sameRow = true),
+            bottom = !sameAs(cell + columns, sameRow = false),
+        )
+    }
+
+    companion object {
+        val EMPTY = BreakdownPlan(1, 0, emptyList(), emptyList())
     }
 }
 
 /**
- * The breakdown's geometry: which card is drawn where, and what that makes.
+ * The breakdown, as geometry over the deck exactly as it is stored.
  *
- * The problem this solves is the one the previous two attempts both failed. A
- * group's cards sit at arbitrary positions in the deck file — six handtraps at
- * indices 3, 7, 12, 19, 25, 33 — so drawing the group where the cards already
- * are can only ever produce six unrelated marks. No amount of rendering fixes
- * that; the cards have to be next to each other, which means the *display* has
- * to be rearranged even though the deck is not.
+ * Nothing is rearranged. The deck is drawn in its own order, ten across, the
+ * same grid with the lens on as with it off — so the grid you edit is always
+ * the deck you save, and a card is never somewhere you did not put it.
  *
- * Grouping the display is the easy half. The other half is the trap: laid out
- * in ordinary reading order, a group that crosses a row boundary is drawn at
- * the right-hand end of one row and the left-hand end of the next, with the
- * whole grid between them — one group, two shapes, at opposite ends of the
- * screen.
+ * What the lens changes is the *space* between cards. With it off the deck is a
+ * near-seamless mosaic; with it on, a card pulls away from its neighbour only
+ * where the two belong to different groups. Cards of one group stay flush, so a
+ * group reads as a single slab of the deck with a solid edge of its colour, and
+ * the deck cracks along exactly the lines the groups draw — one block per run
+ * of adjacent cards, however the deck happens to be ordered.
  *
- * So the rows run alternately: left to right, then right to left, then left to
- * right, the way an ox ploughs a field. Consecutive display slots are then
- * *always* neighbouring cells — side by side within a row, and directly above
- * one another at a row change, because the snake turns at the same column it
- * arrived in. A group is a contiguous run of slots, so a group is always
- * exactly one connected region, whatever its size, wherever its cards sit in
- * the file, and at any column count. The pieces tile the deck's own rectangle
- * with no gaps and no extra rows, which is why the fitter never learns that
- * this mode exists.
+ * The consequence to be honest about: a group whose cards are scattered through
+ * the deck is several blocks, because that is genuinely where those cards are.
+ * The tool's job is to show the deck, not to flatter it — and a handful of
+ * blocks in one colour is itself the useful reading, since it says the deck is
+ * not sorted the way it is being thought about.
  */
 object BreakdownLayout {
-
-    /** The grid cell a display slot is drawn in. */
-    fun cellOfSlot(slot: Int, columns: Int): Int {
-        val width = columns.coerceAtLeast(1)
-        val row = slot / width
-        val along = slot % width
-        val col = if (row % 2 == 0) along else width - 1 - along
-        return row * width + col
-    }
-
-    /**
-     * The display slot drawn in a grid cell.
-     *
-     * The same formula: reversing every other row is its own inverse, which is
-     * a small piece of luck worth stating rather than a coincidence to rely on
-     * silently.
-     */
-    fun slotOfCell(cell: Int, columns: Int): Int = cellOfSlot(cell, columns)
-
-    /**
-     * How many rows [count] cards take, and how many cells that grid holds.
-     *
-     * The two differ whenever the deck does not divide by the row width, and
-     * the difference matters more here than in an ordinary grid: on a row that
-     * runs right to left, a short row's *empty* cells are the ones on the left,
-     * so a caller that walks cells 0 until count walks off the end of the deck
-     * and past cards that are really there.
-     */
-    fun rows(count: Int, columns: Int): Int {
-        val width = columns.coerceAtLeast(1)
-        return (count + width - 1) / width
-    }
-
-    fun gridCells(count: Int, columns: Int): Int =
-        rows(count, columns) * columns.coerceAtLeast(1)
 
     /** Whether two cells share an edge in a [columns]-wide grid. */
     fun adjacent(a: Int, b: Int, columns: Int): Boolean {
@@ -140,119 +120,60 @@ object BreakdownLayout {
             (colA == colB && (rowA - rowB) * (rowA - rowB) == 1)
     }
 
-    /**
-     * The dissected layout: cards gathered into their groups, groups in the
-     * order the user put them in, everything unassigned last.
-     *
-     * Within a group the cards keep their relative order in the deck, so the
-     * rearrangement is a stable partition — the least surprising permutation
-     * there is, and the one that puts a card back where you expect when the
-     * lens goes off.
-     */
     fun plan(section: List<CardId>, groups: DeckGroups, columns: Int): BreakdownPlan {
-        val width = columns.coerceAtLeast(1)
-        if (section.isEmpty()) return BreakdownPlan.EMPTY.copy(columns = width, serpentine = true)
-
-        val ordered = groups.ordered()
-        val byGroup = LinkedHashMap<String, MutableList<Int>>()
-        ordered.forEach { byGroup[it.id] = mutableListOf() }
-        val remainder = mutableListOf<Int>()
-
-        section.forEachIndexed { deckIndex, id ->
-            val owner = groups.groupOf(id)
-            if (owner != null) byGroup.getValue(owner) += deckIndex else remainder += deckIndex
-        }
-
-        val displayToDeck = ArrayList<Int>(section.size)
-        val pieces = mutableListOf<BreakdownPiece>()
-
-        fun addPiece(groupId: String?, colorIndex: Int, deckIndices: List<Int>) {
-            // A group nobody has put a card in yet has no shape; it still exists
-            // in the legend, where it can be filled.
-            if (deckIndices.isEmpty()) return
-            val slots = (displayToDeck.size until displayToDeck.size + deckIndices.size).toList()
-            displayToDeck += deckIndices
-            pieces += BreakdownPiece(
-                groupId = groupId,
-                ordinal = pieces.size,
-                colorIndex = colorIndex,
-                slots = slots,
-                deckIndices = deckIndices,
-                cells = slots.map { cellOfSlot(it, width) },
-            )
-        }
-
-        ordered.forEach { group -> addPiece(group.id, group.color, byGroup.getValue(group.id)) }
-        addPiece(groupId = null, colorIndex = -1, deckIndices = remainder)
-
-        return finish(width, serpentine = true, displayToDeck = displayToDeck, pieces = pieces)
-    }
-
-    /**
-     * The undissected layout: every card where the deck stores it.
-     *
-     * Used while a group is being picked out, where moving cards under the
-     * finger choosing them would be intolerable. The pieces here are scattered
-     * by definition, and the caller draws them as one seat per card rather
-     * than as an outline.
-     */
-    fun identity(section: List<CardId>, groups: DeckGroups, columns: Int): BreakdownPlan {
         val width = columns.coerceAtLeast(1)
         if (section.isEmpty()) return BreakdownPlan.EMPTY.copy(columns = width)
 
-        val displayToDeck = section.indices.toList()
+        val groupOfCell = section.map(groups::groupOf)
         val ordered = groups.ordered()
 
-        val pieces = ordered.mapIndexedNotNull { ordinal, group ->
-            val deckIndices = section.indices.filter { groups.groupOf(section[it]) == group.id }
-            if (deckIndices.isEmpty()) {
-                null
-            } else {
-                BreakdownPiece(
-                    groupId = group.id,
-                    ordinal = ordinal,
-                    colorIndex = group.color,
-                    slots = deckIndices,
-                    deckIndices = deckIndices,
-                    // Reading order, so the cells a group occupies here are
-                    // simply where its cards already are.
-                    cells = deckIndices,
-                )
+        val pieces = mutableListOf<BreakdownPiece>()
+        ordered.forEachIndexed { ordinal, group ->
+            val cells = groupOfCell.indices.filter { groupOfCell[it] == group.id }
+            // A group nobody has put a card in yet has no block; it still
+            // exists in the legend, where it can be filled.
+            if (cells.isNotEmpty()) {
+                pieces += BreakdownPiece(group.id, ordinal, group.color, cells)
             }
         }
 
-        return finish(width, serpentine = false, displayToDeck = displayToDeck, pieces = pieces)
-    }
-
-    /** The cells a set of deck positions occupies, under a plan. */
-    fun cellsOf(plan: BreakdownPlan, deckIndices: Collection<Int>): List<Int> =
-        deckIndices.mapNotNull(plan::cellOfDeckIndex).sorted()
-
-    /**
-     * Where a card dropped onto [piece] should go in the stored deck.
-     *
-     * Straight after the piece's last card, so a card filed into a group lands
-     * with the group it joined rather than at the end of the deck — and, since
-     * a piece's deck indices are ascending, that is a real position and not a
-     * number invented from a screen coordinate.
-     */
-    fun insertIndexFor(piece: BreakdownPiece?, sectionSize: Int): Int =
-        piece?.deckIndices?.lastOrNull()?.plus(1) ?: sectionSize
-
-    private fun finish(
-        columns: Int,
-        serpentine: Boolean,
-        displayToDeck: List<Int>,
-        pieces: List<BreakdownPiece>,
-    ): BreakdownPlan {
-        val deckToDisplay = MutableList(displayToDeck.size) { 0 }
-        displayToDeck.forEachIndexed { slot, deckIndex -> deckToDisplay[deckIndex] = slot }
-
-        val pieceOfCell = HashMap<Int, Int>()
-        pieces.forEachIndexed { index, piece ->
-            piece.cells.forEach { cell -> pieceOfCell[cell] = index }
+        val remainder = groupOfCell.indices.filter { groupOfCell[it] == null }
+        if (remainder.isNotEmpty()) {
+            pieces += BreakdownPiece(null, pieces.size, -1, remainder)
         }
 
-        return BreakdownPlan(columns, serpentine, displayToDeck, deckToDisplay, pieces, pieceOfCell)
+        return BreakdownPlan(width, section.size, pieces, groupOfCell)
+    }
+
+    /**
+     * The blocks a set of cells falls into: runs of cards that touch.
+     *
+     * One group can be several blocks, and each one is drawn as its own shape.
+     * Which cells belong together is the same question [GridRegion] answers
+     * when it traces them, asked in advance so the caller can count them.
+     */
+    fun blocks(cells: List<Int>, columns: Int): List<List<Int>> {
+        val remaining = cells.toMutableSet()
+        val blocks = mutableListOf<List<Int>>()
+
+        while (remaining.isNotEmpty()) {
+            val seed = remaining.first()
+            remaining.remove(seed)
+            val block = mutableListOf(seed)
+            val frontier = ArrayDeque(listOf(seed))
+
+            while (frontier.isNotEmpty()) {
+                val cell = frontier.removeFirst()
+                remaining.filter { adjacent(cell, it, columns) }.forEach { neighbour ->
+                    remaining.remove(neighbour)
+                    block += neighbour
+                    frontier.addLast(neighbour)
+                }
+            }
+
+            blocks += block.sorted()
+        }
+
+        return blocks.sortedBy { it.first() }
     }
 }

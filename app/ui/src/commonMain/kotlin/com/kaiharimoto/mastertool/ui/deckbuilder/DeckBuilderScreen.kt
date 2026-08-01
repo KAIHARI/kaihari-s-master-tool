@@ -28,8 +28,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
-import com.kaiharimoto.mastertool.core.layout.BreakdownLayout
-import com.kaiharimoto.mastertool.core.layout.BreakdownPlan
 import com.kaiharimoto.mastertool.core.input.ShortcutAction
 import com.kaiharimoto.mastertool.core.input.ShortcutContext
 import com.kaiharimoto.mastertool.core.model.CardId
@@ -99,25 +97,7 @@ fun DeckBuilderScreen(
     }
 
     val onDropped: (DragSession, DropHover?) -> Unit = { session, landed ->
-        applyDrop(
-            state = state,
-            session = session,
-            landed = landed,
-            stacked = layout.preferences.stacked,
-            // The dissected main deck is the one place a drop cannot mean
-            // "insert here": the display is a permutation, so the gap between
-            // two cells names no position in the deck. It means "join this
-            // group" instead, and the plan is what says which group that is.
-            dissected = if (state.breakdownVisible && state.groupDraft == null) {
-                BreakdownLayout.plan(
-                    state.deck.main,
-                    state.groups,
-                    layout.preferences[DeckSection.MAIN].columns,
-                )
-            } else {
-                null
-            },
-        )
+        applyDrop(state, session, landed, stacked = layout.preferences.stacked)
     }
 
     val searchFocus = remember { FocusRequester() }
@@ -414,28 +394,14 @@ private fun applyDrop(
     session: DragSession,
     landed: DropHover?,
     stacked: Boolean,
-    dissected: BreakdownPlan?,
 ) {
     if (landed == null || !landed.accepted) return
 
     val target = landed.section
 
-    // Dropped on a piece of the dissected deck: the card joins that group, and
-    // lands in the deck next to the cards it now belongs with.
-    if (target == DeckSection.MAIN && dissected != null && !stacked) {
-        // A grid index, which in this state counts cells and not cards — the
-        // short last row has empty ones. A cell holding nothing is the
-        // remainder, which is the honest answer for a drop into bare grid.
-        val piece = dissected.pieceAt(landed.index.coerceAtLeast(0))
-        state.fileIntoGroup(
-            card = session.card,
-            from = session.section,
-            groupId = piece?.groupId,
-            insertBefore = BreakdownLayout.insertIndexFor(piece, state.deck.main.size),
-        )
-        return
-    }
-
+    // The lens needs no special case: it never moves a card, so a grid index is
+    // a deck position with it on exactly as with it off, and a drop means what
+    // it has always meant.
     when {
         // Dropped back on the pool: the copy leaves the deck.
         target == null -> session.section?.let { from ->

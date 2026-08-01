@@ -5,6 +5,7 @@ import com.kaiharimoto.mastertool.core.deck.DeckGroups
 import com.kaiharimoto.mastertool.core.model.CardId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -12,7 +13,6 @@ class BreakdownLayoutTest {
 
     private val engine = DeckGroup("g-engine", "Engine", color = 2, order = 0)
     private val handtraps = DeckGroup("g-traps", "Handtraps", color = 5, order = 1)
-    private val bricks = DeckGroup("g-brick", "Bricks", color = 0, order = 2)
 
     /** Forty distinct passcodes, so a deck index and a card are the same thing. */
     private val deck = (1..40).map { CardId(it) }
@@ -20,252 +20,145 @@ class BreakdownLayoutTest {
     private fun groupsWith(
         engineAt: List<Int> = emptyList(),
         trapsAt: List<Int> = emptyList(),
-        bricksAt: List<Int> = emptyList(),
     ): DeckGroups {
-        var groups = DeckGroups.EMPTY.upsert(engine).upsert(handtraps).upsert(bricks)
+        var groups = DeckGroups.EMPTY.upsert(engine).upsert(handtraps)
         engineAt.forEach { groups = groups.assign(deck[it], engine.id) }
         trapsAt.forEach { groups = groups.assign(deck[it], handtraps.id) }
-        bricksAt.forEach { groups = groups.assign(deck[it], bricks.id) }
         return groups
     }
 
-    // ---- the snake --------------------------------------------------------
+    // ---- the deck is never rearranged --------------------------------------
 
     @Test
-    fun consecutiveSlotsAreAlwaysNeighbouringCells() {
-        // The property the whole design rests on. Reading order fails this at
-        // every row boundary — slot 9 and slot 10 land at opposite ends of the
-        // grid — and that failure is what made groups draw as two shapes.
-        for (columns in 3..20) {
-            val slots = columns * 8
-            for (slot in 0 until slots - 1) {
-                val here = BreakdownLayout.cellOfSlot(slot, columns)
-                val next = BreakdownLayout.cellOfSlot(slot + 1, columns)
-                assertTrue(
-                    BreakdownLayout.adjacent(here, next, columns),
-                    "columns=$columns slot=$slot: cells $here and $next are not neighbours",
-                )
-            }
-        }
-    }
-
-    @Test
-    fun theSnakeIsAPermutationAndItsOwnInverse() {
-        for (columns in 3..20) {
-            val cells = (0 until columns * 5).map { BreakdownLayout.cellOfSlot(it, columns) }
-            assertEquals(cells.toSet().size, cells.size, "columns=$columns: cells collide")
-            cells.forEachIndexed { slot, cell ->
-                assertEquals(slot, BreakdownLayout.slotOfCell(cell, columns))
-            }
-        }
-    }
-
-    @Test
-    fun everyOtherRowRunsBackwards() {
-        // Ten wide: row 0 left to right, row 1 right to left.
-        assertEquals(listOf(0, 1, 2), (0..2).map { BreakdownLayout.cellOfSlot(it, 10) })
-        assertEquals(listOf(19, 18, 17), (10..12).map { BreakdownLayout.cellOfSlot(it, 10) })
-        // And the turn: slot 9 is cell 9, slot 10 is the cell directly below it.
-        assertEquals(9, BreakdownLayout.cellOfSlot(9, 10))
-        assertEquals(19, BreakdownLayout.cellOfSlot(10, 10))
-    }
-
-    // ---- the dissection ---------------------------------------------------
-
-    @Test
-    fun aScatteredGroupBecomesExactlyOnePiece() {
-        // The complaint, answered: six handtraps at arbitrary deck positions.
-        val plan = BreakdownLayout.plan(deck, groupsWith(trapsAt = listOf(3, 7, 12, 19, 25, 33)), 10)
-
-        val piece = plan.pieces.single { it.groupId == handtraps.id }
-        assertEquals(6, piece.size)
-        assertEquals(listOf(3, 7, 12, 19, 25, 33), piece.deckIndices)
-        // One connected region, and therefore one outline with one ring.
-        assertTrue(GridRegion.isConnected(piece.cells, columns = 10))
-        assertEquals(1, GridRegion.outline(piece.cells, columns = 10).size)
-    }
-
-    @Test
-    fun everyPieceIsOneShapeAtEveryColumnCount() {
-        // Awkward on purpose: three groups interleaved with the remainder, sized
-        // so that pieces start and end mid-row and wrap.
-        val groups = groupsWith(
-            engineAt = listOf(0, 4, 8, 11, 15, 17, 21, 24, 28, 31, 35, 39),
-            trapsAt = listOf(1, 5, 9, 14, 22, 30),
-            bricksAt = listOf(2, 13, 26, 37),
-        )
-
-        for (columns in 3..20) {
-            val plan = BreakdownLayout.plan(deck, groups, columns)
-            plan.pieces.forEach { piece ->
-                assertTrue(
-                    GridRegion.isConnected(piece.cells, columns),
-                    "columns=$columns: ${piece.groupId} is not connected",
-                )
-                assertEquals(
-                    1,
-                    GridRegion.outline(piece.cells, columns).count { !it.isHole },
-                    "columns=$columns: ${piece.groupId} draws more than one shape",
-                )
-            }
-        }
-    }
-
-    @Test
-    fun thePiecesTileTheDeckExactly() {
-        val plan = BreakdownLayout.plan(deck, groupsWith(
-            engineAt = listOf(0, 1, 2, 5, 9),
-            trapsAt = listOf(3, 7, 12, 19, 25, 33),
-            bricksAt = listOf(4, 8),
-        ), 10)
-
-        val cells = plan.pieces.flatMap { it.cells }
-        assertEquals(deck.size, cells.size)
-        assertEquals(deck.indices.toSet(), cells.toSet())
-        // No cell is claimed twice.
-        assertEquals(cells.size, cells.toSet().size)
-    }
-
-    @Test
-    fun groupsKeepTheirOrderAndTheRemainderIsLast() {
-        val plan = BreakdownLayout.plan(deck, groupsWith(
-            engineAt = listOf(30, 31),
-            trapsAt = listOf(0, 1),
-            bricksAt = listOf(20),
-        ), 10)
-
-        assertEquals(
-            listOf(engine.id, handtraps.id, bricks.id, null),
-            plan.pieces.map { it.groupId },
-        )
-        assertTrue(plan.pieces.last().isRemainder)
-        // Within a group, the deck's own order survives.
-        assertEquals(listOf(30, 31), plan.pieces[0].deckIndices)
-    }
-
-    @Test
-    fun anEmptyGroupDrawsNoPiece() {
-        val plan = BreakdownLayout.plan(deck, groupsWith(trapsAt = listOf(2, 3)), 10)
-
-        assertEquals(listOf(handtraps.id, null), plan.pieces.map { it.groupId })
-    }
-
-    @Test
-    fun aFullyAssignedDeckHasNoRemainder() {
-        val everything = deck.indices.toList()
-        val plan = BreakdownLayout.plan(deck, groupsWith(engineAt = everything), 10)
-
-        assertEquals(1, plan.pieces.size)
-        assertTrue(plan.pieces.none { it.isRemainder })
-    }
-
-    @Test
-    fun theStoredOrderIsNeverTouchedAndTheMapsAreInverse() {
-        val plan = BreakdownLayout.plan(deck, groupsWith(
-            trapsAt = listOf(3, 7, 12, 19, 25, 33),
-            engineAt = listOf(0, 1, 2),
-        ), 10)
-
-        assertEquals(deck.size, plan.displayToDeck.size)
-        assertEquals(deck.indices.toSet(), plan.displayToDeck.toSet())
-        plan.displayToDeck.forEachIndexed { slot, deckIndex ->
-            assertEquals(slot, plan.deckToDisplay[deckIndex])
-        }
-        // And every card can be found on screen and read back.
-        deck.indices.forEach { deckIndex ->
-            val cell = plan.cellOfDeckIndex(deckIndex)!!
-            assertEquals(deckIndex, plan.deckIndexAt(cell))
-        }
-    }
-
-    @Test
-    fun aDropOnAPieceLandsWithTheGroupItJoined() {
+    fun everyCardStaysWhereTheDeckPutIt() {
+        // The whole contract of this mode: cell N holds deck position N, with
+        // the lens on exactly as with it off.
         val plan = BreakdownLayout.plan(deck, groupsWith(trapsAt = listOf(3, 7, 12)), 10)
-        val traps = plan.pieces.first { it.groupId == handtraps.id }
 
-        assertEquals(13, BreakdownLayout.insertIndexFor(traps, deck.size))
-        // Nothing under the pointer means the end of the deck.
-        assertEquals(deck.size, BreakdownLayout.insertIndexFor(null, deck.size))
+        assertEquals(deck.size, plan.count)
+        assertEquals(handtraps.id, plan.groupAt(3))
+        assertEquals(handtraps.id, plan.groupAt(12))
+        assertNull(plan.groupAt(4))
+        assertEquals(listOf(3, 7, 12), plan.pieces.first { it.groupId == handtraps.id }.cells)
+    }
+
+    // ---- where the deck cracks open ----------------------------------------
+
+    @Test
+    fun aCardInTheMiddleOfItsGroupHasNoEdges() {
+        // Cells 0..9 are one group, so the card at 5 is flush on both sides and
+        // flush below against 15 — nothing pulls away from it.
+        val plan = BreakdownLayout.plan(deck, groupsWith(engineAt = (0..19).toList()), 10)
+
+        val middle = plan.edgesAt(5)
+        assertFalse(middle.start)
+        assertFalse(middle.end)
+        assertFalse(middle.bottom)
+        // Except upward, where the deck ends.
+        assertTrue(middle.top)
     }
 
     @Test
-    fun aPieceCanBeFoundFromACellUnderThePointer() {
-        val plan = BreakdownLayout.plan(deck, groupsWith(engineAt = listOf(0, 1, 2, 3)), 10)
+    fun aCardCracksAwayOnlyFromADifferentGroup() {
+        // Engine 0..4, handtraps 5..9: the break falls between 4 and 5 and
+        // nowhere else on that row.
+        val plan = BreakdownLayout.plan(
+            deck,
+            groupsWith(engineAt = (0..4).toList(), trapsAt = (5..9).toList()),
+            10,
+        )
 
-        // The engine's four cards take display slots 0..3, which in a snake are
-        // cells 0..3 on the first row.
-        assertEquals(engine.id, plan.pieceAt(0)?.groupId)
-        assertEquals(engine.id, plan.pieceAt(3)?.groupId)
-        assertNull(plan.pieceAt(4)?.groupId)
+        assertTrue(plan.edgesAt(4).end)
+        assertTrue(plan.edgesAt(5).start)
+        assertFalse(plan.edgesAt(3).end)
+        assertFalse(plan.edgesAt(6).start)
     }
 
     @Test
-    fun everyCardIsDrawnExactlyOnceWhateverTheDeckSize() {
-        // The crash this exists to stop. A deck that does not divide by the row
-        // width leaves a short last row, and on a row that runs right to left
-        // the empty cells are the ones on the LEFT — so walking cells 0 until
-        // size both misses real cards and reads the same card twice, which
-        // reaches the grid as two items with one key.
-        for (size in 1..60) {
-            for (columns in 3..20) {
-                val cards = (1..size).map { CardId(it) }
-                val groups = DeckGroups.EMPTY
-                    .upsert(handtraps)
-                    .let { g -> cards.filterIndexed { i, _ -> i % 3 == 0 }.fold(g) { acc, id -> acc.assign(id, handtraps.id) } }
-                val plan = BreakdownLayout.plan(cards, groups, columns)
+    fun theEndOfARowIsAlwaysAnEdge() {
+        // Cell 9 and cell 10 are neighbours in the list but opposite ends of the
+        // screen; treating them as flush would draw a block that wraps around.
+        val plan = BreakdownLayout.plan(deck, groupsWith(engineAt = (0..19).toList()), 10)
 
-                val cells = BreakdownLayout.gridCells(size, columns)
-                val drawn = (0 until cells).mapNotNull(plan::deckIndexAt)
-
-                assertEquals(size, drawn.size, "size=$size columns=$columns: cards drawn")
-                assertEquals(
-                    cards.indices.toSet(),
-                    drawn.toSet(),
-                    "size=$size columns=$columns: not every card was drawn once",
-                )
-                assertEquals(drawn.size, drawn.toSet().size, "size=$size columns=$columns: duplicate")
-            }
-        }
+        assertTrue(plan.edgesAt(9).end)
+        assertTrue(plan.edgesAt(10).start)
     }
 
     @Test
-    fun ashortReversedRowFillsFromTheEdgeItTurnedAt() {
-        // Fifteen cards, ten wide: the second row runs right to left, so its
-        // five cards sit in columns 9 down to 5 and the left of the row is bare.
-        val cards = (1..15).map { CardId(it) }
-        val plan = BreakdownLayout.plan(cards, DeckGroups.EMPTY, 10)
+    fun theOutsideOfTheDeckIsAnEdgeToo() {
+        // So the outermost cards are framed exactly like any other block edge,
+        // and a block never looks like it has been cut off.
+        val plan = BreakdownLayout.plan(deck, groupsWith(engineAt = (0..39).toList()), 10)
 
-        assertEquals(20, BreakdownLayout.gridCells(15, 10))
-        assertEquals(2, BreakdownLayout.rows(15, 10))
-        (10..14).forEach { cell -> assertNull(plan.deckIndexAt(cell)) }
-        assertEquals(10, plan.deckIndexAt(19))
-        assertEquals(14, plan.deckIndexAt(15))
-    }
-
-    // ---- picking ----------------------------------------------------------
-
-    @Test
-    fun theIdentityPlanLeavesEveryCardWhereTheDeckPutIt() {
-        val groups = groupsWith(trapsAt = listOf(3, 7, 12, 19, 25, 33))
-        val plan = BreakdownLayout.identity(deck, groups, 10)
-
-        assertEquals(deck.indices.toList(), plan.displayToDeck)
-        deck.indices.forEach { assertEquals(it, plan.cellOfDeckIndex(it)) }
-        // The group's cells are exactly where its cards are — scattered, which
-        // is why the picking state draws seats and not an outline.
-        val piece = plan.pieces.single { it.groupId == handtraps.id }
-        assertEquals(listOf(3, 7, 12, 19, 25, 33), piece.cells)
+        assertTrue(plan.edgesAt(0).start)
+        assertTrue(plan.edgesAt(0).top)
+        assertTrue(plan.edgesAt(39).end)
+        assertTrue(plan.edgesAt(39).bottom)
+        assertFalse(plan.edgesAt(15).top)
+        assertFalse(plan.edgesAt(15).bottom)
     }
 
     @Test
-    fun cellsOfMapsASelectionThroughWhicheverPlanIsShowing() {
-        val groups = groupsWith(trapsAt = listOf(3, 7, 12))
-        val picking = BreakdownLayout.identity(deck, groups, 10)
-        val cut = BreakdownLayout.plan(deck, groups, 10)
+    fun ungroupedCardsAreOneBlockAmongThemselves() {
+        // The remainder is not forty separate cards with cracks between them —
+        // it is the part of the deck not yet broken down, and it holds together.
+        val plan = BreakdownLayout.plan(deck, groupsWith(engineAt = listOf(0, 1)), 10)
 
-        assertEquals(listOf(3, 7, 12), BreakdownLayout.cellsOf(picking, listOf(3, 7, 12)))
-        // Dissected, the same three cards are the first three cells of the grid.
-        assertEquals(listOf(0, 1, 2), BreakdownLayout.cellsOf(cut, listOf(3, 7, 12)))
+        assertFalse(plan.edgesAt(5).end)
+        assertFalse(plan.edgesAt(5).bottom)
+        assertTrue(plan.edgesAt(2).start)
+        assertTrue(plan.edgesAt(1).end)
+    }
+
+    @Test
+    fun aCardWithNoDeckAroundItIsFramedOnEverySide() {
+        val plan = BreakdownLayout.plan(listOf(CardId(1)), DeckGroups.EMPTY, 10)
+
+        assertEquals(CellEdges.ALL, plan.edgesAt(0))
+    }
+
+    // ---- blocks -------------------------------------------------------------
+
+    @Test
+    fun cardsThatTouchAreOneBlock() {
+        // Five in a row and three stacked below them: one block, because every
+        // card can be reached from every other without leaving the group.
+        val cells = listOf(0, 1, 2, 3, 4, 10, 11, 12)
+        val blocks = BreakdownLayout.blocks(cells, 10)
+
+        assertEquals(1, blocks.size)
+        assertEquals(cells.sorted(), blocks.single())
+        assertTrue(GridRegion.isConnected(blocks.single(), 10))
+    }
+
+    @Test
+    fun scatteredCardsAreSeparateBlocks() {
+        // The honest reading of an unsorted deck: six handtraps at arbitrary
+        // positions are six blocks, and the deck says so rather than pretending.
+        val blocks = BreakdownLayout.blocks(listOf(3, 7, 12, 19, 25, 33), 10)
+
+        assertEquals(6, blocks.size)
+        assertTrue(blocks.all { it.size == 1 })
+    }
+
+    @Test
+    fun blocksComeBackInDeckOrder() {
+        // 16 is deliberately clear of the others: cell 11 would have touched 21
+        // from the row above, which is the kind of join that makes a block.
+        val blocks = BreakdownLayout.blocks(listOf(20, 21, 3, 4, 16), 10)
+
+        assertEquals(listOf(3, 4), blocks[0])
+        assertEquals(listOf(16), blocks[1])
+        assertEquals(listOf(20, 21), blocks[2])
+    }
+
+    @Test
+    fun aBlockNeverWrapsARow() {
+        // 9 and 10 are consecutive in the deck and adjacent in the list, but
+        // they are at opposite ends of the screen.
+        val blocks = BreakdownLayout.blocks(listOf(9, 10), 10)
+
+        assertEquals(2, blocks.size)
     }
 
     @Test
@@ -273,7 +166,23 @@ class BreakdownLayoutTest {
         val plan = BreakdownLayout.plan(emptyList(), DeckGroups.EMPTY, 10)
 
         assertTrue(plan.pieces.isEmpty())
-        assertNull(plan.deckIndexAt(0))
-        assertEquals(10, plan.columns)
+        assertEquals(CellEdges.NONE, plan.edgesAt(0))
+        assertNull(plan.groupAt(0))
+    }
+
+    @Test
+    fun everyCellBelongsToExactlyOnePiece() {
+        val plan = BreakdownLayout.plan(
+            deck,
+            groupsWith(engineAt = listOf(0, 1, 2, 11), trapsAt = listOf(3, 7, 12, 19)),
+            10,
+        )
+
+        val claimed = plan.pieces.flatMap { it.cells }
+        assertEquals(deck.size, claimed.size)
+        assertEquals(deck.indices.toSet(), claimed.toSet())
+        deck.indices.forEach { cell ->
+            assertEquals(plan.groupAt(cell), plan.pieceAt(cell)?.groupId)
+        }
     }
 }

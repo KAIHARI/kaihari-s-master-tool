@@ -103,6 +103,15 @@ in-app updater installs from. Two hard-learned rules:
 
 ## Design Identity (locked in with the user)
 
+**`docs/DESIGN.md` is the handbook — read it before drawing anything.** It holds
+the palette, the type scale, the spacing scale, the motion specs, the component
+rules and the anti-patterns, with the reasoning attached. What follows here is
+the short version; where the two disagree, the handbook is right and this should
+be corrected.
+
+- **Swiss + material finish: sharp white on true black.** "Material" means ink,
+  card stock and light — never Material Design, whose components are used and
+  restyled on the way in.
 - **Swiss + prismatic: sharp white on true black.** Colour appears only as
   *meaning* (card types, legality) or as *light* — the six-hue prismatic ramp
   (`MasterToolPalette.Prism`) shown as chromatic-aberration fringes on things
@@ -137,10 +146,14 @@ replaced an earlier design that looked reasonable and was not:
   Per-pane auto-fitting against divider-dragged heights is what put cards out
   of bounds; do not go back to it. Anything the panes spend on chrome must be
   declared to the fitter or the cards pay for it.
-- **The breakdown never reorders the deck.** Groups are drawn as gaps in the
-  stored order (`DeckBreakdown.slots`), so a grid index is always a deck
-  position and a drop always means insert. Assignment is a selection gesture:
-  `GroupDraft` in core, tapped out on the deck itself.
+- **The breakdown never moves a card.** The deck is a mosaic (2dp gutters) that
+  cracks open only where two groups meet — `BreakdownLayout.plan` says which
+  sides of a card face another group, `GridRegion` traces the blocks, and the
+  group's colour is drawn solid in the space that opened. A grid index is
+  always a deck position, so a drop always means insert. Assignment is a
+  selection gesture: `GroupDraft` in core, tapped out on the deck itself.
+  Rearranging the display to make tidier blocks was tried twice and rejected
+  by the user both times; see `docs/DESIGN.md` §9.
 
 Next: the deck **showcase** stage, goldfish polish (deal-origin projection,
 stack shuffle/cut), and the **duel table UI** on top of `BoardState`,
