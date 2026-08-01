@@ -1,6 +1,5 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
@@ -60,7 +59,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -169,15 +167,6 @@ fun DeckPanes(
         val density = LocalDensity.current
         val preferences = layout.preferences
 
-        // Turning the lens on opens every gutter in the main deck at once. The
-        // fitter is re-solved on each frame of that spring, so the cards give
-        // up exactly the width the gutters take and the deck still fits.
-        val mainSpacing by animateDpAsState(
-            if (state.breakdownVisible) BREAKDOWN_SPACING else CARD_SPACING,
-            spring(dampingRatio = 0.72f, stiffness = 260f),
-            label = "breakdownGutters",
-        )
-
         // Recomputed on every layout pass, which is one division and means the
         // deck re-fits the instant the window, the pool or the row width changes.
         val plan: DeckFit? = if (preferences.fitAll) {
@@ -188,7 +177,7 @@ fun DeckPanes(
                             count = state.deck[section].displayCount(preferences.stacked),
                             columns = preferences[section].columns,
                             baselineCount = section.baselineCapacity,
-                            spacing = spacingFor(section, mainSpacing).toPx(),
+                            spacing = CARD_SPACING.toPx(),
                             collapsed = preferences[section].collapsed,
                             chromeHeight = chromeFor(state, preferences[section].collapsed, section).toPx(),
                         )
@@ -235,7 +224,7 @@ fun DeckPanes(
                     onDropped = onDropped,
                     section = section,
                     fit = fit,
-                    spacing = spacingFor(section, mainSpacing),
+                    spacing = CARD_SPACING,
                     scrolls = plan?.fits == false,
                     modifier = when {
                         sectionPreferences.collapsed -> Modifier
@@ -266,10 +255,6 @@ private val DeckSection.baselineCapacity: Int
 /** How many tiles the section draws, which the stacked view compresses. */
 private fun List<CardId>.displayCount(stacked: Boolean): Int =
     if (stacked) distinct().size else size
-
-/** Only the main deck opens its gutters, because only it wears the lens. */
-private fun spacingFor(section: DeckSection, mainSpacing: Dp): Dp =
-    if (section == DeckSection.MAIN) mainSpacing else CARD_SPACING
 
 /**
  * Everything in a pane that is not grid, to the pixel.
@@ -515,12 +500,13 @@ private fun DeckSectionPane(
             // Where each block's mark sits: the first cell of every run of
             // cards that touch, so a group split across the deck names each of
             // its pieces rather than leaving the others anonymous.
-            val markCells = remember(plan) {
+            val markCells: Map<Int, String> = remember(plan) {
+                val laid = plan ?: return@remember emptyMap()
                 buildMap {
-                    plan?.pieces?.forEach { piece ->
-                        if (piece.groupId == null) return@forEach
-                        BreakdownLayout.blocks(piece.cells, plan.columns).forEach { block ->
-                            put(block.first(), piece.groupId)
+                    laid.pieces.forEach { piece ->
+                        val groupId = piece.groupId ?: return@forEach
+                        BreakdownLayout.blocks(piece.cells, laid.columns).forEach { block ->
+                            put(block.first(), groupId)
                         }
                     }
                 }
