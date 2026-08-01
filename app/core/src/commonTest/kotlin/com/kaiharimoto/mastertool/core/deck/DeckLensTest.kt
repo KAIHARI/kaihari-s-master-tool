@@ -1,7 +1,9 @@
 package com.kaiharimoto.mastertool.core.deck
 
+import com.kaiharimoto.mastertool.core.model.BanStatus
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
+import com.kaiharimoto.mastertool.core.model.Format
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -196,6 +198,92 @@ class DeckLensTest {
         assertContentEquals(List(4) { "c3" }, keying.keyOfCell)
     }
 
+    // ---- type ---------------------------------------------------------------
+
+    @Test
+    fun theTypeLensKeepsTheOrderADecklistIsQuotedIn() {
+        // "20 / 12 / 8" is read monster, spell, trap whatever the deck holds —
+        // ranking these by size would make the shape unreadable at a glance.
+        val pool = listOf(
+            card(11).copy(type = "Spell Card", frameType = "spell"),
+            card(12).copy(type = "Spell Card", frameType = "spell"),
+            card(13).copy(type = "Trap Card", frameType = "trap"),
+            card(14),
+        ).associateBy { it.id }
+
+        val keying = DeckLenses.key(Lens.TYPE, deck(11, 12, 13, 14), pool::get, DeckGroups.EMPTY)
+
+        assertEquals(listOf("monster", "spell", "trap"), keying.keyOrder)
+        assertEquals(1, keying.countOf("monster"))
+        assertEquals(2, keying.countOf("spell"))
+        assertEquals(0, keying.unclaimed)
+    }
+
+    @Test
+    fun aTypeNothingInTheDeckIsGetsNoKey() {
+        val keying = DeckLenses.key(Lens.TYPE, deck(1, 2), cards, DeckGroups.EMPTY)
+
+        assertEquals(listOf("monster"), keying.keyOrder)
+    }
+
+    @Test
+    fun aPasscodeTheDatabaseHasNeverHeardOfIsNotATypeAtAll() {
+        // It is still a card you shuffle — the odds count it in the deck size —
+        // but it is not a monster, a spell or a trap until it resolves.
+        val keying = DeckLenses.key(Lens.TYPE, deck(999), cards, DeckGroups.EMPTY)
+
+        assertEquals(1, keying.unclaimed)
+        assertTrue(keying.keys.isEmpty())
+    }
+
+    @Test
+    fun typeTakesTheColoursTheStatisticsPanelAlreadyUses() {
+        val keying = DeckLenses.key(Lens.TYPE, deck(1), cards, DeckGroups.EMPTY)
+
+        assertEquals(KeyPaint.Tone(KeyTone.MONSTER), keying.keyById("monster")?.paint)
+    }
+
+    // ---- legality -----------------------------------------------------------
+
+    @Test
+    fun onlyTheRestrictedCardsAreKeyed() {
+        // Unlimited is not a category anyone chose; it is the absence of a
+        // restriction, and it stays bare so what lights up is what is limited.
+        val pool = listOf(
+            card(21).copy(tcgBanStatus = BanStatus.FORBIDDEN),
+            card(22).copy(tcgBanStatus = BanStatus.LIMITED),
+            card(23).copy(tcgBanStatus = BanStatus.SEMI_LIMITED),
+            card(24),
+        ).associateBy { it.id }
+
+        val keying = DeckLenses.key(
+            Lens.LEGALITY,
+            deck(21, 22, 23, 24, 24, 24),
+            pool::get,
+            DeckGroups.EMPTY,
+        )
+
+        assertEquals(listOf("forbidden", "limited", "semi"), keying.keyOrder)
+        assertEquals(3, keying.unclaimed)
+        assertEquals("FO", keying.keyById("forbidden")?.mark)
+        assertEquals("SL", keying.keyById("semi")?.mark)
+    }
+
+    @Test
+    fun legalityAnswersForTheFormatBeingBuiltIn() {
+        // The same card is legal in one region and gone in the other, and a
+        // lens that ignored the format would quietly lie about half of them.
+        val pool = listOf(
+            card(31).copy(tcgBanStatus = BanStatus.UNLIMITED, ocgBanStatus = BanStatus.FORBIDDEN),
+        ).associateBy { it.id }
+
+        val tcg = DeckLenses.key(Lens.LEGALITY, deck(31), pool::get, DeckGroups.EMPTY, Format.TCG)
+        val ocg = DeckLenses.key(Lens.LEGALITY, deck(31), pool::get, DeckGroups.EMPTY, Format.OCG)
+
+        assertTrue(tcg.isEmpty)
+        assertEquals(listOf("forbidden"), ocg.keyOrder)
+    }
+
     // ---- every lens, every deck ---------------------------------------------
 
     @Test
@@ -226,9 +314,14 @@ class DeckLensTest {
 
     @Test
     fun theLensRingIsAClosedCycle() {
+        // Stated off the ends rather than off named lenses, so adding one to
+        // the ring is not a test edit.
+        val first = Lens.entries.first()
+        val last = Lens.entries.last()
+
         assertEquals(Lens.ROLES, Lens.DECK.next())
-        assertEquals(Lens.DECK, Lens.COPIES.next())
-        assertEquals(Lens.COPIES, Lens.DECK.previous())
+        assertEquals(first, last.next())
+        assertEquals(last, first.previous())
         Lens.entries.forEach { assertEquals(it, it.next().previous()) }
     }
 

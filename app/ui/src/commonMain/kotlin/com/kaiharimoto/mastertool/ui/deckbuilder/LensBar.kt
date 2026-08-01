@@ -17,8 +17,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,9 +47,12 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import com.kaiharimoto.mastertool.core.deck.GroupMarks
 import com.kaiharimoto.mastertool.core.deck.GroupPresets
 import com.kaiharimoto.mastertool.core.deck.KeyPaint
+import com.kaiharimoto.mastertool.core.deck.KeyTone
 import com.kaiharimoto.mastertool.core.deck.Lens
 import com.kaiharimoto.mastertool.core.deck.LensKey
 import com.kaiharimoto.mastertool.core.deck.LensKeying
+import com.kaiharimoto.mastertool.core.hand.LensOdds
+import com.kaiharimoto.mastertool.ui.components.percentShort
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 
 /**
@@ -60,14 +66,27 @@ import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 val LENS_BAR_HEIGHT = 30.dp
 
 /**
+ * How wide the lens picker is, whatever it currently says.
+ *
+ * Fixed rather than wrapped: the keys sit immediately to its right, and a
+ * control that grew from "Deck" to "Archetype" would shove the whole reading
+ * sideways every time you changed how you were reading it.
+ */
+private val LENS_PICKER_WIDTH = 96.dp
+
+/**
  * The strip under the main deck's header: how the deck is being read, and what
  * that reading found.
  *
- * The four lenses are the whole idea of the mode. Roles is the deck as you have
- * labelled it; Archetype and Copies are the deck as it already is, needing no
- * labelling at all — so the tool has something to say about a list you imported
- * ten seconds ago, which is when a reading is worth most. All four draw the
- * same grid in the same order; only the colour and the cracks change.
+ * The lenses are the whole idea of the mode. Roles is the deck as you labelled
+ * it; Archetype, Type, Copies and Legality are the deck as it already is,
+ * needing no labelling at all — so the tool has something to say about a list
+ * you imported ten seconds ago, which is when a reading is worth most. Every
+ * one of them draws the same grid in the same order; only the colour and the
+ * cracks change.
+ *
+ * Each key then reports what it is worth in the opener. That number is why the
+ * partition is worth drawing: a ratio is only ever being chosen to move it.
  *
  * It sits inside the pane rather than over it because every one of these
  * gestures means looking at the deck while you do it — a modal sheet would
@@ -98,6 +117,13 @@ private fun LensRow(state: DeckBuilderState, keying: LensKeying, modifier: Modif
                 .background(MaterialTheme.colorScheme.outline),
         )
 
+        // The reading and what it is worth, computed once per partition rather
+        // than per frame. Exact hypergeometric over the same counts the blocks
+        // are drawn from, so the bar cannot disagree with the deck under it.
+        val odds = remember(keying) {
+            LensOdds.atLeastOne(keying, deckSize = keying.keyOfCell.size)
+        }
+
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -110,6 +136,7 @@ private fun LensRow(state: DeckBuilderState, keying: LensKeying, modifier: Modif
                 KeyChip(
                     key = key,
                     count = keying.countOf(key.id),
+                    opens = odds[key.id],
                     isolated = state.isolatedKey == key.id,
                     dimmed = state.isolatedKey != null && state.isolatedKey != key.id,
                     onTap = { state.toggleIsolation(key.id) },
@@ -129,39 +156,60 @@ private fun LensRow(state: DeckBuilderState, keying: LensKeying, modifier: Modif
 }
 
 /**
- * Four positions, one of which is always taken.
+ * Which reading is on. One position is always taken.
  *
- * Not a toggle: "off" is a lens too, and making it one of the four means the
+ * Not a toggle: "off" is a lens too, and making it one of the list means the
  * mode is never something you have to remember to turn back off.
+ *
+ * A menu rather than a row of buttons, for two reasons that pull the same way.
+ * Six readings will not fit across a tablet beside the keys they produce, and
+ * the keys are the part worth the width. And the control is a fixed size
+ * whatever it says, so choosing a longer-named lens does not shove the whole
+ * bar sideways under your finger.
  */
 @Composable
 private fun LensPicker(state: DeckBuilderState) {
-    Row(
-        Modifier
-            .height(22.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp)),
-    ) {
-        Lens.entries.forEach { lens ->
-            val active = state.lens == lens
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .background(if (active) MasterToolPalette.SurfaceHigh else Color.Transparent)
-                    .clickable { state.useLens(lens) }
-                    .pointerHoverIcon(PointerIcon.Hand)
-                    .padding(horizontal = 9.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    lens.displayName,
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
-                    color = if (active) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+    var open by remember { mutableStateOf(false) }
+
+    Box {
+        Row(
+            Modifier
+                .width(LENS_PICKER_WIDTH)
+                .height(22.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp))
+                .clickable { open = true }
+                .pointerHoverIcon(PointerIcon.Hand)
+                .padding(start = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                state.lens.displayName,
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                Icons.Filled.ArrowDropDown,
+                contentDescription = "Change lens",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Lens.entries.forEach { lens ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (lens == state.lens) "✓ ${lens.displayName}" else lens.displayName,
+                        )
                     },
-                    maxLines = 1,
+                    onClick = {
+                        open = false
+                        state.useLens(lens)
+                    },
                 )
             }
         }
@@ -169,7 +217,14 @@ private fun LensPicker(state: DeckBuilderState) {
 }
 
 /**
- * One key: its mark, its name, and how much of the deck it is.
+ * One key: its mark, its name, how much of the deck it is, and how often you
+ * open it.
+ *
+ * The last of those is the reason the rest is worth drawing. "Twelve starters"
+ * is a fact about a list; "twelve starters, 89%" is an argument about a deck,
+ * and it is the number the ratio was always being chosen to move. It sits on
+ * the chip rather than behind a sheet because the decision it informs — cut
+ * one, run one more — is made while looking at the cards.
  *
  * Tapping covers everything else, which is the read gesture — one tap to "just
  * the handtraps, where are they", one more to put the deck back. Holding one of
@@ -180,6 +235,7 @@ private fun LensPicker(state: DeckBuilderState) {
 private fun KeyChip(
     key: LensKey,
     count: Int,
+    opens: Double?,
     isolated: Boolean,
     dimmed: Boolean,
     onTap: () -> Unit,
@@ -216,6 +272,17 @@ private fun KeyChip(
             style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (dimmed) 0.4f else 1f),
         )
+
+        if (opens != null) {
+            Text(
+                percentShort(opens),
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                // Brighter than the count, because it is the number the
+                // decision turns on and the count is only how it got there.
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (dimmed) 0.4f else 1f),
+                maxLines = 1,
+            )
+        }
     }
 }
 
@@ -228,13 +295,18 @@ private fun KeyChip(
 @Composable
 private fun Hint(state: DeckBuilderState, keying: LensKeying) {
     val text = when {
-        keying.lens == Lens.DECK -> "Read the deck by role, archetype or copy count"
+        keying.lens == Lens.DECK -> "Read the deck by role, archetype, type, copies or legality"
         keying.keys.isEmpty() && keying.lens == Lens.ROLES ->
             "Name a role, then tap the cards that play it"
         keying.keys.isEmpty() -> "Nothing to read here"
         state.isolatedKey != null -> "Tap again to show the rest"
-        keying.unclaimed > 0 -> "${keying.unclaimed} left over"
-        else -> ""
+        else -> buildString {
+            if (keying.unclaimed > 0) append("${keying.unclaimed} left over  ·  ")
+            // Said once, at the end, rather than on every chip: the percentage
+            // is meaningless without the hand it is drawn from, and repeating
+            // "in 5" nine times across the bar would be noise.
+            append("% opens in a 5-card hand")
+        }
     }
 
     if (text.isEmpty()) return
@@ -441,9 +513,19 @@ private fun Swatch(color: Color, selected: Boolean, onClick: () -> Unit) {
  * A hue is nominal — these are different, not more or less — and comes off the
  * prismatic ramp. A grey is ordinal and reads as a scale, which is what a copy
  * count is: brightest is rarest, because the singleton is the card you are
- * looking for.
+ * looking for. A tone is a fact the app coloured before any lens existed, and
+ * takes exactly the colour it already had — the type split in the statistics
+ * panel, the ban badge in the corner of the card.
  */
 internal fun KeyPaint.color(): Color = when (this) {
     is KeyPaint.Hue -> MasterToolPalette.Prism[prismIndex % MasterToolPalette.Prism.size]
     is KeyPaint.Grey -> Color(luminance, luminance, luminance)
+    is KeyPaint.Tone -> when (tone) {
+        KeyTone.MONSTER -> MasterToolPalette.Monster
+        KeyTone.SPELL -> MasterToolPalette.Spell
+        KeyTone.TRAP -> MasterToolPalette.Trap
+        KeyTone.FORBIDDEN -> MasterToolPalette.Danger
+        KeyTone.LIMITED -> MasterToolPalette.Warning
+        KeyTone.SEMI_LIMITED -> MasterToolPalette.MainAccent
+    }
 }

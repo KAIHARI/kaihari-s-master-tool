@@ -159,7 +159,7 @@ class DeckBuilderState(
 
     /** How the main deck is cut up right now, draft included. */
     fun keying(section: DeckSection = DeckSection.MAIN): LensKeying =
-        DeckLenses.key(lens, deck[section], index::byId, groupsWithDraft)
+        DeckLenses.key(lens, deck[section], index::byId, groupsWithDraft, format)
 
     /**
      * The groups plus the one being drawn up, so a selection is a block of the

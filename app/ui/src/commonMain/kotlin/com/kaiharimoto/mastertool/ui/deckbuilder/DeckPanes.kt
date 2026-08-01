@@ -398,7 +398,16 @@ private fun DeckSectionPane(
         // none at all.
         val lensed = section == DeckSection.MAIN && !layout.preferences.stacked
         val keying = if (section == DeckSection.MAIN) {
-            remember(state.lens, ids, state.groups, state.groupDraft, state.index) {
+            // The format is a key because Legality reads it: the same card is
+            // free in one region and gone in the other.
+            remember(
+                state.lens,
+                ids,
+                state.groups,
+                state.groupDraft,
+                state.index,
+                state.format,
+            ) {
                 state.keying(section)
             }
         } else {
