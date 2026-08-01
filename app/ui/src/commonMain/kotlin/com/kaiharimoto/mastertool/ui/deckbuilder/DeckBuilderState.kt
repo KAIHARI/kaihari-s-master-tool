@@ -128,6 +128,7 @@ class DeckBuilderState(
      * changes is which cards are drawn as one block, and in what colour.
      */
     var lens by mutableStateOf(Lens.DECK)
+        private set
 
     /**
      * The key being looked at alone, if any.
@@ -139,7 +140,7 @@ class DeckBuilderState(
     var isolatedKey by mutableStateOf<String?>(null)
         private set
 
-    fun setLens(value: Lens) {
+    fun useLens(value: Lens) {
         if (value == lens) return
         lens = value
         isolatedKey = null
@@ -148,9 +149,9 @@ class DeckBuilderState(
         if (!value.isEditable) groupDraft = null
     }
 
-    fun nextLens() = setLens(lens.next())
+    fun nextLens() = useLens(lens.next())
 
-    fun previousLens() = setLens(lens.previous())
+    fun previousLens() = useLens(lens.previous())
 
     fun toggleIsolation(keyId: String) {
         isolatedKey = if (isolatedKey == keyId) null else keyId

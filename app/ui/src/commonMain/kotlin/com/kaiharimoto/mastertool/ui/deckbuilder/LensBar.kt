@@ -148,7 +148,7 @@ private fun LensPicker(state: DeckBuilderState) {
                 Modifier
                     .fillMaxHeight()
                     .background(if (active) MasterToolPalette.SurfaceHigh else Color.Transparent)
-                    .clickable { state.setLens(lens) }
+                    .clickable { state.useLens(lens) }
                     .pointerHoverIcon(PointerIcon.Hand)
                     .padding(horizontal = 9.dp),
                 contentAlignment = Alignment.Center,
