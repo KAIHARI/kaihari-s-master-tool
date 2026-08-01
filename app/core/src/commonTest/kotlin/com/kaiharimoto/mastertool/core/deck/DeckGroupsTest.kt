@@ -82,16 +82,34 @@ class DeckGroupsTest {
 
     @Test
     fun codecRoundTripsThroughTheExtendedPayload() {
-        val stored = StoredGroups(groups(), breakdown = true)
+        val stored = StoredGroups(groups(), Lens.ROLES)
         val written = DeckGroupsCodec.write(extended = null, stored = stored)
         val back = DeckGroupsCodec.read(written)
 
-        assertEquals(stored.breakdown, back.breakdown)
+        assertEquals(stored.lens, back.lens)
         assertEquals(stored.groups.assignments, back.groups.assignments)
         assertEquals(
             stored.groups.ordered().map { it.id to it.name },
             back.groups.ordered().map { it.id to it.name },
         )
+    }
+
+    @Test
+    fun aDeckSavedByTheOldBreakdownFlagStillOpensOnItsGroups() {
+        // v1.2 wrote a boolean, back when there was one lens and it was Roles.
+        val legacy = Json.parseToJsonElement(
+            """{"groups":{"defs":[{"id":"g1","name":"Engine","color":2,"order":0}],
+                "cards":{"1":"g1"},"breakdown":true}}"""
+        ) as JsonObject
+
+        assertEquals(Lens.ROLES, DeckGroupsCodec.read(legacy).lens)
+    }
+
+    @Test
+    fun anUnknownLensFallsBackToThePlainDeck() {
+        val future = Json.parseToJsonElement("""{"groups":{"lens":"MANA_CURVE"}}""") as JsonObject
+
+        assertEquals(Lens.DECK, DeckGroupsCodec.read(future).lens)
     }
 
     @Test
@@ -103,7 +121,7 @@ class DeckGroupsTest {
                 "notes":{"cards":{},"pairs":{}}}"""
         ) as JsonObject
 
-        val written = DeckGroupsCodec.write(legacy, StoredGroups(groups(), breakdown = false))!!
+        val written = DeckGroupsCodec.write(legacy, StoredGroups(groups(), Lens.DECK))!!
         assertEquals(legacy["sidingPatterns"], written["sidingPatterns"])
         assertEquals(legacy["notes"], written["notes"])
         assertEquals(legacy["version"], written["version"])

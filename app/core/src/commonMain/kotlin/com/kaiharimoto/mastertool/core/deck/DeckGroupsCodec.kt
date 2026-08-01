@@ -23,7 +23,7 @@ import kotlinx.serialization.json.intOrNull
  * "groups": {
  *   "defs": [{ "id": "g1", "name": "Handtraps", "color": 3, "order": 0 }],
  *   "cards": { "14558127": "g1" },
- *   "breakdown": true
+ *   "lens": "ROLES"
  * }
  * ```
  */
@@ -51,9 +51,26 @@ object DeckGroupsCodec {
             CardId(passcode) to group
         }?.toMap().orEmpty()
 
-        val breakdown = (node["breakdown"] as? JsonPrimitive)?.content == "true"
+        return StoredGroups(DeckGroups(defs, cards), readLens(node))
+    }
 
-        return StoredGroups(DeckGroups(defs, cards), breakdown)
+    /**
+     * Which lens the deck was last read through.
+     *
+     * `breakdown: true` is what v1.2 wrote, back when there was one lens and it
+     * was the user's own groups. Decks saved then still open on the reading
+     * they were left on; an unknown name falls back to the plain deck rather
+     * than to whatever the enum happens to declare first.
+     */
+    private fun readLens(node: JsonObject): Lens {
+        (node["lens"] as? JsonPrimitive)?.content?.let { name ->
+            Lens.entries.firstOrNull { it.name == name }?.let { return it }
+        }
+        return if ((node["breakdown"] as? JsonPrimitive)?.content == "true") {
+            Lens.ROLES
+        } else {
+            Lens.DECK
+        }
     }
 
     /**
@@ -64,7 +81,7 @@ object DeckGroupsCodec {
     fun write(extended: JsonObject?, stored: StoredGroups): JsonObject? {
         val others = extended?.filterKeys { it != KEY } ?: emptyMap()
 
-        if (stored.groups.isEmpty && !stored.breakdown) {
+        if (stored.groups.isEmpty && stored.lens == Lens.DECK) {
             return if (others.isEmpty()) null else JsonObject(others)
         }
 
@@ -92,23 +109,24 @@ object DeckGroupsCodec {
                     }
                 },
             )
-            put("breakdown", JsonPrimitive(stored.breakdown))
+            put("lens", JsonPrimitive(stored.lens.name))
         }
 
         return JsonObject(others + (KEY to node))
     }
 }
 
-/** What the payload stores: the breakdown itself, and whether it is showing. */
+/** What the payload stores: the groups themselves, and how the deck is being read. */
 data class StoredGroups(
     val groups: DeckGroups,
     /**
-     * The view toggle travels with the deck rather than the install: a deck
-     * organised into groups is meant to open organised.
+     * The lens travels with the deck rather than the install: a deck organised
+     * into groups is meant to open organised, and a deck you were last reading
+     * by archetype is meant to open that way too.
      */
-    val breakdown: Boolean,
+    val lens: Lens,
 ) {
     companion object {
-        val EMPTY = StoredGroups(DeckGroups.EMPTY, breakdown = false)
+        val EMPTY = StoredGroups(DeckGroups.EMPTY, Lens.DECK)
     }
 }

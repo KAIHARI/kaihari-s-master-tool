@@ -17,14 +17,25 @@ package com.kaiharimoto.mastertool.core.deck
 object GroupMarks {
 
     /** Marks for [groups], guaranteed distinct within the list. */
-    fun marks(groups: List<DeckGroup>): Map<String, String> {
+    fun marks(groups: List<DeckGroup>): Map<String, String> =
+        marksFor(groups.map { it.id to it.name })
+
+    /**
+     * Marks for any list of `id to name`, guaranteed distinct within the list.
+     *
+     * Groups are not the only thing that gets marked any more: an archetype and
+     * a copy count are named on the deck the same way, by the same rules, so
+     * that two letters on a card mean the same kind of thing whichever lens
+     * drew them.
+     */
+    fun marksFor(entries: List<Pair<String, String>>): Map<String, String> {
         val taken = mutableSetOf<String>()
         val marks = LinkedHashMap<String, String>()
 
-        groups.forEachIndexed { index, group ->
-            val unique = candidates(group.name, index).first { it !in taken }
+        entries.forEachIndexed { index, (id, name) ->
+            val unique = candidates(name, index).first { it !in taken }
             taken += unique
-            marks[group.id] = unique
+            marks[id] = unique
         }
 
         return marks

@@ -40,7 +40,8 @@ enum class ShortcutAction {
     TOGGLE_STATS,
     TOGGLE_ISSUES,
     TOGGLE_HELP,
-    TOGGLE_BREAKDOWN,
+    NEXT_LENS,
+    PREVIOUS_LENS,
     TOGGLE_GROUP_MANAGER,
     NEW_GROUP,
     TOGGLE_SEARCH_PANE,
@@ -193,8 +194,12 @@ object ShortcutTable {
             "Deck check", togglesLayer = ShortcutLayer.ISSUES,
         ),
         Shortcut(
-            KeyChord("b"), ShortcutAction.TOGGLE_BREAKDOWN, ShortcutScope.BUILDER,
-            "Breakdown view — your groups drawn as gaps in the deck",
+            KeyChord("b"), ShortcutAction.NEXT_LENS, ShortcutScope.BUILDER,
+            "Next lens — read the deck by roles, archetype or copies",
+        ),
+        Shortcut(
+            KeyChord("b", shift = true), ShortcutAction.PREVIOUS_LENS, ShortcutScope.BUILDER,
+            "Previous lens",
         ),
         Shortcut(
             KeyChord("n"), ShortcutAction.NEW_GROUP, ShortcutScope.BUILDER,

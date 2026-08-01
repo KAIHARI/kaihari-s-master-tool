@@ -2,6 +2,11 @@ package com.kaiharimoto.mastertool.core.layout
 
 import com.kaiharimoto.mastertool.core.deck.DeckGroup
 import com.kaiharimoto.mastertool.core.deck.DeckGroups
+import com.kaiharimoto.mastertool.core.deck.DeckLenses
+import com.kaiharimoto.mastertool.core.deck.KeyPaint
+import com.kaiharimoto.mastertool.core.deck.Lens
+import com.kaiharimoto.mastertool.core.deck.LensKey
+import com.kaiharimoto.mastertool.core.deck.LensKeying
 import com.kaiharimoto.mastertool.core.model.CardId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,19 +32,28 @@ class BreakdownLayoutTest {
         return groups
     }
 
+    /** A partition written straight out, for the cases groups cannot express. */
+    private fun keying(vararg cells: String?): LensKeying = LensKeying(
+        lens = Lens.COPIES,
+        keys = cells.filterNotNull().distinct().sorted().map {
+            LensKey(it, it, it, KeyPaint.Hue(2))
+        },
+        keyOfCell = cells.toList(),
+    )
+
     // ---- the deck is never rearranged --------------------------------------
 
     @Test
     fun everyCardStaysWhereTheDeckPutIt() {
         // The whole contract of this mode: cell N holds deck position N, with
-        // the lens on exactly as with it off.
+        // a lens on exactly as with it off.
         val plan = BreakdownLayout.plan(deck, groupsWith(trapsAt = listOf(3, 7, 12)), 10)
 
         assertEquals(deck.size, plan.count)
-        assertEquals(handtraps.id, plan.groupAt(3))
-        assertEquals(handtraps.id, plan.groupAt(12))
-        assertNull(plan.groupAt(4))
-        assertEquals(listOf(3, 7, 12), plan.pieces.first { it.groupId == handtraps.id }.cells)
+        assertEquals(handtraps.id, plan.keyAt(3))
+        assertEquals(handtraps.id, plan.keyAt(12))
+        assertNull(plan.keyAt(4))
+        assertEquals(listOf(3, 7, 12), plan.pieces.first { it.keyId == handtraps.id }.cells)
     }
 
     // ---- where the deck cracks open ----------------------------------------
@@ -99,22 +113,113 @@ class BreakdownLayoutTest {
     }
 
     @Test
-    fun ungroupedCardsAreOneBlockAmongThemselves() {
-        // The remainder is not forty separate cards with cracks between them —
-        // it is the part of the deck not yet broken down, and it holds together.
+    fun theUnclaimedPartOfTheDeckDoesNotCrackAtAll() {
+        // What is left over is not a group with a shape — it is the surface the
+        // blocks are being lifted out of, and it stays a mosaic while they go.
         val plan = BreakdownLayout.plan(deck, groupsWith(engineAt = listOf(0, 1)), 10)
 
-        assertFalse(plan.edgesAt(5).end)
-        assertFalse(plan.edgesAt(5).bottom)
-        assertTrue(plan.edgesAt(2).start)
+        assertEquals(CellEdges.NONE, plan.edgesAt(2))
+        assertEquals(CellEdges.NONE, plan.edgesAt(20))
+        // The block still pulls away from it, from its own side.
         assertTrue(plan.edgesAt(1).end)
+        assertTrue(plan.edgesAt(1).bottom)
     }
 
     @Test
     fun aCardWithNoDeckAroundItIsFramedOnEverySide() {
-        val plan = BreakdownLayout.plan(listOf(CardId(1)), DeckGroups.EMPTY, 10)
+        val groups = DeckGroups.EMPTY.upsert(engine).assign(CardId(1), engine.id)
+        val plan = BreakdownLayout.plan(listOf(CardId(1)), groups, 10)
 
         assertEquals(CellEdges.ALL, plan.edgesAt(0))
+    }
+
+    @Test
+    fun aLensWithNothingInItLeavesTheDeckWhole() {
+        // Roles on a deck nobody has labelled: identical to no lens at all,
+        // which is the invitation to make the first group rather than an error.
+        val plan = BreakdownLayout.plan(deck, DeckGroups.EMPTY, 10)
+
+        assertTrue(plan.isEmpty)
+        deck.indices.forEach { assertEquals(CellEdges.NONE, plan.edgesAt(it)) }
+    }
+
+    // ---- any partition, not just groups ------------------------------------
+
+    @Test
+    fun anyPartitionCracksTheSameWay() {
+        // 0,1 one key; 2 another; the crack falls between them wherever the
+        // partition came from.
+        val plan = BreakdownLayout.plan(keying("a", "a", "b", "b"), 4)
+
+        assertFalse(plan.edgesAt(0).end)
+        assertTrue(plan.edgesAt(1).end)
+        assertTrue(plan.edgesAt(2).start)
+        assertEquals(2, plan.pieces.size)
+    }
+
+    @Test
+    fun piecesComeBackInTheLensOrderNotTheDecksOrder() {
+        // The bar and the deck have to agree, and the bar is ordered by the
+        // lens — otherwise the legend reshuffles as cards move.
+        val plan = BreakdownLayout.plan(keying("b", "a", "b", "a"), 4)
+
+        assertEquals(listOf("a", "b"), plan.pieces.map { it.keyId })
+        assertEquals(listOf(1, 3), plan.pieces.first().cells)
+    }
+
+    @Test
+    fun aKeyNothingFallsInGetsNoBlock() {
+        val plan = BreakdownLayout.plan(
+            LensKeying(
+                lens = Lens.ROLES,
+                keys = listOf("a", "b").map { LensKey(it, it, it, KeyPaint.Hue(2)) },
+                keyOfCell = listOf("a", "a", null, null),
+            ),
+            4,
+        )
+
+        assertEquals(listOf("a"), plan.pieces.map { it.keyId })
+    }
+
+    @Test
+    fun theCopiesLensCracksBetweenTheRunsOfACard() {
+        // Three, three, two, one across four columns — the reading the lens is
+        // for, drawn as three slabs and a chip.
+        val section = listOf(1, 1, 1, 2, 2, 2, 3, 3, 4).map(::CardId)
+        val plan = BreakdownLayout.plan(
+            DeckLenses.key(Lens.COPIES, section, cards = { null }, groups = DeckGroups.EMPTY),
+            3,
+        )
+
+        assertEquals(listOf("c1", "c2", "c3"), plan.pieces.map { it.keyId }.sorted())
+        // Rows 0 and 1 are whole runs of threes, so they never crack inside.
+        assertFalse(plan.edgesAt(1).start)
+        assertTrue(plan.edgesAt(5).bottom)
+        assertEquals(0, plan.pieces.sumOf { it.size } - section.size)
+    }
+
+    @Test
+    fun anEmptySectionPlansWithoutFalling() {
+        val plan = BreakdownLayout.plan(emptyList(), DeckGroups.EMPTY, 10)
+
+        assertTrue(plan.pieces.isEmpty())
+        assertEquals(CellEdges.NONE, plan.edgesAt(0))
+        assertNull(plan.keyAt(0))
+    }
+
+    @Test
+    fun everyClaimedCellBelongsToExactlyOnePiece() {
+        val plan = BreakdownLayout.plan(
+            deck,
+            groupsWith(engineAt = listOf(0, 1, 2, 11), trapsAt = listOf(3, 7, 12, 19)),
+            10,
+        )
+
+        val claimed = plan.pieces.flatMap { it.cells }
+        assertEquals(claimed.size, claimed.distinct().size)
+        deck.indices.forEach { cell ->
+            assertEquals(plan.keyAt(cell), plan.pieceAt(cell)?.keyId)
+        }
     }
 
     // ---- blocks -------------------------------------------------------------
@@ -159,30 +264,5 @@ class BreakdownLayoutTest {
         val blocks = BreakdownLayout.blocks(listOf(9, 10), 10)
 
         assertEquals(2, blocks.size)
-    }
-
-    @Test
-    fun anEmptySectionPlansWithoutFalling() {
-        val plan = BreakdownLayout.plan(emptyList(), DeckGroups.EMPTY, 10)
-
-        assertTrue(plan.pieces.isEmpty())
-        assertEquals(CellEdges.NONE, plan.edgesAt(0))
-        assertNull(plan.groupAt(0))
-    }
-
-    @Test
-    fun everyCellBelongsToExactlyOnePiece() {
-        val plan = BreakdownLayout.plan(
-            deck,
-            groupsWith(engineAt = listOf(0, 1, 2, 11), trapsAt = listOf(3, 7, 12, 19)),
-            10,
-        )
-
-        val claimed = plan.pieces.flatMap { it.cells }
-        assertEquals(deck.size, claimed.size)
-        assertEquals(deck.indices.toSet(), claimed.toSet())
-        deck.indices.forEach { cell ->
-            assertEquals(plan.groupAt(cell), plan.pieceAt(cell)?.groupId)
-        }
     }
 }

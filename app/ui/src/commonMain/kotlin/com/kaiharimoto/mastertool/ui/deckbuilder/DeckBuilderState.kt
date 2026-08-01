@@ -10,6 +10,9 @@ import com.kaiharimoto.mastertool.core.deck.DeckEditor
 import com.kaiharimoto.mastertool.core.deck.DeckGroup
 import com.kaiharimoto.mastertool.core.deck.DeckGroups
 import com.kaiharimoto.mastertool.core.deck.DeckGroupsCodec
+import com.kaiharimoto.mastertool.core.deck.DeckLenses
+import com.kaiharimoto.mastertool.core.deck.Lens
+import com.kaiharimoto.mastertool.core.deck.LensKeying
 import com.kaiharimoto.mastertool.core.deck.DeckSorter
 import com.kaiharimoto.mastertool.core.deck.StoredGroups
 import com.kaiharimoto.mastertool.core.deck.DeckStatistics
@@ -36,6 +39,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 import kotlinx.serialization.json.JsonObject
+
+/** The group a draft's selection is drawn as, before it has been saved. */
+internal const val DRAFT_GROUP_ID = "__draft"
 
 /** A transient message shown in the snackbar, optionally with an undo action. */
 data class Toast(
@@ -114,8 +120,65 @@ class DeckBuilderState(
     var groups by mutableStateOf(DeckGroups.EMPTY)
         private set
 
-    /** Whether the main pane is showing the breakdown lens. */
-    var breakdownVisible by mutableStateOf(false)
+    /**
+     * Which lens the main deck is being read through.
+     *
+     * [Lens.DECK] is the quiet position — the plain mosaic. The other three are
+     * partitions of the same grid, and the deck never moves between them: what
+     * changes is which cards are drawn as one block, and in what colour.
+     */
+    var lens by mutableStateOf(Lens.DECK)
+
+    /**
+     * The key being looked at alone, if any.
+     *
+     * Tapping a key in the bar covers everything that is not in it. It answers
+     * "where are my handtraps" in one gesture and without editing anything —
+     * which is the question the breakdown exists for.
+     */
+    var isolatedKey by mutableStateOf<String?>(null)
+        private set
+
+    fun setLens(value: Lens) {
+        if (value == lens) return
+        lens = value
+        isolatedKey = null
+        // A draft is a Roles decision. Reading the deck another way is not
+        // cancelling it, so it only closes when the lens can no longer show it.
+        if (!value.isEditable) groupDraft = null
+    }
+
+    fun nextLens() = setLens(lens.next())
+
+    fun previousLens() = setLens(lens.previous())
+
+    fun toggleIsolation(keyId: String) {
+        isolatedKey = if (isolatedKey == keyId) null else keyId
+    }
+
+    /** How the main deck is cut up right now, draft included. */
+    fun keying(section: DeckSection = DeckSection.MAIN): LensKeying =
+        DeckLenses.key(lens, deck[section], index::byId, groupsWithDraft)
+
+    /**
+     * The groups plus the one being drawn up, so a selection is a block of the
+     * deck while it is being made rather than only after it is saved.
+     */
+    val groupsWithDraft: DeckGroups
+        get() {
+            val draft = groupDraft ?: return groups
+            val provisional = DeckGroup(
+                id = DRAFT_GROUP_ID,
+                name = draft.name.ifBlank { "New group" },
+                color = draft.color,
+                // Last, so drawing up a group never renumbers the ones that
+                // are already there and the bar does not jump under the finger.
+                order = Int.MAX_VALUE,
+            )
+            return draft.selection.fold(groups.upsert(provisional)) { acc, id ->
+                acc.assign(id, DRAFT_GROUP_ID)
+            }
+        }
 
     /**
      * The group being drawn up right now, if any.
@@ -472,11 +535,12 @@ class DeckBuilderState(
         extended = identity.extended
     }
 
-    private fun currentStoredGroups() = StoredGroups(groups, breakdownVisible)
+    private fun currentStoredGroups() = StoredGroups(groups, lens)
 
     private fun applyStoredGroups(stored: StoredGroups) {
         groups = stored.groups
-        breakdownVisible = stored.breakdown
+        lens = stored.lens
+        isolatedKey = null
         // A draft is about the cards in front of you. Loading, importing or
         // starting a new deck replaces those, so it cannot mean anything now.
         groupDraft = null
@@ -549,35 +613,26 @@ class DeckBuilderState(
     // stack. Cancel therefore costs nothing and leaves nothing behind.
 
     /**
-     * Turns the lens on or off.
+     * Opens an empty draft, optionally named by a [preset] and with [seed]
+     * already picked.
      *
-     * On, with nothing assigned yet, there is no dissection to show — so it
-     * opens a draft instead of an empty grid, which is the only useful thing
-     * the button can mean the first time it is pressed.
+     * Drawing up a group is a Roles decision, so it switches to that lens: the
+     * cards you are about to tap have to be the ones the colour is landing on.
      */
-    fun toggleBreakdown() {
-        when {
-            breakdownVisible -> {
-                breakdownVisible = false
-                groupDraft = null
-            }
-            deck.main.none { groups.groupOf(it) != null } -> startGroupDraft()
-            else -> breakdownVisible = true
-        }
-    }
-
-    /** Opens an empty draft, optionally with [seed] already picked. */
-    fun startGroupDraft(seed: CardId? = null) {
-        breakdownVisible = true
+    fun startGroupDraft(seed: CardId? = null, preset: GroupPresets.Preset? = null) {
+        lens = Lens.ROLES
+        isolatedKey = null
         groupDraft = GroupDraft(
-            color = groups.nextColor(),
+            name = preset?.name.orEmpty(),
+            color = preset?.color ?: groups.nextColor(),
             selection = setOfNotNull(seed),
         )
     }
 
     /** Reopens an existing group with everything already in it selected. */
     fun editGroup(group: DeckGroup) {
-        breakdownVisible = true
+        lens = Lens.ROLES
+        isolatedKey = null
         groupDraft = GroupDrafts.edit(groups, group, deck.main)
     }
 
@@ -587,11 +642,6 @@ class DeckBuilderState(
 
     fun setDraftColor(color: Int) {
         groupDraft = groupDraft?.copy(color = color)
-    }
-
-    /** One tap for a name and a colour, which is what the presets are for. */
-    fun applyPreset(preset: GroupPresets.Preset) {
-        groupDraft = groupDraft?.copy(name = preset.name, color = preset.color)
     }
 
     fun toggleDraftSelection(id: CardId) {
@@ -629,7 +679,7 @@ class DeckBuilderState(
 
     /** The extended payload with the current breakdown written into it. */
     private fun extendedForWrite() =
-        DeckGroupsCodec.write(extended, StoredGroups(groups, breakdownVisible))
+        DeckGroupsCodec.write(extended, StoredGroups(groups, lens))
 
     /** Undoes an edit only while it is still the most recent one. */
     private fun undoIfCurrent(token: UndoToken) {

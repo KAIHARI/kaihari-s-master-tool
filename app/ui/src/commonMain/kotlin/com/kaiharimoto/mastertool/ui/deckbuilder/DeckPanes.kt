@@ -12,11 +12,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -42,7 +42,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -64,16 +63,20 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kaiharimoto.mastertool.core.deck.DeckGroup
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.deck.GroupMarks
+import com.kaiharimoto.mastertool.core.deck.LensKeying
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.layout.BreakdownLayout
+import com.kaiharimoto.mastertool.core.layout.BreakdownPlan
+import com.kaiharimoto.mastertool.core.layout.CardPlacement
 import com.kaiharimoto.mastertool.core.layout.CellEdges
+import com.kaiharimoto.mastertool.core.layout.CellPlacement
 import com.kaiharimoto.mastertool.core.layout.DeckFit
 import com.kaiharimoto.mastertool.core.layout.DeckFitter
 import com.kaiharimoto.mastertool.core.layout.GridPoint
@@ -128,14 +131,7 @@ private val CARD_SPACING = 2.dp
 private val CRACK = 4.dp
 
 /** How far inside the cell a block's colour stops. */
-private val CELL_INSET = 1.5.dp
-
-/** The group a draft's selection is drawn as, before it has been saved. */
-private const val DRAFT_GROUP_ID = "__draft"
-
-/** The main deck's group bar: a row of group chips, or the draft editor. */
-private val LEGEND_HEIGHT = 32.dp
-private val DRAFT_BAR_HEIGHT = 88.dp
+private val CELL_INSET = 1.dp
 
 /**
  * The three deck sections, stacked so the whole deck is on screen at once.
@@ -179,7 +175,7 @@ fun DeckPanes(
                             baselineCount = section.baselineCapacity,
                             spacing = CARD_SPACING.toPx(),
                             collapsed = preferences[section].collapsed,
-                            chromeHeight = chromeFor(state, preferences[section].collapsed, section).toPx(),
+                            chromeHeight = chromeFor(preferences[section].collapsed, section).toPx(),
                         )
                     },
                     availableWidth = maxWidth.toPx(),
@@ -262,21 +258,14 @@ private fun List<CardId>.displayCount(stacked: Boolean): Int =
  * The fitter subtracts this before it solves, so a bar that appears here and
  * not in this sum is a bar the cards pay for.
  */
-private fun chromeFor(state: DeckBuilderState, collapsed: Boolean, section: DeckSection): Dp {
+private fun chromeFor(collapsed: Boolean, section: DeckSection): Dp {
     if (collapsed) return PANE_PADDING * 2 + HEADER_HEIGHT
 
     var chrome = PANE_PADDING * 2 + HEADER_HEIGHT + HEADER_GAP
-    val bar = barHeightFor(state, section)
-    if (bar > 0.dp) chrome += bar + HEADER_GAP
+    // Unconditional, because it is always drawn. A bar that comes and goes is a
+    // deck that resizes the moment you start reading it.
+    if (section == DeckSection.MAIN) chrome += LENS_BAR_HEIGHT + HEADER_GAP
     return chrome
-}
-
-/** How tall the main deck's group bar is right now, and zero everywhere else. */
-private fun barHeightFor(state: DeckBuilderState, section: DeckSection): Dp = when {
-    section != DeckSection.MAIN -> 0.dp
-    state.groupDraft != null -> DRAFT_BAR_HEIGHT
-    state.breakdownVisible -> LEGEND_HEIGHT
-    else -> 0.dp
 }
 
 @Composable
@@ -399,18 +388,26 @@ private fun DeckSectionPane(
 
         if (preferences.collapsed) return@Column
 
-        // The main deck's group bar: the legend of what has been drawn up, or
-        // the group being drawn up right now.
-        val barHeight = barHeightFor(state, section)
-        if (barHeight > 0.dp) {
-            BreakdownBar(state, Modifier.fillMaxWidth().height(barHeight))
-        }
-
         val stacks = if (layout.preferences.stacked) DeckGrouping.stacks(ids) else emptyList()
         val displayed = if (layout.preferences.stacked) stacks.map { it.id } else ids
-        val breakdownActive = state.breakdownVisible &&
-            section == DeckSection.MAIN &&
-            !layout.preferences.stacked
+
+        // The lens reads the main deck, and reads it as it is stored. The
+        // stacked view draws a different list — one tile per distinct card —
+        // so the bar still counts honestly there while the grid stays plain: a
+        // reading drawn over a deck that is not the deck would be worse than
+        // none at all.
+        val lensed = section == DeckSection.MAIN && !layout.preferences.stacked
+        val keying = if (section == DeckSection.MAIN) {
+            remember(state.lens, ids, state.groups, state.groupDraft, state.index) {
+                state.keying(section)
+            }
+        } else {
+            LensKeying.none(displayed.size)
+        }
+
+        if (section == DeckSection.MAIN) {
+            LensBar(state, keying, Modifier.fillMaxWidth().height(LENS_BAR_HEIGHT))
+        }
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
             // Fitted: the fitter already solved for the card size, and the grid
@@ -461,52 +458,42 @@ private fun DeckSectionPane(
             // is stored, and a card being picked for a group joins that group's
             // block immediately — drawn as a group that does not exist yet, so
             // the shape you are making is visible while you make it.
-            val draft = state.groupDraft.takeIf { section == DeckSection.MAIN }
-            val lensGroups = remember(state.groups, draft?.selection, draft?.color) {
-                when (draft) {
-                    null -> state.groups
-                    else -> {
-                        val provisional = DeckGroup(
-                            id = DRAFT_GROUP_ID,
-                            name = draft.name,
-                            color = draft.color,
-                            order = -1,
-                        )
-                        draft.selection.fold(state.groups.upsert(provisional)) { groups, id ->
-                            groups.assign(id, DRAFT_GROUP_ID)
-                        }
-                    }
+            val live = remember(keying, columns, lensed) {
+                if (lensed) {
+                    BreakdownLayout.plan(keying, columns)
+                } else {
+                    BreakdownPlan.empty(columns)
                 }
-            }
-
-            val plan = if (breakdownActive) {
-                remember(displayed, lensGroups, columns) {
-                    BreakdownLayout.plan(displayed, lensGroups, columns)
-                }
-            } else {
-                null
             }
 
             // One spring for the whole mode: the deck breaking apart, and the
-            // colour arriving with it.
+            // colour arriving with it. Driven by whether anything is keyed
+            // rather than by which lens is on, so switching between two lenses
+            // that both cut the deck up does not slam it shut and open it again.
             val crack by animateFloatAsState(
-                if (plan != null) 1f else 0f,
+                if (live.isEmpty) 0f else 1f,
                 spring(dampingRatio = 0.68f, stiffness = 240f),
                 label = "breakdownCrack",
             )
 
-            val marks = remember(lensGroups) { GroupMarks.marks(lensGroups.ordered()) }
+            // What is drawn lags what is true, by exactly the length of that
+            // spring. Turning a lens off empties the partition instantly, and
+            // a deck whose colour vanished on the first frame while the cards
+            // took half a second to close up would read as a glitch rather than
+            // as the deck coming back together.
+            val held = remember { mutableStateOf(keying to live) }
+            SideEffect { if (!live.isEmpty) held.value = keying to live }
+            val (shownKeying, plan) =
+                if (live.isEmpty) held.value else (keying to live)
 
             // Where each block's mark sits: the first cell of every run of
-            // cards that touch, so a group split across the deck names each of
+            // cards that touch, so a key split across the deck names each of
             // its pieces rather than leaving the others anonymous.
             val markCells: Map<Int, String> = remember(plan) {
-                val laid = plan ?: return@remember emptyMap()
                 buildMap {
-                    laid.pieces.forEach { piece ->
-                        val groupId = piece.groupId ?: return@forEach
-                        BreakdownLayout.blocks(piece.cells, laid.columns).forEach { block ->
-                            put(block.first(), groupId)
+                    plan.pieces.forEach { piece ->
+                        BreakdownLayout.blocks(piece.cells, plan.columns).forEach { block ->
+                            put(block.first(), piece.keyId)
                         }
                     }
                 }
@@ -517,6 +504,20 @@ private fun DeckSectionPane(
             // the same number either way.
             val cardWidth = (maxWidth - spacing * (columns - 1)) / columns
             val cardHeight = cardWidth / CARD_ASPECT_RATIO
+            val cellWidthPx = with(density) { cardWidth.toPx() }
+            val cellHeightPx = with(density) { cardHeight.toPx() }
+            val crackPx = with(density) { CRACK.toPx() }
+            // The cell a card fills when nothing has cracked, which is every
+            // card in every pane the lens does not touch.
+            val flatCell = remember(cellWidthPx, cellHeightPx) {
+                CardPlacement.place(
+                    cellWidth = cellWidthPx,
+                    cellHeight = cellHeightPx,
+                    edges = CellEdges.NONE,
+                    crack = 0f,
+                    aspectRatio = CARD_ASPECT_RATIO,
+                )
+            }
 
             Box(
                 modifier = if (fit != null) {
@@ -527,9 +528,9 @@ private fun DeckSectionPane(
             ) {
                 // Behind the cards: one solid shape per block. What shows is
                 // the colour standing in the space the crack opened, and the
-                // two dp between cards of the same group — so a block reads as
+                // two dp between cards of the same key — so a block reads as
                 // one object with a bold edge, not as cards with a tint.
-                if (plan != null && crack > 0.01f) {
+                if (crack > 0.01f) {
                     Canvas(Modifier.matchParentSize()) {
                         val metrics = CellMetrics(
                             cardWidth = cardWidth.toPx(),
@@ -540,18 +541,17 @@ private fun DeckSectionPane(
                         )
 
                         plan.pieces.forEach { piece ->
-                            // The part of the deck with no role yet is drawn in
-                            // no colour at all: it is what is left, and it
-                            // should look like what is left.
-                            if (piece.isRemainder) return@forEach
-                            val color = MasterToolPalette.Prism[
-                                piece.colorIndex % MasterToolPalette.Prism.size
-                            ]
+                            val key = shownKeying.keyById(piece.keyId) ?: return@forEach
+                            // Isolating one key takes the colour off the others
+                            // as well as covering their cards: half a shape in
+                            // full colour reads as the block that is left.
+                            val muted = state.isolatedKey != null &&
+                                state.isolatedKey != piece.keyId
                             drawRegion(
                                 cells = piece.cells,
                                 metrics = metrics,
-                                color = color,
-                                alpha = crack,
+                                color = key.paint.color(),
+                                alpha = crack * if (muted) 0.18f else 1f,
                             )
                         }
                     }
@@ -593,6 +593,8 @@ private fun DeckSectionPane(
                                 siblings = ids,
                                 position = stack.firstIndex,
                                 mark = null,
+                                placement = flatCell,
+                                density = density,
                             )
                         }
                     } else {
@@ -600,7 +602,7 @@ private fun DeckSectionPane(
                         // one the lens is off. Indexed keys because a deck
                         // legitimately holds duplicates.
                         items(ids.size, key = { "${section.name}-$it-${ids[it].value}" }) { position ->
-                            val group = plan?.groupAt(position)
+                            val key = plan.keyAt(position)
                             DeckCard(
                                 state = state,
                                 drag = drag,
@@ -618,13 +620,24 @@ private fun DeckSectionPane(
                                     hover.index == ids.size && position == ids.lastIndex,
                                 siblings = ids,
                                 position = position,
-                                mark = markCells[position]?.let { marks[it] },
+                                mark = markCells[position]?.let { shownKeying.keyById(it)?.mark },
+                                markColor = key?.let { shownKeying.keyById(it)?.paint?.color() },
                                 // Inside a block the block's own edge is the
                                 // card's edge; two lines a millimetre apart read
                                 // as a printing error.
-                                hairline = group == null,
-                                edges = plan?.edgesAt(position) ?: CellEdges.NONE,
-                                crack = crack,
+                                hairline = key == null,
+                                // Isolating a key covers the rest of the deck.
+                                // It stays legible — a shape you can still read
+                                // the deck through — rather than disappearing.
+                                covered = state.isolatedKey != null && state.isolatedKey != key,
+                                placement = CardPlacement.place(
+                                    cellWidth = cellWidthPx,
+                                    cellHeight = cellHeightPx,
+                                    edges = plan.edgesAt(position),
+                                    crack = crackPx * crack,
+                                    aspectRatio = CARD_ASPECT_RATIO,
+                                ),
+                                density = density,
                             )
                         }
                     }
@@ -758,16 +771,24 @@ private fun DeckCard(
     siblings: List<CardId>,
     position: Int,
     mark: String?,
+    markColor: Color? = null,
     hairline: Boolean = true,
-    edges: CellEdges = CellEdges.NONE,
-    crack: Float = 0f,
+    covered: Boolean = false,
+    placement: CellPlacement,
+    density: Density,
     modifier: Modifier = Modifier,
 ) {
     val card: Card? = state.index.byId(id)
     var menuOpen by remember { mutableStateOf(false) }
 
     if (card == null) {
-        UnknownCardTile(id)
+        // Still the size of the cell it stands in, so one unresolved passcode
+        // does not put the rest of the row out of step with the grid behind it.
+        with(density) {
+            Box(modifier.size(placement.cellWidth.toDp(), placement.cellHeight.toDp())) {
+                UnknownCardTile(id)
+            }
+        }
         return
     }
 
@@ -786,12 +807,7 @@ private fun DeckCard(
     // A chosen card carries the mark of the group it is being put in, so the
     // bar's count is not the only thing that says what you have picked.
     val selectionMark = if (selected) GroupMarks.mark(draft?.name.orEmpty()) else null
-    val chipColor = selectionColor
-        ?: mark?.let { _ ->
-            state.groups.groupOf(id)
-                ?.let { state.groups.byId(it) }
-                ?.let { MasterToolPalette.Prism[it.color % MasterToolPalette.Prism.size] }
-        }
+    val chipColor = selectionColor ?: markColor
 
     val tile: @Composable () -> Unit = {
         HoverPreview(card) {
@@ -806,6 +822,7 @@ private fun DeckCard(
                 outline = selectionColor,
                 // Inside a coloured piece the piece's edge is the card's edge.
                 hairline = hairline,
+                dimmed = covered,
                 // The card being chosen is not being handled, so its tilt stands
                 // down and the lift says what is happening instead. Every other
                 // card keeps its feel, which is the opposite of the old blanket
@@ -863,102 +880,107 @@ private fun DeckCard(
         }
     }
 
-    // The card gives way only on the sides that face another group, so a block
-    // of cards stays flush and the deck opens along the group lines alone.
-    val opening = CRACK * crack
-    Box(
-        modifier
-            .padding(
-                start = if (edges.start) opening else 0.dp,
-                top = if (edges.top) opening else 0.dp,
-                end = if (edges.end) opening else 0.dp,
-                bottom = if (edges.bottom) opening else 0.dp,
-            )
-            .graphicsLayer {
-            // Off the table, not bigger than it was: a selected card keeps its
-            // size so the grid it came out of stays legible behind it, and the
-            // shape the selection is drawing does not breathe.
-            translationY = -8.dp.toPx() * lift
-            shadowElevation = 18.dp.toPx() * lift
-            shape = RoundedCornerShape(4.dp)
-        },
-    ) {
-        DragSource(
-            controller = drag,
-            key = "${section.name}-$position-${id.value}",
-            competesWithScroll = competesWithScroll,
-            session = { DragSession(card, section, position, IntSize.Zero) },
-            onLongPress = { menuOpen = true },
-            onDropped = onDropped,
-            // Picking cards for a group and dragging them somewhere are two
-            // readings of the same movement; while a draft is open, tap wins.
-            dragEnabled = dragEnabled && draft == null,
-            content = tile,
-        )
-
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(
-                text = { Text("Inspect") },
-                onClick = {
-                    menuOpen = false
-                    state.inspect(siblings.mapNotNull { state.index.byId(it) }, position)
-                },
-            )
-            DropdownMenuItem(
-                text = { Text("Hold card") },
-                onClick = { menuOpen = false; state.heldCard = card },
-            )
-            DropdownMenuItem(
-                text = { Text("Remove one") },
-                onClick = { menuOpen = false; state.removeOne(card, section) },
-            )
-            if (copies > 1) {
-                DropdownMenuItem(
-                    text = { Text("Remove all $copies") },
-                    onClick = { menuOpen = false; state.removeAllCopies(card, section) },
+    // The cell is fixed and the card moves inside it.
+    //
+    // The card gives way only on the sides that face another key, so a block of
+    // cards stays flush and the deck opens along the lens's lines alone — but it
+    // never grows past the cell the fitter solved for. Applying the crack as
+    // padding, as this used to, made every item taller than the size the fitter
+    // had promised, and ten rows of that pushed the main deck out of its pane.
+    with(density) {
+        Box(modifier.size(placement.cellWidth.toDp(), placement.cellHeight.toDp())) {
+            Box(
+                Modifier
+                    .offset(placement.left.toDp(), placement.top.toDp())
+                    .size(placement.width.toDp(), placement.height.toDp())
+                    .graphicsLayer {
+                        // Off the table, not bigger than it was: a selected card
+                        // keeps its size so the grid it came out of stays legible
+                        // behind it, and the shape the selection is drawing does
+                        // not breathe.
+                        translationY = -8.dp.toPx() * lift
+                        shadowElevation = 18.dp.toPx() * lift
+                        shape = RoundedCornerShape(4.dp)
+                    },
+            ) {
+                DragSource(
+                    controller = drag,
+                    key = "${section.name}-$position-${id.value}",
+                    competesWithScroll = competesWithScroll,
+                    session = { DragSession(card, section, position, IntSize.Zero) },
+                    onLongPress = { menuOpen = true },
+                    onDropped = onDropped,
+                    // Picking cards for a group and dragging them somewhere are two
+                    // readings of the same movement; while a draft is open, tap wins.
+                    dragEnabled = dragEnabled && draft == null,
+                    content = tile,
                 )
-            }
 
-            HorizontalDivider()
-
-            val elsewhere = if (section == DeckSection.SIDE) card.requiredSection() else DeckSection.SIDE
-            DropdownMenuItem(
-                text = { Text("Move one to ${elsewhere.displayName}") },
-                onClick = { menuOpen = false; state.moveCard(card, section, elsewhere) },
-            )
-
-            // The pointer/keyboard idiom for assignment; tapping cards into an
-            // open draft is the touch one.
-            if (section == DeckSection.MAIN) {
-                HorizontalDivider()
-
-                state.groups.ordered().forEach { group ->
-                    val assigned = state.groups.assignments[id] == group.id
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text(if (assigned) "✓ ${group.name}" else group.name) },
-                        leadingIcon = {
-                            Box(
-                                Modifier
-                                    .size(width = 4.dp, height = 14.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(
-                                        MasterToolPalette.Prism[
-                                            group.color % MasterToolPalette.Prism.size
-                                        ]
-                                    ),
-                            )
-                        },
+                        text = { Text("Inspect") },
                         onClick = {
                             menuOpen = false
-                            state.assignCardToGroup(id, if (assigned) null else group.id)
+                            state.inspect(siblings.mapNotNull { state.index.byId(it) }, position)
                         },
                     )
-                }
+                    DropdownMenuItem(
+                        text = { Text("Hold card") },
+                        onClick = { menuOpen = false; state.heldCard = card },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Remove one") },
+                        onClick = { menuOpen = false; state.removeOne(card, section) },
+                    )
+                    if (copies > 1) {
+                        DropdownMenuItem(
+                            text = { Text("Remove all $copies") },
+                            onClick = { menuOpen = false; state.removeAllCopies(card, section) },
+                        )
+                    }
 
-                DropdownMenuItem(
-                    text = { Text("New group from here…") },
-                    onClick = { menuOpen = false; state.startGroupDraft(seed = id) },
-                )
+                    HorizontalDivider()
+
+                    val elsewhere = if (section == DeckSection.SIDE) card.requiredSection() else DeckSection.SIDE
+                    DropdownMenuItem(
+                        text = { Text("Move one to ${elsewhere.displayName}") },
+                        onClick = { menuOpen = false; state.moveCard(card, section, elsewhere) },
+                    )
+
+                    // The pointer/keyboard idiom for assignment; tapping cards into an
+                    // open draft is the touch one.
+                    if (section == DeckSection.MAIN) {
+                        HorizontalDivider()
+
+                        state.groups.ordered().forEach { group ->
+                            val assigned = state.groups.assignments[id] == group.id
+                            DropdownMenuItem(
+                                text = { Text(if (assigned) "✓ ${group.name}" else group.name) },
+                                leadingIcon = {
+                                    Box(
+                                        Modifier
+                                            .size(width = 4.dp, height = 14.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(
+                                                MasterToolPalette.Prism[
+                                                    group.color % MasterToolPalette.Prism.size
+                                                ]
+                                            ),
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    state.assignCardToGroup(id, if (assigned) null else group.id)
+                                },
+                            )
+                        }
+
+                        DropdownMenuItem(
+                            text = { Text("New group from here…") },
+                            onClick = { menuOpen = false; state.startGroupDraft(seed = id) },
+                        )
+                    }
+                }
             }
         }
     }
@@ -1010,16 +1032,6 @@ private fun SectionHeader(
         Box(Modifier.weight(1f))
 
         if (!preferences.collapsed) {
-            // The breakdown belongs to the main deck and nowhere else: it is the
-            // main forty that gets argued about in roles.
-            if (section == DeckSection.MAIN) {
-                CompactButton(
-                    label = "Breakdown",
-                    selected = state.breakdownVisible,
-                    onClick = { state.toggleBreakdown() },
-                )
-            }
-
             // Ten across, fifteen across — the row width is the setting, and the
             // cards are sized to whatever makes it fit.
             CompactIconButton(
@@ -1117,25 +1129,6 @@ private fun CompactIconButton(
         modifier = Modifier.size(26.dp),
         content = content,
     )
-}
-
-@Composable
-private fun CompactButton(label: String, selected: Boolean, onClick: () -> Unit) {
-    TextButton(
-        onClick = onClick,
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-        modifier = Modifier.height(24.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (selected) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
-    }
 }
 
 /**

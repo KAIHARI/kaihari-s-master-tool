@@ -1,31 +1,33 @@
 package com.kaiharimoto.mastertool.core.layout
 
 import com.kaiharimoto.mastertool.core.deck.DeckGroups
+import com.kaiharimoto.mastertool.core.deck.DeckLenses
+import com.kaiharimoto.mastertool.core.deck.Lens
+import com.kaiharimoto.mastertool.core.deck.LensKeying
 import com.kaiharimoto.mastertool.core.model.CardId
 
 /**
- * One group, drawn as one block of the deck.
+ * One key of a lens, drawn as one part of the deck.
  *
  * [cells] are positions in the section — which, because the breakdown never
  * moves a card, are both where the cards are stored and where they are drawn.
- * A null [groupId] is the remainder: everything not yet given a role.
+ * Cards belonging to no key get no piece at all: they are what is left, and
+ * what is left should look like the deck.
  */
 data class BreakdownPiece(
-    val groupId: String?,
+    val keyId: String,
     val ordinal: Int,
-    val colorIndex: Int,
     val cells: List<Int>,
 ) {
     val size: Int get() = cells.size
-    val isRemainder: Boolean get() = groupId == null
 }
 
 /**
- * Which sides of a card face a different group.
+ * Which sides of a card face a different key.
  *
- * This is the whole breakdown, per card. A side that faces the same group is
- * not an edge — the two cards are part of one block and sit flush against each
- * other. A side that faces a different group, or the outside of the deck, is
+ * This is the whole breakdown, per card. A side that faces the same key is not
+ * an edge — the two cards are part of one block and sit flush against each
+ * other. A side that faces a different key, or the outside of the deck, is
  * where the block ends, and that is where the deck cracks open.
  */
 data class CellEdges(
@@ -42,36 +44,42 @@ data class CellEdges(
     }
 }
 
-/** The deck's groups, as blocks over the grid the deck is already drawn in. */
+/** A lens's keys, as blocks over the grid the deck is already drawn in. */
 data class BreakdownPlan(
     val columns: Int,
     val count: Int,
     val pieces: List<BreakdownPiece>,
-    private val groupOfCell: List<String?>,
+    private val keyOfCell: List<String?>,
 ) {
+    val isEmpty: Boolean get() = pieces.isEmpty()
+
     fun pieceAt(cell: Int): BreakdownPiece? {
-        val group = groupOfCell.getOrNull(cell) ?: return pieces.firstOrNull { it.isRemainder }
-        return pieces.firstOrNull { it.groupId == group }
+        val key = keyOfCell.getOrNull(cell) ?: return null
+        return pieces.firstOrNull { it.keyId == key }
     }
 
-    fun groupAt(cell: Int): String? = groupOfCell.getOrNull(cell)
+    fun keyAt(cell: Int): String? = keyOfCell.getOrNull(cell)
 
     /**
      * Which sides of [cell] are the edge of its block.
      *
-     * A neighbour off the end of the deck counts as a different group, so the
+     * A neighbour off the end of the deck counts as a different key, so the
      * outermost cards are framed like any other edge and every block is inset
      * from its surroundings by the same amount, wherever it sits.
+     *
+     * A card belonging to no key has no edges at all. The unclaimed part of the
+     * deck is not a group with a shape; it is the surface the blocks are being
+     * lifted out of, and it stays a mosaic while they go.
      */
     fun edgesAt(cell: Int): CellEdges {
         if (cell !in 0 until count) return CellEdges.NONE
-        val group = groupOfCell.getOrNull(cell)
+        val key = keyOfCell.getOrNull(cell) ?: return CellEdges.NONE
         val column = cell % columns
 
         fun sameAs(other: Int, sameRow: Boolean): Boolean {
             if (other !in 0 until count) return false
             if (sameRow && other / columns != cell / columns) return false
-            return groupOfCell.getOrNull(other) == group
+            return keyOfCell.getOrNull(other) == key
         }
 
         return CellEdges(
@@ -84,6 +92,10 @@ data class BreakdownPlan(
 
     companion object {
         val EMPTY = BreakdownPlan(1, 0, emptyList(), emptyList())
+
+        /** A grid with nothing keyed in it: the plain mosaic, [columns] across. */
+        fun empty(columns: Int) =
+            BreakdownPlan(columns.coerceAtLeast(1), 0, emptyList(), emptyList())
     }
 }
 
@@ -91,17 +103,16 @@ data class BreakdownPlan(
  * The breakdown, as geometry over the deck exactly as it is stored.
  *
  * Nothing is rearranged. The deck is drawn in its own order, ten across, the
- * same grid with the lens on as with it off — so the grid you edit is always
- * the deck you save, and a card is never somewhere you did not put it.
+ * same grid with a lens on as with it off — so the grid you edit is always the
+ * deck you save, and a card is never somewhere you did not put it.
  *
- * What the lens changes is the *space* between cards. With it off the deck is a
- * near-seamless mosaic; with it on, a card pulls away from its neighbour only
- * where the two belong to different groups. Cards of one group stay flush, so a
- * group reads as a single slab of the deck with a solid edge of its colour, and
- * the deck cracks along exactly the lines the groups draw — one block per run
- * of adjacent cards, however the deck happens to be ordered.
+ * What a lens changes is the *space* between cards. With no lens the deck is a
+ * near-seamless mosaic; with one on, a card pulls away from its neighbour only
+ * where the two belong to different keys. Cards of one key stay flush, so a key
+ * reads as a single slab of the deck with a solid edge of its colour, and the
+ * deck cracks along exactly the lines the lens draws.
  *
- * The consequence to be honest about: a group whose cards are scattered through
+ * The consequence to be honest about: a key whose cards are scattered through
  * the deck is several blocks, because that is genuinely where those cards are.
  * The tool's job is to show the deck, not to flatter it — and a handful of
  * blocks in one colour is itself the useful reading, since it says the deck is
@@ -120,35 +131,40 @@ object BreakdownLayout {
             (colA == colB && (rowA - rowB) * (rowA - rowB) == 1)
     }
 
-    fun plan(section: List<CardId>, groups: DeckGroups, columns: Int): BreakdownPlan {
+    /**
+     * The plan for a partition of the section.
+     *
+     * Key order comes from the lens, not from where the cards happen to fall,
+     * so the legend and the deck agree and neither reorders itself as cards
+     * move around.
+     */
+    fun plan(keying: LensKeying, columns: Int): BreakdownPlan {
         val width = columns.coerceAtLeast(1)
-        if (section.isEmpty()) return BreakdownPlan.EMPTY.copy(columns = width)
+        if (keying.keyOfCell.isEmpty()) return BreakdownPlan.empty(width)
 
-        val groupOfCell = section.map(groups::groupOf)
-        val ordered = groups.ordered()
-
+        val keyOfCell = keying.keyOfCell
         val pieces = mutableListOf<BreakdownPiece>()
-        ordered.forEachIndexed { ordinal, group ->
-            val cells = groupOfCell.indices.filter { groupOfCell[it] == group.id }
-            // A group nobody has put a card in yet has no block; it still
-            // exists in the legend, where it can be filled.
+
+        keying.keyOrder.forEachIndexed { ordinal, keyId ->
+            val cells = keyOfCell.indices.filter { keyOfCell[it] == keyId }
+            // A key nothing falls in has no block; it still exists in the bar,
+            // where — if the lens is editable — it can be filled.
             if (cells.isNotEmpty()) {
-                pieces += BreakdownPiece(group.id, ordinal, group.color, cells)
+                pieces += BreakdownPiece(keyId, ordinal, cells)
             }
         }
 
-        val remainder = groupOfCell.indices.filter { groupOfCell[it] == null }
-        if (remainder.isNotEmpty()) {
-            pieces += BreakdownPiece(null, pieces.size, -1, remainder)
-        }
-
-        return BreakdownPlan(width, section.size, pieces, groupOfCell)
+        return BreakdownPlan(width, keyOfCell.size, pieces, keyOfCell)
     }
+
+    /** The plan for the user's own groups, which is the [Lens.ROLES] keying. */
+    fun plan(section: List<CardId>, groups: DeckGroups, columns: Int): BreakdownPlan =
+        plan(DeckLenses.key(Lens.ROLES, section, cards = { null }, groups = groups), columns)
 
     /**
      * The blocks a set of cells falls into: runs of cards that touch.
      *
-     * One group can be several blocks, and each one is drawn as its own shape.
+     * One key can be several blocks, and each one is drawn as its own shape.
      * Which cells belong together is the same question [GridRegion] answers
      * when it traces them, asked in advance so the caller can count them.
      */

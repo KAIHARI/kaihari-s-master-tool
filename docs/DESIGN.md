@@ -165,26 +165,54 @@ Idle things cost nothing: springs run only while touched.
 
 ## 9. The breakdown, as a worked example
 
-The rules above decide it completely, and it took three attempts to see that.
+The rules above decide it completely, and it took four attempts to see that.
 
-The deck is a **mosaic**: 2dp between cards, near enough to touching that a row
-reads as one surface. Turning the lens on does not open every gutter — it opens
-only the ones where two groups meet. A card gives way by 4dp on a side that
-faces a different group, and on no other side, so the deck cracks along exactly
-the lines the groups draw. A group's colour is then drawn **solid** in the space
-that opened, and the block reads as one object with a bold edge.
+**A lens is a partition, and the partition is a parameter.** `core/deck/DeckLens.kt`
+hands the layout a `LensKeying`: a list of keys and, index-aligned with the
+section, which key each card falls in. Four of them ship — Deck (none), Roles
+(the user's own groups), Archetype and Copies — and the drawing code cannot tell
+them apart. That split is the point. A breakdown wired to the user's own labels
+can only ever show back the bookkeeping they already did; one pointed at facts
+the card database already knows has something to say about a list imported ten
+seconds ago, which is when a reading is worth most.
+
+**Paint says what kind of difference it is.** A key is painted either `Hue` —
+nominal, off the prismatic ramp, *these are different* — or `Grey` — ordinal,
+read as a scale. Copies is grey, brightest for singletons, because the singleton
+is the card you are looking for. Archetype takes hues 2–5 and never 0 or 1,
+which mean illegal and warning everywhere else.
+
+**The deck is a mosaic that cracks.** 2dp between cards, near enough to touching
+that a row reads as one surface. A lens does not open every gutter — only the
+ones where two keys meet. A card gives way by 4dp on a side that faces a
+different key, and on no other side, so the deck cracks along exactly the lines
+the lens draws. The key's colour is then drawn **solid** in the space that
+opened, and the block reads as one object with a bold edge.
+
+**Cards with no key have no edges.** The unclaimed part of the deck is not a
+group with a shape; it is the surface the blocks are lifted out of, and it stays
+flush while they go. This is also the reading: what is in no archetype is the
+non-engine, and what is in no role is the part not yet thought about.
+
+**The cell is fixed and the card moves inside it.** `core/layout/CardPlacement.kt`
+places a card in the cell the fitter solved for: it gives way on cracked sides,
+keeps 59:86 exactly, and never grows. The crack was once applied as padding,
+which made every item taller than the fitter had promised and pushed the last
+row of the main deck out of its pane — §5's first rule, broken by the mode drawn
+on top of it.
 
 What this design refuses, and why:
 
-- **Rearranging the deck to make prettier blocks.** Rule 2. A group whose cards
+- **Rearranging the deck to make prettier blocks.** Rule 2. A key whose cards
   are scattered is drawn as several blocks, because that is where those cards
   are — and that reading is itself useful, since it says the deck is not sorted
   the way it is being thought about.
-- **Tinting grouped cards.** Rule in §2: solid, not translucent.
-- **Labelling blocks with names.** Names go in the legend; the deck carries
+- **Tinting keyed cards.** Rule in §2: solid, not translucent.
+- **Labelling blocks with names.** Names go in the lens bar; the deck carries
   two-letter marks, one per block.
-- **Making the lens cost card size.** The crack is bought from the gutter, which
-  the fitter already knows about.
+- **Making a lens cost card size.** The bar is 30dp, always present, declared to
+  the fitter whether a lens is on or not; the crack is bought from the cell.
+  Nothing about the deck's geometry changes when a lens does.
 
 ## 10. Anti-patterns
 

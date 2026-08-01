@@ -133,7 +133,8 @@ fun DeckBuilderScreen(
             ShortcutAction.TOGGLE_STATS -> state.statsVisible = !state.statsVisible
             ShortcutAction.TOGGLE_ISSUES -> state.issuesVisible = !state.issuesVisible
             ShortcutAction.TOGGLE_HELP -> state.helpVisible = !state.helpVisible
-            ShortcutAction.TOGGLE_BREAKDOWN -> state.toggleBreakdown()
+            ShortcutAction.NEXT_LENS -> state.nextLens()
+            ShortcutAction.PREVIOUS_LENS -> state.previousLens()
             ShortcutAction.TOGGLE_GROUP_MANAGER ->
                 state.groupManagerVisible = !state.groupManagerVisible
             ShortcutAction.NEW_GROUP -> state.startGroupDraft()
