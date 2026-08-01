@@ -423,8 +423,10 @@ private fun applyDrop(
     // Dropped on a piece of the dissected deck: the card joins that group, and
     // lands in the deck next to the cards it now belongs with.
     if (target == DeckSection.MAIN && dissected != null && !stacked) {
-        val cell = landed.index.coerceIn(0, (state.deck.main.size - 1).coerceAtLeast(0))
-        val piece = dissected.pieceAt(cell)
+        // A grid index, which in this state counts cells and not cards — the
+        // short last row has empty ones. A cell holding nothing is the
+        // remainder, which is the honest answer for a drop into bare grid.
+        val piece = dissected.pieceAt(landed.index.coerceAtLeast(0))
         state.fileIntoGroup(
             card = session.card,
             from = session.section,

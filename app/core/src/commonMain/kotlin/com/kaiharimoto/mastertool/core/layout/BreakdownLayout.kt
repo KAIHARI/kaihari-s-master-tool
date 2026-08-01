@@ -112,6 +112,23 @@ object BreakdownLayout {
      */
     fun slotOfCell(cell: Int, columns: Int): Int = cellOfSlot(cell, columns)
 
+    /**
+     * How many rows [count] cards take, and how many cells that grid holds.
+     *
+     * The two differ whenever the deck does not divide by the row width, and
+     * the difference matters more here than in an ordinary grid: on a row that
+     * runs right to left, a short row's *empty* cells are the ones on the left,
+     * so a caller that walks cells 0 until count walks off the end of the deck
+     * and past cards that are really there.
+     */
+    fun rows(count: Int, columns: Int): Int {
+        val width = columns.coerceAtLeast(1)
+        return (count + width - 1) / width
+    }
+
+    fun gridCells(count: Int, columns: Int): Int =
+        rows(count, columns) * columns.coerceAtLeast(1)
+
     /** Whether two cells share an edge in a [columns]-wide grid. */
     fun adjacent(a: Int, b: Int, columns: Int): Boolean {
         val width = columns.coerceAtLeast(1)

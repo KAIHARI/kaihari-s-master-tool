@@ -199,6 +199,49 @@ class BreakdownLayoutTest {
         assertNull(plan.pieceAt(4)?.groupId)
     }
 
+    @Test
+    fun everyCardIsDrawnExactlyOnceWhateverTheDeckSize() {
+        // The crash this exists to stop. A deck that does not divide by the row
+        // width leaves a short last row, and on a row that runs right to left
+        // the empty cells are the ones on the LEFT — so walking cells 0 until
+        // size both misses real cards and reads the same card twice, which
+        // reaches the grid as two items with one key.
+        for (size in 1..60) {
+            for (columns in 3..20) {
+                val cards = (1..size).map { CardId(it) }
+                val groups = DeckGroups.EMPTY
+                    .upsert(handtraps)
+                    .let { g -> cards.filterIndexed { i, _ -> i % 3 == 0 }.fold(g) { acc, id -> acc.assign(id, handtraps.id) } }
+                val plan = BreakdownLayout.plan(cards, groups, columns)
+
+                val cells = BreakdownLayout.gridCells(size, columns)
+                val drawn = (0 until cells).mapNotNull(plan::deckIndexAt)
+
+                assertEquals(size, drawn.size, "size=$size columns=$columns: cards drawn")
+                assertEquals(
+                    cards.indices.toSet(),
+                    drawn.toSet(),
+                    "size=$size columns=$columns: not every card was drawn once",
+                )
+                assertEquals(drawn.size, drawn.toSet().size, "size=$size columns=$columns: duplicate")
+            }
+        }
+    }
+
+    @Test
+    fun ashortReversedRowFillsFromTheEdgeItTurnedAt() {
+        // Fifteen cards, ten wide: the second row runs right to left, so its
+        // five cards sit in columns 9 down to 5 and the left of the row is bare.
+        val cards = (1..15).map { CardId(it) }
+        val plan = BreakdownLayout.plan(cards, DeckGroups.EMPTY, 10)
+
+        assertEquals(20, BreakdownLayout.gridCells(15, 10))
+        assertEquals(2, BreakdownLayout.rows(15, 10))
+        (10..14).forEach { cell -> assertNull(plan.deckIndexAt(cell)) }
+        assertEquals(10, plan.deckIndexAt(19))
+        assertEquals(14, plan.deckIndexAt(15))
+    }
+
     // ---- picking ----------------------------------------------------------
 
     @Test

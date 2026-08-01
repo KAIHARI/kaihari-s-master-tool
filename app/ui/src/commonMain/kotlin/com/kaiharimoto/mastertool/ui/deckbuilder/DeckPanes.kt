@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -431,7 +432,9 @@ private fun DeckSectionPane(
 
         val stacks = if (layout.preferences.stacked) DeckGrouping.stacks(ids) else emptyList()
         val displayed = if (layout.preferences.stacked) stacks.map { it.id } else ids
-        val breakdownActive = state.breakdownVisible && section == DeckSection.MAIN
+        val breakdownActive = state.breakdownVisible &&
+            section == DeckSection.MAIN &&
+            !layout.preferences.stacked
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
             // Fitted: the fitter already solved for the card size, and the grid
@@ -490,13 +493,19 @@ private fun DeckSectionPane(
                 else -> BreakdownLayout.plan(displayed, state.groups, columns)
             }
 
-            // Which card is drawn in which cell. Without the lens this is the
-            // identity, and the grid is exactly what it always was.
-            val order = remember(plan, displayed.size) {
+            // Which card is drawn in which cell, walked over the WHOLE grid
+            // rather than over the deck. A deck that does not divide by the row
+            // width leaves a short last row, and on a row the snake runs right
+            // to left the empty cells are the ones on the left — so a cell can
+            // legitimately hold nothing, and -1 says so. Reading only as many
+            // cells as there are cards drew some cards twice, which reached the
+            // grid as two items sharing one key.
+            val order = remember(plan, displayed.size, columns) {
                 if (plan == null) {
                     displayed.indices.toList()
                 } else {
-                    displayed.indices.map { cell -> plan.deckIndexAt(cell) ?: cell }
+                    val cells = BreakdownLayout.gridCells(displayed.size, columns)
+                    (0 until cells).map { cell -> plan.deckIndexAt(cell) ?: -1 }
                 }
             }
 
@@ -641,10 +650,22 @@ private fun DeckSectionPane(
                             count = order.size,
                             key = { cell ->
                                 val position = order[cell]
-                                "${section.name}-$position-${ids[position].value}"
+                                if (position < 0) {
+                                    "${section.name}-gap-$cell"
+                                } else {
+                                    "${section.name}-$position-${ids[position].value}"
+                                }
                             },
                         ) { cell ->
                             val position = order[cell]
+                            // A cell the snake turned past: it holds the row's
+                            // shape open so the cards after it stay in the
+                            // columns their piece was traced against.
+                            if (position < 0) {
+                                Spacer(Modifier.fillMaxWidth().aspectRatio(CARD_ASPECT_RATIO))
+                                return@items
+                            }
+
                             val piece = plan?.pieceAt(cell)
                             DeckCard(
                                 state = state,
