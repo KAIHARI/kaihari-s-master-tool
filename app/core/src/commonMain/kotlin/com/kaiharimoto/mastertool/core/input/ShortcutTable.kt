@@ -215,7 +215,8 @@ object ShortcutTable {
         ),
         Shortcut(
             KeyChord("c"), ShortcutAction.TOGGLE_CONSISTENCY, ShortcutScope.BUILDER,
-            "Opening-hand odds over your groups", togglesLayer = ShortcutLayer.CONSISTENCY,
+            "Ask the deck a question about its opening hand",
+            togglesLayer = ShortcutLayer.CONSISTENCY,
         ),
         Shortcut(
             KeyChord("1"), ShortcutAction.FOCUS_MAIN, ShortcutScope.BUILDER,

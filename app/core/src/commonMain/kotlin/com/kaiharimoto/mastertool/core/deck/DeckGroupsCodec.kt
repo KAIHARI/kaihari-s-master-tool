@@ -1,5 +1,9 @@
 package com.kaiharimoto.mastertool.core.deck
 
+import com.kaiharimoto.mastertool.core.hand.Ask
+import com.kaiharimoto.mastertool.core.hand.HandGoal
+import com.kaiharimoto.mastertool.core.hand.HandGoals
+import com.kaiharimoto.mastertool.core.hand.LensOdds
 import com.kaiharimoto.mastertool.core.model.CardId
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -23,7 +27,8 @@ import kotlinx.serialization.json.intOrNull
  * "groups": {
  *   "defs": [{ "id": "g1", "name": "Handtraps", "color": 3, "order": 0 }],
  *   "cards": { "14558127": "g1" },
- *   "lens": "ROLES"
+ *   "lens": "ROLES",
+ *   "goals": [{ "id": "q1", "name": "Opens", "hand": 5, "asks": { "g1": "AT_LEAST_1" } }]
  * }
  * ```
  */
@@ -51,7 +56,34 @@ object DeckGroupsCodec {
             CardId(passcode) to group
         }?.toMap().orEmpty()
 
-        return StoredGroups(DeckGroups(defs, cards), readLens(node))
+        return StoredGroups(DeckGroups(defs, cards), readLens(node), readGoals(node))
+    }
+
+    /**
+     * The questions the deck was left holding.
+     *
+     * Tolerant in exactly the way the rest of this codec is: an ask naming a
+     * position this build has never heard of is dropped rather than failing the
+     * read, because a deck file written by a newer version must still open.
+     */
+    private fun readGoals(node: JsonObject): HandGoals {
+        val array = node["goals"] as? JsonArray ?: return HandGoals.EMPTY
+
+        return HandGoals(
+            array.mapNotNull { element ->
+                val obj = element as? JsonObject ?: return@mapNotNull null
+                val id = (obj["id"] as? JsonPrimitive)?.content ?: return@mapNotNull null
+                HandGoal(
+                    id = id,
+                    name = (obj["name"] as? JsonPrimitive)?.content.orEmpty(),
+                    handSize = (obj["hand"] as? JsonPrimitive)?.intOrNull ?: LensOdds.DEFAULT_HAND,
+                    asks = (obj["asks"] as? JsonObject)?.entries?.mapNotNull { (group, value) ->
+                        val name = (value as? JsonPrimitive)?.content ?: return@mapNotNull null
+                        Ask.entries.firstOrNull { it.name == name }?.let { group to it }
+                    }?.toMap().orEmpty(),
+                )
+            }
+        )
     }
 
     /**
@@ -81,7 +113,7 @@ object DeckGroupsCodec {
     fun write(extended: JsonObject?, stored: StoredGroups): JsonObject? {
         val others = extended?.filterKeys { it != KEY } ?: emptyMap()
 
-        if (stored.groups.isEmpty && stored.lens == Lens.DECK) {
+        if (stored.groups.isEmpty && stored.lens == Lens.DECK && stored.goals.isEmpty) {
             return if (others.isEmpty()) null else JsonObject(others)
         }
 
@@ -110,13 +142,41 @@ object DeckGroupsCodec {
                 },
             )
             put("lens", JsonPrimitive(stored.lens.name))
+
+            if (!stored.goals.isEmpty) {
+                put(
+                    "goals",
+                    buildJsonArray {
+                        stored.goals.goals.forEach { goal ->
+                            add(
+                                buildJsonObject {
+                                    put("id", JsonPrimitive(goal.id))
+                                    put("name", JsonPrimitive(goal.name))
+                                    put("hand", JsonPrimitive(goal.handSize))
+                                    put(
+                                        "asks",
+                                        buildJsonObject {
+                                            goal.asks.forEach { (group, ask) ->
+                                                put(group, JsonPrimitive(ask.name))
+                                            }
+                                        },
+                                    )
+                                }
+                            )
+                        }
+                    },
+                )
+            }
         }
 
         return JsonObject(others + (KEY to node))
     }
 }
 
-/** What the payload stores: the groups themselves, and how the deck is being read. */
+/**
+ * What the payload stores: the groups, how the deck is being read, and what it
+ * is being asked.
+ */
 data class StoredGroups(
     val groups: DeckGroups,
     /**
@@ -125,8 +185,14 @@ data class StoredGroups(
      * by archetype is meant to open that way too.
      */
     val lens: Lens,
+    /**
+     * And so do the questions. A goal written in terms of this deck's roles is
+     * about this deck and nothing else, and a question you have to rebuild
+     * from memory every session is one you stop asking.
+     */
+    val goals: HandGoals = HandGoals.EMPTY,
 ) {
     companion object {
-        val EMPTY = StoredGroups(DeckGroups.EMPTY, Lens.DECK)
+        val EMPTY = StoredGroups(DeckGroups.EMPTY, Lens.DECK, HandGoals.EMPTY)
     }
 }

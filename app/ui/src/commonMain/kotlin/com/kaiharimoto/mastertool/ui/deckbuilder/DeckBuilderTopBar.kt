@@ -173,7 +173,7 @@ fun DeckBuilderTopBar(
         IconButton(onClick = { state.statsVisible = true }) {
             Icon(Icons.Filled.BarChart, contentDescription = "Deck statistics")
         }
-        IconButton(onClick = { state.consistencyVisible = true }) {
+        IconButton(onClick = { state.openGoal() }) {
             Icon(Icons.Filled.Percent, contentDescription = "Opening-hand odds")
         }
         IconButton(onClick = { state.save() }) {

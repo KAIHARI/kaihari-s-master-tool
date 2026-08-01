@@ -23,6 +23,10 @@ import com.kaiharimoto.mastertool.core.deck.GroupDrafts
 import com.kaiharimoto.mastertool.core.deck.GroupPresets
 import com.kaiharimoto.mastertool.core.deck.RejectionReason
 import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.hand.Ask
+import com.kaiharimoto.mastertool.core.hand.GoalOdds
+import com.kaiharimoto.mastertool.core.hand.HandGoal
+import com.kaiharimoto.mastertool.core.hand.HandGoals
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.Deck
@@ -195,7 +199,25 @@ class DeckBuilderState(
 
     var groupManagerVisible by mutableStateOf(false)
 
-    var consistencyVisible by mutableStateOf(false)
+    /**
+     * The questions this deck is being asked, stored with it.
+     *
+     * The maths was always exact; what evaporated was the question. Keeping it
+     * next to the groups it is written in terms of is what turns "open the
+     * calculator and describe your deck to it again" into a number that is
+     * simply true on screen while you cut a card.
+     */
+    var goals by mutableStateOf(HandGoals.EMPTY)
+        private set
+
+    /**
+     * The goal open in the editor, if any — a working copy.
+     *
+     * Edited in the sheet and committed on Save, exactly like a group draft:
+     * half a question does not belong in the deck file or on the undo stack.
+     */
+    var editingGoal by mutableStateOf<HandGoal?>(null)
+        private set
 
     /** The card currently held in the 3D inspect, if any. */
     var heldCard by mutableStateOf<Card?>(null)
@@ -536,12 +558,14 @@ class DeckBuilderState(
         extended = identity.extended
     }
 
-    private fun currentStoredGroups() = StoredGroups(groups, lens)
+    private fun currentStoredGroups() = StoredGroups(groups, lens, goals)
 
     private fun applyStoredGroups(stored: StoredGroups) {
         groups = stored.groups
         lens = stored.lens
+        goals = stored.goals.pruned(stored.groups)
         isolatedKey = null
+        editingGoal = null
         // A draft is about the cards in front of you. Loading, importing or
         // starting a new deck replaces those, so it cannot mean anything now.
         groupDraft = null
@@ -602,7 +626,70 @@ class DeckBuilderState(
         if (next == groups) return
         pushUndo(deck, groupsSnapshot = currentStoredGroups())
         groups = next
+        // An ask against a role that no longer exists would read as "at least
+        // one of nothing" and report zero forever, with nothing on screen to
+        // explain why.
+        goals = goals.pruned(next)
     }
+
+    // ---- the questions -----------------------------------------------------
+
+    /** Every goal edit is undoable, like a group edit and by the same path. */
+    private fun updateGoals(transform: (HandGoals) -> HandGoals) {
+        val next = transform(goals)
+        if (next == goals) return
+        pushUndo(deck, groupsSnapshot = currentStoredGroups())
+        goals = next
+    }
+
+    fun newGoal() {
+        editingGoal = HandGoal.blank(id = "q-${Random.nextLong().toString(16)}")
+    }
+
+    /** Opens a stored goal, or the first one, or a fresh one if there are none. */
+    fun openGoal(id: String? = null) {
+        editingGoal = id?.let(goals::byId) ?: goals.goals.firstOrNull()
+        if (editingGoal == null) newGoal()
+    }
+
+    fun setGoalName(value: String) {
+        editingGoal = editingGoal?.copy(name = value)
+    }
+
+    fun setGoalHandSize(value: Int) {
+        editingGoal = editingGoal?.copy(handSize = value)
+    }
+
+    fun setGoalAsk(groupId: String, ask: Ask) {
+        editingGoal = editingGoal?.with(groupId, ask)
+    }
+
+    fun clearGoalAsks() {
+        editingGoal = editingGoal?.copy(asks = emptyMap())
+    }
+
+    fun saveGoal() {
+        val goal = editingGoal ?: return
+        // A question that asks nothing is not a question; saving it would put a
+        // chip on the bar reading 100% forever.
+        if (!goal.isEmpty) {
+            updateGoals { it.upsert(goal.copy(name = goal.name.trim())) }
+        }
+        editingGoal = null
+    }
+
+    fun deleteGoal() {
+        val goal = editingGoal ?: return
+        updateGoals { it.remove(goal.id) }
+        editingGoal = null
+    }
+
+    fun cancelGoal() {
+        editingGoal = null
+    }
+
+    /** What a stored goal currently comes out at, over the deck as it stands. */
+    fun oddsOf(goal: HandGoal): Double = GoalOdds.probability(goal, deck.main, groups)
 
     fun assignCardToGroup(id: CardId, groupId: String?) =
         updateGroups { it.assign(id, groupId) }
@@ -680,7 +767,7 @@ class DeckBuilderState(
 
     /** The extended payload with the current breakdown written into it. */
     private fun extendedForWrite() =
-        DeckGroupsCodec.write(extended, StoredGroups(groups, lens))
+        DeckGroupsCodec.write(extended, StoredGroups(groups, lens, goals))
 
     /** Undoes an edit only while it is still the most recent one. */
     private fun undoIfCurrent(token: UndoToken) {

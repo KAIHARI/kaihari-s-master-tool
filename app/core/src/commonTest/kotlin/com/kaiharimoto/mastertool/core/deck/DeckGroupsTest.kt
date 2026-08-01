@@ -1,5 +1,8 @@
 package com.kaiharimoto.mastertool.core.deck
 
+import com.kaiharimoto.mastertool.core.hand.Ask
+import com.kaiharimoto.mastertool.core.hand.HandGoal
+import com.kaiharimoto.mastertool.core.hand.HandGoals
 import com.kaiharimoto.mastertool.core.model.CardId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -92,6 +95,43 @@ class DeckGroupsTest {
             stored.groups.ordered().map { it.id to it.name },
             back.groups.ordered().map { it.id to it.name },
         )
+    }
+
+    @Test
+    fun theQuestionSurvivesBeingSavedAndReopened() {
+        // The whole point of storing it: a goal you have to rebuild from memory
+        // every session is one you stop asking.
+        val goal = HandGoal(
+            id = "q1",
+            name = "Opens clean",
+            handSize = 6,
+            asks = mapOf("g1" to Ask.AT_LEAST_1, HandGoal.UNGROUPED to Ask.AT_MOST_1),
+        )
+        val stored = StoredGroups(groups(), Lens.ROLES, HandGoals(listOf(goal)))
+
+        val back = DeckGroupsCodec.read(DeckGroupsCodec.write(extended = null, stored = stored))
+
+        assertEquals(goal, back.goals.byId("q1"))
+    }
+
+    @Test
+    fun anAskThisBuildHasNeverHeardOfIsDroppedNotFatal() {
+        // A deck file written by a newer version must still open.
+        val future = Json.parseToJsonElement(
+            """{"groups":{"goals":[{"id":"q1","name":"X","hand":5,
+                "asks":{"g1":"EXACTLY_THREE","g2":"AT_LEAST_1"}}]}}"""
+        ) as JsonObject
+
+        val goal = DeckGroupsCodec.read(future).goals.byId("q1")
+        assertEquals(Ask.ANY, goal?.ask("g1"))
+        assertEquals(Ask.AT_LEAST_1, goal?.ask("g2"))
+    }
+
+    @Test
+    fun aDeckWithNoQuestionsGainsNoGoalsKey() {
+        val written = DeckGroupsCodec.write(null, StoredGroups(groups(), Lens.ROLES))!!
+
+        assertTrue((written["groups"] as JsonObject)["goals"] == null)
     }
 
     @Test

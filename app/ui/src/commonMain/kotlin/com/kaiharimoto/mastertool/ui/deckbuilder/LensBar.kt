@@ -152,6 +152,90 @@ private fun LensRow(state: DeckBuilderState, keying: LensKeying, modifier: Modif
 
             Hint(state, keying)
         }
+
+        GoalStrip(state)
+    }
+}
+
+/**
+ * What the deck is being asked, and whether it answers.
+ *
+ * Pinned to the right of the bar rather than scrolling with the keys, and
+ * present under every lens, because a goal is a fact about the deck and not
+ * about how you happen to be looking at it right now. Left is how you are
+ * reading; middle is what that reading found; right is whether the deck does
+ * what you asked of it.
+ */
+@Composable
+private fun GoalStrip(state: DeckBuilderState) {
+    val goals = state.goals.goals
+
+    // Recomputed when the deck, the roles or the questions change — not per
+    // frame, and not per keystroke in the search box.
+    val answers = remember(goals, state.deck.main, state.groups) {
+        goals.associate { it.id to state.oddsOf(it) }
+    }
+
+    Box(
+        Modifier
+            .width(1.dp)
+            .height(16.dp)
+            .background(MaterialTheme.colorScheme.outline),
+    )
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        goals.forEach { goal ->
+            GoalChip(
+                name = goal.name.ifBlank { "Opens" },
+                odds = answers[goal.id],
+                onClick = { state.openGoal(goal.id) },
+            )
+        }
+
+        TextButton(
+            onClick = state::newGoal,
+            contentPadding = PaddingValues(horizontal = 8.dp),
+            modifier = Modifier.height(22.dp),
+        ) {
+            Text(
+                if (goals.isEmpty()) "+ Ask something" else "+",
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun GoalChip(name: String, odds: Double?, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .height(22.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(MasterToolPalette.SurfaceHigh)
+            .clickable(onClick = onClick)
+            .pointerHoverIcon(PointerIcon.Hand)
+            .padding(horizontal = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            name,
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (odds != null) {
+            Text(
+                percentShort(odds),
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
     }
 }
 
