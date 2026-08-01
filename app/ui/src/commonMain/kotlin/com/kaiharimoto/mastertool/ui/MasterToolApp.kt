@@ -24,6 +24,7 @@ import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.defaultFeedbackEnabled
 import com.kaiharimoto.mastertool.ui.fx.rememberFeedback
 import com.kaiharimoto.mastertool.ui.library.DeckLibraryScreen
+import com.kaiharimoto.mastertool.ui.table.DuelTableScreen
 import com.kaiharimoto.mastertool.ui.table.GoldfishScreen
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
 import com.kaiharimoto.mastertool.ui.update.UpdateDialog
@@ -32,13 +33,14 @@ import com.kaiharimoto.mastertool.ui.update.UpdateState
 /**
  * Which screen is showing.
  *
- * Two destinations do not justify a navigation library; a sealed type keeps the
- * whole routing story visible in one place.
+ * A handful of destinations do not justify a navigation library; a sealed type
+ * keeps the whole routing story visible in one place.
  */
 private sealed interface Screen {
     data object DeckBuilder : Screen
     data object Library : Screen
     data object Goldfish : Screen
+    data object DuelTable : Screen
 }
 
 @Composable
@@ -78,9 +80,15 @@ fun MasterToolApp(deps: AppDependencies) {
                 updateState = updateState,
                 onOpenLibrary = { screen = Screen.Library },
                 onOpenGoldfish = { screen = Screen.Goldfish },
+                onOpenTable = { screen = Screen.DuelTable },
             )
 
             Screen.Goldfish -> GoldfishScreen(
+                state = builderState,
+                onBack = { screen = Screen.DeckBuilder },
+            )
+
+            Screen.DuelTable -> DuelTableScreen(
                 state = builderState,
                 onBack = { screen = Screen.DeckBuilder },
             )

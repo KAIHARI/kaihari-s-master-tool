@@ -61,6 +61,7 @@ fun DeckBuilderScreen(
     updateState: UpdateState,
     onOpenLibrary: () -> Unit,
     onOpenGoldfish: () -> Unit = {},
+    onOpenTable: () -> Unit = {},
 ) {
     val snackbarHost = remember { SnackbarHostState() }
     val density = LocalDensity.current
@@ -180,7 +181,14 @@ fun DeckBuilderScreen(
             // clipped by the grid it was lifted out of.
             Box(Modifier.fillMaxSize().padding(padding)) {
                 Column(Modifier.fillMaxSize()) {
-                    DeckBuilderTopBar(state, layout, updateState, onOpenLibrary, onOpenGoldfish)
+                    DeckBuilderTopBar(
+                        state,
+                        layout,
+                        updateState,
+                        onOpenLibrary,
+                        onOpenGoldfish,
+                        onOpenTable,
+                    )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
                     Row(
