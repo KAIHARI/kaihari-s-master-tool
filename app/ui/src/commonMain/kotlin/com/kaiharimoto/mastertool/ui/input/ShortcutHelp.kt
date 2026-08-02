@@ -51,9 +51,12 @@ fun ShortcutHelpSheet(onDismiss: () -> Unit, shortcuts: ShortcutRelay? = null) {
         ) {
             Text("Keyboard", style = MaterialTheme.typography.headlineSmall)
 
-            Group("Anywhere", ShortcutTable.all.filter { it.scope == ShortcutScope.ANYWHERE })
-            Group("Building a deck", ShortcutTable.all.filter { it.scope == ShortcutScope.BUILDER })
-            Group("Inspecting a card", ShortcutTable.all.filter { it.scope == ShortcutScope.INSPECTOR })
+            // Every scope, by walking them — not a list of the ones this file
+            // happens to name. Naming them is how a whole screen's shortcuts go
+            // missing from the help the day that screen is added.
+            ShortcutScope.entries.forEach { scope ->
+                Group(scope.heading, ShortcutTable.all.filter { it.scope == scope })
+            }
 
             Text(
                 "While the cursor is in a text field, only Esc, Ctrl+S and Ctrl+F stay live.",

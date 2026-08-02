@@ -229,6 +229,17 @@ class ShortcutTableTest {
     }
 
     @Test
+    fun everyScopeIsAHeadingWithSomethingUnderIt() {
+        // The help sheet walks the scopes, so a scope with no bindings is a
+        // blank section and a scope with no heading is an unlabelled one.
+        val used = ShortcutTable.all.map { it.scope }.toSet()
+        ShortcutScope.entries.forEach { scope ->
+            assertTrue(scope.heading.isNotBlank(), "$scope has no heading")
+            assertTrue(scope in used, "$scope has no shortcuts under it")
+        }
+    }
+
+    @Test
     fun everyShortcutIsDescribedForTheHelpSheet() {
         // The help sheet renders this table, so a blank description is a blank row.
         ShortcutTable.all.forEach { assertTrue(it.description.isNotBlank()) }

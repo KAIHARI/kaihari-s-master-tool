@@ -64,19 +64,28 @@ enum class ShortcutAction {
     PLAY_END_TURN,
 }
 
-/** Where a shortcut applies. Checked in the order the entries are declared. */
-enum class ShortcutScope {
-    /** Only while the card inspector is open. */
-    INSPECTOR,
+/**
+ * Where a shortcut applies, with the heading it is listed under.
+ *
+ * The heading lives here rather than in the help sheet so the sheet can render
+ * every scope by walking these entries. Naming the scopes it knows about is how
+ * a help sheet ends up quietly omitting a whole screen's shortcuts the day one
+ * is added — which is the drift this table exists to make impossible.
+ *
+ * Declaration order is display order.
+ */
+enum class ShortcutScope(val heading: String) {
+    /** Always, including over a sheet. */
+    ANYWHERE("Anywhere"),
 
     /** Only while nothing is covering the builder. */
-    BUILDER,
+    BUILDER("Building a deck"),
 
     /** Only on the play stage, which is a screen rather than a sheet. */
-    PLAY,
+    PLAY("At the table"),
 
-    /** Always, including over a sheet. */
-    ANYWHERE,
+    /** Only while the card inspector is open. */
+    INSPECTOR("Inspecting a card"),
 }
 
 /**
