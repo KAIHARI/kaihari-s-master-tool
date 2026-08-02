@@ -175,6 +175,29 @@ class BoardLayoutTest {
     }
 
     @Test
+    fun aTiltedTableIsSolvedSmallSoItStillFitsOnceProjected() {
+        // A plane tipped toward the viewer is drawn bigger at the near edge
+        // than it was laid out. A layout solved to exactly fill the surface
+        // would spill off it the moment perspective was switched on, so the
+        // solver is handed less room rather than the screen fudging it after.
+        val flat = BoardLayouter.solve(1600f, 1000f, aspect)
+        val tilted = BoardLayouter.solve(1600f, 1000f, aspect, perspectiveGrowth = 1.06f)
+
+        assertTrue(tilted.cardWidth < flat.cardWidth)
+        assertClose(flat.cardWidth / 1.06f, tilted.cardWidth)
+        // And still centred in the surface, not in the space it was given.
+        assertClose(tilted.field.left, 1600f - tilted.field.right)
+    }
+
+    @Test
+    fun aGrowthBelowOneCannotStretchTheTable() {
+        // Nonsense in, the flat layout out — never a table larger than its box.
+        val flat = BoardLayouter.solve(1600f, 1000f, aspect)
+
+        assertClose(flat.cardWidth, BoardLayouter.solve(1600f, 1000f, aspect, 0.5f).cardWidth)
+    }
+
+    @Test
     fun aWideSurfaceLeavesTheTableCentredRatherThanCornered() {
         val layout = table(width = 2400f, height = 900f)
 

@@ -158,18 +158,28 @@ object BoardLayouter {
     /** Which columns the two extra monster zones sit above: over M2 and M4. */
     private val EXTRA_MONSTER_COLUMNS = listOf(2, 4)
 
+    /**
+     * @param perspectiveGrowth how much larger the near edge will be once the
+     *   table is tilted, as a multiplier. A tilted plane is drawn bigger at the
+     *   bottom than it was laid out, so a layout solved to exactly fill the
+     *   surface would spill off it the moment perspective was switched on. The
+     *   caller doing the tilting knows the number; the solver is simply handed
+     *   less room. Pass 1 for a flat table.
+     */
     fun solve(
         width: Float,
         height: Float,
         aspectRatio: Float,
+        perspectiveGrowth: Float = 1f,
     ): BoardLayout {
         val ratio = if (aspectRatio > 0f) aspectRatio else 1f
+        val growth = perspectiveGrowth.coerceAtLeast(1f)
 
         // Width:  7 cards + 6 lanes.
         // Height: 3 rows of card + 2 lanes, then the hand's own lane and a
         //         fourth card's worth of band for the fan to sit in.
-        val byWidth = width / (COLUMNS + (COLUMNS - 1) * GAP_FRACTION)
-        val byHeight = height / (
+        val byWidth = (width / growth) / (COLUMNS + (COLUMNS - 1) * GAP_FRACTION)
+        val byHeight = (height / growth) / (
             (ROWS + 1 + READOUT_FRACTION) / ratio +
                 ((ROWS - 1) + HAND_GAP_FRACTION + 1) * GAP_FRACTION
             )

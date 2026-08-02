@@ -71,6 +71,43 @@ import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 private val TOP_BAR = 44.dp
 
 /**
+ * How far the table is tipped away from you.
+ *
+ * Nine degrees, which is less than it sounds — enough that the far row reads as
+ * further away and the near row as the one under your hands, and not so much
+ * that the graveyard turns into a sliver. A duel mat on a desk is seen at a much
+ * steeper angle than this; the screen is not a desk, and past about fifteen the
+ * top row stops being comfortably tappable.
+ *
+ * Compose maps pointer input back through the layer's inverse matrix, camera
+ * and all, so a tap on the far row lands where it looks like it landed. That is
+ * the whole reason this is a parent transform and not something drawn.
+ */
+private const val TILT_DEGREES = 9f
+
+/**
+ * How far the camera sits from the table, in multiples of the table's height.
+ *
+ * Far enough that the perspective is a hint rather than a fisheye. Compose
+ * scales `cameraDistance` by density internally, so this is computed against
+ * the table's height in dp.
+ */
+private const val CAMERA_DISTANCE_IN_HEIGHTS = 3.2f
+
+/**
+ * How much bigger the near edge gets, which the solver is handed so the table
+ * still fits once it has been projected.
+ *
+ * Derived rather than eyeballed. Tipping about the centre pushes the near edge
+ * a distance `(h/2)·sin θ` toward the camera, and the perspective divide scales
+ * it by `d / (d − (h/2)·sin θ)`. At nine degrees with the camera 3.2 heights
+ * out that is a shade under 1.03; the value here rounds up so the arithmetic
+ * being slightly off can only ever leave the table smaller than its box, never
+ * hanging over the edge.
+ */
+private const val PERSPECTIVE_GROWTH = 1.05f
+
+/**
  * The duel table: one side of a board, as a thing you move cards around on.
  *
  * A sandbox, not a rules engine — the same stance `BoardState` takes, and the
@@ -86,11 +123,14 @@ private val TOP_BAR = 44.dp
  * the bar is a sibling in a column, so the solver is handed what is left rather
  * than trusted to remember to subtract it.
  *
- * Drawn flat, for now. The handbook's fake-3D is one tilted parent plane, and a
- * tilted plane needs its hit-testing un-projected before a tap on the far row
- * lands where it looks like it landed. Doing that properly is worth a pass of
- * its own; drawing a convincing tilt over hit-testing that is subtly wrong is
- * exactly the trade this app keeps refusing.
+ * Tipped nine degrees on one parent `graphicsLayer`, which is the handbook's
+ * fake-3D exactly: no engine, one transform, everything on the table sharing a
+ * single projection so it reads as one surface. Nothing inside it knows it is
+ * tilted — the geometry is solved flat and the layer does the rest. Compose
+ * maps pointer input back through that layer's inverse matrix, camera and all,
+ * so a tap on the far row lands where it looks like it landed; the only thing
+ * the tilt costs is a slightly smaller table, which the solver is told about
+ * rather than left to discover.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,6 +151,7 @@ fun DuelTableScreen(state: DeckBuilderState, onBack: () -> Unit) {
                     width = maxWidth.toPx(),
                     height = maxHeight.toPx(),
                     aspectRatio = CARD_ASPECT_RATIO,
+                    perspectiveGrowth = PERSPECTIVE_GROWTH,
                 )
             }
 
@@ -124,29 +165,45 @@ fun DuelTableScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 return@BoxWithConstraints
             }
 
-            // Every zone's outline, whether or not it holds anything. An empty
-            // board should still look like a board.
-            layout.slots.forEach { (slot, rect) ->
-                ZoneOutline(
-                    slot = slot,
-                    rect = rect,
-                    accepting = table.accepts(slot),
-                    density = density,
-                    onClick = { onSlotTapped(table, slot, placement) },
-                )
-            }
-
-            layout.slots.forEach { (slot, rect) ->
-                when (slot) {
-                    is BoardSlot.Zone -> table.board.at(slot.zone)?.let { card ->
-                        FieldCard(state, table, slot.zone, card, rect, density, placement)
-                    }
-                    else -> PileTop(state, table, slot, rect, density, placement)
+            // One tilted plane for the whole table, which is the handbook's
+            // fake-3D exactly: no engine, one graphicsLayer, and everything on
+            // the table sharing a single projection so it stays one surface.
+            // Nothing inside here knows it is tilted — the geometry is solved
+            // flat and the layer does the rest, which is also why a tap still
+            // lands where it looks like it lands.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        rotationX = TILT_DEGREES
+                        cameraDistance = (layout.bounds.height / this.density) *
+                            CAMERA_DISTANCE_IN_HEIGHTS
+                    },
+            ) {
+                // Every zone's outline, whether or not it holds anything. An
+                // empty board should still look like a board.
+                layout.slots.forEach { (slot, rect) ->
+                    ZoneOutline(
+                        slot = slot,
+                        rect = rect,
+                        accepting = table.accepts(slot),
+                        density = density,
+                        onClick = { onSlotTapped(table, slot, placement) },
+                    )
                 }
-            }
 
-            HandReadout(state, table, layout, density)
-            HandFan(state, table, layout, density, placement)
+                layout.slots.forEach { (slot, rect) ->
+                    when (slot) {
+                        is BoardSlot.Zone -> table.board.at(slot.zone)?.let { card ->
+                            FieldCard(state, table, slot.zone, card, rect, density, placement)
+                        }
+                        else -> PileTop(state, table, slot, rect, density, placement)
+                    }
+                }
+
+                HandReadout(state, table, layout, density)
+                HandFan(state, table, layout, density, placement)
+            }
         }
     }
 
