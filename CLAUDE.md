@@ -124,7 +124,7 @@ be corrected.
   quiet card sounds, haptics. No decorative clutter, no skeuomorphic
   inefficiency. The physical feeling to capture is handling a single card.
 - **Motion = springs.** `core/motion/` (`Springs`, `PosePhysics`) with the
-  one-`withFrameNanos`-loop recipe (see `EasterEgg.kt` and `GoldfishScreen.kt`
+  one-`withFrameNanos`-loop recipe (see `EasterEgg.kt` and `ui/play/StageCard.kt`
   for the sanctioned perf pattern: bulk state in plain lists, per-object state
   read inside `graphicsLayer`).
 - **Fake-3D by design:** perspective via `graphicsLayer`
@@ -134,8 +134,8 @@ be corrected.
 ## Roadmap State
 
 Shipped: the full deck builder (drag-and-drop, exact consistency calculator,
-per-card tactility, sound/haptics, 3D card inspect, goldfish table) and the
-tested duel-board domain (`core/board/BoardState.kt`).
+per-card tactility, sound/haptics, 3D card inspect), the zone duel table, and
+the freeform play stage that replaced the goldfish screen.
 
 Two parts of the builder are worth knowing before touching them, because both
 replaced an earlier design that looked reasonable and was not:
@@ -161,14 +161,42 @@ its type split, its copy counts and its banlist exposure. Every key reports its
 exact opening rate (`core/hand/LensOdds.kt`), and the consistency question is
 stored *with the deck* as a `HandGoal` rather than rebuilt in a sheet each time.
 
-Next, chosen with the user: the **duel table UI** on top of `BoardState`,
-inheriting the goldfish stage pattern. `core/board/BoardState.kt` is a complete,
-tested sandbox — draw, play from hand/extra/graveyard, move, flip, banish,
-attach and detach materials, counters, life points, phases — with no UI at all,
-and it is the gate on everything about *piloting* a deck rather than building
-one. Zone geometry should be solved in core the way `DeckFit` is, not negotiated
-in the composable. After that: the deck **showcase** stage and goldfish polish
-(deal-origin projection, stack shuffle/cut).
+Both play surfaces now exist, and they answer different questions:
+
+- **Table** (`ui/table/DuelTableScreen.kt`) is the zone board over
+  `core/board/BoardState.kt`. Cards go in the five monster and five
+  spell/trap zones, and the question it answers is where a card is *allowed*
+  to go. Geometry is solved in core (`core/layout/BoardLayout.kt`), the way
+  `DeckFit` is, and not negotiated in the composable.
+- **Play** (`ui/play/`) is the freeform table that replaced the goldfish
+  screen: cards go anywhere, stack on each other, and can be set face-down.
+  Its domain is `core/board/PlayField.kt`, and everything about *what a
+  release means* is core and tested — `DropTargets` resolves the finger's
+  position to an intent, `DropCommit` carries it out, and the indicator the
+  user sees is that same value, so the table cannot promise one thing and
+  do another.
+
+Three rules the play stage would be broken without, each of which was a bug
+first:
+
+- **One gesture arbiter for the whole mat**, in core
+  (`core/mat/MatGestureMachine.kt`), driven by one `pointerInput`. Per-card
+  detectors let one finger start a drag on one card while a second starts a
+  separate drag on another, and consumption cannot fix that after the fact.
+- **Both of its clocks report to `MatPilot`.** Pointer events and the frame
+  loop each produce gesture events, and both must act on the same memory of
+  what the press landed on. `onTick` called for its side effects, with its
+  return value dropped, is the shape of that bug: peek and the two-finger
+  menu compute correctly and then vanish.
+- **The gesture belongs to the finger that started it**, but does not end the
+  instant that finger lifts — the second finger of a tap is a frame behind.
+  It opens a grace window instead; a hand left resting on the mat loses the
+  gesture when the window closes.
+
+Next: attaching as material is reachable in the domain and not yet by gesture
+(`DropIntent.Attach` needs an idiom that is not already spoken for). After
+that: the deck **showcase** stage, and play polish (deal-origin projection,
+stack shuffle/cut).
 
 **Explicitly deferred by the user — do not build on the legacy designs:**
 siding patterns and shootout mode will be redesigned from scratch in a future
