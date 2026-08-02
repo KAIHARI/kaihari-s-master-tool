@@ -123,7 +123,7 @@ anything simple enough not to need the frame loop.
 
 **One loop, not one per object.** The sanctioned pattern for many moving things
 is a single `withFrameNanos` loop with bulk state in plain lists and per-object
-state read *inside* `graphicsLayer` — see `EasterEgg.kt` and `GoldfishScreen.kt`.
+state read *inside* `graphicsLayer` — see `EasterEgg.kt` and `ui/play/StageCard.kt`.
 Reading animated state in a composable body recomposes the tree sixty times a
 second; reading it in a layer does not.
 
@@ -236,7 +236,50 @@ What this design refuses, and why:
   the fitter whether a lens is on or not; the crack is bought from the cell.
   Nothing about the deck's geometry changes when a lens does.
 
-## 10. Anti-patterns
+## 10. The play stage, as a worked example
+
+The freeform table (`ui/play/`) is the second place where the whole design
+argument shows up at once, and it is worth reading before touching it.
+
+**One arbiter, not one per card.** Every gesture on the mat is decided by a
+single `MatGestureMachine` in core, driven by a single `pointerInput` over the
+whole stage. Compose hit-tests each pointer independently, so per-card gesture
+detectors let one finger start a drag on one card while a second finger starts
+a *separate* drag on another. Consumption cannot fix that: by the time it
+happens there are already two gesture loops that each believe they are in
+charge. It also means touch and pointer are two producers of one vocabulary
+rather than two implementations, which is how "every gesture ships with both
+idioms" stays true structurally instead of by discipline.
+
+**The gesture is decided by time as much as by position.** All four two-finger
+gestures are spoken for — tap flips, twist turns to defence, drag takes the
+pile, hold opens the menu — so the remaining channels are duration and
+stillness. A one-finger hold peeks; a *carried* card held still goes underneath
+the card it is over rather than on top. Both are driven from the frame loop,
+because a finger that has stopped moving stops producing pointer events, which
+is precisely the condition being detected.
+
+**The indicator is the intent, not a picture of it.** `DropTargets` resolves
+the finger's position to one `DropIntent`, the highlight draws that value, and
+the release commits that same value. There is no second decision at release
+time that could disagree with what the user was shown. Every threshold in the
+resolver is a pair — harder to enter than to leave — because a single number
+makes a finger resting on a boundary flicker between two answers several times
+a second, and which one you get is luck.
+
+**Fake-3D, still.** One tilted parent plane via `graphicsLayer`, and a flat
+overlay for anything that lifts off it, projected by hand through the same
+`StagePlane` the renderer uses so there is no seam. A carried card's *position*
+is assigned from the finger rather than sprung toward it — any spring between a
+finger and the thing it is holding is lag, and lag on a touch drag is the one
+thing that makes a simulator feel fake. Its rotations still spring, which is
+where the weight comes from instead.
+
+**Every face-down card has a back.** `CardBack` draws it — the brown field with
+either the oval or the spiral — and it is a preference, not a constant. Nothing
+in the app draws a blank rectangle where a card back belongs.
+
+## 11. Anti-patterns
 
 - Colour that is neither meaning nor light.
 - A translucent wash over content.
@@ -246,3 +289,6 @@ What this design refuses, and why:
 - Chrome that grows without being declared to the fitter.
 - Stock Material spacing (48dp targets, 56dp fields) inside the deck column.
 - A view that reorders, renames or invents anything about the deck.
+- A gesture detector attached to a card rather than to the mat.
+- A drop indicator computed separately from the drop.
+- A spring between a finger and the thing it is dragging.
