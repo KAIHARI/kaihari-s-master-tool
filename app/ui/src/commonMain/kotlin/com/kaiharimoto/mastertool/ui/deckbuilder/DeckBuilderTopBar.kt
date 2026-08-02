@@ -62,6 +62,7 @@ fun DeckBuilderTopBar(
     onOpenLibrary: () -> Unit,
     onOpenGoldfish: () -> Unit = {},
     onOpenTable: () -> Unit = {},
+    onOpenPlay: () -> Unit = {},
 ) {
     val validation = state.validation
     var menuOpen by remember { mutableStateOf(false) }
@@ -186,6 +187,9 @@ fun DeckBuilderTopBar(
         }
         TextButton(onClick = onOpenTable, enabled = state.deck.main.size >= 1) {
             Text("Table")
+        }
+        TextButton(onClick = onOpenPlay, enabled = state.deck.main.size >= 1) {
+            Text("Play")
         }
         TextButton(onClick = onOpenLibrary) { Text("Library") }
 

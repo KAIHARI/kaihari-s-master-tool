@@ -62,6 +62,7 @@ fun DeckBuilderScreen(
     onOpenLibrary: () -> Unit,
     onOpenGoldfish: () -> Unit = {},
     onOpenTable: () -> Unit = {},
+    onOpenPlay: () -> Unit = {},
 ) {
     val snackbarHost = remember { SnackbarHostState() }
     val density = LocalDensity.current
@@ -188,6 +189,7 @@ fun DeckBuilderScreen(
                         onOpenLibrary,
                         onOpenGoldfish,
                         onOpenTable,
+                        onOpenPlay,
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
