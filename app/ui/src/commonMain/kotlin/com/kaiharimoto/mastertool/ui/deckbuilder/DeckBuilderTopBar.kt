@@ -60,7 +60,6 @@ fun DeckBuilderTopBar(
     layout: DeckLayoutState,
     updateState: UpdateState,
     onOpenLibrary: () -> Unit,
-    onOpenGoldfish: () -> Unit = {},
     onOpenTable: () -> Unit = {},
     onOpenPlay: () -> Unit = {},
 ) {
@@ -182,13 +181,10 @@ fun DeckBuilderTopBar(
         IconButton(onClick = { state.save() }) {
             Icon(Icons.Filled.Save, contentDescription = "Save deck")
         }
-        TextButton(onClick = onOpenGoldfish, enabled = state.deck.main.size >= 5) {
-            Text("Goldfish")
-        }
         TextButton(onClick = onOpenTable, enabled = state.deck.main.size >= 1) {
             Text("Table")
         }
-        TextButton(onClick = onOpenPlay, enabled = state.deck.main.size >= 1) {
+        TextButton(onClick = onOpenPlay, enabled = state.deck.main.size >= 5) {
             Text("Play")
         }
         TextButton(onClick = onOpenLibrary) { Text("Library") }

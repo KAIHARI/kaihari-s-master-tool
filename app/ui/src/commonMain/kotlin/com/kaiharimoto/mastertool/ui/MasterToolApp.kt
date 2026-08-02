@@ -28,7 +28,6 @@ import com.kaiharimoto.mastertool.ui.fx.rememberFeedback
 import com.kaiharimoto.mastertool.ui.library.DeckLibraryScreen
 import com.kaiharimoto.mastertool.ui.play.PlayScreen
 import com.kaiharimoto.mastertool.ui.table.DuelTableScreen
-import com.kaiharimoto.mastertool.ui.table.GoldfishScreen
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
 import com.kaiharimoto.mastertool.ui.update.UpdateDialog
 import com.kaiharimoto.mastertool.ui.update.UpdateState
@@ -42,7 +41,6 @@ import com.kaiharimoto.mastertool.ui.update.UpdateState
 private sealed interface Screen {
     data object DeckBuilder : Screen
     data object Library : Screen
-    data object Goldfish : Screen
     data object DuelTable : Screen
     data object Play : Screen
 }
@@ -89,14 +87,8 @@ fun MasterToolApp(deps: AppDependencies) {
                 layout = layoutState,
                 updateState = updateState,
                 onOpenLibrary = { screen = Screen.Library },
-                onOpenGoldfish = { screen = Screen.Goldfish },
                 onOpenTable = { screen = Screen.DuelTable },
                 onOpenPlay = { screen = Screen.Play },
-            )
-
-            Screen.Goldfish -> GoldfishScreen(
-                state = builderState,
-                onBack = { screen = Screen.DeckBuilder },
             )
 
             Screen.DuelTable -> DuelTableScreen(

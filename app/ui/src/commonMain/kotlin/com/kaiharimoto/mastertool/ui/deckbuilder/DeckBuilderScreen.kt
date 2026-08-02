@@ -60,7 +60,6 @@ fun DeckBuilderScreen(
     layout: DeckLayoutState,
     updateState: UpdateState,
     onOpenLibrary: () -> Unit,
-    onOpenGoldfish: () -> Unit = {},
     onOpenTable: () -> Unit = {},
     onOpenPlay: () -> Unit = {},
 ) {
@@ -187,7 +186,6 @@ fun DeckBuilderScreen(
                         layout,
                         updateState,
                         onOpenLibrary,
-                        onOpenGoldfish,
                         onOpenTable,
                         onOpenPlay,
                     )
