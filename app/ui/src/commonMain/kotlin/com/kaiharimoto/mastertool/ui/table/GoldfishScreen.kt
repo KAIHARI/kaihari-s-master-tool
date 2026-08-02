@@ -41,6 +41,8 @@ import com.kaiharimoto.mastertool.core.motion.PosePhysics
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
+import com.kaiharimoto.mastertool.ui.components.CardBack
+import com.kaiharimoto.mastertool.ui.components.LocalCardBack
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
 import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
@@ -81,6 +83,7 @@ fun GoldfishScreen(
     onBack: () -> Unit,
 ) {
     val feedback = LocalFeedback.current
+    val back = LocalCardBack.current
     var session by remember { mutableStateOf<OpeningHand?>(null) }
     val dealt = remember { mutableStateListOf<DealtCard>() }
     var handSize by remember { mutableStateOf(5) }
@@ -277,16 +280,13 @@ fun GoldfishScreen(
                     val facingAway =
                         ((card.motion.pose.rotY % 360f) + 360f) % 360f in 90f..270f
                     if (!card.revealed || facingAway || art == null) {
-                        Box(
-                            Modifier
-                                .fillMaxSize()
-                                .padding(5.dp)
-                                .prismaticBorder(
-                                    angle = 135f,
-                                    cornerRadius = 4.dp,
-                                    stroke = 1.dp,
-                                    alpha = 0.45f,
-                                ),
+                        // A face-down card wears a card back, here and
+                        // everywhere else in the app.
+                        CardBack(
+                            modifier = Modifier.fillMaxSize(),
+                            style = back.style,
+                            imageUrl = back.imageUrl,
+                            cornerRadius = 6.dp,
                         )
                     } else {
                         AsyncImage(

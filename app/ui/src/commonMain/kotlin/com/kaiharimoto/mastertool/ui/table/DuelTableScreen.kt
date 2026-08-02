@@ -67,7 +67,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Density
 import coil3.compose.AsyncImage
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
+import com.kaiharimoto.mastertool.ui.components.CardBack
 import com.kaiharimoto.mastertool.ui.components.CardTile
+import com.kaiharimoto.mastertool.ui.components.LocalCardBack
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
 import com.kaiharimoto.mastertool.ui.deckbuilder.color
 import com.kaiharimoto.mastertool.ui.fx.Feedback
@@ -887,26 +889,32 @@ private fun TablePiece(
     }
 }
 
-/**
- * A card whose face is not showing.
- *
- * Drawn rather than illustrated: a photographed card back is the one piece of
- * skeuomorphism this app would not survive, and a set card's whole meaning is
- * that you cannot see it.
- */
+/** A card whose face is not showing: the card back, plus whatever it is doing. */
 @Composable
 private fun FaceDown(held: Boolean) {
-    Box(
-        Modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(4.dp))
-            .background(MasterToolPalette.SurfaceHigh)
-            .border(
-                width = if (held) 2.5.dp else 1.dp,
-                color = if (held) MasterToolPalette.AccentBright else MaterialTheme.colorScheme.outline,
-                shape = RoundedCornerShape(4.dp),
-            ),
-    )
+    val back = LocalCardBack.current
+
+    Box(Modifier.fillMaxSize()) {
+        CardBack(
+            modifier = Modifier.fillMaxSize(),
+            style = back.style,
+            imageUrl = back.imageUrl,
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(4.dp))
+                .border(
+                    width = if (held) 2.5.dp else 1.dp,
+                    color = if (held) {
+                        MasterToolPalette.AccentBright
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    },
+                    shape = RoundedCornerShape(4.dp),
+                ),
+        )
+    }
 }
 
 /** A pile, opened to be read and played from. */

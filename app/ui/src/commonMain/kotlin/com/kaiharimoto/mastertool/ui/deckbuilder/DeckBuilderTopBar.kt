@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kaiharimoto.mastertool.core.model.Format
+import com.kaiharimoto.mastertool.core.prefs.CardBackStyle
 import com.kaiharimoto.mastertool.core.prefs.ThemeMode
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
 import com.kaiharimoto.mastertool.ui.egg.ChibiLogo
@@ -283,6 +284,21 @@ fun DeckBuilderTopBar(
                     },
                 )
                 DropdownMenuItem(
+                    text = { Text("Card back: ${layout.preferences.cardBack.displayName}") },
+                    onClick = {
+                        // Cycles for the same reason the theme does: two values,
+                        // and every face-down card on screen previews it at once.
+                        layout.update {
+                            it.copy(
+                                cardBack = when (it.cardBack) {
+                                    CardBackStyle.OVAL -> CardBackStyle.SPIRAL
+                                    CardBackStyle.SPIRAL -> CardBackStyle.OVAL
+                                }
+                            )
+                        }
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text("Reset layout") },
                     onClick = {
                         menuOpen = false
@@ -296,6 +312,8 @@ fun DeckBuilderTopBar(
                                 easterEggPool = it.easterEggPool,
                                 themeMode = it.themeMode,
                                 feedbackEnabled = it.feedbackEnabled,
+                                cardBack = it.cardBack,
+                                cardBackUrl = it.cardBackUrl,
                             )
                         }
                     },

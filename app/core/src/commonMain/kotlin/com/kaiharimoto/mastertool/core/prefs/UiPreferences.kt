@@ -14,6 +14,27 @@ enum class ThemeMode {
     LIGHT,
 }
 
+/**
+ * Which back a face-down card wears.
+ *
+ * Two, because two is what people mean by "the card back": the plain one with a
+ * dark oval, and the older spiral. Both are drawn rather than shipped as
+ * artwork — see `ui/components/CardBack.kt` for why — and either can be
+ * overridden per install by pointing [UiPreferences.cardBackUrl] at an image.
+ */
+@Serializable
+enum class CardBackStyle {
+    OVAL,
+    SPIRAL,
+    ;
+
+    val displayName: String
+        get() = when (this) {
+            OVAL -> "Oval"
+            SPIRAL -> "Spiral"
+        }
+}
+
 /** How one deck pane is laid out. */
 @Serializable
 data class SectionPreferences(
@@ -94,6 +115,17 @@ data class UiPreferences(
     val side: SectionPreferences = SectionPreferences(weight = 1f, columns = 15),
     /** Show one tile per distinct card with a count, rather than one per copy. */
     val stacked: Boolean = false,
+    /** Which of the drawn backs a face-down card wears. */
+    val cardBack: CardBackStyle = CardBackStyle.OVAL,
+    /**
+     * An image to use for the card back instead of the drawn one.
+     *
+     * Blank by default and blank in the repository, deliberately. The official
+     * back is Konami's artwork and this project is public, so it is not shipped
+     * here; anyone who wants the real thing points this at it on their own
+     * device and it is cached like any other card image.
+     */
+    val cardBackUrl: String = "",
     val format: Format = Format.TCG,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /**

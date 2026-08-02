@@ -20,6 +20,8 @@ import com.kaiharimoto.mastertool.core.remote.HttpClientFactory
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderScreen
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckLayoutState
+import com.kaiharimoto.mastertool.ui.components.CardBackChoice
+import com.kaiharimoto.mastertool.ui.components.LocalCardBack
 import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.defaultFeedbackEnabled
 import com.kaiharimoto.mastertool.ui.fx.rememberFeedback
@@ -72,7 +74,13 @@ fun MasterToolApp(deps: AppDependencies) {
     )
 
     MasterToolTheme(mode = layoutState.preferences.themeMode) {
-        CompositionLocalProvider(LocalFeedback provides feedback) {
+        CompositionLocalProvider(
+            LocalFeedback provides feedback,
+            LocalCardBack provides CardBackChoice(
+                style = layoutState.preferences.cardBack,
+                imageUrl = layoutState.preferences.cardBackUrl,
+            ),
+        ) {
         when (screen) {
             Screen.DeckBuilder -> DeckBuilderScreen(
                 state = builderState,
