@@ -65,7 +65,12 @@ import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CardBack
 import com.kaiharimoto.mastertool.ui.components.LocalCardBack
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
+import com.kaiharimoto.mastertool.core.input.ShortcutAction
+import com.kaiharimoto.mastertool.core.input.ShortcutContext
+import com.kaiharimoto.mastertool.core.input.ShortcutLayer
 import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
+import com.kaiharimoto.mastertool.ui.fx.SoundEffect
+import com.kaiharimoto.mastertool.ui.input.ShortcutHost
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlin.math.abs
 import kotlin.math.cos
@@ -140,6 +145,29 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
     val back = LocalCardBack.current
     var menuFor by remember { mutableStateOf<DragOrigin?>(null) }
 
+    // The pointer half of the standing rule that every gesture ships with both
+    // idioms. Only the actions that need no card selected are here: a keyboard
+    // has no way to say "this one" on a table where cards are anywhere rather
+    // than in numbered zones, so anything about a particular card stays on the
+    // card — touched, or through its menu.
+    ShortcutHost(
+        context = ShortcutContext(topLayer = ShortcutLayer.PLAY),
+        onAction = { action ->
+            when (action) {
+                ShortcutAction.PLAY_DRAW ->
+                    if (play.move { it.draw() }) feedback.play(SoundEffect.DEAL)
+                ShortcutAction.PLAY_SHUFFLE ->
+                    play.move { it.shuffleDeck(it.turn * 31L + it.deck.size) }
+                ShortcutAction.PLAY_NEW_HAND -> play.restart()
+                ShortcutAction.PLAY_NEXT_PHASE -> play.move { it.nextPhase() }
+                ShortcutAction.PLAY_END_TURN -> play.move { it.endTurn() }
+                ShortcutAction.UNDO -> play.undo()
+                ShortcutAction.REDO -> play.redo()
+                ShortcutAction.DISMISS -> if (menuFor != null) menuFor = null else onBack()
+                else -> Unit
+            }
+        },
+    ) {
     Box(Modifier.fillMaxSize().background(MasterToolPalette.Ink)) {
         BoxWithConstraints(Modifier.fillMaxSize().padding(top = TOP_BAR)) {
             val density = LocalDensity.current
@@ -267,6 +295,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
         }
 
         PlayTopBar(play, onBack)
+    }
     }
 }
 

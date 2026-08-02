@@ -12,6 +12,7 @@ class ShortcutTableTest {
     private val typing = ShortcutContext(textInputFocused = true)
     private val inspecting = ShortcutContext(topLayer = ShortcutLayer.INSPECTOR)
     private val sheetOpen = ShortcutContext(topLayer = ShortcutLayer.ISSUES)
+    private val playing = ShortcutContext(topLayer = ShortcutLayer.PLAY)
 
     @Test
     fun resolvesAPlainKey() {
@@ -138,6 +139,10 @@ class ShortcutTableTest {
                 ShortcutAction.NEXT_CARD,
                 ShortcutAction.UNDO,
                 ShortcutAction.REDO,
+                // Holding `d` deals: opening five cards on the play stage is
+                // five presses otherwise, and drawing is a stepping action in
+                // the same sense paging is.
+                ShortcutAction.PLAY_DRAW,
             ),
             repeatable,
         )
@@ -186,13 +191,41 @@ class ShortcutTableTest {
     @Test
     fun everyShortcutCanActuallyFire() {
         // A binding no context can reach is a binding nobody will ever discover.
-        val contexts = listOf(builder, typing, inspecting, sheetOpen)
+        val contexts = listOf(builder, typing, inspecting, sheetOpen, playing)
         ShortcutTable.all.forEach { shortcut ->
             assertTrue(
                 contexts.any { ShortcutTable.resolve(shortcut.chord, it) == shortcut.action },
                 "${shortcut.chord.label} (${shortcut.action}) is unreachable",
             )
         }
+    }
+
+    @Test
+    fun theSameLetterMeansDifferentThingsOnTheTableAndInTheBuilder() {
+        // The two scopes are never live at once, which is what makes reusing
+        // the good letters safe rather than ambiguous.
+        assertEquals(ShortcutAction.TOGGLE_STATS, ShortcutTable.resolve(KeyChord("s"), builder))
+        assertEquals(ShortcutAction.PLAY_SHUFFLE, ShortcutTable.resolve(KeyChord("s"), playing))
+        assertEquals(
+            ShortcutAction.TOGGLE_SEARCH_PANE,
+            ShortcutTable.resolve(KeyChord("d"), builder),
+        )
+        assertEquals(ShortcutAction.PLAY_DRAW, ShortcutTable.resolve(KeyChord("d"), playing))
+    }
+
+    @Test
+    fun theTableOnlyUsesKeysTheHostCanName() {
+        // `ShortcutHost.chordName` is an explicit list, and a binding on a key
+        // missing from it is a binding that silently never fires — which is
+        // exactly what had happened to `d` and `n`. This is the reminder: add a
+        // key here and you must name it there too.
+        val named = setOf(
+            "escape", "slash", "space", "left", "right",
+            "1", "2", "3",
+            "b", "c", "d", "f", "g", "i", "n", "s", "t", "z",
+        )
+        val used = ShortcutTable.all.map { it.chord.key }.toSet()
+        assertEquals(emptySet(), used - named, "bound to a key the host cannot name")
     }
 
     @Test

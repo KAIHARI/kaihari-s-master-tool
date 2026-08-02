@@ -138,6 +138,7 @@ private fun KeyEvent.toChord(): KeyChord? {
 private fun Key.chordName(): String? = when (this) {
     Key.Escape -> "escape"
     Key.Slash -> "slash"
+    Key.Spacebar -> "space"
     Key.DirectionLeft -> "left"
     Key.DirectionRight -> "right"
     Key.One -> "1"
@@ -145,10 +146,13 @@ private fun Key.chordName(): String? = when (this) {
     Key.Three -> "3"
     Key.B -> "b"
     Key.C -> "c"
+    Key.D -> "d"
     Key.F -> "f"
     Key.G -> "g"
     Key.I -> "i"
+    Key.N -> "n"
     Key.S -> "s"
+    Key.T -> "t"
     Key.Z -> "z"
     else -> null
 }

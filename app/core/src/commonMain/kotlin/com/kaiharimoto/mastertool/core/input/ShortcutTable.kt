@@ -52,6 +52,16 @@ enum class ShortcutAction {
     FOCUS_SIDE,
     PREVIOUS_CARD,
     NEXT_CARD,
+
+    // The play stage. Only the actions that need no card selected — everything
+    // that is *about* a particular card is reached by touching that card, or by
+    // its menu, because a keyboard has no way to say "this one" on a table
+    // where cards are anywhere rather than in numbered zones.
+    PLAY_DRAW,
+    PLAY_SHUFFLE,
+    PLAY_NEW_HAND,
+    PLAY_NEXT_PHASE,
+    PLAY_END_TURN,
 }
 
 /** Where a shortcut applies. Checked in the order the entries are declared. */
@@ -61,6 +71,9 @@ enum class ShortcutScope {
 
     /** Only while nothing is covering the builder. */
     BUILDER,
+
+    /** Only on the play stage, which is a screen rather than a sheet. */
+    PLAY,
 
     /** Always, including over a sheet. */
     ANYWHERE,
@@ -84,6 +97,7 @@ enum class ShortcutLayer {
     GROUPS,
     CONSISTENCY,
     EGG,
+    PLAY,
 }
 
 /** What is on screen, which decides which shortcuts are live. */
@@ -234,6 +248,36 @@ object ShortcutTable {
             KeyChord("slash", shift = true), ShortcutAction.TOGGLE_HELP, ShortcutScope.BUILDER,
             "This list", togglesLayer = ShortcutLayer.HELP,
         ),
+
+        // The play stage. Several of these reuse letters the builder already
+        // spends, which is safe because the two scopes are never live at once —
+        // and it is better than second-choice keys, since nobody holding a
+        // keyboard over a table wants `d` to mean anything but draw.
+        Shortcut(
+            KeyChord("d"), ShortcutAction.PLAY_DRAW, ShortcutScope.PLAY,
+            "Draw a card", repeatable = true,
+        ),
+        Shortcut(
+            KeyChord("s"), ShortcutAction.PLAY_SHUFFLE, ShortcutScope.PLAY, "Shuffle the deck",
+        ),
+        Shortcut(
+            KeyChord("n"), ShortcutAction.PLAY_NEW_HAND, ShortcutScope.PLAY,
+            "Clear the table and deal again",
+        ),
+        Shortcut(
+            KeyChord("space"), ShortcutAction.PLAY_NEXT_PHASE, ShortcutScope.PLAY, "Next phase",
+        ),
+        Shortcut(
+            KeyChord("t"), ShortcutAction.PLAY_END_TURN, ShortcutScope.PLAY, "End the turn",
+        ),
+        Shortcut(
+            KeyChord("z", ctrl = true), ShortcutAction.UNDO, ShortcutScope.PLAY,
+            "Undo", repeatable = true,
+        ),
+        Shortcut(
+            KeyChord("z", ctrl = true, shift = true), ShortcutAction.REDO, ShortcutScope.PLAY,
+            "Redo", repeatable = true,
+        ),
     )
 
     fun resolve(chord: KeyChord, context: ShortcutContext): ShortcutAction? =
@@ -255,6 +299,7 @@ object ShortcutTable {
             ShortcutScope.ANYWHERE -> true
             ShortcutScope.INSPECTOR -> context.topLayer == ShortcutLayer.INSPECTOR
             ShortcutScope.BUILDER -> context.topLayer == ShortcutLayer.BUILDER
+            ShortcutScope.PLAY -> context.topLayer == ShortcutLayer.PLAY
         }
     }
 }
