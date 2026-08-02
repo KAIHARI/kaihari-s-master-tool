@@ -154,6 +154,18 @@ fun DeckBuilderScreen(
             ShortcutAction.FOCUS_SIDE -> layout.focusSection(DeckSection.SIDE)
             ShortcutAction.PREVIOUS_CARD -> state.pageInspection(-1)
             ShortcutAction.NEXT_CARD -> state.pageInspection(1)
+
+            // The play stage's own, which cannot reach this handler because
+            // their scope is never live while the builder is. Listed rather
+            // than swept up by an `else`, so that adding an action still has to
+            // be a decision here — which is the whole value of the exhaustive
+            // check, and the reason this file is where it was caught.
+            ShortcutAction.PLAY_DRAW,
+            ShortcutAction.PLAY_SHUFFLE,
+            ShortcutAction.PLAY_NEW_HAND,
+            ShortcutAction.PLAY_NEXT_PHASE,
+            ShortcutAction.PLAY_END_TURN,
+            -> Unit
         }
     }
     // Sheets compose into their own focus boundary, so each stands up its own
