@@ -87,7 +87,11 @@ object Shadows {
             corners = corners,
             alpha = DARKEST / (1f + lift / FADE_OVER),
             spread = reference * (SOFT_AT_REST + lift * SOFT_PER_HEIGHT),
-            contact = 1f / (1f + lift / CONTACT_OVER),
+            // Squared, so it is gone rather than merely faint by the time a
+            // card is properly in the air. A linear tail leaves a smudge under
+            // a held card, which is precisely the reading the separation
+            // between card and cast shadow is trying to establish is wrong.
+            contact = 1f / (1f + (lift / CONTACT_OVER) * (lift / CONTACT_OVER)),
             height = above,
         )
     }
