@@ -76,6 +76,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.PI
+import kotlin.random.Random
 
 /** How far a carried card rises off the mat, as a share of its own height. */
 private const val LIFT_Z = 0.42f
@@ -138,7 +139,12 @@ private const val ANNOUNCEMENT_MILLIS = 1_600L
 @Composable
 fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
     val deck = state.deck
-    val play = remember(deck.main, deck.extra) { PlayState(deck.main, deck.extra) }
+    // A fresh shuffle each time the table is opened. The seed defaults to a
+    // constant so tests can ask for a known deal; a demo that dealt the same
+    // five cards to every person you showed it to would look broken.
+    val play = remember(deck.main, deck.extra) {
+        PlayState(deck.main, deck.extra, Random.nextLong())
+    }
     val cards = remember(deck.main, deck.extra) { mutableMapOf<Int, StageCard>() }
     val machine = remember(deck.main, deck.extra) { MatGestureMachine() }
     val feedback = LocalFeedback.current
