@@ -723,10 +723,12 @@ private fun CardActions(play: PlayState, origin: DragOrigin, onDismiss: () -> Un
     val id = (origin as? DragOrigin.Mat)?.id
 
     androidx.compose.material3.DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
-        fun item(label: String, enabled: Boolean = true, action: () -> Unit) {
+        // A lambda rather than a local `fun`, because a local function cannot be
+        // @Composable and DropdownMenuItem is one. Every entry below dismisses
+        // first and acts second, so the menu never outlives the card it is about.
+        val item: @Composable (String, () -> Unit) -> Unit = { label, action ->
             androidx.compose.material3.DropdownMenuItem(
                 text = { Text(label) },
-                enabled = enabled,
                 onClick = { onDismiss(); action() },
             )
         }
