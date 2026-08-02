@@ -131,9 +131,25 @@ second; reading it in a layer does not.
 deck changed, nothing moves. Staggers are for showing structure — pieces of a
 deck arriving in order — and are measured in tens of milliseconds, not hundreds.
 
-**Fake 3D only.** Perspective via `graphicsLayer` (rotationX/Y, cameraDistance):
-one tilted parent plane for tables, flat overlay springs for anything that lifts
-off. No 3D engine, ever.
+**Real geometry, no engine.** The rule used to read "fake 3D only", and the
+second half of it still holds: there is no Filament, no OpenGL, no scene graph,
+and there never will be — none of them reaches Kotlin Multiplatform common code,
+and all of them would take the desktop target with them.
+
+What changed is the first half. The geometry is now *real* and lives in
+`core/render/`, tested like everything else in core: `Rot3` interprets the same
+three Euler angles `graphicsLayer` is about to rasterise with, `CardSolid` gives
+a card a thickness and six faces with normals, `Shading` is Lambert plus
+Blinn-Phong with a moving specular pool, `Shadows` casts by projecting every
+corner along the light, and `StageRig` holds the one key, the one fill and the
+one eye that all of it agrees about.
+
+That reaches the screen through the two things Compose does give you: a
+`graphicsLayer` is a genuine perspective-correct textured quad, and a canvas
+will draw a path. `StagePlane.flatten` is the join between them — it rewrites a
+point *with a height* as the point on the mat that will look like it once the
+plane's own transform has run, so shadows, pile edges and card thickness can all
+be drawn by a canvas that only speaks two dimensions.
 
 ## 7. Materials
 
@@ -143,12 +159,34 @@ The physical feeling to reproduce is handling a single card.
   spring.
 - **Lift** with a shadow while held, and a 5% grow — the only place anything
   scales.
-- **Sheen**: a soft specular opposite the tilt, screen-blended, drawn only while
-  a pointer is on the card.
+- **The highlight moves; the brightness does not.** This is the whole material
+  model in one sentence. A card that gets *brighter* as you tilt it is a
+  brightness animation; a pool of light that slides across the face is why you
+  tilt a real card to read the small print. `Shading.of` puts the pool where a
+  mirror at that angle would send the lamp, and lets it slide off the edge when
+  it should — clamping it to the border pins a bright smear to a card that has
+  simply stopped catching the light.
+- **Three stocks, chosen by what the card is** (`CardStock`): gloss for card
+  stock in a sleeve, foil for extra-deck frames, matte for the back of a sleeve.
+  Foil is brighter *and tighter*, which is what makes it read as metal rather
+  than as brighter paper, and it is the only one that splits its highlight into
+  the prismatic ramp — colour as light, inside the specular term or nowhere.
+- **A card is a solid.** It has an edge, piles have a visible white band, and
+  both are drawn from `CardSolid` with back-face culling. A pile's height is
+  notation rather than measurement — a three-card pile is a millimetre, which
+  the tilt then divides by four — but notation on a saturating curve, so it is
+  honest at both ends: three cards read, and sixty do not become a tower.
 - **Sound**: short, quiet, and only for things a hand does — lift, set down,
   slide, shuffle, deal. The pickup is a soft pitched tap (55ms, fast attack,
   smooth tail), not a click. Synthesis lives in `tools/sounds/`.
-- **Haptics** follow sound, on the same toggle.
+- **Haptics** follow sound, on the same toggle, from one vocabulary in
+  `core/haptics/`: lift, land, stack, slide, detent, flip, deal, shuffle, peek.
+  Each carries a *crispness* as well as a pattern, because that is the axis the
+  modern Android API exposes and a tick played as "buzz for nine milliseconds"
+  is a smear. Two rules: nothing outlasts the gesture that caused it (the riffle
+  is the one exception and earns it), and nothing fires for something the *app*
+  did — only for something the hand did. A table that buzzes when a turn counter
+  increments is a phone.
 
 Idle things cost nothing: springs run only while touched.
 
@@ -267,13 +305,32 @@ resolver is a pair — harder to enter than to leave — because a single number
 makes a finger resting on a boundary flicker between two answers several times
 a second, and which one you get is luck.
 
-**Fake-3D, still.** One tilted parent plane via `graphicsLayer`, and a flat
-overlay for anything that lifts off it, projected by hand through the same
-`StagePlane` the renderer uses so there is no seam. A carried card's *position*
-is assigned from the finger rather than sprung toward it — any spring between a
-finger and the thing it is holding is lag, and lag on a touch drag is the one
-thing that makes a simulator feel fake. Its rotations still spring, which is
-where the weight comes from instead.
+**One tilted plane, one flat overlay, one projection.** The plane is a
+`graphicsLayer`; anything a hand is holding lifts onto the overlay above it and
+is projected by hand through the same `StagePlane`, so there is no seam at the
+moment it leaves. The line between the two layers is *whether a hand is holding
+it*, not whether its z is zero — resting cards have heights too, and get them by
+being flattened onto the plane rather than by leaving it.
+
+**A carried card's position is assigned from the finger and never sprung toward
+it** — any spring between a finger and the thing it is holding is lag, and lag
+on a touch drag is the one thing that makes a simulator feel fake. Its
+*attitude* is where the weight went instead: `CardDynamics` reads the speed the
+finger is dragging at and banks the card into the sweep, leading edge back, and
+hands that to the same rotation springs. Position is exact, attitude has
+inertia, and the card ends up feeling like an object without any of it being
+between the finger and the card.
+
+**What says a card is off the table is its shadow, not its size.** At any
+camera distance that does not keystone the text, lifting a card grows it by a
+few per cent — unreadable. What is readable is the shadow separating from it
+and softening, so that is what the geometry is tuned around, and it is why the
+shadow is cast properly (every corner projected along the light) rather than
+drawn as an offset copy. An offset copy is right only for a card lying flat, and
+the moment one banks in the air, the difference between the two *is* the effect.
+A held card's shadow is also drawn **over** the cards it falls across, on a
+second canvas above the resting ones: a shadow is on the table even when the
+thing casting it is not.
 
 **Every face-down card has a back.** `CardBack` draws it — the brown field with
 either the oval or the spiral — and it is a preference, not a constant. Nothing
@@ -291,4 +348,7 @@ in the app draws a blank rectangle where a card back belongs.
 - A view that reorders, renames or invents anything about the deck.
 - A gesture detector attached to a card rather than to the mat.
 - A drop indicator computed separately from the drop.
+- A shadow drawn as an offset copy of the thing casting it.
+- A highlight that brightens instead of moving.
+- A haptic for something the app did rather than something the hand did.
 - A spring between a finger and the thing it is dragging.

@@ -1,16 +1,48 @@
 package com.kaiharimoto.mastertool.core.motion
 
+import kotlin.math.sqrt
+
 /**
- * A position in the fake-3D space the UI draws: screen x/y plus a z that the
- * renderer turns into scale, shadow and paint order. Plain data, unit-agnostic.
+ * A point or a direction in the space the stage renders.
+ *
+ * The axes are Compose's, and they stay Compose's everywhere in the app: **+x
+ * to the right, +y *down* the screen, +z toward the viewer.** That is a
+ * left-handed frame, which is unusual to read and is nonetheless the right
+ * choice — the alternative is a second convention that has to be flipped at
+ * every boundary with `graphicsLayer`, and a sign error in a lighting term is
+ * invisible until the day a card is lit from underneath.
+ *
+ * Rotations about these axes are right-handed (see `core/render/Rot3.kt`),
+ * which is what Compose's `rotationX`/`Y`/`Z` do.
  */
 data class Vec3(val x: Float, val y: Float, val z: Float) {
     operator fun plus(other: Vec3) = Vec3(x + other.x, y + other.y, z + other.z)
     operator fun minus(other: Vec3) = Vec3(x - other.x, y - other.y, z - other.z)
     operator fun times(factor: Float) = Vec3(x * factor, y * factor, z * factor)
+    operator fun div(factor: Float) = Vec3(x / factor, y / factor, z / factor)
+    operator fun unaryMinus() = Vec3(-x, -y, -z)
+
+    infix fun dot(other: Vec3): Float = x * other.x + y * other.y + z * other.z
+
+    infix fun cross(other: Vec3) = Vec3(
+        x = y * other.z - z * other.y,
+        y = z * other.x - x * other.z,
+        z = x * other.y - y * other.x,
+    )
+
+    val length: Float get() = sqrt(x * x + y * y + z * z)
+
+    /** Unit length, or [Zero] if there was no direction to preserve. */
+    fun normalised(): Vec3 {
+        val len = length
+        return if (len < 1e-6f) Zero else Vec3(x / len, y / len, z / len)
+    }
 
     companion object {
         val Zero = Vec3(0f, 0f, 0f)
+
+        /** Straight out of the screen at the viewer — the default eye direction. */
+        val Toward = Vec3(0f, 0f, 1f)
     }
 }
 

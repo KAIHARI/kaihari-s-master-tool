@@ -27,10 +27,9 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -61,6 +60,10 @@ import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
 import com.kaiharimoto.mastertool.core.motion.Vec3
+import com.kaiharimoto.mastertool.core.haptics.Haptic
+import com.kaiharimoto.mastertool.core.render.CardSolid
+import com.kaiharimoto.mastertool.core.render.CardStock
+import com.kaiharimoto.mastertool.core.render.StageRig
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CardBack
 import com.kaiharimoto.mastertool.ui.components.LocalCardBack
@@ -72,31 +75,26 @@ import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
 import com.kaiharimoto.mastertool.ui.input.ShortcutHost
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.PI
 import kotlin.random.Random
 
-/** How far a carried card rises off the mat, as a share of its own height. */
-private const val LIFT_Z = 0.42f
+/**
+ * How far a carried card rises off the mat, as a share of its own height.
+ *
+ * Raised along with the tilt and the lens. What tells you a card is off the
+ * table is not how much bigger it got — that is a few per cent at any sane
+ * camera distance — it is how far its shadow has walked out from under it, and
+ * that is linear in this number.
+ */
+private const val LIFT_Z = 0.55f
 
 /** A card raised to be *read* comes closer than one being slid. */
 private const val HAND_LIFT = LIFT_Z * 1.6f
 
 /** How far a hand card leans back, so hand and table read as two objects. */
 private const val HAND_LEAN = -7f
-
-/**
- * A stack's offset per card, exaggerated about four times.
- *
- * A real three-card pile is a millimetre. At tablet scale that is well under a
- * pixel and simply invisible, and the thing that needs communicating is only
- * "there is more than one here" — so the offset is notation rather than
- * measurement, and it is capped so a twenty-card pile is not a tower.
- */
-private const val STACK_SLIVER = 0.020f
-private const val STACK_MAX_DRAWN = 4
 
 /**
  * A peeked card comes off the table and turns to face the reader.
@@ -124,10 +122,14 @@ private const val ANNOUNCEMENT_MILLIS = 1_600L
  * table is.
  *
  * Three layers, and one invariant that removes the need to sort anything:
- * **a card resting on the mat has z = 0, and anything with z above zero lives
- * on the flat layer above.** Parent order then answers every occlusion question
- * — plane, then air — so a resting card's transform collapses to a position and
- * a scale, and there is no per-card depth sort anywhere.
+ * **a card nobody is holding belongs to the plane, and a card in the air
+ * belongs to the flat layer above it.** Parent order then answers every
+ * occlusion question — plane, then air — and there is no per-card depth sort
+ * anywhere. Note what the line is drawn on: whether a *hand* is holding it, not
+ * whether its z is zero. Resting cards do have heights now — a card on a pile
+ * of four is four cards off the felt, and the top of a deck is a deck's worth —
+ * and they get them by being *flattened* onto the plane rather than by leaving
+ * it, which is what keeps the invariant true and the sort absent.
  *
  * Motion is one `withFrameNanos` loop over plain lists, with each card's pose
  * read inside its own `graphicsLayer`. Poses live in [StageCard] objects held by
@@ -135,6 +137,18 @@ private const val ANNOUNCEMENT_MILLIS = 1_600L
  * changes parent — mat to air — which destroys and recreates its composable,
  * and a pose that reset at the moment of pickup would be a pose that reset on
  * the one frame it must not.
+ *
+ * **Everything with a height is real, and none of it is a 3D engine.** Cards
+ * are solids in `core/render`: they have a thickness, a normal, an orientation
+ * you can ask questions of, a light they respond to and a shadow they throw by
+ * having each of their corners projected onto the felt. All of that arithmetic
+ * lives in core where it is tested, and it reaches the screen through the one
+ * thing Compose does give you for free — a `graphicsLayer` is a real
+ * perspective-correct textured quad — plus a canvas for the geometry a layer
+ * cannot hold. `StagePlane.flatten` is the join: it turns a point with a height
+ * into the point on the mat that will look like it once the plane's own
+ * transform has run, so shadows, pile edges and card thickness can all be drawn
+ * by a canvas that only speaks two dimensions.
  */
 @Composable
 fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
@@ -161,9 +175,11 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
         onAction = { action ->
             when (action) {
                 ShortcutAction.PLAY_DRAW ->
-                    if (play.move { it.draw() }) feedback.play(SoundEffect.DEAL)
+                    if (play.move { it.draw() }) feedback.play(SoundEffect.DEAL, Haptic.DEAL)
                 ShortcutAction.PLAY_SHUFFLE ->
-                    play.move { it.shuffleDeck(it.turn * 31L + it.deck.size) }
+                    if (play.move { it.shuffleDeck(it.turn * 31L + it.deck.size) }) {
+                        feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+                    }
                 ShortcutAction.PLAY_NEW_HAND -> play.restart()
                 ShortcutAction.PLAY_NEXT_PHASE -> play.move { it.nextPhase() }
                 ShortcutAction.PLAY_END_TURN -> play.move { it.endTurn() }
@@ -248,8 +264,17 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             seats.forEach { seat ->
                 val card = cards.getOrPut(seat.id) { StageCard(seat.id).also { it.placeAt(dealFrom) } }
                 card.pinned = seat.pinned
+                card.cardWidth = seat.width
                 card.aimAt(seat.pose)
             }
+
+            // Where the camera is, in the mat's own frame. The tilted plane and
+            // the flat overlay above it are two different frames, so they get
+            // two different eyes — a resting card is being looked at slightly
+            // from above, and a card held up in the air is being looked at
+            // square on, and shading either of them with the other's eye puts
+            // the highlight in a place the rest of the table disagrees with.
+            val restingEye = remember(stage) { StageRig.eye(stage.tiltDegrees) }
 
             // ---- the one loop -------------------------------------------------
             LaunchedEffect(Unit) {
@@ -275,14 +300,34 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                         cameraDistance = stage.cameraDistance / this.density
                     },
             ) {
+                // The felt, what is about to happen to it, and the shadow and
+                // the white edge of everything resting on it.
                 Canvas(Modifier.fillMaxSize()) {
-                    drawMat(layout)
+                    drawFelt(layout)
                     drawIndicator(play.carry?.intent, play.field, layout)
-                    seats.filter { !it.carried }.forEach { drawContact(it, layout) }
+                    seats.filter { !it.carried }.forEach { seat ->
+                        val pose = cards[seat.id]?.pose ?: seat.pose
+                        drawCardShadow(pose, seat.width, seat.height, seat.height)
+                    }
+                    seats.filter { !it.carried }.forEach { seat ->
+                        val pose = cards[seat.id]?.pose ?: seat.pose
+                        drawSolidEdges(pose, seat.width, seat.height, seat.solid, stage, restingEye)
+                    }
                 }
 
                 seats.filter { !it.carried }.forEach { seat ->
-                    StagedCard(seat, cards, layout, state, back, density)
+                    StagedCard(seat, cards, state, back, density, stage, restingEye)
+                }
+
+                // The shadow of anything in the air, over the cards it falls
+                // on rather than under them. Still inside the tilted plane,
+                // because a shadow is on the table even when the thing casting
+                // it is not — that is the whole of what a shadow is for here.
+                Canvas(Modifier.fillMaxSize()) {
+                    seats.filter { it.carried }.forEach { seat ->
+                        val pose = cards[seat.id]?.pose ?: seat.pose
+                        drawCardShadow(pose, seat.width, seat.height, seat.height)
+                    }
                 }
             }
 
@@ -290,7 +335,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             // Anything with z above zero, drawn flat and projected by hand so it
             // leaves the plane without a seam.
             seats.filter { it.carried }.forEach { seat ->
-                StagedCard(seat, cards, layout, state, back, density, stage = stage)
+                StagedCard(seat, cards, state, back, density, stage, Vec3.Toward)
             }
 
             MatInput(pilot = pilot, machine = machine, layout = layout, stage = stage)
@@ -321,6 +366,7 @@ private data class Seat(
      * *rise*; pinning it would make it jump.
      */
     val pinned: Boolean = false,
+    /** How many cards are here. One card is a card; more than one is a solid. */
     val depth: Int,
     val materials: Int,
     val counters: Int,
@@ -328,7 +374,16 @@ private data class Seat(
     val height: Float,
     /** Held up to be read rather than played, which changes the art it loads. */
     val magnified: Boolean = false,
-)
+) {
+    /**
+     * How far the body of this card, or this pile, hangs below its printed face.
+     *
+     * The pose already sits on top of it — a card resting on a deck is at the
+     * *top* of the deck — so this is what the renderer extrudes downward to
+     * reach the felt.
+     */
+    val solid: Float get() = CardSolid.pileDepth(depth, width)
+}
 
 /**
  * Every card that is visible, and where it belongs.
@@ -371,7 +426,14 @@ private fun seatsFor(
             card = placed.card,
             pose = poseAt(
                 at = if (carrying) carry.at else placed.at,
-                z = if (carrying) cardHeight * LIFT_Z else 0f,
+                // Resting on whatever is under it, which for a stack is the
+                // rest of the stack: a card on a pile of four is four cards
+                // off the felt, and its shadow is cast from up there.
+                z = if (carrying) {
+                    cardHeight * LIFT_Z
+                } else {
+                    CardSolid.pileDepth(placed.depth, cardWidth)
+                },
                 turned = placed.turned || (carrying && carry.quarterTurns % 2 != 0),
                 faceUp = faceUp,
             ),
@@ -435,12 +497,18 @@ private fun seatsFor(
             id = top.instanceId,
             card = top,
             pose = Pose3(
-                position = Vec3(rect.centerX, rect.centerY, 0f),
+                // On top of its own pile, which is the whole reason a deck
+                // looks like a deck rather than like a card with a number.
+                position = Vec3(
+                    rect.centerX,
+                    rect.centerY,
+                    CardSolid.pileDepth(pile.size, cardWidth),
+                ),
                 rotY = if (faceUp) 0f else 180f,
             ),
             faceUp = faceUp,
             carried = false,
-            depth = min(pile.size, STACK_MAX_DRAWN + 1),
+            depth = pile.size,
             materials = 0,
             counters = 0,
             width = cardWidth,
@@ -555,49 +623,6 @@ internal fun handPointFor(layout: BoardLayout, index: Int, count: Int): MatPoint
     )
 }
 
-/** The felt, its zones, and the pool of light that makes a shadow possible at all. */
-private fun DrawScope.drawMat(layout: BoardLayout) {
-    val mat = layout.field
-
-    // A true-black table cannot receive a dark shadow — there is nothing to
-    // take away. So the mat carries a little light, and a card resting on it
-    // removes some.
-    drawRect(
-        brush = Brush.radialGradient(
-            colors = listOf(Color.White.copy(alpha = 0.045f), Color.Transparent),
-            center = Offset(mat.centerX, mat.centerY),
-            radius = maxOf(mat.width, mat.height) * 0.75f,
-        ),
-        topLeft = Offset(mat.left - mat.width * 0.1f, mat.top - mat.height * 0.1f),
-        size = Size(mat.width * 1.2f, mat.height * 1.2f),
-    )
-
-    layout.slots.forEach { (slot, rect) ->
-        val pile = slot !is BoardSlot.Zone
-        drawRoundRect(
-            color = Color.White.copy(alpha = if (pile) 0.10f else 0.06f),
-            topLeft = Offset(rect.left, rect.top),
-            size = Size(rect.width, rect.height),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(rect.width * 0.05f),
-            style = Stroke(width = rect.width * 0.008f),
-        )
-    }
-}
-
-/** The contact shadow: a card resting on the mat takes light out of it. */
-private fun DrawScope.drawContact(seat: Seat, layout: BoardLayout) {
-    val w = seat.width * 0.50f
-    val h = seat.height * 0.28f
-    drawOval(
-        color = Color.Black.copy(alpha = 0.55f),
-        topLeft = Offset(
-            seat.pose.position.x - w / 2f,
-            seat.pose.position.y + seat.height * 0.30f - h / 2f,
-        ),
-        size = Size(w, h),
-    )
-}
-
 /**
  * Where the card in the air is going to land, drawn on the mat under it.
  *
@@ -672,14 +697,15 @@ private fun DrawScope.drawIndicator(
 private fun StagedCard(
     seat: Seat,
     cards: MutableMap<Int, StageCard>,
-    layout: BoardLayout,
     state: DeckBuilderState,
     back: com.kaiharimoto.mastertool.ui.components.CardBackChoice,
     density: androidx.compose.ui.unit.Density,
-    stage: StagePlane? = null,
+    stage: StagePlane,
+    eye: Vec3,
 ) {
     val motion = cards[seat.id] ?: return
     val art = state.index.byId(seat.card.cardId)
+    val airborne = seat.carried
 
     with(density) {
         Box(
@@ -687,13 +713,27 @@ private fun StagedCard(
                 .size(seat.width.toDp(), seat.height.toDp())
                 .graphicsLayer {
                     val pose = motion.pose
-                    // On the plane a card is flat and its scale is one; in the
-                    // air the projection is applied here by hand, so the two
-                    // agree exactly at the moment it leaves.
-                    val projected = stage?.project(pose.position.x, pose.position.y, pose.position.z)
-                    val x = projected?.x ?: pose.position.x
-                    val y = projected?.y ?: pose.position.y
-                    val lift = projected?.scale ?: 1f
+                    // Two frames, two answers. In the air the card is drawn on
+                    // the flat overlay, so the projection is applied here by
+                    // hand and the two agree exactly at the moment it leaves
+                    // the plane. On the plane the parent will project it, so
+                    // the height is folded into a point on the felt that will
+                    // *look* like that height once the parent has run — which
+                    // is what puts the top card of a deck on top of the deck.
+                    val x: Float
+                    val y: Float
+                    val lift: Float
+                    if (airborne) {
+                        val projected = stage.project(pose.position)
+                        x = projected.x
+                        y = projected.y
+                        lift = projected.scale
+                    } else {
+                        val flattened = stage.flatten(pose.position)
+                        x = flattened.x
+                        y = flattened.y
+                        lift = flattened.scale
+                    }
 
                     translationX = x - seat.width / 2f
                     translationY = y - seat.height / 2f
@@ -705,23 +745,15 @@ private fun StagedCard(
                     cameraDistance = (seat.width * 6f) / this.density
                 },
         ) {
-            // Stacked cards, as slivers behind the top one.
-            repeat(min(seat.depth - 1, STACK_MAX_DRAWN)) { i ->
-                val offset = seat.width * STACK_SLIVER * (i + 1)
-                Box(
-                    Modifier
-                        .size(seat.width.toDp(), seat.height.toDp())
-                        .graphicsLayer {
-                            translationX = -offset
-                            translationY = -offset
-                        }
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(MasterToolPalette.SurfaceHigh),
-                )
-            }
-
-            CardFace(art, faceUp = true, back = back, motion = motion, magnified = seat.magnified)
-            CardFace(art, faceUp = false, back = back, motion = motion)
+            CardFace(
+                art = art,
+                faceUp = true,
+                back = back,
+                motion = motion,
+                eye = eye,
+                magnified = seat.magnified,
+            )
+            CardFace(art = art, faceUp = false, back = back, motion = motion, eye = eye)
 
             if (seat.counters > 0 || seat.materials > 0) {
                 Badge(
@@ -746,9 +778,17 @@ private fun CardFace(
     faceUp: Boolean,
     back: com.kaiharimoto.mastertool.ui.components.CardBackChoice,
     motion: StageCard,
+    eye: Vec3,
     /** Held up to be read, so it is worth fetching the art at full size. */
     magnified: Boolean = false,
 ) {
+    // Two surfaces, two materials. The printed side is card stock — foiled if
+    // this is an extra-deck frame — and the other side is the back of a sleeve,
+    // which is the quietest thing on the table. Each side owns its own, so a
+    // card turning over changes what the light does to it at the same moment it
+    // changes what you can see.
+    val material = remember(art, faceUp) { CardStock.of(art, faceUp) }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -765,13 +805,13 @@ private fun CardFace(
                 if (!faceUp) rotationY = 180f
             },
     ) {
-        if (faceUp) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(MasterToolPalette.SurfaceRaised),
-            ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(CardCornerRadius))
+                .background(MasterToolPalette.SurfaceRaised),
+        ) {
+            if (faceUp) {
                 if (art != null) {
                     Text(
                         art.name,
@@ -793,12 +833,27 @@ private fun CardFace(
                         },
                         contentDescription = art.name,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)),
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
+            } else {
+                CardBack(Modifier.fillMaxSize(), back.style, back.imageUrl)
             }
-        } else {
-            CardBack(Modifier.fillMaxSize(), back.style, back.imageUrl)
+
+            // The light, over the picture and inside the card's own clip, so
+            // the pool and the rim follow the cut corners. The pose is read
+            // *here*, in a draw lambda, which is what keeps a card catching the
+            // light through a whole flip without recomposing anything.
+            Box(
+                Modifier.fillMaxSize().drawBehind {
+                    drawCardSurface(
+                        pose = motion.pose,
+                        material = material,
+                        eye = eye,
+                        radiusPx = CardCornerRadius.toPx(),
+                    )
+                },
+            )
         }
     }
 }
@@ -823,6 +878,7 @@ private fun Badge(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun PlayTopBar(play: PlayState, onBack: () -> Unit) {
+    val feedback = LocalFeedback.current
     Row(
         Modifier.fillMaxWidth().height(TOP_BAR).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -853,8 +909,14 @@ private fun PlayTopBar(play: PlayState, onBack: () -> Unit) {
                 color = MasterToolPalette.AccentBright,
             )
         }
-        BarButton("Draw") { play.move { it.draw() } }
-        BarButton("Shuffle") { play.move { it.shuffleDeck(it.turn * 31L + it.deck.size) } }
+        BarButton("Draw") {
+            if (play.move { it.draw() }) feedback.play(SoundEffect.DEAL, Haptic.DEAL)
+        }
+        BarButton("Shuffle") {
+            if (play.move { it.shuffleDeck(it.turn * 31L + it.deck.size) }) {
+                feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+            }
+        }
         BarButton("Undo", enabled = play.canUndo) { play.undo() }
         BarButton("Redo", enabled = play.canRedo) { play.redo() }
         BarButton("New hand") { play.restart() }

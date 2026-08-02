@@ -142,6 +142,70 @@ class StagePlaneTest {
         assertTrue(raised.y < resting.y, "a raised card should ride up the screen")
     }
 
+    // ---- flattening: height, drawn by a canvas that has no height -----------------
+
+    @Test
+    fun somethingTouchingTheMatIsDrawnExactlyWhereItWasComputed() {
+        // The identity at z = 0, which is what lets shadow and slab geometry be
+        // handed to the mat's canvas without a special case for "resting".
+        listOf(0f to 0f, 800f to 500f, 1600f to 1000f, 120f to 880f).forEach { (x, y) ->
+            val flat = stage.flatten(x, y, 0f)
+            assertClose(x, flat.x, note = "x at ($x, $y):")
+            assertClose(y, flat.y, note = "y at ($x, $y):")
+            assertClose(1f, flat.scale, note = "scale at ($x, $y):")
+        }
+    }
+
+    @Test
+    fun aFlattenedPointLandsWhereTheRealOneWould() {
+        // The whole contract. Draw the flattened point on the mat, let the
+        // plane's own transform run, and it has to land on the projection of
+        // the point it came from — otherwise a pile's edge and the card on top
+        // of it disagree about where the pile is.
+        listOf(
+            Triple(800f, 500f, 60f),
+            Triple(300f, 900f, 25f),
+            Triple(1400f, 120f, 140f),
+        ).forEach { (x, y, z) ->
+            val wanted = stage.project(x, y, z)
+            val drawn = stage.flatten(x, y, z)
+            val landed = stage.project(drawn.x, drawn.y, 0f)
+
+            assertClose(wanted.x, landed.x, 0.2f, "x for ($x, $y, $z):")
+            assertClose(wanted.y, landed.y, 0.2f, "y for ($x, $y, $z):")
+        }
+    }
+
+    @Test
+    fun heightMovesAPointUpTheScreenAndTheFlattenedOneToo() {
+        val resting = stage.flatten(800f, 500f, 0f)
+        val raised = stage.flatten(800f, 500f, 120f)
+
+        assertTrue(raised.y < resting.y, "a pile's top should sit above its base")
+    }
+
+    @Test
+    fun theTopOfAPileIsDrawnBiggerThanTheFeltUnderIt() {
+        // The correction that comes with the position. Flattening moves the
+        // point onto a part of the mat that is *further away* than the point
+        // really is, so without this the card on top of a deck is drawn very
+        // slightly too small — which is the whole tell that it is a picture of
+        // a deck rather than a card resting on one.
+        val raised = stage.flatten(800f, 500f, 120f)
+        val wanted = stage.project(800f, 500f, 120f).scale
+        val asFelt = stage.project(raised.x, raised.y, 0f).scale
+
+        assertTrue(raised.scale > 1f, "it should grow, was ${raised.scale}")
+        assertClose(wanted, asFelt * raised.scale, 0.001f, "corrected size:")
+    }
+
+    @Test
+    fun aTallerPileRisesFurther() {
+        val heights = listOf(0f, 20f, 60f, 150f).map { stage.flatten(800f, 500f, it).y }
+
+        assertEquals(heights.sortedDescending(), heights, "further up the screen each time")
+    }
+
     // ---- refusing to fall over ----------------------------------------------------
 
     @Test

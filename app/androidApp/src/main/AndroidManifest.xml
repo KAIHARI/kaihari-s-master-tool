@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Lets the app install the release APK it downloads from GitHub. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- The haptic half of card feel. Normal permission: no prompt, and the
+         one in-app toggle already governs whether it is ever used. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:name=".MasterToolApplication"

@@ -10,6 +10,16 @@ import kotlin.math.sin
 data class Projected(val x: Float, val y: Float, val scale: Float, val depth: Float)
 
 /**
+ * A point with a height, rewritten as a point on the mat that will look like it.
+ *
+ * [scale] is the correction that goes with it: the mat's own projection will
+ * size whatever is drawn here by however much it sizes that part of the felt,
+ * which is not the same as how much a thing standing off the felt should grow.
+ * Multiply by this and it is.
+ */
+data class Flattened(val x: Float, val y: Float, val scale: Float)
+
+/**
  * The tilted surface the play stage is drawn on, as arithmetic rather than a guess.
  *
  * One transform described twice. The parent `graphicsLayer` applies it to
@@ -82,6 +92,50 @@ data class StagePlane(
         cameraDistance / max(cameraDistance - z * cosTilt, MIN_GAP)
 
     /**
+     * Where to draw a point *on the mat* so that it appears to be [z] above it.
+     *
+     * The mat is one `graphicsLayer`, and everything drawn inside it gets the
+     * plane's projection applied on the way out. That is exactly what you want
+     * for the felt and for cards lying on it, and exactly what you cannot use
+     * for anything with a height: a shadow thrown by a card in the air, the
+     * white edge of a pile standing off the table, a card's own thickness. All
+     * of those are geometry *at a z*, drawn by a canvas that has no z.
+     *
+     * So: project the point properly, then ask where on the flat mat that
+     * screen position came from. The plane's own transform then undoes the
+     * second step and the point lands where the first step put it. Both halves
+     * are already here and exact, so this is not an approximation of the
+     * projection — it is the projection, run through a canvas that only speaks
+     * two dimensions.
+     *
+     * At z = 0 it is the identity, which is the property worth holding on to:
+     * geometry that touches the mat is drawn exactly where it was computed.
+     *
+     * Position is not the whole answer, so [Flattened.scale] comes with it. The
+     * plane will size anything drawn at the flattened point by however much it
+     * sizes the *felt* there, and a card sitting on top of a forty-card deck is
+     * closer to the camera than the felt under it by rather more than that. For
+     * a polygon whose every vertex has been flattened the correction is already
+     * baked in and can be ignored; for a whole card drawn at one point it is
+     * the difference between a deck and a picture of one.
+     */
+    fun flatten(x: Float, y: Float, z: Float): Flattened {
+        if (z == 0f) return Flattened(x, y, 1f)
+
+        val raised = project(x, y, z)
+        val onPlane = unproject(raised.x, raised.y)
+        val asFelt = project(onPlane.x, onPlane.y, 0f).scale
+
+        return Flattened(
+            x = onPlane.x,
+            y = onPlane.y,
+            scale = if (asFelt <= MIN_GAP / cameraDistance) 1f else raised.scale / asFelt,
+        )
+    }
+
+    fun flatten(point: Vec3): Flattened = flatten(point.x, point.y, point.z)
+
+    /**
      * What the near edge grows to, which is what [BoardLayouter.solve] wants.
      *
      * The projection reporting on itself, so the fitter and the renderer cannot
@@ -92,13 +146,32 @@ data class StagePlane(
     val perspectiveGrowth: Float get() = project(centreX, height).scale
 
     companion object {
-        const val TILT = 11f
+        /**
+         * How far the table is laid back from the camera.
+         *
+         * Raised from eleven degrees, which was a tilt you could measure and
+         * not one you could see. Everything with a height on this stage —
+         * a pile's edge, a lifted card's parallax, the gap between a card and
+         * its shadow — projects to `z·sin θ`, so at eleven degrees a forty-card
+         * deck stood a pixel and a half proud of the felt and the whole table
+         * read as a diagram of a table. Fifteen is half again as much depth for
+         * about three per cent of card size, and it stops short of the angle
+         * where a card's own text starts to keystone.
+         */
+        const val TILT = 15f
         private const val MIN_GAP = 1f
 
         /**
          * The lens, solved from the growth wanted at the near edge:
-         * `s = d / (d − (h/2)·sinθ)`, which at eleven degrees and about six
-         * per cent gives `d ≈ 1.7·h`.
+         * `s = d / (d − (h/2)·sinθ)`.
+         *
+         * Shortened along with the tilt. A camera nearly two screen-heights
+         * back is an almost orthographic one, which is a fine choice for a
+         * diagram and the wrong one for a table you are sitting at: it is what
+         * made a card raised into the hand grow by four per cent and read as
+         * having not moved. At `1.45·h` and fifteen degrees the near edge grows
+         * about ten per cent, the fitter is told so, and a lifted card is
+         * visibly closer than the felt it left.
          *
          * Taking the larger of height and a share of width keeps an ultrawide
          * window from getting a violent keystone at its left and right edges —
@@ -109,7 +182,7 @@ data class StagePlane(
             width = width,
             height = height,
             tiltDegrees = tilt,
-            cameraDistance = 1.7f * max(height, width * 0.55f),
+            cameraDistance = 1.45f * max(height, width * 0.55f),
         )
     }
 }

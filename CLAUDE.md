@@ -22,7 +22,8 @@ Do not develop it further; maintenance only if something in it is truly broken.
 
 **Key locations:**
 - `app/core/` — pure Kotlin logic (models, deck editing, groups, hand odds,
-  motion physics, board domain), all tested in commonTest
+  motion physics, 3D geometry and lighting, haptics, board domain), all tested
+  in commonTest
 - `app/ui/` — Compose Multiplatform UI (androidTarget + jvm("desktop"))
 - `app/androidApp/`, `app/desktopApp/` — platform entry points
 - `legacy/` — the archived original tool and its assets
@@ -127,9 +128,14 @@ be corrected.
   one-`withFrameNanos`-loop recipe (see `EasterEgg.kt` and `ui/play/StageCard.kt`
   for the sanctioned perf pattern: bulk state in plain lists, per-object state
   read inside `graphicsLayer`).
-- **Fake-3D by design:** perspective via `graphicsLayer`
-  (rotationX/Y, cameraDistance) — one tilted parent plane for tables, flat
-  overlay springs for anything that lifts off it. No 3D engine, ever.
+- **Real geometry, no engine.** `core/render/` is a small, tested renderer:
+  `Rot3` (the same Euler angles `graphicsLayer` rasterises with), `CardSolid`
+  (a card has a thickness and six faces), `Shading` (Lambert + Blinn-Phong,
+  with a specular pool that *moves*), `Shadows` (cast by projecting every
+  corner along the light), `StageRig` (one key, one fill, one eye). It reaches
+  the screen through `graphicsLayer` — which is a real perspective-correct
+  quad — and a canvas, joined by `StagePlane.flatten`. **No 3D engine, ever:**
+  none reaches KMP common code and all of them would cost the desktop target.
 
 ## Roadmap State
 

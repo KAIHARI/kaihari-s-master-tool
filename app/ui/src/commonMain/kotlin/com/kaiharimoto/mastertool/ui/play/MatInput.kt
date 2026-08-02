@@ -10,8 +10,11 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import com.kaiharimoto.mastertool.core.board.DragOrigin
+import com.kaiharimoto.mastertool.core.board.DropIntent
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlayField
+import com.kaiharimoto.mastertool.core.haptics.Haptic
+import com.kaiharimoto.mastertool.core.haptics.HapticScore
 import com.kaiharimoto.mastertool.core.board.toMat
 import com.kaiharimoto.mastertool.core.board.toPixels
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
@@ -202,11 +205,13 @@ private fun handle(
                 is DragOrigin.Pile -> when (what.pile) {
                     // The deck is drawn from; every other pile is read.
                     BoardSlot.Deck ->
-                        if (play.move { it.draw() }) feedback.play(SoundEffect.DEAL)
+                        if (play.move { it.draw() }) feedback.play(SoundEffect.DEAL, Haptic.DEAL)
                     else -> onMenu(what)
                 }
                 is DragOrigin.Mat ->
-                    if (play.move { it.bringToFront(what.id) }) feedback.play(SoundEffect.LIFT)
+                    if (play.move { it.bringToFront(what.id) }) {
+                        feedback.play(SoundEffect.LIFT, Haptic.LIFT)
+                    }
                 else -> Unit
             }
         }
@@ -214,14 +219,14 @@ private fun handle(
         is MatEvent.LiftedCard -> {
             grabbed?.let {
                 play.lift(it, mat(event.at), layout, whole = false)
-                feedback.play(SoundEffect.LIFT)
+                feedback.play(SoundEffect.LIFT, Haptic.LIFT)
             }
         }
 
         is MatEvent.LiftedStack -> {
             grabbed?.let {
                 play.lift(it, mat(event.at), layout, whole = true)
-                feedback.play(SoundEffect.LIFT)
+                feedback.play(SoundEffect.LIFT, Haptic.LIFT)
             }
         }
 
@@ -234,12 +239,19 @@ private fun handle(
         is MatEvent.Dwelled -> {
             if (play.carry != null) {
                 play.carryTo(mat(event.at), layout, attaching = true)
-                feedback.play(SoundEffect.LIFT)
+                feedback.play(SoundEffect.LIFT, Haptic.SLIDE)
             }
         }
 
         is MatEvent.Dropped -> {
-            if (play.carry != null && play.release()) feedback.play(SoundEffect.SNAP)
+            // Asked before the release, because the release is what clears it.
+            // Landing on another card is two surfaces meeting and the hand can
+            // tell; landing on felt is one.
+            val onto = play.carry?.intent
+            val stacked = onto is DropIntent.Stack || onto is DropIntent.Attach
+            if (play.carry != null && play.release()) {
+                feedback.play(SoundEffect.SNAP, HapticScore.landing(stacked))
+            }
         }
 
         is MatEvent.Flipped -> {
@@ -248,23 +260,31 @@ private fun handle(
                 // Mid-carry, the card turns in the air and lands set. Putting
                 // it down face-up and flipping it after would have shown the
                 // table the one card the player meant to hide.
-                play.carry != null -> if (play.turnCarry()) feedback.play(SoundEffect.SLIDE)
+                play.carry != null ->
+                    if (play.turnCarry()) feedback.play(SoundEffect.SLIDE, Haptic.FLIP)
                 what is DragOrigin.Mat ->
-                    if (play.move { it.flip(what.id) }) feedback.play(SoundEffect.SLIDE)
+                    if (play.move { it.flip(what.id) }) {
+                        feedback.play(SoundEffect.SLIDE, Haptic.FLIP)
+                    }
                 else -> Unit
             }
         }
 
         is MatEvent.Twisting -> play.twistCarry(event.quarterTurns)
 
-        is MatEvent.Detent -> feedback.play(SoundEffect.LIFT)
+        // The one event with nothing to hear, because crossing a notch makes no
+        // sound. It is also the sharpest thing the table can say, and a twist
+        // gesture you can feel the detents of is one you can do without looking.
+        is MatEvent.Detent -> feedback.feel(Haptic.DETENT)
 
         is MatEvent.TwistCommitted -> {
             val what = grabbed
             if (play.carry != null) {
                 play.release()
             } else if (what is DragOrigin.Mat && event.quarterTurns % 2 != 0) {
-                if (play.move { it.rotate(what.id) }) feedback.play(SoundEffect.SLIDE)
+                if (play.move { it.rotate(what.id) }) {
+                    feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
+                }
             }
         }
 
@@ -282,7 +302,7 @@ private fun handle(
             val deck = what is DragOrigin.Pile && what.pile == BoardSlot.Deck
             if (!deck) {
                 play.peek(what)
-                feedback.play(SoundEffect.LIFT)
+                feedback.play(SoundEffect.LIFT, Haptic.PEEK)
             }
         }
 
