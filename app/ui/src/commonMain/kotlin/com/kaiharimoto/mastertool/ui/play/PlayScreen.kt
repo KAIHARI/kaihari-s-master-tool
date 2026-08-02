@@ -320,6 +320,8 @@ private data class Seat(
     val counters: Int,
     val width: Float,
     val height: Float,
+    /** Held up to be read rather than played, which changes the art it loads. */
+    val magnified: Boolean = false,
 )
 
 /**
@@ -495,6 +497,7 @@ private fun seatsFor(
                 faceUp = true,
                 carried = true,
                 pinned = false,
+                magnified = true,
             )
         }
     }
@@ -711,7 +714,7 @@ private fun StagedCard(
                 )
             }
 
-            CardFace(art, faceUp = true, back = back, motion = motion)
+            CardFace(art, faceUp = true, back = back, motion = motion, magnified = seat.magnified)
             CardFace(art, faceUp = false, back = back, motion = motion)
 
             if (seat.counters > 0 || seat.materials > 0) {
@@ -737,6 +740,8 @@ private fun CardFace(
     faceUp: Boolean,
     back: com.kaiharimoto.mastertool.ui.components.CardBackChoice,
     motion: StageCard,
+    /** Held up to be read, so it is worth fetching the art at full size. */
+    magnified: Boolean = false,
 ) {
     Box(
         Modifier
@@ -772,7 +777,14 @@ private fun CardFace(
                         modifier = Modifier.align(Alignment.Center).padding(2.dp),
                     )
                     AsyncImage(
-                        model = art.imageUrlSmall ?: art.imageUrl,
+                        // The thumbnail is right for a card lying on the table
+                        // and visibly soft at nearly twice the size, which is
+                        // exactly when someone is trying to read it.
+                        model = if (magnified) {
+                            art.imageUrl ?: art.imageUrlSmall
+                        } else {
+                            art.imageUrlSmall ?: art.imageUrl
+                        },
                         contentDescription = art.name,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)),
