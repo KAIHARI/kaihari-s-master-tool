@@ -12,11 +12,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.kaiharimoto.mastertool.core.prefs.CardBackStyle
@@ -49,7 +50,7 @@ fun CardBack(
     modifier: Modifier = Modifier,
     style: CardBackStyle = CardBackStyle.OVAL,
     imageUrl: String = "",
-    cornerRadius: androidx.compose.ui.unit.Dp = 4.dp,
+    cornerRadius: Dp = 4.dp,
 ) {
     val shape = RoundedCornerShape(cornerRadius)
 
@@ -163,7 +164,7 @@ private fun DrawScope.drawSpiral() {
                 start = previous,
                 end = point,
                 strokeWidth = maxRadius * (0.19f - 0.10f * t),
-                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                cap = StrokeCap.Round,
             )
             previous = point
         }
@@ -172,22 +173,6 @@ private fun DrawScope.drawSpiral() {
         // overlapping strokes.
         drawCircle(color = INK, radius = maxRadius * 0.10f, center = centre)
     }
-}
-
-/** A path helper kept for callers that want the spiral as a shape. */
-internal fun spiralPath(centre: Offset, maxRadius: Float, turns: Float): Path {
-    val path = Path()
-    val sweep = turns * 2f * PI.toFloat()
-    val steps = 480
-
-    path.moveTo(centre.x, centre.y)
-    for (i in 1..steps) {
-        val t = i / steps.toFloat()
-        val angle = t * sweep
-        val radius = maxRadius * t
-        path.lineTo(centre.x + radius * cos(angle), centre.y + radius * sin(angle))
-    }
-    return path
 }
 
 // Card stock, not app surface: the one warm thing on screen.
