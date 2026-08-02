@@ -92,6 +92,17 @@ private const val HAND_LEAN = -7f
 private const val STACK_SLIVER = 0.020f
 private const val STACK_MAX_DRAWN = 4
 
+/**
+ * A peeked card comes off the table and turns to face the reader.
+ *
+ * Further than a carried card, because this one is being *read* rather than
+ * moved, and it reveals its face even if it is set — which is the whole
+ * question a held finger is asking. Nothing about the field changes, so it
+ * goes back down exactly as it was.
+ */
+private const val PEEK_Z = 1.35f
+private const val PEEK_SCALE = 1.9f
+
 private val TOP_BAR = 44.dp
 
 /** Long enough to read "To the graveyard", short enough not to become scenery. */
@@ -157,8 +168,8 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 return@BoxWithConstraints
             }
 
-            val seats = remember(play.field, layout, play.carry) {
-                seatsFor(play.field, layout, play.carry)
+            val seats = remember(play.field, layout, play.carry, play.peeking) {
+                seatsFor(play.field, layout, play.carry, play.peeking)
             }
 
             // What the last release did, said once and then withdrawn. Left up,
@@ -181,11 +192,28 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 pilot.onMenu = { menuFor = it }
             }
 
+            // Where a card the stage has never seen before comes from. Placing
+            // it at its destination instead means a drawn card materialises in
+            // the hand already there, which reads as a redraw of the screen
+            // rather than as a card being dealt — and the opening five, all new
+            // at once, are the first thing anyone sees.
+            val dealFrom = remember(layout) {
+                val deck = layout[BoardSlot.Deck]
+                Pose3(
+                    position = Vec3(
+                        deck?.centerX ?: layout.field.centerX,
+                        deck?.centerY ?: layout.field.centerY,
+                        0f,
+                    ),
+                    rotY = 180f,
+                )
+            }
+
             // Aim every card at where it now belongs. Done outside the frame
             // loop because it only changes when the board does.
             seats.forEach { seat ->
-                val card = cards.getOrPut(seat.id) { StageCard(seat.id).also { it.placeAt(seat.pose) } }
-                card.pinned = seat.carried
+                val card = cards.getOrPut(seat.id) { StageCard(seat.id).also { it.placeAt(dealFrom) } }
+                card.pinned = seat.pinned
                 card.aimAt(seat.pose)
             }
 
@@ -248,7 +276,16 @@ private data class Seat(
     val card: BoardCard,
     val pose: Pose3,
     val faceUp: Boolean,
+    /** Off the mat, so it draws on the flat layer above rather than the plane. */
     val carried: Boolean,
+    /**
+     * Position assigned from the finger rather than sprung toward it.
+     *
+     * Not the same question as [carried], which is only about which layer draws
+     * it. A peeked card is in the air and nobody is holding it, so it should
+     * *rise*; pinning it would make it jump.
+     */
+    val pinned: Boolean = false,
     val depth: Int,
     val materials: Int,
     val counters: Int,
@@ -265,7 +302,12 @@ private data class Seat(
  * plane a card played early near the front must still occlude one played later
  * further back.
  */
-private fun seatsFor(field: PlayField, layout: BoardLayout, carry: Carry?): List<Seat> {
+private fun seatsFor(
+    field: PlayField,
+    layout: BoardLayout,
+    carry: Carry?,
+    peeking: DragOrigin? = null,
+): List<Seat> {
     val seats = mutableListOf<Seat>()
     val cardWidth = layout.cardWidth
     val cardHeight = layout.cardHeight
@@ -298,6 +340,7 @@ private fun seatsFor(field: PlayField, layout: BoardLayout, carry: Carry?): List
             ),
             faceUp = faceUp,
             carried = carrying,
+            pinned = carrying,
             depth = placed.depth,
             materials = placed.card.materials.size,
             counters = placed.card.counters,
@@ -332,6 +375,7 @@ private fun seatsFor(field: PlayField, layout: BoardLayout, carry: Carry?): List
             ),
             faceUp = faceUp,
             carried = carrying,
+            pinned = carrying,
             depth = 1,
             materials = 0,
             counters = 0,
@@ -387,6 +431,7 @@ private fun seatsFor(field: PlayField, layout: BoardLayout, carry: Carry?): List
                 pose = poseAt(carry.at, cardHeight * LIFT_Z, carry.quarterTurns % 2 != 0, faceUp),
                 faceUp = faceUp,
                 carried = true,
+                pinned = true,
                 depth = 1,
                 materials = 0,
                 counters = 0,
@@ -396,7 +441,49 @@ private fun seatsFor(field: PlayField, layout: BoardLayout, carry: Carry?): List
         }
     }
 
+    // The peek, applied last as a change to one seat rather than threaded
+    // through every branch above: it moves nothing and owns nothing, it only
+    // says that one card is being read right now.
+    val peeked = peeking?.let { seatIdOf(field, it) }
+    if (peeked != null) {
+        val index = seats.indexOfFirst { it.id == peeked }
+        if (index >= 0) {
+            val seat = seats[index]
+            seats[index] = seat.copy(
+                pose = seat.pose.copy(
+                    position = Vec3(
+                        seat.pose.position.x,
+                        seat.pose.position.y,
+                        cardHeight * PEEK_Z,
+                    ),
+                    // Square to the reader and face up, whichever way it was
+                    // lying. Being unable to check your own set card is the
+                    // thing a held finger is asking about.
+                    rotX = 0f,
+                    rotY = 0f,
+                    scale = PEEK_SCALE,
+                ),
+                faceUp = true,
+                carried = true,
+                pinned = false,
+            )
+        }
+    }
+
     return seats
+}
+
+/** Which card on the stage a grabbed origin refers to. */
+private fun seatIdOf(field: PlayField, origin: DragOrigin): Int? = when (origin) {
+    is DragOrigin.Mat -> origin.id
+    is DragOrigin.Hand -> field.hand.getOrNull(origin.index)?.instanceId
+    is DragOrigin.Pile -> when (origin.pile) {
+        BoardSlot.Deck -> field.deck
+        BoardSlot.ExtraDeck -> field.extraDeck
+        BoardSlot.Graveyard -> field.graveyard
+        BoardSlot.Banished -> field.banished
+        is BoardSlot.Zone -> emptyList()
+    }.getOrNull(origin.index)?.instanceId
 }
 
 /** Quantised so a small wobble in y cannot reshuffle the whole paint order. */

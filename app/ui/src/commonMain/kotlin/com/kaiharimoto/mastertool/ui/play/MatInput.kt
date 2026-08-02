@@ -239,7 +239,21 @@ private fun handle(
 
         MatEvent.Cancelled -> play.cancelCarry()
 
-        is MatEvent.PeekBegan, MatEvent.PeekEnded -> Unit
+        // Looking, not moving: the card rises and turns toward the reader and
+        // the field is untouched, which is what a held finger on a table means.
+        is MatEvent.PeekBegan -> grabbed?.let { what ->
+            // Everything is peekable except the deck. The graveyard, the
+            // banished pile and the extra deck are all open information you are
+            // allowed to read; the top of your own deck is the one card a
+            // goldfish is only honest without.
+            val deck = what is DragOrigin.Pile && what.pile == BoardSlot.Deck
+            if (!deck) {
+                play.peek(what)
+                feedback.play(SoundEffect.LIFT)
+            }
+        }
+
+        MatEvent.PeekEnded -> play.peek(null)
     }
 
     return grabbed

@@ -51,6 +51,20 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
     /** What the last release did, for a moment, so the table can say so. */
     var announcement by mutableStateOf<String?>(null)
 
+    /**
+     * What is being looked at without being moved.
+     *
+     * A held finger on a card asks "what is this", which on a table you answer
+     * by tilting it toward you rather than by picking it up and putting it back.
+     * Nothing about the field changes, which is why this is not a [move].
+     */
+    var peeking by mutableStateOf<DragOrigin?>(null)
+        private set
+
+    fun peek(at: DragOrigin?) {
+        peeking = at
+    }
+
     private val past = ArrayDeque<PlayField>()
     private val future = ArrayDeque<PlayField>()
     private val opening = main to extra
