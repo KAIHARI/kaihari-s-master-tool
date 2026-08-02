@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -156,6 +157,16 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 seatsFor(play.field, layout, play.carry)
             }
 
+            // Both clocks report here, so a gesture the frame loop decides acts
+            // on the same card the press landed on.
+            val pilot = remember(play, machine, feedback) {
+                MatPilot(machine, play, feedback, layout)
+            }
+            SideEffect {
+                pilot.layout = layout
+                pilot.onMenu = { menuFor = it }
+            }
+
             // Aim every card at where it now belongs. Done outside the frame
             // loop because it only changes when the board does.
             seats.forEach { seat ->
@@ -173,7 +184,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                         previous = now
                         // A finger held perfectly still produces no pointer
                         // events, so the long press has to be driven from here.
-                        machine.onTick(now / 1_000_000L)
+                        pilot.tick(now / 1_000_000L)
                         cards.values.forEach { it.step(SpringSpec.Bouncy, dt.coerceAtMost(0.05f)) }
                     }
                 }
@@ -206,14 +217,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 StagedCard(seat, cards, layout, state, back, density, stage = stage)
             }
 
-            MatInput(
-                play = play,
-                machine = machine,
-                layout = layout,
-                stage = stage,
-                feedback = feedback,
-                onMenu = { menuFor = it },
-            )
+            MatInput(pilot = pilot, machine = machine, layout = layout, stage = stage)
 
             menuFor?.let { origin ->
                 CardActions(play, origin, onDismiss = { menuFor = null })

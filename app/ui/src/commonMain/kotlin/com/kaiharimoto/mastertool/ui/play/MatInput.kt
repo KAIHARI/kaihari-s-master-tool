@@ -3,8 +3,10 @@ package com.kaiharimoto.mastertool.ui.play
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import com.kaiharimoto.mastertool.core.board.DragOrigin
 import com.kaiharimoto.mastertool.core.board.MatPoint
@@ -42,21 +44,52 @@ import kotlin.math.abs
  * angles on the glass, and the arithmetic is the same `StagePlane` the renderer
  * uses.
  */
+/**
+ * What both of the mat's clocks report to.
+ *
+ * The arbiter is driven from two places — pointer events, and the frame loop
+ * that gives a motionless finger a way to become a long press — and both of
+ * them produce events that have to be carried out against *the same* memory of
+ * what the press landed on. Left inside the `pointerInput` closure, that memory
+ * is unreachable from the frame loop, and every gesture the clock decides
+ * (peek, the two-finger menu, a hand left resting on the mat) is computed and
+ * then dropped on the floor.
+ *
+ * [layout] and [onMenu] are refreshed by the composable rather than captured,
+ * because this outlives any one composition of it.
+ */
+@Stable
+internal class MatPilot(
+    private val machine: MatGestureMachine,
+    private val play: PlayState,
+    private val feedback: Feedback,
+    var layout: BoardLayout,
+) {
+    var onMenu: (DragOrigin) -> Unit = {}
+
+    /** What the press landed on. The one thing that has to survive both clocks. */
+    private var grabbed: DragOrigin? = null
+
+    fun frame(frame: TouchFrame) = carryOut(machine.onFrame(frame))
+
+    fun tick(timeMillis: Long) = carryOut(machine.onTick(timeMillis))
+
+    private fun carryOut(events: List<MatEvent>) {
+        events.forEach { grabbed = handle(it, grabbed, play, layout, feedback, onMenu) }
+    }
+}
+
 @Composable
 internal fun MatInput(
-    play: PlayState,
+    pilot: MatPilot,
     machine: MatGestureMachine,
     layout: BoardLayout,
     stage: StagePlane,
-    feedback: Feedback,
-    onMenu: (DragOrigin) -> Unit,
 ) {
     Box(
         Modifier
             .fillMaxSize()
             .pointerInput(layout, stage) {
-                var grabbed: DragOrigin? = null
-
                 awaitPointerEventScope {
                     while (true) {
                         // Main, not Initial: this is the deepest interactive node
@@ -64,32 +97,24 @@ internal fun MatInput(
                         // ancestor pager or drawer from stealing a drag.
                         val event = awaitPointerEvent(PointerEventPass.Main)
 
-                        val touches = event.changes
-                            .filter { it.pressed }
-                            .map { change ->
-                                val onPlane = stage.unproject(change.position.x, change.position.y)
-                                Touch(change.id.value, Vec2(onPlane.x, onPlane.y))
-                            }
+                        fun onFelt(change: PointerInputChange): Touch {
+                            val onPlane = stage.unproject(change.position.x, change.position.y)
+                            return Touch(change.id.value, Vec2(onPlane.x, onPlane.y))
+                        }
 
                         val frame = TouchFrame(
                             timeMillis = event.changes.firstOrNull()?.uptimeMillis ?: 0L,
-                            touches = touches,
+                            touches = event.changes.filter { it.pressed }.map(::onFelt),
                             // Every pointer the event carried, including any that
                             // went up inside it: Android batches, and a brisk
                             // two-finger tap can arrive with both already lifted.
                             seen = event.changes.size,
+                            // And where those lifted ones were when they left, or
+                            // a fully batched tap has nothing to flip *at*.
+                            released = event.changes.filterNot { it.pressed }.map(::onFelt),
                         )
 
-                        machine.onFrame(frame).forEach { matEvent ->
-                            grabbed = handle(
-                                matEvent,
-                                grabbed,
-                                play,
-                                layout,
-                                feedback,
-                                onMenu,
-                            )
-                        }
+                        pilot.frame(frame)
 
                         if (machine.phase.locked) {
                             event.changes.forEach { it.consume() }
