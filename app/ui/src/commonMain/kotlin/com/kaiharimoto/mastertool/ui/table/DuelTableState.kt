@@ -47,9 +47,20 @@ sealed interface Held {
  * back null and nothing happens. A move that is *illegal* happens, because a
  * table lets you do illegal things and a player is the one who knows.
  */
-class DuelTableState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
+class DuelTableState(
+    main: List<CardId>,
+    extra: List<CardId>,
+    seed: Long = 1L,
+    handSize: Int = OPENING_HAND,
+) {
 
-    var board by mutableStateOf(BoardState.setUp(main, extra).shuffleDeck(seed))
+    /**
+     * Opened, not empty.
+     *
+     * A table you have to tap the deck five times to sit down at is a table
+     * nobody goldfishes on, and goldfishing is the whole reason to have one.
+     */
+    var board by mutableStateOf(dealt(main, extra, seed, handSize))
         private set
 
     var held by mutableStateOf<Held?>(null)
@@ -106,9 +117,15 @@ class DuelTableState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
         canRedo = future.isNotEmpty()
     }
 
-    /** Back to a shuffled deck and an empty field. Undoable like anything else. */
-    fun restart(seed: Long = Random.nextLong()) {
-        move { BoardState.setUp(opening.first, opening.second).shuffleDeck(seed) }
+    /**
+     * A fresh shuffle and a fresh opener. Undoable like anything else.
+     *
+     * Which is the point of it being a move rather than a reconstruction: you
+     * can deal ten hands looking for the one you want to practise and still
+     * walk back to the one three deals ago that was interesting.
+     */
+    fun restart(handSize: Int = OPENING_HAND, seed: Long = Random.nextLong()) {
+        move { dealt(opening.first, opening.second, seed, handSize) }
         held = null
     }
 
@@ -177,11 +194,25 @@ class DuelTableState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
         }
     }
 
-    private companion object {
+    companion object {
+        /** Going first. The other five-or-six decision belongs to the goal sheet. */
+        const val OPENING_HAND = 5
+
         /**
          * Deep, because a combo is fifteen moves and the reason to undo one is
          * usually that you noticed something several steps back.
          */
-        const val HISTORY = 200
+        private const val HISTORY = 200
+
+        private fun dealt(
+            main: List<CardId>,
+            extra: List<CardId>,
+            seed: Long,
+            handSize: Int,
+        ): BoardState {
+            var board = BoardState.setUp(main, extra).shuffleDeck(seed)
+            repeat(handSize) { board = board.draw() ?: return board }
+            return board
+        }
     }
 }

@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.sp
 import com.kaiharimoto.mastertool.core.board.BoardCard
 import com.kaiharimoto.mastertool.core.board.CardPosition
 import com.kaiharimoto.mastertool.core.board.FieldZone
+import com.kaiharimoto.mastertool.core.deck.DeckLenses
+import com.kaiharimoto.mastertool.core.deck.Lens
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
@@ -60,6 +62,7 @@ import coil3.compose.AsyncImage
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
+import com.kaiharimoto.mastertool.ui.deckbuilder.color
 import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
@@ -142,6 +145,7 @@ fun DuelTableScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 }
             }
 
+            HandReadout(state, table, layout, density)
             HandFan(state, table, layout, density, placement)
         }
     }
@@ -233,7 +237,7 @@ private fun TableTopBar(
         BarButton("Shuffle") { table.move { it.shuffleDeck(it.turn * 31L + it.deck.size) } }
         BarButton("Undo", enabled = table.canUndo) { table.undo() }
         BarButton("Redo", enabled = table.canRedo) { table.redo() }
-        BarButton("Reset") { table.restart() }
+        BarButton("New hand") { table.restart() }
     }
 }
 
@@ -474,6 +478,92 @@ private fun PileTop(
         onTap = { onSlotTapped(table, slot, placement) },
         onLongPress = { table.openPile = slot },
     )
+}
+
+/**
+ * What is in the hand, in the words the deck was labelled with.
+ *
+ * This is the payoff of the lens work sitting one screen away. You spent the
+ * time saying which twelve cards are your starters; the table is where that
+ * answer is worth something, because "is this opener any good" is a question
+ * about roles and not about card names. Whichever lens the deck was left on is
+ * the one that speaks here — roles if you drew them, archetypes or copy counts
+ * if you did not, so an unlabelled deck still gets a reading.
+ */
+@Composable
+private fun HandReadout(
+    state: DeckBuilderState,
+    table: DuelTableState,
+    layout: BoardLayout,
+    density: Density,
+) {
+    val hand = table.board.hand
+    val keying = remember(hand, state.lens, state.groups, state.index, state.format) {
+        DeckLenses.key(
+            lens = state.lens,
+            section = hand.map { it.cardId },
+            cards = state.index::byId,
+            groups = state.groups,
+            format = state.format,
+        )
+    }
+
+    if (hand.isEmpty()) return
+
+    val parts = keying.keys
+        .map { it to keying.countOf(it.id) }
+        .filter { (_, count) -> count > 0 }
+
+    with(density) {
+        Row(
+            Modifier
+                .offset(layout.readout.left.toDp(), layout.readout.top.toDp())
+                .size(layout.readout.width.toDp(), layout.readout.height.toDp()),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            parts.forEach { (key, count) ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 4.dp, height = 12.dp)
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(key.paint.color()),
+                    )
+                    Text(
+                        "$count ${key.label}",
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            // What is left over is part of the reading, not an omission from
+            // it — an opener with two cards that do nothing is a fact about
+            // that opener. The plain Deck lens labels nothing on purpose, so
+            // there it says the only thing it honestly can.
+            val remainder = when {
+                keying.lens == Lens.DECK -> "${hand.size} in hand"
+                parts.isEmpty() -> "${hand.size} in hand, none of them labelled"
+                keying.unclaimed > 0 -> "${keying.unclaimed} loose"
+                else -> null
+            }
+
+            if (remainder != null) {
+                Text(
+                    remainder,
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
 }
 
 /**

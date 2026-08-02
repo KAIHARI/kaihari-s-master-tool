@@ -52,6 +52,8 @@ data class BoardLayout(
     val slots: Map<BoardSlot, Slot>,
     /** The band the hand is fanned across. Not a slot: a fan is not a grid. */
     val hand: Slot,
+    /** A line above the hand, for saying what is in it. */
+    val readout: Slot,
     /** The three rows of zones, without the hand — what the table's felt covers. */
     val field: Slot,
     val fits: Boolean,
@@ -109,6 +111,7 @@ data class BoardLayout(
  *                   [EMZ]        [EMZ]            [Banished]
  *   [Field spell]  [M1][M2][M3][M4][M5]           [Graveyard]
  *   [Extra deck]   [S1][S2][S3][S4][S5]           [Deck]
+ *                  2 Starter · 1 Handtrap · 2 loose
  *                       — the hand, fanned —
  * ```
  */
@@ -135,6 +138,15 @@ object BoardLayouter {
     private const val HAND_GAP_FRACTION = 2.5f
 
     /**
+     * The band that says what the hand is, as a fraction of a card's height.
+     *
+     * In the budget rather than drawn into whatever happened to be left over.
+     * That rule has now been learned twice — once by the deck panes and once by
+     * the lens bar — and it is cheaper to obey it the first time here.
+     */
+    private const val READOUT_FRACTION = 0.30f
+
+    /**
      * Below this a card is a coloured rectangle rather than a card.
      *
      * The same stance the deck fitter takes: report that it does not fit and
@@ -157,8 +169,10 @@ object BoardLayouter {
         // Height: 3 rows of card + 2 lanes, then the hand's own lane and a
         //         fourth card's worth of band for the fan to sit in.
         val byWidth = width / (COLUMNS + (COLUMNS - 1) * GAP_FRACTION)
-        val byHeight = height /
-            ((ROWS + 1) / ratio + ((ROWS - 1) + HAND_GAP_FRACTION) * GAP_FRACTION)
+        val byHeight = height / (
+            (ROWS + 1 + READOUT_FRACTION) / ratio +
+                ((ROWS - 1) + HAND_GAP_FRACTION + 1) * GAP_FRACTION
+            )
 
         val cardWidth = min(byWidth, byHeight).coerceAtLeast(0f)
         val cardHeight = cardWidth / ratio
@@ -173,9 +187,12 @@ object BoardLayouter {
         val fieldWidth = COLUMNS * cardWidth + (COLUMNS - 1) * gap
         val fieldHeight = ROWS * cardHeight + (ROWS - 1) * gap
         val handHeight = cardHeight
+        val readoutHeight = cardHeight * READOUT_FRACTION
         val handGap = gap * HAND_GAP_FRACTION
+        val stackHeight = fieldHeight + handGap + readoutHeight + gap + handHeight
         val originX = (width - fieldWidth) / 2f
-        val originY = ((height - (fieldHeight + handGap + handHeight)) / 2f).coerceAtLeast(0f)
+        val originY = ((height - stackHeight) / 2f).coerceAtLeast(0f)
+        val readoutTop = originY + fieldHeight + handGap
 
         fun slot(column: Int, row: Int) = Slot(
             left = originX + column * pitchX,
@@ -206,9 +223,15 @@ object BoardLayouter {
             slots = slots,
             hand = Slot(
                 left = originX,
-                top = originY + fieldHeight + handGap,
+                top = readoutTop + readoutHeight + gap,
                 width = fieldWidth,
                 height = handHeight,
+            ),
+            readout = Slot(
+                left = originX,
+                top = readoutTop,
+                width = fieldWidth,
+                height = readoutHeight,
             ),
             field = Slot(originX, originY, fieldWidth, fieldHeight),
             fits = cardWidth >= MIN_CARD_WIDTH,

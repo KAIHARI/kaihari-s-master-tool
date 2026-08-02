@@ -145,6 +145,18 @@ class BoardLayoutTest {
     }
 
     @Test
+    fun theReadoutSitsBetweenTheFieldAndTheHand() {
+        // It says what the hand is, so it has to be next to the hand and not on
+        // the field — and it has to be in the budget, or the hand pays for it.
+        val layout = table()
+
+        assertTrue(layout.readout.top >= layout.field.bottom)
+        assertTrue(layout.readout.bottom <= layout.hand.top)
+        assertClose(layout.field.left, layout.readout.left)
+        assertTrue(layout.readout.height > 0f)
+    }
+
+    @Test
     fun theWholeTableFitsTheSurfaceItWasGiven() {
         // The bug this file exists to prevent: a hand drawn after the fact over
         // whatever was left, and a field sized as if it were free.
