@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import coil3.compose.AsyncImage
 import com.kaiharimoto.mastertool.core.board.BoardCard
 import com.kaiharimoto.mastertool.core.board.CardPosition
@@ -92,6 +93,9 @@ private const val STACK_SLIVER = 0.020f
 private const val STACK_MAX_DRAWN = 4
 
 private val TOP_BAR = 44.dp
+
+/** Long enough to read "To the graveyard", short enough not to become scenery. */
+private const val ANNOUNCEMENT_MILLIS = 1_600L
 
 /**
  * The play stage: a deck, a table, and nothing telling you what you may do.
@@ -157,6 +161,16 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 seatsFor(play.field, layout, play.carry)
             }
 
+            // What the last release did, said once and then withdrawn. Left up,
+            // it stops being news and starts being furniture that lies about
+            // what just happened.
+            play.announcement?.let { said ->
+                LaunchedEffect(said) {
+                    delay(ANNOUNCEMENT_MILLIS)
+                    if (play.announcement == said) play.announcement = null
+                }
+            }
+
             // Both clocks report here, so a gesture the frame loop decides acts
             // on the same card the press landed on.
             val pilot = remember(play, machine, feedback) {
@@ -201,7 +215,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             ) {
                 Canvas(Modifier.fillMaxSize()) {
                     drawMat(layout)
-                    drawIndicator(play.carry?.intent, layout)
+                    drawIndicator(play.carry?.intent, play.field, layout)
                     seats.filter { !it.carried }.forEach { drawContact(it, layout) }
                 }
 
@@ -466,18 +480,37 @@ private fun DrawScope.drawContact(seat: Seat, layout: BoardLayout) {
  * once and both the highlight and the release read that decision — so the table
  * cannot promise one thing and do another.
  */
-private fun DrawScope.drawIndicator(intent: DropIntent?, layout: BoardLayout) {
+private fun DrawScope.drawIndicator(
+    intent: DropIntent?,
+    field: PlayField,
+    layout: BoardLayout,
+) {
     if (intent == null) return
 
     val accent = MasterToolPalette.AccentBright
-    fun ring(rect: Slot, alpha: Float) {
+    fun ring(rect: Slot, alpha: Float, weight: Float = 0.035f) {
         drawRoundRect(
             color = accent.copy(alpha = alpha),
             topLeft = Offset(rect.left, rect.top),
             size = Size(rect.width, rect.height),
             cornerRadius = androidx.compose.ui.geometry.CornerRadius(rect.width * 0.05f),
-            style = Stroke(width = rect.width * 0.035f),
+            style = Stroke(width = rect.width * weight),
         )
+    }
+
+    /** The footprint a card would occupy centred on a mat point. */
+    fun footprint(at: MatPoint): Slot {
+        val (x, y) = layout.toPixels(at)
+        return Slot(
+            left = x - layout.cardWidth / 2f,
+            top = y - layout.cardHeight / 2f,
+            width = layout.cardWidth,
+            height = layout.cardHeight,
+        )
+    }
+
+    fun onCard(id: Int, alpha: Float, weight: Float) {
+        field.placed(id)?.let { ring(footprint(it.at), alpha, weight) }
     }
 
     when (intent) {
@@ -487,7 +520,17 @@ private fun DrawScope.drawIndicator(intent: DropIntent?, layout: BoardLayout) {
         DropIntent.Deck -> layout[BoardSlot.Deck]?.let { ring(it, 0.85f) }
         DropIntent.ExtraDeck -> layout[BoardSlot.ExtraDeck]?.let { ring(it, 0.85f) }
         DropIntent.Hand -> ring(layout.hand, 0.6f)
-        else -> Unit
+
+        // The freeform three, which are the only ones with no box already drawn
+        // on the felt to light up. Stacking rings the card being landed on;
+        // attaching rings it thinner, because the card is going underneath;
+        // free just shows the footprint, so "nowhere in particular" still looks
+        // like a decision rather than a dead gesture.
+        is DropIntent.Stack -> onCard(intent.onto, 0.85f, 0.035f)
+        is DropIntent.Attach -> onCard(intent.onto, 0.7f, 0.012f)
+        is DropIntent.Free -> ring(footprint(intent.at), 0.28f, 0.02f)
+
+        DropIntent.Cancel -> Unit
     }
 }
 
