@@ -1,5 +1,8 @@
 package com.kaiharimoto.mastertool.ui.table
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -31,13 +34,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -47,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kaiharimoto.mastertool.core.board.BoardCard
+import com.kaiharimoto.mastertool.core.board.BoardState
 import com.kaiharimoto.mastertool.core.board.CardPosition
 import com.kaiharimoto.mastertool.core.board.FieldZone
 import com.kaiharimoto.mastertool.core.deck.DeckLenses
@@ -63,6 +70,7 @@ import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
 import com.kaiharimoto.mastertool.ui.deckbuilder.color
+import com.kaiharimoto.mastertool.ui.fx.Feedback
 import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
@@ -140,9 +148,10 @@ fun DuelTableScreen(state: DeckBuilderState, onBack: () -> Unit) {
         DuelTableState(deck.main, deck.extra)
     }
     var placement by remember { mutableStateOf(CardPosition.FACE_UP_ATK) }
+    val feedback = LocalFeedback.current
 
     Column(Modifier.fillMaxSize().background(MasterToolPalette.Ink)) {
-        TableTopBar(table, placement, { placement = it }, onBack)
+        TableTopBar(table, placement, { placement = it }, feedback, onBack)
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val density = LocalDensity.current
@@ -188,21 +197,22 @@ fun DuelTableScreen(state: DeckBuilderState, onBack: () -> Unit) {
                         rect = rect,
                         accepting = table.accepts(slot),
                         density = density,
-                        onClick = { onSlotTapped(table, slot, placement) },
+                        onClick = { onSlotTapped(table, slot, placement, feedback) },
                     )
                 }
 
-                layout.slots.forEach { (slot, rect) ->
-                    when (slot) {
-                        is BoardSlot.Zone -> table.board.at(slot.zone)?.let { card ->
-                            FieldCard(state, table, slot.zone, card, rect, density, placement)
-                        }
-                        else -> PileTop(state, table, slot, rect, density, placement)
+                // Composed by card, not by zone. A card that moves is then the
+                // same composable in a new place rather than one disappearing
+                // and another appearing, which is the whole reason it can
+                // travel there instead of arriving.
+                val seats = remember(table.board, layout) { seatCards(table.board, layout) }
+                seats.forEach { seat ->
+                    key(seat.card.instanceId) {
+                        SeatedCard(state, table, seat, density, placement)
                     }
                 }
 
                 HandReadout(state, table, layout, density)
-                HandFan(state, table, layout, density, placement)
             }
         }
     }
@@ -226,14 +236,19 @@ fun DuelTableScreen(state: DeckBuilderState, onBack: () -> Unit) {
  * to read — because a table you have to think about twice to draw a card from
  * is a table nobody goldfishes on.
  */
-private fun onSlotTapped(table: DuelTableState, slot: BoardSlot, placement: CardPosition) {
+private fun onSlotTapped(
+    table: DuelTableState,
+    slot: BoardSlot,
+    placement: CardPosition,
+    feedback: Feedback,
+) {
     if (table.held != null) {
-        table.place(slot, placement)
+        if (table.place(slot, placement)) feedback.play(SoundEffect.SNAP)
         return
     }
 
     when (slot) {
-        BoardSlot.Deck -> table.move { it.draw() }
+        BoardSlot.Deck -> if (table.move { it.draw() }) feedback.play(SoundEffect.DEAL)
         BoardSlot.Graveyard, BoardSlot.Banished, BoardSlot.ExtraDeck -> table.openPile = slot
         is BoardSlot.Zone -> Unit
     }
@@ -244,6 +259,7 @@ private fun TableTopBar(
     table: DuelTableState,
     placement: CardPosition,
     onPlacement: (CardPosition) -> Unit,
+    feedback: Feedback,
     onBack: () -> Unit,
 ) {
     val board = table.board
@@ -290,11 +306,17 @@ private fun TableTopBar(
 
         Box(Modifier.weight(1f))
 
-        BarButton("Draw") { table.move { it.draw() } }
-        BarButton("Shuffle") { table.move { it.shuffleDeck(it.turn * 31L + it.deck.size) } }
+        BarButton("Draw") {
+            if (table.move { it.draw() }) feedback.play(SoundEffect.DEAL)
+        }
+        BarButton("Shuffle") {
+            if (table.move { it.shuffleDeck(it.turn * 31L + it.deck.size) }) {
+                feedback.play(SoundEffect.SHUFFLE)
+            }
+        }
         BarButton("Undo", enabled = table.canUndo) { table.undo() }
         BarButton("Redo", enabled = table.canRedo) { table.redo() }
-        BarButton("New hand") { table.restart() }
+        BarButton("New hand") { table.restart(); feedback.play(SoundEffect.SHUFFLE) }
     }
 }
 
@@ -394,45 +416,162 @@ private fun BoardSlot.label(): String? = when (this) {
 }
 
 /**
- * A card on the field.
+ * One card and where it currently belongs.
+ *
+ * The table is drawn from a list of these rather than by walking the zones,
+ * because a card that moves has to stay the *same* composable to travel. Walk
+ * the zones and a card leaving the hand for a monster zone is one composable
+ * being removed and a different one appearing somewhere else — nothing in that
+ * has any reason to animate.
+ */
+private data class Seat(
+    val card: BoardCard,
+    val rect: Slot,
+    /** What picking it up means, or null for somewhere you cannot pick from. */
+    val pick: Held?,
+    val faceUp: Boolean,
+    val badge: String?,
+    /** Set when it is on the field, which is where the full menu applies. */
+    val zone: FieldZone?,
+)
+
+/**
+ * Every card currently visible, and where it sits.
+ *
+ * Piles show their top card only — a stack is one card and a number, the way a
+ * stack looks — so a card sent to the graveyard travels from its zone to the
+ * pile and then simply stays there as the new top. That the animation falls out
+ * of the model rather than being scripted is the point of doing it this way.
+ *
+ * Order is draw order: piles, then the field, then the hand, then whatever is
+ * held, so the card in your hand is never underneath the table.
+ */
+private fun seatCards(board: BoardState, layout: BoardLayout): List<Seat> = buildList {
+    fun pileTop(slot: BoardSlot, cards: List<BoardCard>, faceUp: Boolean, pick: Held?) {
+        val top = cards.firstOrNull() ?: return
+        val rect = layout[slot] ?: return
+        add(Seat(top, rect, pick, faceUp, cards.size.toString(), null))
+    }
+
+    pileTop(BoardSlot.Deck, board.deck, faceUp = false, pick = null)
+    pileTop(BoardSlot.ExtraDeck, board.extraDeck, faceUp = false, pick = null)
+    pileTop(BoardSlot.Graveyard, board.graveyard, faceUp = true, pick = null)
+    pileTop(BoardSlot.Banished, board.banished, faceUp = true, pick = null)
+
+    layout.slots.keys.filterIsInstance<BoardSlot.Zone>().forEach { slot ->
+        val card = board.at(slot.zone) ?: return@forEach
+        val rect = layout[slot] ?: return@forEach
+        add(
+            Seat(
+                card = card,
+                rect = rect,
+                pick = Held.OnField(slot.zone),
+                faceUp = card.position.faceUp,
+                badge = card.counters.takeIf { it > 0 }?.let { "\u25cf$it" }
+                    ?: card.materials.size.takeIf { it > 0 }?.let { "\u25c8$it" },
+                zone = slot.zone,
+            ),
+        )
+    }
+
+    board.hand.forEachIndexed { index, card ->
+        add(
+            Seat(
+                card = card,
+                rect = handSlot(layout, index, board.hand.size),
+                pick = Held.InHand(index),
+                faceUp = true,
+                badge = null,
+                zone = null,
+            ),
+        )
+    }
+}
+
+/**
+ * Where hand card [index] of [count] sits along the band the solver set aside.
+ *
+ * A row rather than an arc: an arc is lovely with six cards and unreadable with
+ * fourteen, and a combo line routinely holds fourteen. The cards overlap only
+ * as far as they must to fit, so the common case still reads as a fan.
+ */
+private fun handSlot(layout: BoardLayout, index: Int, count: Int): Slot {
+    val band = layout.hand
+    val step = if (count <= 1) {
+        0f
+    } else {
+        minOf(
+            layout.cardWidth + layout.gap,
+            (band.width - layout.cardWidth) / (count - 1),
+        )
+    }
+    val spread = layout.cardWidth + step * (count - 1)
+
+    return Slot(
+        left = band.left + (band.width - spread) / 2f + index * step,
+        top = band.top,
+        width = layout.cardWidth,
+        height = layout.cardHeight,
+    )
+}
+
+/**
+ * A card in its seat.
  *
  * Tap picks it up, and picks it up again to put it down. Everything that is not
  * a move — flipping, banishing, counters, materials — is behind the long press,
  * the same division the deck builder's tiles use.
  */
 @Composable
-private fun FieldCard(
+private fun SeatedCard(
     state: DeckBuilderState,
     table: DuelTableState,
-    zone: FieldZone,
-    card: BoardCard,
-    rect: Slot,
+    seat: Seat,
     density: Density,
     placement: CardPosition,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val held = table.held == Held.OnField(zone)
+    val zone = seat.zone
+    val feedback = LocalFeedback.current
 
     TablePiece(
-        card = card,
-        resolved = state.index.byId(card.cardId),
-        rect = rect,
+        card = seat.card,
+        resolved = state.index.byId(seat.card.cardId).takeIf { seat.faceUp },
+        rect = seat.rect,
         density = density,
-        held = held,
-        badge = card.counters.takeIf { it > 0 }?.let { "●$it" }
-            ?: card.materials.size.takeIf { it > 0 }?.let { "◈$it" },
+        held = seat.pick != null && table.held == seat.pick,
+        badge = seat.badge,
         onTap = {
-            // Holding something and tapping an occupied zone means "attach" only
-            // through the menu; a bare tap picks this card up instead, which is
-            // what a hand does when it reaches for a card that is already there.
-            if (table.held != null && table.accepts(BoardSlot.Zone(zone))) {
-                table.place(BoardSlot.Zone(zone), placement)
-            } else {
-                table.pick(Held.OnField(zone))
+            when {
+                // Something is held and this zone will take it: that is a move,
+                // not a reach for the card already sitting there.
+                zone != null && table.accepts(BoardSlot.Zone(zone)) -> {
+                    if (table.place(BoardSlot.Zone(zone), placement)) {
+                        feedback.play(SoundEffect.SNAP)
+                    }
+                }
+
+                seat.pick != null -> {
+                    table.pick(seat.pick)
+                    if (table.held != null) feedback.play(SoundEffect.LIFT)
+                }
+
+                // The top of a pile: the deck is drawn from, the rest are read.
+                else -> pileOf(seat, table.board)?.let { pile ->
+                    onSlotTapped(table, pile, placement, feedback)
+                }
             }
         },
-        onLongPress = { menuOpen = true },
+        onLongPress = {
+            if (zone != null) {
+                menuOpen = true
+            } else {
+                pileOf(seat, table.board)?.let { table.openPile = it }
+            }
+        },
     ) {
+        if (zone == null) return@TablePiece
+
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             val holding = table.held
             if (holding is Held.OnField && holding.zone != zone) {
@@ -440,14 +579,16 @@ private fun FieldCard(
                     text = { Text("Attach held card as material") },
                     onClick = {
                         menuOpen = false
-                        table.move { it.attachAsMaterial(holding.zone, zone) }
+                        if (table.move { it.attachAsMaterial(holding.zone, zone) }) {
+                            feedback.play(SoundEffect.SLIDE)
+                        }
                         table.drop()
                     },
                 )
                 HorizontalDivider()
             }
 
-            if (card.position.faceUp) {
+            if (seat.card.position.faceUp) {
                 DropdownMenuItem(
                     text = { Text("Change position") },
                     onClick = { menuOpen = false; table.move { it.changePosition(zone) } },
@@ -461,11 +602,19 @@ private fun FieldCard(
 
             DropdownMenuItem(
                 text = { Text("Send to graveyard") },
-                onClick = { menuOpen = false; table.move { it.sendToGraveyard(zone) } },
+                onClick = {
+                    menuOpen = false
+                    if (table.move { it.sendToGraveyard(zone) }) {
+                        feedback.play(SoundEffect.SLIDE)
+                    }
+                },
             )
             DropdownMenuItem(
                 text = { Text("Banish") },
-                onClick = { menuOpen = false; table.move { it.banishFrom(zone) } },
+                onClick = {
+                    menuOpen = false
+                    if (table.move { it.banishFrom(zone) }) feedback.play(SoundEffect.SLIDE)
+                },
             )
             DropdownMenuItem(
                 text = { Text("Banish face-down") },
@@ -481,9 +630,9 @@ private fun FieldCard(
 
             HorizontalDivider()
 
-            if (card.materials.isNotEmpty()) {
+            if (seat.card.materials.isNotEmpty()) {
                 DropdownMenuItem(
-                    text = { Text("Detach a material (${card.materials.size})") },
+                    text = { Text("Detach a material (${seat.card.materials.size})") },
                     onClick = { menuOpen = false; table.move { it.detachMaterial(zone) } },
                 )
             }
@@ -491,7 +640,7 @@ private fun FieldCard(
                 text = { Text("Add a counter") },
                 onClick = { menuOpen = false; table.move { it.addCounter(zone, 1) } },
             )
-            if (card.counters > 0) {
+            if (seat.card.counters > 0) {
                 DropdownMenuItem(
                     text = { Text("Remove a counter") },
                     onClick = { menuOpen = false; table.move { it.addCounter(zone, -1) } },
@@ -501,40 +650,13 @@ private fun FieldCard(
     }
 }
 
-/** The top of a pile, plus how deep it is. */
-@Composable
-private fun PileTop(
-    state: DeckBuilderState,
-    table: DuelTableState,
-    slot: BoardSlot,
-    rect: Slot,
-    density: Density,
-    placement: CardPosition,
-) {
-    val board = table.board
-    val cards = when (slot) {
-        BoardSlot.Deck -> board.deck
-        BoardSlot.ExtraDeck -> board.extraDeck
-        BoardSlot.Graveyard -> board.graveyard
-        BoardSlot.Banished -> board.banished
-        is BoardSlot.Zone -> return
-    }
-    if (cards.isEmpty()) return
-
-    // The deck and the extra deck read as stacks with their backs up; the
-    // graveyard and the banish pile are public, so their top card shows.
-    val faceDown = slot == BoardSlot.Deck || slot == BoardSlot.ExtraDeck
-
-    TablePiece(
-        card = cards.first().let { if (faceDown) it.copy(position = CardPosition.FACE_DOWN_ATK) else it },
-        resolved = state.index.byId(cards.first().cardId),
-        rect = rect,
-        density = density,
-        held = false,
-        badge = cards.size.toString(),
-        onTap = { onSlotTapped(table, slot, placement) },
-        onLongPress = { table.openPile = slot },
-    )
+/** Which pile a seated card is the top of, if it is one. */
+private fun pileOf(seat: Seat, board: BoardState): BoardSlot? = when (seat.card.instanceId) {
+    board.deck.firstOrNull()?.instanceId -> BoardSlot.Deck
+    board.extraDeck.firstOrNull()?.instanceId -> BoardSlot.ExtraDeck
+    board.graveyard.firstOrNull()?.instanceId -> BoardSlot.Graveyard
+    board.banished.firstOrNull()?.instanceId -> BoardSlot.Banished
+    else -> null
 }
 
 /**
@@ -624,58 +746,6 @@ private fun HandReadout(
 }
 
 /**
- * The hand, spread along the band the solver set aside for it.
- *
- * A row rather than an arc: an arc is lovely with six cards and unreadable with
- * fourteen, and a combo line routinely holds fourteen. The cards overlap only
- * as far as they must to fit, so the common case still reads as a fan.
- */
-@Composable
-private fun HandFan(
-    state: DeckBuilderState,
-    table: DuelTableState,
-    layout: BoardLayout,
-    density: Density,
-    placement: CardPosition,
-) {
-    val hand = table.board.hand
-    if (hand.isEmpty()) return
-
-    with(density) {
-        val band = layout.hand
-        // Spread to fill the band, overlapping only when the hand outgrows it.
-        val step = if (hand.size <= 1) {
-            0f
-        } else {
-            minOf(
-                layout.cardWidth + layout.gap,
-                (band.width - layout.cardWidth) / (hand.size - 1),
-            )
-        }
-        val spread = layout.cardWidth + step * (hand.size - 1)
-        val originX = band.left + (band.width - spread) / 2f
-
-        hand.forEachIndexed { index, card ->
-            TablePiece(
-                card = card,
-                resolved = state.index.byId(card.cardId),
-                rect = Slot(
-                    left = originX + index * step,
-                    top = band.top,
-                    width = layout.cardWidth,
-                    height = layout.cardHeight,
-                ),
-                density = density,
-                held = table.held == Held.InHand(index),
-                badge = null,
-                onTap = { table.pick(Held.InHand(index)) },
-                onLongPress = { table.pick(Held.InHand(index)) },
-            )
-        }
-    }
-}
-
-/**
  * One card on the table, wherever it is.
  *
  * Held cards lift and cast a shadow rather than growing, the same rule the deck
@@ -695,12 +765,26 @@ private fun TablePiece(
     onLongPress: () -> Unit,
     content: @Composable () -> Unit = {},
 ) {
-    val feedback = LocalFeedback.current
     val lift by animateFloatAsState(
         if (held) 1f else 0f,
         spring(dampingRatio = 0.62f, stiffness = 380f),
         label = "tableLift",
     )
+    // Where it is, as opposed to where it belongs. Seeded at its first seat so
+    // a card that appears does not fly in from the corner, and animated from
+    // then on so a card that moves goes there.
+    val position = remember { Animatable(Offset(rect.left, rect.top), Offset.VectorConverter) }
+    LaunchedEffect(rect.left, rect.top) {
+        position.animateTo(
+            Offset(rect.left, rect.top),
+            spring(
+                dampingRatio = 0.78f,
+                stiffness = 260f,
+                visibilityThreshold = Offset.VisibilityThreshold,
+            ),
+        )
+    }
+
     val turn by animateFloatAsState(
         if (card.position == CardPosition.FACE_UP_DEF ||
             card.position == CardPosition.FACE_DOWN_DEF
@@ -716,17 +800,20 @@ private fun TablePiece(
     with(density) {
         Box(
             Modifier
-                .offset(rect.left.toDp(), rect.top.toDp())
                 .size(rect.width.toDp(), rect.height.toDp())
+                // Read inside the layer rather than in the composable body: a
+                // travelling card must not recompose the table sixty times a
+                // second to get there.
                 .graphicsLayer {
+                    translationX = position.value.x
+                    translationY = position.value.y - 6.dp.toPx() * lift
                     rotationZ = turn
-                    translationY = -6.dp.toPx() * lift
                     shadowElevation = 16.dp.toPx() * lift
                     shape = RoundedCornerShape(4.dp)
                 }
                 .pointerInput(card.instanceId, held) {
                     detectTapGestures(
-                        onTap = { feedback.play(SoundEffect.LIFT); onTap() },
+                        onTap = { onTap() },
                         onLongPress = { onLongPress() },
                     )
                 },
