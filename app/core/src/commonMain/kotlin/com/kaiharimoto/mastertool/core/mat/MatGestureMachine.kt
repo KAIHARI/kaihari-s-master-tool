@@ -73,11 +73,17 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
     var stackModifier: Boolean = false
 
     private var owned: List<Long> = emptyList()
+    /** Pointers down last frame, so a gesture only ever starts on a fresh landing. */
+    private var lastSeen: Set<Long> = emptySet()
+    /** Pointers still down after a gesture ended; they cannot start another one. */
+    private var stale: Set<Long> = emptySet()
     private var previous: Map<Long, Vec2> = emptyMap()
     private var previousTime = 0L
     private var pressPoint = Vec2.Zero
     private var pressedAt = 0L
     private var secondAt = 0L
+    /** When the finger that started the gesture lifted, with others still down. */
+    private var orphanedAt = 0L
     private var pan = Vec2.Zero
     private var peakFingers = 0
     private var carried = false
@@ -88,22 +94,58 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         val events = mutableListOf<MatEvent>()
         val here = frame.touches.associate { it.id to it.at }
 
-        // Ownership: the first two fingers to land, in order, and no others. A
-        // resting palm or a steadying thumb must not be able to start or
-        // corrupt anything.
-        owned = owned.filter { it in here }
+        // A twist the scroll wheel left latched is not a touch gesture. A finger
+        // arriving ends it, or the mat would be inert until something called
+        // commitWheel.
+        if (phase == MatPhase.TWIST && owned.isEmpty()) reset()
+
+        peakFingers = maxOf(peakFingers, frame.seen)
+
+        // The fingers this gesture owns, minus any that have lifted.
+        val survivors = owned.filter { it in here }
+
+        // The gesture belongs to the finger that started it — the one the host
+        // hit-tested, and so the only one that knows what is being held. A
+        // second pointer is a modifier, never an heir.
+        //
+        // But it cannot end the instant that finger lifts, because the two
+        // fingers of a tap almost never leave in the same frame: the second is
+        // a beat behind, and ending on the first would make the flip fire only
+        // when the OS happened to batch them together. So the primary lifting
+        // opens a grace window, and what fills it decides the gesture. The
+        // other finger lifting inside it is a tap. Nothing at all is a hand
+        // resting on the mat, and it gets the gesture taken away from it.
+        if (phase != MatPhase.IDLE && orphanedAt == 0L &&
+            owned.isNotEmpty() && owned[0] !in here
+        ) {
+            orphanedAt = frame.timeMillis
+        }
+        if (phase != MatPhase.IDLE && survivors.isEmpty()) {
+            events += settle(frame, complete = true)
+            reset()
+            stale = here.keys
+            lastSeen = here.keys
+            return events
+        }
+
+        owned = survivors
         for (touch in frame.touches) {
             if (owned.size >= 2) break
-            if (touch.id !in owned) owned = owned + touch.id
+            if (touch.id in owned || touch.id in stale) continue
+            // A gesture starts only on a finger that just landed. One already
+            // resting when the last gesture ended is furniture.
+            if (phase == MatPhase.IDLE && touch.id in lastSeen) continue
+            owned = owned + touch.id
         }
+        stale = stale.filterTo(mutableSetOf()) { it in here }
 
         val fingers = owned.mapNotNull { here[it] }
         val mine = here.filterKeys { it in owned }
-        peakFingers = maxOf(peakFingers, frame.seen)
 
         if (fingers.isEmpty()) {
-            events += settle()
+            events += settle(frame, complete = true)
             reset()
+            lastSeen = here.keys
             return events
         }
 
@@ -176,8 +218,15 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
                         events += MatEvent.Twisting(twist, detent)
                     }
                     pan.length > limits.touchSlop * limits.stackSlopFactor -> {
-                        phase = MatPhase.DRAG_STACK
-                        events += MatEvent.LiftedStack(focus)
+                        if (carried) {
+                            // The second finger only came along to steady the
+                            // tablet. Carry on with the card that was already
+                            // in the air rather than grabbing the whole pile.
+                            phase = MatPhase.DRAG_CARD
+                        } else {
+                            phase = MatPhase.DRAG_STACK
+                            events += MatEvent.LiftedStack(focus)
+                        }
                         events += MatEvent.Moved(focus, moved, speed.value)
                     }
                 }
@@ -189,6 +238,21 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
             }
 
             MatPhase.TWIST -> {
+                if (fingers.size < 2) {
+                    // One finger lifted mid-twist. The turn is finished — but
+                    // the other finger is still holding the card, so it keeps
+                    // it rather than the card going dead under it.
+                    events += MatEvent.TwistCommitted(quarterTurns)
+                    phase = MatPhase.DRAG_CARD
+                    twist = 0f
+                    detent = 0
+                    focus = fingers[0]
+                    events += MatEvent.Moved(focus, moved, speed.value)
+                    previous = mine
+                    previousTime = frame.timeMillis
+                    lastSeen = here.keys
+                    return events
+                }
                 // The span guard is off once locked: fingers may drift together
                 // mid-twist and the rotation is still what is meant.
                 accumulateTwist(fingers, guardSpan = false)
@@ -206,6 +270,7 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         events += checkTimers(frame.timeMillis)
         previous = mine
         previousTime = frame.timeMillis
+        lastSeen = here.keys
         return events
     }
 
@@ -231,6 +296,17 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         if (phase == MatPhase.IDLE) emptyList() else checkTimers(timeMillis)
 
     private fun checkTimers(now: Long): List<MatEvent> = when {
+        // The grace window closed with the rest of the hand still down. Land
+        // anything in the air, claim nothing that needed a release, and make
+        // what is left on the glass inert — it cannot start the next gesture
+        // either, or a palm would become a permanent phantom finger.
+        orphanedAt != 0L && now - orphanedAt >= limits.releaseGraceMillis -> {
+            val out = settle(TouchFrame(now, emptyList()), complete = false)
+            val resting = lastSeen
+            reset()
+            stale = resting
+            out
+        }
         phase == MatPhase.PRESS && now - pressedAt >= limits.longPressMillis -> {
             phase = MatPhase.PEEK
             listOf(MatEvent.PeekBegan(focus))
@@ -245,8 +321,25 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         else -> emptyList()
     }
 
-    private fun settle(): List<MatEvent> = when (phase) {
+    /**
+     * The gesture is over; say what it was.
+     *
+     * [complete] is false when the gesture ended because the finger that owned
+     * it lifted while something else — the other hand, a palm — is still down.
+     * Anything already in the air still has to land, but the gestures that are
+     * defined by *letting go* cannot be claimed by a hand that never did.
+     */
+    private fun settle(frame: TouchFrame, complete: Boolean): List<MatEvent> = when (phase) {
+        // Nothing was ever pressed, but the event carried two pointers that had
+        // already lifted: a two-finger tap delivered whole. The positions come
+        // from where they left, because there is no other record of them.
+        MatPhase.IDLE -> when {
+            frame.seen >= 2 && frame.released.isNotEmpty() ->
+                listOf(MatEvent.Flipped(frame.released.first().at))
+            else -> emptyList()
+        }
         MatPhase.PRESS -> when {
+            !complete -> emptyList()
             // Both fingers landed and left inside one dispatched event.
             peakFingers >= 2 -> listOf(MatEvent.Flipped(focus))
             (focus - pressPoint).length <= limits.touchSlop -> listOf(MatEvent.Tapped(focus))
@@ -254,10 +347,13 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         }
         MatPhase.PEEK -> listOf(MatEvent.PeekEnded)
         MatPhase.DRAG_CARD, MatPhase.DRAG_STACK -> listOf(MatEvent.Dropped(focus, speed.value))
-        MatPhase.TWO_UNDECIDED ->
-            if (carried) listOf(MatEvent.Dropped(focus, speed.value)) else listOf(MatEvent.Flipped(focus))
+        MatPhase.TWO_UNDECIDED -> when {
+            carried -> listOf(MatEvent.Dropped(focus, speed.value))
+            complete -> listOf(MatEvent.Flipped(focus))
+            else -> emptyList()
+        }
         MatPhase.TWIST -> listOf(MatEvent.TwistCommitted(quarterTurns))
-        MatPhase.MENU, MatPhase.IDLE -> emptyList()
+        MatPhase.MENU -> emptyList()
     }
 
     /** The composable left, or an ancestor took the gesture away. */
@@ -304,8 +400,10 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         detent = 0
         peakFingers = 0
         carried = false
+        orphanedAt = 0L
         stackModifier = false
         speed.reset()
+        stale = emptySet()
     }
 
     companion object {

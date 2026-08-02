@@ -18,6 +18,14 @@ data class TouchFrame(
     val timeMillis: Long,
     val touches: List<Touch>,
     val seen: Int = touches.size,
+    /**
+     * Where pointers that went up *in this event* were when they left.
+     *
+     * The other half of the batching problem. Knowing that two fingers were
+     * seen is no use for a flip if there is no position to flip at, and a
+     * fully batched two-finger tap arrives with nothing pressed at all.
+     */
+    val released: List<Touch> = emptyList(),
 )
 
 /** Every number a gesture is judged against. Mat pixels, degrees, milliseconds. */
@@ -34,6 +42,15 @@ data class GestureThresholds(
      */
     val minTwistSpan: Float = 64f,
     val longPressMillis: Long = 420L,
+    /**
+     * How long the gesture waits for the rest of the hand after its first
+     * finger lifts.
+     *
+     * The two fingers of a tap do not leave in the same frame. Long enough that
+     * a deliberate two-finger tap always reads as one; short enough that a palm
+     * left on the mat cannot hold a gesture open behind the user's back.
+     */
+    val releaseGraceMillis: Long = 140L,
     /** Where a live twist changes its mind between attack and defence. */
     val detentDegrees: Float = 45f,
 )
