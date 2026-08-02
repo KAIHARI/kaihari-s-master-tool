@@ -1,0 +1,90 @@
+package com.kaiharimoto.mastertool.core.mat
+
+import com.kaiharimoto.mastertool.core.motion.Vec2
+
+/** One pressed pointer, in the mat's own coordinates. */
+data class Touch(val id: Long, val at: Vec2)
+
+/**
+ * Everything the arbiter knows at one instant.
+ *
+ * [seen] counts every pointer in the delivering event, *including ones that
+ * went up in it*. Android batches motion: a brisk two-finger tap can arrive as
+ * a single dispatched event in which both fingers are already released, and
+ * without [seen] that gesture is indistinguishable from one slow finger — the
+ * flip is silently lost and the user is told to tap more slowly.
+ */
+data class TouchFrame(
+    val timeMillis: Long,
+    val touches: List<Touch>,
+    val seen: Int = touches.size,
+)
+
+/** Every number a gesture is judged against. Mat pixels, degrees, milliseconds. */
+data class GestureThresholds(
+    val touchSlop: Float = 18f,
+    /** A two-finger pan should be surer of itself than a one-finger one. */
+    val stackSlopFactor: Float = 1.6f,
+    val twistSlopDegrees: Float = 7f,
+    /**
+     * Below this finger separation, rotation is noise.
+     *
+     * Two fingers ten pixels apart generate tens of degrees from one pixel of
+     * jitter. Every twist gesture that feels haunted is missing this guard.
+     */
+    val minTwistSpan: Float = 64f,
+    val longPressMillis: Long = 420L,
+    /** Where a live twist changes its mind between attack and defence. */
+    val detentDegrees: Float = 45f,
+)
+
+enum class MatPhase {
+    IDLE,
+    PRESS,
+    PEEK,
+    DRAG_CARD,
+    TWO_UNDECIDED,
+    DRAG_STACK,
+    TWIST,
+    MENU,
+    ;
+
+    /** Locked means the gesture is ours, and every pointer gets consumed. */
+    val locked: Boolean get() = this != IDLE && this != PRESS && this != TWO_UNDECIDED
+}
+
+/**
+ * What the mat is being told, by a finger or by a mouse or by a key.
+ *
+ * This is the app's gesture vocabulary. Touch and pointer are two producers of
+ * one language rather than two parallel implementations — which is how the
+ * standing "every gesture ships with both idioms" rule is kept structurally
+ * instead of by discipline. There is exactly one code path that flips a card,
+ * and a mouse cannot reach one a finger cannot.
+ */
+sealed interface MatEvent {
+    /** A finger landed. The host hit-tests here and remembers what it grabbed. */
+    data class Pressed(val at: Vec2) : MatEvent
+    data class Tapped(val at: Vec2) : MatEvent
+
+    /** Held still with one finger: show the card big without moving it. */
+    data class PeekBegan(val at: Vec2) : MatEvent
+    data object PeekEnded : MatEvent
+
+    data class LiftedCard(val at: Vec2) : MatEvent
+    data class LiftedStack(val at: Vec2) : MatEvent
+    data class Moved(val at: Vec2, val delta: Vec2, val velocity: Vec2) : MatEvent
+    data class Dropped(val at: Vec2, val velocity: Vec2) : MatEvent
+
+    data class Flipped(val at: Vec2) : MatEvent
+
+    /** Live and uncommitted: [degrees] is what to draw, [quarterTurns] what it means. */
+    data class Twisting(val degrees: Float, val quarterTurns: Int) : MatEvent
+
+    /** Crossed a detent: tick the haptics and swap the attack/defence indicator. */
+    data class Detent(val quarterTurns: Int) : MatEvent
+    data class TwistCommitted(val quarterTurns: Int) : MatEvent
+
+    data class MenuRequested(val at: Vec2) : MatEvent
+    data object Cancelled : MatEvent
+}
