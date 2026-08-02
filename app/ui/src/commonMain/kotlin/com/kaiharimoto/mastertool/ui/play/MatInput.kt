@@ -7,6 +7,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import com.kaiharimoto.mastertool.core.board.DragOrigin
 import com.kaiharimoto.mastertool.core.board.MatPoint
@@ -73,9 +74,29 @@ internal class MatPilot(
     /** Whether the carried card is going *under* what it is over, not on top. */
     private var attaching = false
 
+    /** True while the secondary mouse button is down, so the menu opens once. */
+    private var secondaryDown = false
+
     fun frame(frame: TouchFrame) = carryOut(machine.onFrame(frame))
 
     fun tick(timeMillis: Long) = carryOut(machine.onTick(timeMillis))
+
+    /**
+     * The mouse's way of asking for the card menu.
+     *
+     * On touch that is the two-finger hold. A mouse has no second finger, and
+     * holding the one button still is already spoken for by the peek, so the
+     * secondary button is the whole of the pointer idiom — without it the menu
+     * is simply unreachable on a desktop.
+     */
+    fun secondary(down: Boolean, at: Vec2) {
+        if (down == secondaryDown) return
+        secondaryDown = down
+        if (!down) return
+
+        machine.cancel()
+        whatIsUnder(play.field, layout, at)?.let(onMenu)
+    }
 
     private fun carryOut(events: List<MatEvent>) {
         events.forEach { event ->
@@ -118,6 +139,18 @@ internal fun MatInput(
                         fun onFelt(change: PointerInputChange): Touch {
                             val onPlane = stage.unproject(change.position.x, change.position.y)
                             return Touch(change.id.value, Vec2(onPlane.x, onPlane.y))
+                        }
+
+                        // The mouse's right button, before the gesture machine
+                        // sees anything: it is a request for a menu, never the
+                        // start of a drag.
+                        val secondary = event.buttons.isSecondaryPressed
+                        event.changes.firstOrNull()?.let {
+                            pilot.secondary(secondary, onFelt(it).at)
+                        }
+                        if (secondary) {
+                            event.changes.forEach { it.consume() }
+                            continue
                         }
 
                         val frame = TouchFrame(
