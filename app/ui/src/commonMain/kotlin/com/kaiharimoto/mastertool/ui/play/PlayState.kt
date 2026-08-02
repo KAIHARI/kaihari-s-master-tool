@@ -26,6 +26,8 @@ data class Carry(
     val attaching: Boolean = false,
     /** Quarter turns applied by a live twist, uncommitted. */
     val quarterTurns: Int = 0,
+    /** Turned over in the air, so it is *set* rather than flipped after landing. */
+    val faceDown: Boolean = false,
     /** Whether the whole pile is being carried rather than the top card. */
     val whole: Boolean = false,
 )
@@ -109,6 +111,9 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
             at = at,
             intent = DropTargets.resolve(at, id.takeIf { it != NO_CARD }, field, layout, null),
             whole = whole,
+            // Picked up as it lay. A set card slid across the mat is still set
+            // when it lands, and only a deliberate turn changes that.
+            faceDown = from is DragOrigin.Mat && field.placed(from.id)?.faceUp == false,
         )
     }
 
@@ -134,20 +139,33 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
     }
 
     /**
+     * Turns the carried card over before it lands.
+     *
+     * Setting a card is one motion in the hand, not put-down-then-flip, and it
+     * is the only way a card ever reaches the mat already face-down — the
+     * alternative shows the table a card the player meant to hide.
+     */
+    fun turnCarry(): Boolean {
+        val held = carry ?: return false
+        carry = held.copy(faceDown = !held.faceDown)
+        return true
+    }
+
+    /**
      * Lets go.
      *
      * Whatever the indicator was showing is what happens, because the indicator
      * *is* the intent — there is no second decision made at release time that
      * could disagree with what the user was told.
      */
-    fun release(setFaceDown: Boolean = false): Boolean {
+    fun release(): Boolean {
         val held = carry ?: return false
         carry = null
 
         val turned = held.quarterTurns % 2 != 0
         val position = when {
-            setFaceDown && turned -> CardPosition.FACE_DOWN_DEF
-            setFaceDown -> CardPosition.FACE_DOWN_ATK
+            held.faceDown && turned -> CardPosition.FACE_DOWN_DEF
+            held.faceDown -> CardPosition.FACE_DOWN_ATK
             turned -> CardPosition.FACE_UP_DEF
             else -> CardPosition.FACE_UP_ATK
         }

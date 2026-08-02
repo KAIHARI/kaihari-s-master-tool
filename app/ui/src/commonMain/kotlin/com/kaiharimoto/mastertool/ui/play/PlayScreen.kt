@@ -270,6 +270,9 @@ private fun seatsFor(field: PlayField, layout: BoardLayout, carry: Carry?): List
 
     field.mat.forEach { placed ->
         val carrying = carry?.id == placed.id
+        // In the air, the carry owns which face shows: it is what the card will
+        // land as, so turning it over is visible before it is committed.
+        val faceUp = if (carrying) !carry.faceDown else placed.faceUp
         seats += Seat(
             id = placed.id,
             card = placed.card,
@@ -277,9 +280,9 @@ private fun seatsFor(field: PlayField, layout: BoardLayout, carry: Carry?): List
                 at = if (carrying) carry.at else placed.at,
                 z = if (carrying) cardHeight * LIFT_Z else 0f,
                 turned = placed.turned || (carrying && carry.quarterTurns % 2 != 0),
-                faceUp = placed.faceUp,
+                faceUp = faceUp,
             ),
-            faceUp = placed.faceUp,
+            faceUp = faceUp,
             carried = carrying,
             depth = placed.depth,
             materials = placed.card.materials.size,
@@ -300,17 +303,20 @@ private fun seatsFor(field: PlayField, layout: BoardLayout, carry: Carry?): List
         val carrying = carry?.from is DragOrigin.Hand &&
             (carry.from as DragOrigin.Hand).index == index
         val at = handPointFor(layout, index, field.hand.size)
+        // A card in hand is always face-up to its owner; one turned over on the
+        // way out of it is being set.
+        val faceUp = !(carrying && carry.faceDown)
         seats += Seat(
             id = card.instanceId,
             card = card,
             pose = poseAt(
                 at = if (carrying) carry.at else at,
                 z = if (carrying) cardHeight * HAND_LIFT else 0f,
-                turned = false,
-                faceUp = true,
+                turned = carrying && carry.quarterTurns % 2 != 0,
+                faceUp = faceUp,
                 lean = if (carrying) 0f else HAND_LEAN,
             ),
-            faceUp = true,
+            faceUp = faceUp,
             carried = carrying,
             depth = 1,
             materials = 0,
@@ -360,11 +366,12 @@ private fun seatsFor(field: PlayField, layout: BoardLayout, carry: Carry?): List
             is BoardSlot.Zone -> emptyList()
         }
         pile.getOrNull(from.index)?.let { card ->
+            val faceUp = !carry.faceDown
             seats += Seat(
                 id = card.instanceId,
                 card = card,
-                pose = poseAt(carry.at, cardHeight * LIFT_Z, carry.quarterTurns % 2 != 0, true),
-                faceUp = true,
+                pose = poseAt(carry.at, cardHeight * LIFT_Z, carry.quarterTurns % 2 != 0, faceUp),
+                faceUp = faceUp,
                 carried = true,
                 depth = 1,
                 materials = 0,

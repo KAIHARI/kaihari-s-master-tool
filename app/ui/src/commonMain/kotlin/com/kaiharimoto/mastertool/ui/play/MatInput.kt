@@ -181,8 +181,14 @@ private fun handle(
 
         is MatEvent.Flipped -> {
             val what = grabbed
-            if (what is DragOrigin.Mat) {
-                if (play.move { it.flip(what.id) }) feedback.play(SoundEffect.SLIDE)
+            when {
+                // Mid-carry, the card turns in the air and lands set. Putting
+                // it down face-up and flipping it after would have shown the
+                // table the one card the player meant to hide.
+                play.carry != null -> if (play.turnCarry()) feedback.play(SoundEffect.SLIDE)
+                what is DragOrigin.Mat ->
+                    if (play.move { it.flip(what.id) }) feedback.play(SoundEffect.SLIDE)
+                else -> Unit
             }
         }
 
