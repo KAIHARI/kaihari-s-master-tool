@@ -93,8 +93,16 @@ data class PlayField(
 
     fun placed(id: Int): PlacedCard? = mat.firstOrNull { it.id == id }
 
-    /** Every card anywhere on the mat, piles included — for counting, not drawing. */
-    val onMat: List<BoardCard> get() = mat.flatMap { it.pile }
+    /**
+     * Every physical card on the mat — for counting, not for drawing.
+     *
+     * Stacks *and* materials. A card tucked under a monster as material is
+     * still a card on the table, and leaving it out of the census made
+     * attaching one look like losing one, which an exhaustive test noticed
+     * before a person did.
+     */
+    val onMat: List<BoardCard>
+        get() = mat.flatMap { placed -> placed.pile.flatMap { listOf(it) + it.materials } }
 
     // ---- the deck -----------------------------------------------------------
 
