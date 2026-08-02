@@ -70,12 +70,30 @@ internal class MatPilot(
     /** What the press landed on. The one thing that has to survive both clocks. */
     private var grabbed: DragOrigin? = null
 
+    /** Whether the carried card is going *under* what it is over, not on top. */
+    private var attaching = false
+
     fun frame(frame: TouchFrame) = carryOut(machine.onFrame(frame))
 
     fun tick(timeMillis: Long) = carryOut(machine.onTick(timeMillis))
 
     private fun carryOut(events: List<MatEvent>) {
-        events.forEach { grabbed = handle(it, grabbed, play, layout, feedback, onMenu) }
+        events.forEach { event ->
+            when (event) {
+                is MatEvent.Pressed, is MatEvent.Dropped -> attaching = false
+                is MatEvent.Dwelled -> attaching = true
+                // Only movement worth the name undoes it. A card held still is
+                // still being held still through the jitter of a real finger.
+                is MatEvent.Moved -> if (event.delta.length > ROUSE) attaching = false
+                else -> Unit
+            }
+            grabbed = handle(event, grabbed, play, layout, feedback, onMenu, attaching)
+        }
+    }
+
+    private companion object {
+        /** Mat pixels of travel in one frame that count as having moved on. */
+        const val ROUSE = 2.5f
     }
 }
 
@@ -139,6 +157,7 @@ private fun handle(
     layout: BoardLayout,
     feedback: Feedback,
     onMenu: (DragOrigin) -> Unit,
+    attaching: Boolean,
 ): DragOrigin? {
     fun mat(at: Vec2): MatPoint = layout.toMat(at.x to at.y)
 
@@ -173,7 +192,18 @@ private fun handle(
             }
         }
 
-        is MatEvent.Moved -> play.carryTo(mat(event.at), layout)
+        is MatEvent.Moved -> play.carryTo(mat(event.at), layout, attaching)
+
+        // The card has been held still over another one long enough to mean it
+        // is going underneath. Re-resolving with the same point is what changes
+        // the indicator from "stack" to "attach", so the user is told before
+        // they let go rather than after.
+        is MatEvent.Dwelled -> {
+            if (play.carry != null) {
+                play.carryTo(mat(event.at), layout, attaching = true)
+                feedback.play(SoundEffect.LIFT)
+            }
+        }
 
         is MatEvent.Dropped -> {
             if (play.carry != null && play.release()) feedback.play(SoundEffect.SNAP)

@@ -95,6 +95,18 @@ sealed interface MatEvent {
 
     data class Flipped(val at: Vec2) : MatEvent
 
+    /**
+     * A carried card held still long enough to mean "push it under this one".
+     *
+     * The four two-finger gestures are all spoken for — tap, twist, drag and
+     * hold — so the only channel left during a one-finger drag is time. It is
+     * also the honest one: tucking a card underneath another is the slow,
+     * deliberate version of dropping it on top, and doing it by pausing reads
+     * that way. Moving again undoes it, which is why there is no matching
+     * "stopped dwelling" event: [Moved] already says so.
+     */
+    data class Dwelled(val at: Vec2) : MatEvent
+
     /** Live and uncommitted: [degrees] is what to draw, [quarterTurns] what it means. */
     data class Twisting(val degrees: Float, val quarterTurns: Int) : MatEvent
 

@@ -127,6 +127,45 @@ class MatGestureEdgeTest {
     }
 
     @Test
+    fun holdingACarriedCardStillMeansTuckItUnder() {
+        val h = Hand(limits)
+        h.frame(1L to at(100f, 100f))
+        h.frame(1L to at(100f, 160f))
+        assertEquals(MatPhase.DRAG_CARD, h.machine.phase)
+        assertFalse(h.has<MatEvent.Dwelled>(), "the dwell fired the moment the drag began")
+
+        // Stop. The clock, not the pointer, is what notices.
+        h.events += h.machine.onTick(h.now + limits.longPressMillis + 1L)
+        assertTrue(h.has<MatEvent.Dwelled>(), "holding still over a card said nothing")
+
+        val once = h.events.filterIsInstance<MatEvent.Dwelled>().size
+        h.events += h.machine.onTick(h.now + limits.longPressMillis * 3L)
+        assertEquals(once, h.events.filterIsInstance<MatEvent.Dwelled>().size, "the dwell repeated")
+    }
+
+    @Test
+    fun movingAgainTakesTheDwellBack() {
+        val h = Hand(limits)
+        h.frame(1L to at(100f, 100f))
+        h.frame(1L to at(100f, 160f))
+        h.events += h.machine.onTick(h.now + limits.longPressMillis + 1L)
+        val after = h.events.filterIsInstance<MatEvent.Dwelled>().size
+
+        // Move off, then stop somewhere else: that is a second decision, and it
+        // has to be able to happen. Sticking at one dwell per drag would mean a
+        // card could only ever be tucked under the first thing it paused over.
+        h.now += limits.longPressMillis + 1L
+        h.frame(1L to at(300f, 400f))
+        h.events += h.machine.onTick(h.now + limits.longPressMillis + 1L)
+
+        assertEquals(
+            after + 1,
+            h.events.filterIsInstance<MatEvent.Dwelled>().size,
+            "pausing somewhere new did not count",
+        )
+    }
+
+    @Test
     fun aTwoFingerTapWhoseFingersLeaveAFrameApartIsStillAFlip() {
         // Two fingers never lift on the same frame. If the gesture ended on the
         // first one, the flip would only fire when the OS happened to batch

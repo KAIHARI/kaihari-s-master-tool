@@ -85,6 +85,10 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
     /** When the finger that started the gesture lifted, with others still down. */
     private var orphanedAt = 0L
     private var pan = Vec2.Zero
+    /** Where a carried card stopped, and when, for the dwell. */
+    private var stillAt = Vec2.Zero
+    private var stillSince = 0L
+    private var dwelled = false
     private var peakFingers = 0
     private var carried = false
     private var detent = 0
@@ -180,6 +184,7 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
                 focus = fingers[0]
                 if ((fingers[0] - pressPoint).length > limits.touchSlop) {
                     phase = MatPhase.DRAG_CARD
+                    holdStill(focus, frame.timeMillis)
                     events += if (stackModifier) {
                         MatEvent.LiftedStack(focus)
                     } else {
@@ -195,12 +200,15 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
                 if ((fingers[0] - pressPoint).length > limits.touchSlop * 2f) {
                     events += MatEvent.PeekEnded
                     phase = MatPhase.DRAG_CARD
+                    holdStill(focus, frame.timeMillis)
                     events += MatEvent.LiftedCard(focus)
                 }
             }
 
             MatPhase.DRAG_CARD -> {
                 focus = fingers[0]
+                // Any real movement restarts the clock and takes the dwell back.
+                if ((focus - stillAt).length > limits.touchSlop) holdStill(focus, frame.timeMillis)
                 events += MatEvent.Moved(focus, moved, speed.value)
             }
 
@@ -223,6 +231,7 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
                             // tablet. Carry on with the card that was already
                             // in the air rather than grabbing the whole pile.
                             phase = MatPhase.DRAG_CARD
+                            holdStill(focus, frame.timeMillis)
                         } else {
                             phase = MatPhase.DRAG_STACK
                             events += MatEvent.LiftedStack(focus)
@@ -244,6 +253,7 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
                     // it rather than the card going dead under it.
                     events += MatEvent.TwistCommitted(quarterTurns)
                     phase = MatPhase.DRAG_CARD
+                    holdStill(fingers[0], frame.timeMillis)
                     twist = 0f
                     detent = 0
                     focus = fingers[0]
@@ -272,6 +282,22 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         previousTime = frame.timeMillis
         lastSeen = here.keys
         return events
+    }
+
+    /**
+     * Restarts the dwell clock.
+     *
+     * Called at every way in to [MatPhase.DRAG_CARD], not from inside its own
+     * branch: `when (phase)` picks its branch before the transition happens, so
+     * the frame that *starts* a drag runs the branch it came from and never the
+     * one it went to. A clock started only from inside DRAG_CARD would sit at
+     * zero for that frame — and a drag that ends there, which is most of the
+     * short ones, would never have had a clock at all.
+     */
+    private fun holdStill(at: Vec2, now: Long) {
+        stillAt = at
+        stillSince = now
+        dwelled = false
     }
 
     private fun accumulateTwist(fingers: List<Vec2>, guardSpan: Boolean) {
@@ -306,6 +332,15 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
             reset()
             stale = resting
             out
+        }
+        // Held still over one spot with a card in hand: tuck it under rather
+        // than drop it on top. Driven from here as well as from onFrame,
+        // because a finger that has stopped moving stops producing events —
+        // which is precisely the condition being detected.
+        phase == MatPhase.DRAG_CARD && !dwelled && stillSince != 0L &&
+            now - stillSince >= limits.longPressMillis -> {
+            dwelled = true
+            listOf(MatEvent.Dwelled(focus))
         }
         phase == MatPhase.PRESS && now - pressedAt >= limits.longPressMillis -> {
             phase = MatPhase.PEEK
@@ -398,6 +433,9 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         pan = Vec2.Zero
         twist = 0f
         detent = 0
+        stillAt = Vec2.Zero
+        stillSince = 0L
+        dwelled = false
         peakFingers = 0
         carried = false
         orphanedAt = 0L
