@@ -1,8 +1,11 @@
 package com.kaiharimoto.mastertool.core.render
 
+import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.Vec3
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -12,6 +15,16 @@ class CardSolidTest {
     private val flat = Pose3(position = Vec3(500f, 400f, 0f))
     private val width = 120f
     private val height = 175f
+
+    /**
+     * The exchange rate between a height computed here and a pixel on screen.
+     *
+     * Read off [StagePlane.TILT] rather than written down, because the whole
+     * point of the claims below is that they hold *at the angle the table is
+     * actually seen from* — pinning a number here would let the tilt move and
+     * leave the tests passing about a table nobody is looking at.
+     */
+    private val SIN_DEFAULT_TILT = sin(StagePlane.TILT * (PI.toFloat() / 180f))
 
     private fun assertClose(expected: Float, actual: Float, tolerance: Float = 1e-3f, note: String = "") {
         assertTrue(abs(expected - actual) < tolerance, "$note expected $expected, was $actual")
@@ -70,10 +83,109 @@ class CardSolidTest {
         val deck = CardSolid.pileDepth(40, 120f)
         val pair = CardSolid.pileDepth(2, 120f)
 
-        // Divided by four again by the tilt, so this is about three pixels of
-        // white edge on screen — a deck, rather than a card with a number.
+        // Divided by three again by the tilt, so this is a dozen pixels of white
+        // edge on screen — a deck, rather than a card with a number.
         assertTrue(deck > 20f, "a forty-card deck should be visible: $deck")
         assertTrue(pair < deck / 5f, "two cards are two cards: $pair")
+    }
+
+    @Test
+    fun aDeckIsTallEnoughToSeeAtTheAngleTheTableIsSeenFrom() {
+        // The claim the exaggeration was raised to make, written as the thing
+        // that was actually wrong rather than as the constant that fixed it.
+        // Height on this stage reaches the screen multiplied by `sin(tilt)`, so
+        // a pile is only as legible as that product — which is why an
+        // exaggeration that looked generous in a unit test could still leave a
+        // forty-card deck reading as a printed rectangle on the felt.
+        val onScreen = CardSolid.pileDepth(40, 120f) * SIN_DEFAULT_TILT
+
+        assertTrue(onScreen > 12f, "a deck should stand a dozen pixels up: $onScreen")
+    }
+
+    @Test
+    fun twoCardsAreVisiblyMoreThanOne() {
+        // The complaint that started this, in one line: a stack has to *look*
+        // like a stack. One card's thickness is a third of a pixel however it is
+        // drawn — this is not a claim about a single card — but the difference
+        // between one and two has to survive the projection, or the second card
+        // is a fact only the model knows.
+        val step = (CardSolid.pileDepth(2, 120f) - CardSolid.pileDepth(1, 120f)) *
+            SIN_DEFAULT_TILT
+
+        assertTrue(step > 1f, "the second card of a stack adds $step pixels")
+    }
+
+    // ---- the seams -----------------------------------------------------------------
+
+    @Test
+    fun aSingleCardHasNoSeamInIt() {
+        assertEquals(0, CardSolid.layerLines(1, 40f))
+        assertEquals(0, CardSolid.layerLines(0, 40f))
+    }
+
+    @Test
+    fun aPileIsRuledIntoAsManyCardsAsItHas() {
+        // Three cards, two seams — the lines are between cards, not on them.
+        assertEquals(2, CardSolid.layerLines(3, 100f))
+    }
+
+    @Test
+    fun aPileNeverRulesMoreLinesThanThereIsRoomFor() {
+        // Forty cards over eight pixels of edge cannot be forty lines, and
+        // drawing them anyway is not honesty — it is a grey band. The same
+        // bargain the height curve makes, made in the same place.
+        val lines = CardSolid.layerLines(40, 8f)
+
+        assertTrue(lines in 1..5, "forty cards over eight pixels ruled $lines lines")
+        assertTrue(
+            8f / (lines + 1) >= CardSolid.LAYER_MIN_SPACING * 0.8f,
+            "the lines came out closer than they are allowed to be",
+        )
+    }
+
+    @Test
+    fun anEdgeWithNoLengthIsRuledIntoNothing() {
+        assertEquals(0, CardSolid.layerLines(40, 0f))
+        assertEquals(0, CardSolid.layerLines(40, -1f))
+    }
+
+    // ---- the slouch ----------------------------------------------------------------
+
+    @Test
+    fun aPileLeansTowardThePlayer() {
+        val lean = CardSolid.pileLean(CardSolid.pileDepth(6, width), width)
+
+        assertTrue(lean.y > 0f, "the slouch should come toward the near edge")
+        assertTrue(lean.y > lean.x, "and mostly that way rather than sideways")
+        assertClose(0f, lean.z, note = "a pile leans on the table, not off it:")
+    }
+
+    @Test
+    fun aTallPileIsNoUntidierThanAShortOne() {
+        // The saturation, stated as the thing it is for: the deck is the one
+        // object on this table anybody actually squares up, and a lean that grew
+        // with the height would make it the messiest thing on the felt.
+        val small = CardSolid.pileLean(CardSolid.pileDepth(6, width), width)
+        val deck = CardSolid.pileLean(CardSolid.pileDepth(40, width), width)
+
+        assertTrue(deck.y >= small.y, "a taller pile never leans less")
+        assertTrue(deck.y < width * 0.06f, "and never becomes a mess: ${deck.y}")
+    }
+
+    @Test
+    fun aLeaningPileIsTheSameCardOnTop() {
+        // The property everything else rests on. The lean moves the *back* of
+        // the body, so the printed face — which is where the card's composable
+        // is drawn and where a finger hit-tests — does not move at all.
+        val lean = CardSolid.pileLean(40f, width)
+        val upright = CardSolid.slab(flat, width, height, 40f)
+        val slouched = CardSolid.slab(flat, width, height, 40f, lean)
+
+        upright.last().corners.forEachIndexed { index, corner ->
+            val moved = slouched.last().corners[index]
+            assertClose(corner.x, moved.x, note = "the top face stays put:")
+            assertClose(corner.y, moved.y, note = "the top face stays put:")
+        }
     }
 
     @Test

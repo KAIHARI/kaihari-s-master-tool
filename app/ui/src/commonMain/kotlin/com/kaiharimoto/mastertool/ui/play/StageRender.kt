@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
+import com.kaiharimoto.mastertool.core.layout.Slot
 import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.Vec3
@@ -41,6 +42,48 @@ import kotlin.math.pow
 
 /** Card stock, seen edge-on. Warm, because bleached white card does not exist. */
 private val CardStockColour = Color(0xFFE8E3D8)
+
+/** The seam between two cards in a pile: a shadow, not a line somebody drew. */
+private val CardSeamColour = Color(0xFF16130E)
+
+/**
+ * The furniture the playmat is lying on.
+ *
+ * Dark, but nothing like as dark as the mat, and that gap is the whole reason
+ * it exists. A true-black stage has no *place* in it: a mat drawn as gradients
+ * on black is a mat floating in a void, and no amount of shading on the cards
+ * makes a void into a room. Give it a table and the table has a thickness, and
+ * a thickness has sides, and the sides swing into view as the camera comes down
+ * — which is the one cue that says the thing you are turning is a solid object
+ * rather than a picture being sheared.
+ */
+private val TableColour = Color(0xFF23252B)
+
+/** The playmat itself. Near enough to ink that the cards still own the screen. */
+private val MatColour = Color(0xFF0A0A0E)
+
+/**
+ * How far the playmat runs past the cards, and the table past the mat, in card
+ * widths.
+ *
+ * Both are eyeballed from a real setup: a playmat has a border on it, and a
+ * table is bigger than the mat you put on it. The table's is the larger of the
+ * two because a table whose edge is close behind the mat's reads as one object
+ * with a stripe on it.
+ */
+private const val MAT_MARGIN = 0.34f
+private const val TABLE_MARGIN = 1.05f
+
+/** How thick the table top is, in card widths. A lip you can see, not a plinth. */
+private const val TABLE_THICKNESS = 0.38f
+
+/** The playmat's outline: everything the board occupies, plus its border. */
+internal fun matSurface(layout: BoardLayout): Slot =
+    layout.bounds.inflated(layout.cardWidth * MAT_MARGIN)
+
+/** The table top's outline. */
+internal fun tableSurface(layout: BoardLayout): Slot =
+    matSurface(layout).inflated(layout.cardWidth * TABLE_MARGIN)
 
 /** The one radius every card on the stage is cut to. §8 of the handbook. */
 internal val CardCornerRadius = 4.dp
@@ -77,7 +120,47 @@ private fun Color.shaded(lit: Lit): Color = Color(
 // ---- the table ------------------------------------------------------------------
 
 /**
- * The felt: a pool of light, a fall-off into the corners, and the zones.
+ * The table: a top, and the sides of it you can see from where you are sitting.
+ *
+ * The same slab the cards are, at fifty times the size, and that is not a joke
+ * about reuse — it is the reason this is eleven lines. A table is a rectangular
+ * solid with a thickness lying flat on the stage, which is precisely what
+ * [CardSolid.slab] describes and [CardSolid.visible] culls, so it gets the
+ * back-face culling, the per-face normals and the rig's three lamps for free and
+ * cannot end up lit by a different room than the cards standing on it.
+ *
+ * Drawn before everything, because it is under everything. The one face that is
+ * skipped is the top, which is drawn flat afterwards: it sits at z = 0, where
+ * [StagePlane.flatten] is the identity, so it needs no geometry at all.
+ */
+internal fun DrawScope.drawTable(layout: BoardLayout, stage: StagePlane, eye: Vec3) {
+    val table = tableSurface(layout)
+    val thickness = layout.cardWidth * TABLE_THICKNESS
+    val pose = Pose3(position = Vec3(table.centerX, table.centerY, 0f))
+
+    CardSolid.visible(CardSolid.slab(pose, table.width, table.height, thickness), eye)
+        .forEach { face ->
+            // The top, which is the next thing drawn and is drawn flat.
+            if (face.normal.z > 0.99f) return@forEach
+
+            val path = Path()
+            face.corners.forEachIndexed { index, corner ->
+                val flat = stage.flatten(corner)
+                if (index == 0) path.moveTo(flat.x, flat.y) else path.lineTo(flat.x, flat.y)
+            }
+            path.close()
+            drawPath(path, TableColour.shaded(StageRig.face(face, eye)))
+        }
+
+    drawRect(
+        color = TableColour.shaded(StageRig.lit(Rot3.FaceNormal, eye)),
+        topLeft = Offset(table.left, table.top),
+        size = Size(table.width, table.height),
+    )
+}
+
+/**
+ * The playmat: a pool of light, a fall-off into the corners, and the zones.
  *
  * A true-black table cannot receive a dark shadow — there is nothing there to
  * take away — so the mat has to carry some light before anything resting on it
@@ -85,11 +168,22 @@ private fun Color.shaded(lit: Lit): Color = Color(
  * centre of the table: a room lit from one side does not have its brightest
  * spot in the middle, and the moment the pool and the shadows disagree about
  * where the lamp is, the table stops being a place.
+ *
+ * The mat covers the hand's band as well as the field, which it did not before.
+ * A hand fanned out on bare void beneath a mat that stopped short of it was the
+ * one place on this stage where the cards were demonstrably resting on nothing.
  */
 internal fun DrawScope.drawFelt(layout: BoardLayout) {
-    val mat = layout.field
+    val mat = matSurface(layout)
     val span = max(mat.width, mat.height)
     val key = StageRig.Key.direction
+
+    val corner = CornerRadius(layout.cardWidth * 0.16f)
+    val matTopLeft = Offset(mat.left, mat.top)
+    val matSize = Size(mat.width, mat.height)
+
+    // The mat itself, as a surface rather than as an absence.
+    drawRoundRect(color = MatColour, topLeft = matTopLeft, size = matSize, cornerRadius = corner)
 
     // Upstream of the light's travel: where it is coming from.
     val pool = Offset(
@@ -105,7 +199,13 @@ internal fun DrawScope.drawFelt(layout: BoardLayout) {
     // rather than a correctness fix, which is why it deliberately did not ride
     // in with the encoding change — but the next pass over the felt should know
     // that these numbers were chosen for a lamp that has since got brighter.
-    drawRect(
+    //
+    // Both are bounded by the mat now rather than by a rectangle half again its
+    // size. That was harmless while there was nothing outside the mat to spoil;
+    // with a table under it, the fall-off's job — darkening toward the corners —
+    // was being done to the table's corners too, and eating the one surface that
+    // tells you the mat is lying on something.
+    drawRoundRect(
         brush = Brush.radialGradient(
             colors = listOf(
                 Color.White.copy(alpha = 0.062f),
@@ -115,20 +215,22 @@ internal fun DrawScope.drawFelt(layout: BoardLayout) {
             center = pool,
             radius = span * 0.95f,
         ),
-        topLeft = Offset(mat.left - mat.width * 0.35f, mat.top - mat.height * 0.35f),
-        size = Size(mat.width * 1.7f, mat.height * 1.7f),
+        topLeft = matTopLeft,
+        size = matSize,
+        cornerRadius = corner,
     )
 
     // And the fall-off, which is what stops the pool from reading as a
     // rectangle of grey rather than as light landing on something.
-    drawRect(
+    drawRoundRect(
         brush = Brush.radialGradient(
             colors = listOf(Color.Transparent, MasterToolPalette.Ink.copy(alpha = 0.55f)),
             center = Offset(mat.centerX, mat.centerY),
             radius = span * 0.78f,
         ),
-        topLeft = Offset(mat.left - mat.width * 0.35f, mat.top - mat.height * 0.35f),
-        size = Size(mat.width * 1.7f, mat.height * 1.7f),
+        topLeft = matTopLeft,
+        size = matSize,
+        cornerRadius = corner,
     )
 
     layout.slots.forEach { (slot, rect) ->
@@ -242,11 +344,17 @@ private fun polygon(corners: List<Offset>, centre: Offset, grow: Float): Path {
  * The white edge of a card, a stack or a deck.
  *
  * This is the thing whose absence made a pile read as several rectangles
- * printed on the felt: cards are objects, objects have sides, and at fifteen
- * degrees you can see them. The faces come from `CardSolid` already
- * back-face-culled, and every corner is flattened separately — the top of a
- * deck is genuinely further from the felt than its base, and drawing the two
- * ends at the same place is what a fake stack looks like.
+ * printed on the felt: cards are objects, objects have sides, and at any angle
+ * the table is seen from you can see them. The faces come from `CardSolid`
+ * already back-face-culled, and every corner is flattened separately — the top
+ * of a deck is genuinely further from the felt than its base, and drawing the
+ * two ends at the same place is what a fake stack looks like.
+ *
+ * The printed face and the back are both skipped, which is one test rather than
+ * two: the back's normal is the printed one negated, so the absolute value of
+ * the dot product catches both. That is also what guarantees everything reaching
+ * the seam code below is a *side* quad, whose corners run front, front, back,
+ * back — the ordering the ruling depends on.
  */
 internal fun DrawScope.drawSolidEdges(
     pose: Pose3,
@@ -255,22 +363,57 @@ internal fun DrawScope.drawSolidEdges(
     depth: Float,
     stage: StagePlane,
     eye: Vec3,
+    /** How many cards are in this body, so its side can be ruled into that many. */
+    layers: Int = 1,
 ) {
     if (depth <= 0.4f) return
 
     val printed = Rot3.normal(pose)
-    CardSolid.visible(CardSolid.slab(pose, width, height, depth), eye).forEach { face ->
+    // A single card is square with itself; a pile is not, and the slouch is what
+    // says so from directly overhead, where its height has gone.
+    val lean = if (layers > 1) CardSolid.pileLean(depth, width) else Vec3.Zero
+
+    CardSolid.visible(CardSolid.slab(pose, width, height, depth, lean), eye).forEach { face ->
         // Everything except the printed face, which the card's own composable
         // is about to draw over the top of this anyway.
         if (abs(face.normal dot printed) > 0.99f) return@forEach
 
+        // The face's four corners come round as: two on the printed face, then
+        // the same two on the back. So 0→3 and 1→2 are the two edges that run
+        // down through the body, which is the axis the cards are stacked along.
+        val flat = face.corners.map { stage.flatten(it) }
         val path = Path()
-        face.corners.forEachIndexed { index, corner ->
-            val flat = stage.flatten(corner)
-            if (index == 0) path.moveTo(flat.x, flat.y) else path.lineTo(flat.x, flat.y)
+        flat.forEachIndexed { index, at ->
+            if (index == 0) path.moveTo(at.x, at.y) else path.lineTo(at.x, at.y)
         }
         path.close()
         drawPath(path, CardStockColour.shaded(StageRig.face(face, eye)))
+
+        // And the seams. A pile's side is not a white band — it is thirty cards
+        // seen end-on, and the dark lines between them are most of what says so.
+        // Without them a deck reads as a solid block of stock, which is a
+        // difference you can see instantly and cannot name until it is fixed:
+        // the block is a *ramp*, and a ramp has no count you can read off it.
+        val down = Offset(flat[3].x - flat[0].x, flat[3].y - flat[0].y).getDistance()
+        val seams = CardSolid.layerLines(layers, down)
+        if (seams == 0) return@forEach
+
+        val seam = CardSeamColour.shaded(StageRig.face(face, eye))
+        for (line in 1..seams) {
+            val t = line.toFloat() / (seams + 1)
+            drawLine(
+                color = seam,
+                start = Offset(
+                    flat[0].x + (flat[3].x - flat[0].x) * t,
+                    flat[0].y + (flat[3].y - flat[0].y) * t,
+                ),
+                end = Offset(
+                    flat[1].x + (flat[2].x - flat[1].x) * t,
+                    flat[1].y + (flat[2].y - flat[1].y) * t,
+                ),
+                strokeWidth = 1f,
+            )
+        }
     }
 }
 

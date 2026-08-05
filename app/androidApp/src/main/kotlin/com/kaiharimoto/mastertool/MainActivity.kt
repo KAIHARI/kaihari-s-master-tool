@@ -5,7 +5,9 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -118,6 +120,25 @@ class MainActivity : ComponentActivity(), DeckFileAccess {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Said out loud rather than inherited. Targeting SDK 35 or later already
+        // forces edge-to-edge — `android:statusBarColor` in the theme is ignored
+        // from Android 15 — so the choice is not whether to draw under the
+        // system bars but whether the app knows it is doing so. Declaring it
+        // here means one behaviour on every version the app runs on, which is
+        // what `SafeArea` in the Compose tree is padding against; without it,
+        // whether the insets arrive as real numbers or as zeroes depends on the
+        // OS version, and a layout that is right on one and wrong on the other
+        // is the worst of the two.
+        //
+        // Both bars are asked for the dark style — light icons — because the
+        // scrim behind them is this app's own ink and never anything else.
+        // Fully qualified: `Color` in this file already means Compose's, which
+        // the crash screen below uses and which a `SystemBarStyle` cannot take.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
 
         // A crash on a tablet with no adb is a crash nobody can read. Persist
         // any uncaught exception; the next launch shows it with a share button

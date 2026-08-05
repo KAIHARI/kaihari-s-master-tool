@@ -72,6 +72,26 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
     /** Set by the adapter from the keyboard modifiers: shift-drag takes the pile. */
     var stackModifier: Boolean = false
 
+    /**
+     * The press landed on nothing, so this gesture belongs to the camera.
+     *
+     * Called by the host on the frame it hit-tests [MatEvent.Pressed] and finds
+     * bare felt. It is a claim rather than a suggestion — from here the gesture
+     * cannot become a drag, a peek, a twist or a menu, whatever the fingers go
+     * on to do — and it is deliberately only reachable out of [MatPhase.PRESS],
+     * so nothing can take a card out of a hand that is already carrying one.
+     *
+     * The split it draws is the whole of the control rework: **fingers on a card
+     * move the card, fingers on the felt move the camera.** Before it, two
+     * fingers on empty felt went off into the two-finger card gestures and
+     * silently did nothing at all — there was no card for them to twist, stack
+     * or open a menu about — which is a third of the gesture vocabulary spent on
+     * the most-touched surface on the screen to no effect.
+     */
+    fun claimForCamera() {
+        if (phase == MatPhase.PRESS) phase = MatPhase.CAMERA
+    }
+
     private var owned: List<Long> = emptyList()
     /**
      * Pointers down last frame, so a gesture only ever starts on a fresh landing.
@@ -185,8 +205,11 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
                 // The pile and the twist are held by both fingers together, so
                 // the survivor is already carrying them: it keeps them, and no
                 // window opens. The twist says so out loud a few lines below by
-                // committing the turn and handing the card over.
-                phase == MatPhase.DRAG_STACK || phase == MatPhase.TWIST -> Unit
+                // committing the turn and handing the card over. A pinch is the
+                // same shape — both fingers are moving the camera, so either of
+                // them may go on doing it alone as an orbit.
+                phase == MatPhase.DRAG_STACK || phase == MatPhase.TWIST ||
+                    phase == MatPhase.CAMERA -> Unit
                 // A carried card is held by the one finger that picked it up,
                 // and that finger has let go. The other came along to steady
                 // the tablet and never held the card, so handing over would
@@ -251,8 +274,13 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         val moved = TwoFinger.pan(previous, mine)
         speed.add(moved, dt)
 
+        // Phases a second finger must not re-open the two-finger question for.
+        // CAMERA is on the list because a pinch is *two* fingers doing the one
+        // thing it already is; without it the second finger of a pinch would
+        // send the gesture off to decide between a twist and a pile drag.
         val hadTwo = phase == MatPhase.TWO_UNDECIDED || phase == MatPhase.TWIST ||
-            phase == MatPhase.DRAG_STACK || phase == MatPhase.MENU
+            phase == MatPhase.DRAG_STACK || phase == MatPhase.MENU ||
+            phase == MatPhase.CAMERA
 
         if (phase == MatPhase.IDLE) {
             phase = MatPhase.PRESS
@@ -370,6 +398,16 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
                     events += MatEvent.Detent(turns)
                 }
                 events += MatEvent.Twisting(twist, turns)
+            }
+
+            // One event a frame, with the count on it, and no positions: the
+            // host is holding the glass coordinates this gesture is actually
+            // made of. Emitted even on a frame nothing moved, because the host
+            // is the only thing that knows whether anything did — and a nudge
+            // by zero is free.
+            MatPhase.CAMERA -> {
+                focus = fingers[0]
+                events += MatEvent.CameraMoved(fingers.size)
             }
 
             MatPhase.MENU, MatPhase.IDLE -> Unit
@@ -516,6 +554,11 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         }
         MatPhase.TWIST -> listOf(MatEvent.TwistCommitted(quarterTurns))
         MatPhase.MENU -> emptyList()
+        // Nothing to claim on release and nothing to undo: the camera was moved
+        // as the fingers moved, and it is already where it was left. Said out
+        // loud anyway, because the host has per-gesture state — the last glass
+        // positions a delta is measured against — that has to be let go of.
+        MatPhase.CAMERA -> listOf(MatEvent.CameraEnded)
     }
 
     /** The composable left, or an ancestor took the gesture away. */

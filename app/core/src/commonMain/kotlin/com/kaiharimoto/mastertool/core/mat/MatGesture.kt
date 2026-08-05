@@ -64,6 +64,17 @@ enum class MatPhase {
     DRAG_STACK,
     TWIST,
     MENU,
+
+    /**
+     * The fingers landed on bare felt, so they are moving the camera.
+     *
+     * Claimed by the host on the press — see [MatGestureMachine.claimForCamera]
+     * — because what is under a finger is a question about the board and this
+     * file is deliberately ignorant of boards. Once claimed, none of the card
+     * gestures can start: a hand sweeping the table is not going to
+     * accidentally set a card, and the peek timer never runs.
+     */
+    CAMERA,
     ;
 
     /** Locked means the gesture is ours, and every pointer gets consumed. */
@@ -116,4 +127,23 @@ sealed interface MatEvent {
 
     data class MenuRequested(val at: Vec2) : MatEvent
     data object Cancelled : MatEvent
+
+    /**
+     * The fingers on the felt want the camera somewhere else.
+     *
+     * It carries a count and no distances, and that omission is the design. The
+     * arbiter works in the mat's own coordinates, and the mat's own coordinates
+     * are being turned by the very camera this gesture is turning — drive a yaw
+     * from them and the table curves away under your finger, accelerating,
+     * because every degree it turns changes what the next frame's delta means.
+     * What an orbit wants is the glass, which the host has and this does not.
+     *
+     * So the arbiter says *that* the camera is being moved and with how many
+     * fingers — one is an orbit, two is an orbit and a pinch — and the host
+     * says by how much.
+     */
+    data class CameraMoved(val fingers: Int) : MatEvent
+
+    /** The hand left the felt. Nothing to commit; the camera is already there. */
+    data object CameraEnded : MatEvent
 }

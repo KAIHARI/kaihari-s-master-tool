@@ -5,10 +5,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import com.kaiharimoto.mastertool.core.board.DragOrigin
 import com.kaiharimoto.mastertool.core.board.DropIntent
@@ -24,6 +25,7 @@ import com.kaiharimoto.mastertool.core.mat.MatEvent
 import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
 import com.kaiharimoto.mastertool.core.mat.Touch
 import com.kaiharimoto.mastertool.core.mat.TouchFrame
+import com.kaiharimoto.mastertool.core.mat.TwoFinger
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.ui.fx.Feedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
@@ -72,22 +74,29 @@ internal class MatPilot(
     var onMenu: (DragOrigin) -> Unit = {}
 
     /**
-     * The camera, and where the finger moved on the *glass* since the last frame.
+     * The camera, and how the hand moved on the *glass* since the last frame.
      *
-     * Orbit takes the one channel on this mat that was doing nothing: a drag
-     * whose press landed on empty felt. Every event still comes from the single
-     * arbiter — the machine decides that this is a drag, exactly as it always
-     * did — and all that changes is who acts on it when there is no card under
-     * the finger. No new phase, no second `pointerInput`, and nothing at all
-     * happens differently while a card *is* under the finger.
+     * The felt is the camera's surface. A press that lands on nothing claims the
+     * gesture for the camera outright — [MatGestureMachine.claimForCamera] —
+     * and from there one finger orbits and two also pinch. That claim is what
+     * makes the whole control scheme sayable in one line, which is the test a
+     * gesture vocabulary has to pass: *fingers on a card move the card, fingers
+     * on the felt move the camera.*
      *
-     * The delta is in screen pixels rather than the mat's, and that is not
+     * Both numbers are in screen pixels rather than the mat's, and that is not
      * fussiness: the mat's own coordinates are being turned by the very camera
      * the gesture is turning, so driving yaw from them is a feedback loop that
      * curves under your finger. What you want is the glass.
+     *
+     * [screenDelta] is the mean movement of the pointers present in *both*
+     * frames, the way `TwoFinger.pan` computes it and for the same reason: a
+     * centroid jumps by half the finger separation on the frame a second finger
+     * lands, and a camera that lurches when you go to pinch it is a camera
+     * nobody trusts. [spanRatio] is 1 whenever there is nothing to compare.
      */
     var camera: StageCameraState? = null
     var screenDelta: Vec2 = Vec2.Zero
+    var spanRatio: Float = 1f
 
     /** What the press landed on. The one thing that has to survive both clocks. */
     private var grabbed: DragOrigin? = null
@@ -101,6 +110,25 @@ internal class MatPilot(
     fun frame(frame: TouchFrame) = carryOut(machine.onFrame(frame))
 
     fun tick(timeMillis: Long) = carryOut(machine.onTick(timeMillis))
+
+    /**
+     * The mouse's way of coming closer to the table.
+     *
+     * The pointer half of the pinch, and the last unspoken-for channel a mouse
+     * has. It goes straight to the camera rather than through the arbiter, on
+     * the same grounds the secondary button does: the arbiter exists to
+     * disambiguate contacts that all begin identically, and a wheel notch is not
+     * ambiguous about anything. Nothing about it can start, join or end a
+     * gesture, so there is nothing for the arbiter to arbitrate.
+     *
+     * [notches] is positive scrolling away from you, which is out.
+     */
+    fun wheel(notches: Float) {
+        val state = camera ?: return
+        if (notches == 0f) return
+        state.rig.nudge(deltaYaw = 0f, deltaPitch = 0f, dollyBy = notches * DOLLY_PER_NOTCH)
+        state.refresh()
+    }
 
     /**
      * The mouse's way of asking for the card menu.
@@ -129,30 +157,47 @@ internal class MatPilot(
                 is MatEvent.Moved -> if (event.delta.length > ROUSE) attaching = false
                 else -> Unit
             }
-            if (grabbed == null && event is MatEvent.Moved) orbit()
+
             grabbed = handle(event, grabbed, play, layout, feedback, onMenu, attaching)
+
+            // The press has been hit-tested by now — `handle` is what does it —
+            // so this is the first moment anything knows whether the finger
+            // landed on a card. Nothing under it means the felt, and the felt
+            // is the camera's.
+            if (event is MatEvent.Pressed && grabbed == null) machine.claimForCamera()
+            if (event is MatEvent.CameraMoved) fly(event.fingers)
         }
     }
 
     /**
-     * A finger sweeping the felt turns the table under it.
+     * A hand sweeping the felt moves the camera round the table.
      *
      * Across for yaw and up-down for pitch, which is the idiom every
      * three-dimensional viewer has used for thirty years and therefore the one
-     * nobody has to be taught. The rates are per *screen height* rather than per
-     * pixel so the same sweep turns the table by the same amount on a phone and
-     * on a desk monitor — the same reason `CardDynamics` scales its bank by the
-     * card rather than by pixels.
+     * nobody has to be taught; a second finger adds the pinch, which is the
+     * idiom every *touch* viewer has used since there were two of them. The
+     * rates are per *screen height* rather than per pixel so the same sweep
+     * turns the table by the same amount on a phone and on a desk monitor — the
+     * same reason `CardDynamics` scales its bank by the card rather than by
+     * pixels.
+     *
+     * The pinch is inverted on the way in and that is the whole of it being
+     * right: fingers spreading is a request to be *closer*, and closer is a
+     * smaller `distance`. Expressed as a ratio rather than a number of pixels
+     * because a pinch is a scale — the same spread means the same zoom whether
+     * it started with the fingers an inch apart or a hand's width.
      */
-    private fun orbit() {
+    private fun fly(fingers: Int) {
         val state = camera ?: return
         val across = state.rig.width
         val down = state.rig.height
         if (across <= 0f || down <= 0f) return
 
+        val dolly = if (fingers >= 2 && spanRatio > 0.01f) 1f / spanRatio - 1f else 0f
         state.rig.nudge(
             deltaYaw = -screenDelta.x / across * YAW_PER_SWEEP,
             deltaPitch = -screenDelta.y / down * PITCH_PER_SWEEP,
+            dollyBy = dolly,
         )
         state.refresh()
     }
@@ -169,6 +214,16 @@ internal class MatPilot(
          */
         const val YAW_PER_SWEEP = 220f
         const val PITCH_PER_SWEEP = 90f
+
+        /**
+         * How much of the distance to the table one wheel notch is worth.
+         *
+         * Eight per cent, which crosses the envelope's whole range in about
+         * fifteen notches. A wheel is the one camera control with no way to say
+         * "a bit less" halfway through, so it is set where a single notch is
+         * clearly a step and a flick of the finger is not a teleport.
+         */
+        const val DOLLY_PER_NOTCH = 0.08f
     }
 }
 
@@ -189,7 +244,12 @@ internal fun MatInput(
             // dying after one frame rather than as a keying mistake.
             .pointerInput(layout) {
                 awaitPointerEventScope {
-                    var lastOnGlass: Offset? = null
+                    // Where every pressed pointer was last frame, on the glass.
+                    // A map rather than one position because the camera's two
+                    // measurements — the hand's travel and the pinch — are both
+                    // about pointers that were there *before*, and a pointer
+                    // that has only just landed must contribute to neither.
+                    var lastOnGlass: Map<Long, Vec2> = emptyMap()
                     while (true) {
                         // Main, not Initial: this is the deepest interactive node
                         // on the stage, and consuming here is what stops an
@@ -200,23 +260,40 @@ internal fun MatInput(
                         // loop outlives any pose the stage happens to be in.
                         val plane = camera.plane
 
+                        // The wheel, before anything else looks at the event. It
+                        // carries no contact and starts no gesture, so handing
+                        // it to the arbiter would only give the arbiter a frame
+                        // in which nothing it understands happened.
+                        if (event.type == PointerEventType.Scroll) {
+                            pilot.wheel(event.changes.firstOrNull()?.scrollDelta?.y ?: 0f)
+                            event.changes.forEach { it.consume() }
+                            continue
+                        }
+
+                        // Shift takes the whole pile rather than the top card:
+                        // the pointer idiom for the two-finger drag, and the one
+                        // the arbiter has always been able to act on and never
+                        // once been told about.
+                        machine.stackModifier = event.keyboardModifiers.isShiftPressed
+
                         fun onFelt(change: PointerInputChange): Touch {
                             val onPlane = plane.unproject(change.position.x, change.position.y)
                             return Touch(change.id.value, Vec2(onPlane.x, onPlane.y))
                         }
 
-                        // How far the primary pointer moved on the glass, which
-                        // is the frame the camera wants and the mat is not.
-                        val primary = event.changes.firstOrNull { it.pressed }
-                        pilot.screenDelta = when {
-                            primary == null -> Vec2.Zero.also { lastOnGlass = null }
-                            lastOnGlass == null -> Vec2.Zero
-                            else -> Vec2(
-                                primary.position.x - lastOnGlass!!.x,
-                                primary.position.y - lastOnGlass!!.y,
-                            )
-                        }
-                        lastOnGlass = primary?.position
+                        // How the hand moved on the glass, which is the frame
+                        // the camera wants and the mat is not. Both numbers are
+                        // computed for every event and read only by a camera
+                        // gesture; measuring them unconditionally is a handful
+                        // of subtractions and means there is no state to get
+                        // into step with when one begins.
+                        val onGlass = event.changes
+                            .filter { it.pressed }
+                            .associate { it.id.value to Vec2(it.position.x, it.position.y) }
+
+                        pilot.screenDelta = TwoFinger.pan(lastOnGlass, onGlass)
+                        pilot.spanRatio = spanRatio(lastOnGlass, onGlass)
+                        lastOnGlass = onGlass
 
                         // The mouse's right button, before the gesture machine
                         // sees anything: it is a request for a menu, never the
@@ -254,6 +331,31 @@ internal fun MatInput(
 }
 
 /**
+ * How much wider the hand opened since last frame, as a ratio.
+ *
+ * One when there are not two pointers that were down in both frames, which is
+ * the answer that means "no pinch" rather than a special case: a ratio of one
+ * dollies by nothing. The two pointers are picked by id order rather than by
+ * event order, because the order changes hand between platforms and a pinch
+ * that reverses when a driver reorders its pointers is a very bad afternoon.
+ */
+private fun spanRatio(before: Map<Long, Vec2>, now: Map<Long, Vec2>): Float {
+    val both = now.keys.filter { it in before }.sorted()
+    if (both.size < 2) return 1f
+
+    val was = TwoFinger.span(before.getValue(both[0]), before.getValue(both[1]))
+    val is0 = TwoFinger.span(now.getValue(both[0]), now.getValue(both[1]))
+    // Two fingers all but touching turn a pixel of jitter into a large ratio,
+    // which is the same hazard `minTwistSpan` exists for and gets the same
+    // answer: below it, there is no gesture here to measure.
+    if (was < MIN_PINCH_SPAN) return 1f
+    return is0 / was
+}
+
+/** Below this separation on the glass, a pinch is noise. */
+private const val MIN_PINCH_SPAN = 48f
+
+/**
  * Carries out one thing the arbiter says happened.
  *
  * Returns what is currently grabbed, which only [MatEvent.Pressed] changes —
@@ -277,10 +379,15 @@ private fun handle(
         is MatEvent.Tapped -> {
             when (val what = grabbed) {
                 is DragOrigin.Pile -> when (what.pile) {
-                    // The deck is drawn from; every other pile is read.
+                    // The deck is drawn from. Every other pile used to open its
+                    // menu here, which sounds reasonable and was not: the menu a
+                    // pile gets is the deck's — Draw, and Shuffle the deck — so
+                    // tapping the graveyard offered to shuffle something else
+                    // entirely. A pile is read by holding it and emptied by
+                    // dragging off it, and both of those already worked.
                     BoardSlot.Deck ->
                         if (play.move { it.draw() }) feedback.play(SoundEffect.DEAL, Haptic.DEAL)
-                    else -> onMenu(what)
+                    else -> Unit
                 }
                 is DragOrigin.Mat ->
                     if (play.move { it.bringToFront(what.id) }) {
@@ -381,6 +488,13 @@ private fun handle(
         }
 
         MatEvent.PeekEnded -> play.peek(null)
+
+        // The camera's two, which are answered in `MatPilot` rather than here:
+        // this function's whole vocabulary is the field, and the camera is the
+        // one gesture that changes nothing about it. Listed rather than swept
+        // into an `else` so that adding an event to the language still fails to
+        // compile here until somebody has said what the table does about it.
+        is MatEvent.CameraMoved, MatEvent.CameraEnded -> Unit
     }
 
     return grabbed

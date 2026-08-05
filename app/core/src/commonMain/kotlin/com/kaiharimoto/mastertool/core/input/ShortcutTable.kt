@@ -65,6 +65,7 @@ enum class ShortcutAction {
     PLAY_SEAT_OVERHEAD,
     PLAY_SEAT_TABLE,
     PLAY_SEAT_SEATED,
+    PLAY_GUIDE,
 }
 
 /**
@@ -297,6 +298,14 @@ object ShortcutTable {
         Shortcut(
             KeyChord("3"), ShortcutAction.PLAY_SEAT_SEATED, ShortcutScope.PLAY,
             "Drop down into the player's chair",
+        ),
+        // The same chord the builder's help uses, because it is the same
+        // question asked on a different screen — and because a guide you have to
+        // find is a guide nobody reads. The touch idiom is the button on the
+        // bar, which is the half of this the table actually needed.
+        Shortcut(
+            KeyChord("slash", shift = true), ShortcutAction.PLAY_GUIDE, ShortcutScope.PLAY,
+            "How the table is played",
         ),
         Shortcut(
             KeyChord("z", ctrl = true), ShortcutAction.UNDO, ShortcutScope.PLAY,

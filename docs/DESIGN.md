@@ -289,13 +289,37 @@ charge. It also means touch and pointer are two producers of one vocabulary
 rather than two implementations, which is how "every gesture ships with both
 idioms" stays true structurally instead of by discipline.
 
+**Fingers on a card move the card; fingers on the felt move you.** That
+sentence is the whole control scheme, and it is worth insisting that it stays
+sayable in one line — a table with fifteen gestures on it is not a table, it is
+a keyboard. The split is made in the arbiter, once, on the press:
+`claimForCamera` is called when the hit test finds nothing, and from there the
+gesture cannot become a drag, a peek, a twist or a menu whatever the fingers go
+on to do. On the felt, one finger orbits and two also pinch; the pointer idioms
+are a drag and the wheel.
+
+Before that split existed, all four two-finger gestures were reachable on empty
+felt, where there is no card for any of them to be about, and all four did
+nothing at all — a third of the vocabulary spent on the most-touched surface on
+the screen to no effect, while the one thing a hand on a table obviously wants
+to do, look at it from somewhere else, had no pinch.
+
 **The gesture is decided by time as much as by position.** All four two-finger
-gestures are spoken for — tap flips, twist turns to defence, drag takes the
-pile, hold opens the menu — so the remaining channels are duration and
+gestures *on a card* are spoken for — tap flips, twist turns to defence, drag
+takes the pile, hold opens the menu — so the remaining channels are duration and
 stillness. A one-finger hold peeks; a *carried* card held still goes underneath
 the card it is over rather than on top. Both are driven from the frame loop,
 because a finger that has stopped moving stops producing pointer events, which
 is precisely the condition being detected.
+
+**The table has no affordances on it, so it has a guide.** Nothing is drawn on
+the felt to tell you what you may do, because a table does not do that either.
+The price of that stance has to be payable on a press: `MatGuide` in core is the
+gesture vocabulary as data, and the button on the bar renders it beside the
+keyboard table. It is data for the same reason `ShortcutTable` is — a control
+list written by hand beside the code it describes is wrong within two changes,
+and a wrong guide is worse than none, because it turns a user who does not know
+a gesture into one who believes the table is broken.
 
 **The indicator is the intent, not a picture of it.** `DropTargets` resolves
 the finger's position to one `DropIntent`, the highlight draws that value, and
@@ -305,12 +329,34 @@ resolver is a pair — harder to enter than to leave — because a single number
 makes a finger resting on a boundary flicker between two answers several times
 a second, and which one you get is luck.
 
-**One tilted plane, one flat overlay, one projection.** The plane is a
-`graphicsLayer`; anything a hand is holding lifts onto the overlay above it and
-is projected by hand through the same `StagePlane`, so there is no seam at the
-moment it leaves. The line between the two layers is *whether a hand is holding
-it*, not whether its z is zero — resting cards have heights too, and get them by
-being flattened onto the plane rather than by leaving it.
+**One tilted plane, and everything on it.** The plane is a `graphicsLayer`;
+everything on the stage — the table, the mat, a card resting on the felt, the
+top card of a deck, the card in your hand — is drawn inside it, and height is
+carried by `StagePlane.flatten`, which rewrites a point *with* a z as the point
+on the felt that will look like it once the camera has run. There was a second,
+flat layer above this one for whatever a hand was holding, and it worked
+precisely as long as there was only one camera angle: "flat" and "square to the
+reader" were the same thing. A camera that turns ends that, and it is gone.
+
+**Height is notation, and notation has to be legible.** Everything with a z on
+this stage reaches the screen multiplied by `sin(tilt)`, which is the exchange
+rate between the geometry and anything anybody can see. A physically honest
+deck — forty cards, a fifth of a card width — comes out four pixels tall, and
+four pixels is a diagram. So the pile curve exaggerates (`CardSolid.pileDepth`),
+the default tilt is 21° rather than the 11° it started at, and a pile carries
+two more cues that survive angles its height does not: its side is *ruled* into
+the cards it is made of, and it *leans*, because nobody has ever squared up a
+graveyard and a slouch is the only thing that says "several cards" from directly
+overhead. All three are capped rather than clamped, so a deck never becomes a
+tower or a mess.
+
+**The mat is lying on a table, and the table is an object.** A true-black stage
+has no place in it: gradients on black are a mat floating in a void, and no
+amount of shading on the cards makes a void into a room. So the table is drawn
+as a slab — the same `CardSolid.slab` a card is, fifty times the size — and it
+has a thickness whose sides swing into view as the camera comes down. That is
+the cue that says the thing you are turning is a solid rather than a picture
+being sheared, and it is the cheapest one on the stage.
 
 **A carried card's position is assigned from the finger and never sprung toward
 it** — any spring between a finger and the thing it is holding is lag, and lag

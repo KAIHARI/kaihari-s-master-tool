@@ -1,6 +1,15 @@
 package com.kaiharimoto.mastertool.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -28,6 +37,7 @@ import com.kaiharimoto.mastertool.ui.fx.rememberFeedback
 import com.kaiharimoto.mastertool.ui.library.DeckLibraryScreen
 import com.kaiharimoto.mastertool.ui.play.PlayScreen
 import com.kaiharimoto.mastertool.ui.table.DuelTableScreen
+import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
 import com.kaiharimoto.mastertool.ui.update.UpdateDialog
 import com.kaiharimoto.mastertool.ui.update.UpdateState
@@ -81,6 +91,7 @@ fun MasterToolApp(deps: AppDependencies) {
                 imageUrl = layoutState.preferences.cardBackUrl,
             ),
         ) {
+        SafeArea {
         when (screen) {
             Screen.DeckBuilder -> DeckBuilderScreen(
                 state = builderState,
@@ -124,6 +135,42 @@ fun MasterToolApp(deps: AppDependencies) {
             )
         }
         }
+        }
+    }
+}
+
+/**
+ * Everything the app draws, kept clear of the system's own furniture.
+ *
+ * Android 15 made edge-to-edge the only option for anything targeting SDK 35 or
+ * later: `windowIsTranslucent`, `statusBarColor` and the rest of the old opt-out
+ * are ignored, and every app draws under the status and navigation bars whether
+ * it has planned for it or not. This app had not, which on a Tab S11 in
+ * landscape meant the play stage's toolbar and the system clock occupied the
+ * same twenty-four density-independent pixels.
+ *
+ * Done once, here, rather than per screen — four screens with their own
+ * `statusBarsPadding` is four places for a fifth screen to be forgotten, and
+ * this is exactly the class of bug that gets noticed on a device and nowhere
+ * else. The Ink background is drawn *behind* the padding so the bars sit on the
+ * app's own black rather than on a gap.
+ *
+ * The insets are the system bars and any display cutout, deliberately **not**
+ * `safeDrawing`: that one includes the on-screen keyboard, and padding the whole
+ * app by the keyboard means every deck pane re-solves its layout the moment
+ * anybody types in the search field.
+ *
+ * On desktop every one of these is zero and this is an empty box.
+ */
+@Composable
+private fun SafeArea(content: @Composable () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MasterToolPalette.Ink)
+            .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)),
+    ) {
+        content()
     }
 }
 

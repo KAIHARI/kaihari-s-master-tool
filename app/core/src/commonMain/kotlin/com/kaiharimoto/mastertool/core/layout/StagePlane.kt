@@ -237,16 +237,23 @@ data class StagePlane(
         /**
          * How far the table is laid back from the camera.
          *
-         * Raised from eleven degrees, which was a tilt you could measure and
-         * not one you could see. Everything with a height on this stage —
-         * a pile's edge, a lifted card's parallax, the gap between a card and
-         * its shadow — projects to `z·sin θ`, so at eleven degrees a forty-card
-         * deck stood a pixel and a half proud of the felt and the whole table
-         * read as a diagram of a table. Fifteen is half again as much depth for
-         * about three per cent of card size, and it stops short of the angle
-         * where a card's own text starts to keystone.
+         * Raised twice now, from eleven to fifteen and from fifteen to
+         * twenty-one, and both times for the same reason. Everything with a
+         * height on this stage — a pile's edge, a lifted card's parallax, the
+         * gap between a card and its shadow — projects to `z·sin θ`, so the
+         * tilt is the exchange rate between every height the renderer computes
+         * and the pixels anybody sees. At eleven degrees a forty-card deck
+         * stood a pixel and a half proud of the felt; at fifteen it stood two,
+         * which is a table you can measure and not one you can sit at.
+         *
+         * Twenty-one buys another forty per cent of that for about three per
+         * cent of card size, and it is still a long way short of the angle where
+         * a card's own printed text starts to keystone — the seated seat is at
+         * thirty-four and is legible. It is deliberately the *default*, not the
+         * limit: the camera can be anywhere between four and fifty-eight
+         * degrees, and this is only the angle the table opens at.
          */
-        const val TILT = 15f
+        const val TILT = 21f
         private const val MIN_GAP = 1f
 
         /**
@@ -257,9 +264,9 @@ data class StagePlane(
          * back is an almost orthographic one, which is a fine choice for a
          * diagram and the wrong one for a table you are sitting at: it is what
          * made a card raised into the hand grow by four per cent and read as
-         * having not moved. At `1.45·h` and fifteen degrees the near edge grows
-         * about ten per cent, the fitter is told so, and a lifted card is
-         * visibly closer than the felt it left.
+         * having not moved. At `1.45·h` and the default tilt the near edge
+         * grows about fourteen per cent, the fitter is told so, and a lifted
+         * card is visibly closer than the felt it left.
          *
          * Taking the larger of height and a share of width keeps an ultrawide
          * window from getting a violent keystone at its left and right edges —

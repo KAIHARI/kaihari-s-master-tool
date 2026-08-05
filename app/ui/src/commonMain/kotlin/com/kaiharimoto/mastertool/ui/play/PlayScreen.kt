@@ -95,8 +95,22 @@ private const val LIFT_Z = 0.55f
 /** A card raised to be *read* comes closer than one being slid. */
 private const val HAND_LIFT = LIFT_Z * 1.6f
 
-/** How far a hand card leans back, so hand and table read as two objects. */
-private const val HAND_LEAN = -7f
+/**
+ * How far a hand card leans back, so hand and table read as two objects.
+ *
+ * Raised from seven degrees, which was a lean you could measure and not one you
+ * could see. This is the cheapest three-dimensionality on the whole stage and
+ * for a while it was the least used: a card leaned about its own centre keeps
+ * that centre exactly where it was, so nothing about hit-testing, the fan or the
+ * layout has an opinion — while its top edge rises a fifth of a card height off
+ * the mat, its bottom edge presses into it, and the shadow it throws stops being
+ * a rectangle underneath it and becomes a rectangle behind it.
+ *
+ * Which is the whole trick, and the reason it is worth this much comment: a hand
+ * that is *standing up* off the table is the difference between five cards laid
+ * out on a mat and five cards being held.
+ */
+private const val HAND_LEAN = -24f
 
 /**
  * A peeked card comes off the table and turns to face the reader.
@@ -176,6 +190,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
     val feedback = LocalFeedback.current
     val back = LocalCardBack.current
     var menuFor by remember { mutableStateOf<DragOrigin?>(null) }
+    var guide by remember { mutableStateOf(false) }
 
     // The pointer half of the standing rule that every gesture ships with both
     // idioms. Only the actions that need no card selected are here: a keyboard
@@ -200,7 +215,15 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 ShortcutAction.PLAY_SEAT_OVERHEAD -> camera.rig.aimAt(StageSeat.OVERHEAD)
                 ShortcutAction.PLAY_SEAT_TABLE -> camera.rig.aimAt(StageSeat.TABLE)
                 ShortcutAction.PLAY_SEAT_SEATED -> camera.rig.aimAt(StageSeat.SEATED)
-                ShortcutAction.DISMISS -> if (menuFor != null) menuFor = null else onBack()
+                ShortcutAction.PLAY_GUIDE -> guide = !guide
+                // Outward one layer at a time, and the guide is the outermost
+                // thing over the table: Esc with it open should close it, not
+                // walk out of the stage and lose the board.
+                ShortcutAction.DISMISS -> when {
+                    guide -> guide = false
+                    menuFor != null -> menuFor = null
+                    else -> onBack()
+                }
                 else -> Unit
             }
         },
@@ -279,7 +302,12 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             }
             SideEffect {
                 pilot.layout = layout
-                pilot.onMenu = { menuFor = it }
+                // Asked before it opens rather than discovered when it draws.
+                // A `DropdownMenu` with nothing in it is not nothing — it is a
+                // three-pixel box that appears, sits there, and has to be
+                // dismissed, which is a worse answer than the gesture having
+                // done nothing at all.
+                pilot.onMenu = { if (hasMenu(it)) menuFor = it }
                 pilot.camera = camera
             }
 
@@ -368,6 +396,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 // The felt, what is about to happen to it, and the shadow and
                 // the white edge of everything resting on it.
                 Canvas(Modifier.fillMaxSize()) {
+                    drawTable(layout, camera.plane, camera.eye)
                     drawFelt(layout)
                     drawIndicator(play.carry?.intent, play.field, layout)
                     seats.filter { !it.carried }.forEach { seat ->
@@ -378,7 +407,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                         val pose = cards[seat.id]?.pose ?: seat.pose
                         drawSolidEdges(
                             pose, seat.width, seat.height, seat.solid,
-                            camera.plane, camera.eye,
+                            camera.plane, camera.eye, seat.depth,
                         )
                     }
                 }
@@ -395,6 +424,17 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                         val pose = cards[seat.id]?.pose ?: seat.pose
                         drawCardShadow(pose, seat.width, seat.height, seat.height)
                     }
+                    // A card in the air is the one a hand is actually looking
+                    // at, and it is the one whose thickness used to go missing:
+                    // only the cards resting on the mat had their bodies drawn,
+                    // so picking a card up made it flat.
+                    seats.filter { it.carried }.forEach { seat ->
+                        val pose = cards[seat.id]?.pose ?: seat.pose
+                        drawSolidEdges(
+                            pose, seat.width, seat.height, seat.solid,
+                            camera.plane, camera.eye, seat.depth,
+                        )
+                    }
                 }
 
                 seats.filter { it.carried }.forEach { seat ->
@@ -409,7 +449,11 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             }
         }
 
-        PlayTopBar(play, camera, onBack)
+        PlayTopBar(play, camera, onBack, onGuide = { guide = true })
+
+        // Over the bar as well as the table, because it is answering a question
+        // about both of them.
+        if (guide) PlayGuide(onDismiss = { guide = false })
     }
     }
 }
@@ -935,7 +979,12 @@ private fun Badge(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun PlayTopBar(play: PlayState, camera: StageCameraState, onBack: () -> Unit) {
+private fun PlayTopBar(
+    play: PlayState,
+    camera: StageCameraState,
+    onBack: () -> Unit,
+    onGuide: () -> Unit,
+) {
     val feedback = LocalFeedback.current
     Row(
         Modifier.fillMaxWidth().height(TOP_BAR).padding(horizontal = 10.dp),
@@ -943,6 +992,11 @@ private fun PlayTopBar(play: PlayState, camera: StageCameraState, onBack: () -> 
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         BarButton("← Deck", onClick = onBack)
+        // Second from the left, where a thing you need in the first minute
+        // belongs. The table has no affordances on it by design, so this button
+        // is the entire discoverability budget of every gesture on the stage —
+        // it is not going at the far end of a row of fifteen.
+        BarButton("? Guide", onClick = onGuide)
         Divider()
         Text(
             play.field.lifePoints.toString(),
@@ -1025,6 +1079,20 @@ private fun BarButton(label: String, enabled: Boolean = true, onClick: () -> Uni
 internal fun Slot.holds(x: Float, y: Float, grace: Float = 0f): Boolean =
     x >= left - grace && x <= right + grace && y >= top - grace && y <= bottom + grace
 
+
+/**
+ * Whether [CardActions] would have anything to put in a menu about this.
+ *
+ * The one place that answer is decided, so the check and the menu cannot drift
+ * apart into a gesture that opens an empty box.
+ */
+private fun hasMenu(origin: DragOrigin): Boolean = when (origin) {
+    is DragOrigin.Mat -> true
+    // The deck's menu is the deck's. Every other pile has nothing to offer that
+    // holding it or dragging off it does not already do better.
+    is DragOrigin.Pile -> origin.pile == BoardSlot.Deck
+    is DragOrigin.Hand -> false
+}
 
 /**
  * Everything a card can be told to do that is not a movement.
