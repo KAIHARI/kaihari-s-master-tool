@@ -136,6 +136,12 @@ be corrected.
   the screen through `graphicsLayer` — which is a real perspective-correct
   quad — and a canvas, joined by `StagePlane.flatten`. **No 3D engine, ever:**
   none reaches KMP common code and all of them would cost the desktop target.
+- **Height is notation, and `sin(tilt)` is its exchange rate.** Every z on the
+  stage reaches the screen multiplied by it, so a physically honest forty-card
+  deck is four pixels and a diagram. `CardSolid.pileDepth` exaggerates and
+  saturates; a pile's side is ruled into its cards and leans, because those two
+  survive the angles its height does not. The mat lies on a table drawn as a
+  slab, because gradients on true black are a mat floating in a void.
 
 ## Roadmap State
 
@@ -182,13 +188,20 @@ Both play surfaces now exist, and they answer different questions:
   user sees is that same value, so the table cannot promise one thing and
   do another.
 
-Three rules the play stage would be broken without, each of which was a bug
+Four rules the play stage would be broken without, each of which was a bug
 first:
 
 - **One gesture arbiter for the whole mat**, in core
   (`core/mat/MatGestureMachine.kt`), driven by one `pointerInput`. Per-card
   detectors let one finger start a drag on one card while a second starts a
   separate drag on another, and consumption cannot fix that after the fact.
+- **Fingers on a card move the card; fingers on the felt move the camera.**
+  The whole control scheme, and it has to stay sayable in one line. The split
+  is made once, on the press, by `claimForCamera` when the hit test finds
+  nothing; from there the gesture cannot become a drag, a peek or a menu. One
+  finger orbits, two also pinch. The table has no affordances drawn on it, so
+  it has a guide — `core/input/MatGuide.kt`, data rather than prose, rendered
+  by the button on the bar and held to both-idioms-present by a test.
 - **Both of its clocks report to `MatPilot`.** Pointer events and the frame
   loop each produce gesture events, and both must act on the same memory of
   what the press landed on. `onTick` called for its side effects, with its
