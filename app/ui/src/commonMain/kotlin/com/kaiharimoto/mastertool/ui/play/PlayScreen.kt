@@ -54,7 +54,9 @@ import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.layout.Slot
-import com.kaiharimoto.mastertool.core.layout.StagePlane
+import com.kaiharimoto.mastertool.core.layout.CameraRig
+import com.kaiharimoto.mastertool.core.layout.StageSeat
+import com.kaiharimoto.mastertool.core.layout.planeFor
 import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.motion.Pose3
@@ -63,7 +65,7 @@ import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.haptics.Haptic
 import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.CardStock
-import com.kaiharimoto.mastertool.core.render.StageRig
+import com.kaiharimoto.mastertool.core.render.Rot3
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CardBack
 import com.kaiharimoto.mastertool.ui.components.LocalCardBack
@@ -121,15 +123,22 @@ private const val ANNOUNCEMENT_MILLIS = 1_600L
  * with the rules of the game living entirely in your head, which is what a
  * table is.
  *
- * Three layers, and one invariant that removes the need to sort anything:
- * **a card nobody is holding belongs to the plane, and a card in the air
- * belongs to the flat layer above it.** Parent order then answers every
- * occlusion question — plane, then air — and there is no per-card depth sort
- * anywhere. Note what the line is drawn on: whether a *hand* is holding it, not
- * whether its z is zero. Resting cards do have heights now — a card on a pile
- * of four is four cards off the felt, and the top of a deck is a deck's worth —
- * and they get them by being *flattened* onto the plane rather than by leaving
- * it, which is what keeps the invariant true and the sort absent.
+ * **One plane, and one invariant that removes the need to sort anything: draw
+ * order is depth.** Felt, then what is resting on it, then the shadows of what
+ * is in the air, then what is in the air. There is no per-card depth sort
+ * anywhere and there does not need to be.
+ *
+ * There used to be a second layer above this one, flat, holding whatever a hand
+ * was carrying. It worked because there was only ever one camera angle, so
+ * "flat" and "square to the reader" were the same thing and a card in the air
+ * could live in the screen's frame while the felt lived in the mat's. A camera
+ * that turns ends that — a carried card set in defence would stay square to the
+ * glass while the table turned under it, and its own shadow would slide out
+ * from beneath it. So there is one frame now. Height is carried by
+ * `StagePlane.flatten`, which rewrites a point *with* a height as the point on
+ * the felt that will look like it once the camera has run; that is what puts
+ * the top card of a deck on top of the deck, and what keeps the card in your
+ * hand turning with the table it left.
  *
  * Motion is one `withFrameNanos` loop over plain lists, with each card's pose
  * read inside its own `graphicsLayer`. Poses live in [StageCard] objects held by
@@ -161,6 +170,9 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
     }
     val cards = remember(deck.main, deck.extra) { mutableMapOf<Int, StageCard>() }
     val machine = remember(deck.main, deck.extra) { MatGestureMachine() }
+    // Above the shortcut host, because three of the shortcuts are seats. It
+    // needs no surface to exist — `sync` tells it one as soon as there is a box.
+    val camera = remember { StageCameraState(CameraRig(seat = StageSeat.TABLE)) }
     val feedback = LocalFeedback.current
     val back = LocalCardBack.current
     var menuFor by remember { mutableStateOf<DragOrigin?>(null) }
@@ -185,6 +197,9 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 ShortcutAction.PLAY_END_TURN -> play.move { it.endTurn() }
                 ShortcutAction.UNDO -> play.undo()
                 ShortcutAction.REDO -> play.redo()
+                ShortcutAction.PLAY_SEAT_OVERHEAD -> camera.rig.aimAt(StageSeat.OVERHEAD)
+                ShortcutAction.PLAY_SEAT_TABLE -> camera.rig.aimAt(StageSeat.TABLE)
+                ShortcutAction.PLAY_SEAT_SEATED -> camera.rig.aimAt(StageSeat.SEATED)
                 ShortcutAction.DISMISS -> if (menuFor != null) menuFor = null else onBack()
                 else -> Unit
             }
@@ -196,15 +211,26 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             val widthPx = with(density) { maxWidth.toPx() }
             val heightPx = with(density) { maxHeight.toPx() }
 
-            val stage = remember(widthPx, heightPx) { StagePlane.forStage(widthPx, heightPx) }
-            val layout = remember(widthPx, heightPx, stage) {
+            SideEffect { camera.sync(widthPx, heightPx) }
+
+            val layout = remember(widthPx, heightPx) {
                 BoardLayouter.solve(
                     width = widthPx,
                     height = heightPx,
                     aspectRatio = CARD_ASPECT_RATIO,
-                    // The stage reporting on itself, rather than a constant that
-                    // would drift the first time the tilt changed.
-                    perspectiveGrowth = stage.perspectiveGrowth,
+                    // The seat the stage opens at, and deliberately not the live
+                    // camera. Handing the fitter a growth that changes every
+                    // frame re-solves the whole board every frame: every card
+                    // resizes, all sixty seats re-target, and `fits` can flip
+                    // below MIN_CARD_WIDTH mid-gesture and unmount the stage.
+                    // Handing it the *worst* growth the camera could ever reach
+                    // is no better — that is the mat's diagonal, and it would
+                    // cost a fifth of every card forever to buy an angle that
+                    // might never be used. So the layout is solved once and the
+                    // camera obeys it: CameraFit dollies back instead.
+                    perspectiveGrowth = StageSeat.TABLE.pose
+                        .planeFor(widthPx, heightPx)
+                        .perspectiveGrowth,
                 )
             }
 
@@ -219,7 +245,21 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             }
 
             val seats = remember(play.field, layout, play.carry, play.peeking) {
-                seatsFor(play.field, layout, play.carry, play.peeking)
+                // The camera is read as a plain field, not as observable state:
+                // this must not re-run sixty times a second while the table is
+                // turning. The cost is that a card already held up does not
+                // re-face if the camera moves under it, which is a moment when
+                // nobody is moving the camera.
+                seatsFor(
+                    field = play.field,
+                    layout = layout,
+                    carry = play.carry,
+                    peeking = play.peeking,
+                    facingReader = Rot3.facingViewer(
+                        camera.pose.pitchDegrees,
+                        camera.pose.yawDegrees,
+                    ),
+                )
             }
 
             // What the last release did, said once and then withdrawn. Left up,
@@ -240,6 +280,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             SideEffect {
                 pilot.layout = layout
                 pilot.onMenu = { menuFor = it }
+                pilot.camera = camera
             }
 
             // Where a card the stage has never seen before comes from. Placing
@@ -268,14 +309,6 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 card.aimAt(seat.pose)
             }
 
-            // Where the camera is, in the mat's own frame. The tilted plane and
-            // the flat overlay above it are two different frames, so they get
-            // two different eyes — a resting card is being looked at slightly
-            // from above, and a card held up in the air is being looked at
-            // square on, and shading either of them with the other's eye puts
-            // the highlight in a place the rest of the table disagrees with.
-            val restingEye = remember(stage) { StageRig.eye(stage.tiltDegrees) }
-
             // ---- the one loop -------------------------------------------------
             LaunchedEffect(Unit) {
                 var previous = 0L
@@ -286,18 +319,50 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                         // A finger held perfectly still produces no pointer
                         // events, so the long press has to be driven from here.
                         pilot.tick(now / 1_000_000L)
-                        cards.values.forEach { it.step(SpringSpec.Bouncy, dt.coerceAtMost(0.05f)) }
+                        val step = dt.coerceAtMost(0.05f)
+                        cards.values.forEach { it.step(SpringSpec.Bouncy, step) }
+                        // Snappy rather than Bouncy: a card overshooting reads as
+                        // weight, and a whole table overshooting reads as a lurch.
+                        if (camera.rig.step(SpringSpec.Snappy, step)) {
+                            camera.sync(widthPx, heightPx)
+                        }
                     }
                 }
             }
 
-            // ---- layer one: the tilted plane ------------------------------------
+            // ---- one plane, and everything on it ---------------------------------
+            //
+            // There used to be a second layer above this one, flat, holding
+            // whatever a hand was carrying, with its position projected by hand
+            // so it left the plane without a seam. It worked because there was
+            // only ever one camera angle: "flat" and "square to the reader" were
+            // the same thing, so a card in the air could be drawn in the screen's
+            // frame and a card on the felt in the mat's, and nobody had to say
+            // which was which.
+            //
+            // A camera that turns ends that. In two frames a carried card set in
+            // defence stays square to the glass while every card under it turns
+            // with the table, and its own shadow — drawn in here, because a
+            // shadow is on the table even when the thing casting it is not —
+            // slides out from under it. So the second frame is gone: everything
+            // is in the mat's, `flatten` carries the height, and the card in
+            // your hand is turned by the same camera as the felt it left.
             Box(
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        rotationX = stage.tiltDegrees
-                        cameraDistance = stage.cameraDistance / this.density
+                        // The projection, said the other way round. `StagePlane`
+                        // spins the mat about its own normal and then lays it
+                        // back; Compose builds `Rx · Ry · Rz`, which turns a
+                        // point about Z first and about X last — so these three
+                        // lines *are* that projection, and the agreement is
+                        // structural rather than a coincidence to maintain.
+                        val plane = camera.plane
+                        rotationZ = -plane.yawDegrees
+                        rotationX = plane.tiltDegrees
+                        scaleX = plane.zoom
+                        scaleY = plane.zoom
+                        cameraDistance = plane.cameraDistance / this.density
                     },
             ) {
                 // The felt, what is about to happen to it, and the shadow and
@@ -311,41 +376,40 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                     }
                     seats.filter { !it.carried }.forEach { seat ->
                         val pose = cards[seat.id]?.pose ?: seat.pose
-                        drawSolidEdges(pose, seat.width, seat.height, seat.solid, stage, restingEye)
+                        drawSolidEdges(
+                            pose, seat.width, seat.height, seat.solid,
+                            camera.plane, camera.eye,
+                        )
                     }
                 }
 
                 seats.filter { !it.carried }.forEach { seat ->
-                    StagedCard(seat, cards, state, back, density, stage, restingEye)
+                    StagedCard(seat, cards, state, back, density, camera)
                 }
 
-                // The shadow of anything in the air, over the cards it falls
-                // on rather than under them. Still inside the tilted plane,
-                // because a shadow is on the table even when the thing casting
-                // it is not — that is the whole of what a shadow is for here.
+                // Then the shadow of anything in the air, over the cards it
+                // falls across rather than under them, and then the thing
+                // casting it. Parent order is still the whole depth sort.
                 Canvas(Modifier.fillMaxSize()) {
                     seats.filter { it.carried }.forEach { seat ->
                         val pose = cards[seat.id]?.pose ?: seat.pose
                         drawCardShadow(pose, seat.width, seat.height, seat.height)
                     }
                 }
+
+                seats.filter { it.carried }.forEach { seat ->
+                    StagedCard(seat, cards, state, back, density, camera)
+                }
             }
 
-            // ---- layer two: the air ---------------------------------------------
-            // Anything with z above zero, drawn flat and projected by hand so it
-            // leaves the plane without a seam.
-            seats.filter { it.carried }.forEach { seat ->
-                StagedCard(seat, cards, state, back, density, stage, Vec3.Toward)
-            }
-
-            MatInput(pilot = pilot, machine = machine, layout = layout, stage = stage)
+            MatInput(pilot = pilot, machine = machine, layout = layout, camera = camera)
 
             menuFor?.let { origin ->
                 CardActions(play, origin, onDismiss = { menuFor = null })
             }
         }
 
-        PlayTopBar(play, onBack)
+        PlayTopBar(play, camera, onBack)
     }
     }
 }
@@ -399,6 +463,12 @@ private fun seatsFor(
     layout: BoardLayout,
     carry: Carry?,
     peeking: DragOrigin? = null,
+    /**
+     * The three angles that, inside the mat's own layer, come out square to the
+     * viewer. Passed in rather than computed here because it is a fact about
+     * where the camera is, and this function is about where the cards are.
+     */
+    facingReader: Triple<Float, Float, Float> = Triple(0f, 0f, 0f),
 ): List<Seat> {
     val seats = mutableListOf<Seat>()
     val cardWidth = layout.cardWidth
@@ -563,9 +633,12 @@ private fun seatsFor(
                     ),
                     // Square to the reader and face up, whichever way it was
                     // lying. Being unable to check your own set card is the
-                    // thing a held finger is asking about.
-                    rotX = 0f,
-                    rotY = 0f,
+                    // thing a held finger is asking about — and "the reader" is
+                    // now wherever the camera is, so this is whatever undoes it
+                    // rather than a pair of zeroes.
+                    rotX = facingReader.first,
+                    rotY = facingReader.second,
+                    rotZ = facingReader.third,
                     scale = PEEK_SCALE,
                 ),
                 faceUp = true,
@@ -700,12 +773,10 @@ private fun StagedCard(
     state: DeckBuilderState,
     back: com.kaiharimoto.mastertool.ui.components.CardBackChoice,
     density: androidx.compose.ui.unit.Density,
-    stage: StagePlane,
-    eye: Vec3,
+    camera: StageCameraState,
 ) {
     val motion = cards[seat.id] ?: return
     val art = state.index.byId(seat.card.cardId)
-    val airborne = seat.carried
 
     with(density) {
         Box(
@@ -713,35 +784,22 @@ private fun StagedCard(
                 .size(seat.width.toDp(), seat.height.toDp())
                 .graphicsLayer {
                     val pose = motion.pose
-                    // Two frames, two answers. In the air the card is drawn on
-                    // the flat overlay, so the projection is applied here by
-                    // hand and the two agree exactly at the moment it leaves
-                    // the plane. On the plane the parent will project it, so
-                    // the height is folded into a point on the felt that will
-                    // *look* like that height once the parent has run — which
-                    // is what puts the top card of a deck on top of the deck.
-                    val x: Float
-                    val y: Float
-                    val lift: Float
-                    if (airborne) {
-                        val projected = stage.project(pose.position)
-                        x = projected.x
-                        y = projected.y
-                        lift = projected.scale
-                    } else {
-                        val flattened = stage.flatten(pose.position)
-                        x = flattened.x
-                        y = flattened.y
-                        lift = flattened.scale
-                    }
+                    // One frame, one answer. Every card on this stage — resting
+                    // on the felt, sitting on top of a deck, or held in the air
+                    // — is drawn inside the mat's own layer, so its height is
+                    // folded into a point on the felt that will *look* like that
+                    // height once the camera has run. That is what puts the top
+                    // card of a deck on top of the deck, and it is what keeps a
+                    // card in your hand turning with the table it left.
+                    val flattened = camera.plane.flatten(pose.position)
 
-                    translationX = x - seat.width / 2f
-                    translationY = y - seat.height / 2f
+                    translationX = flattened.x - seat.width / 2f
+                    translationY = flattened.y - seat.height / 2f
                     rotationX = pose.rotX
                     rotationY = pose.rotY
                     rotationZ = pose.rotZ
-                    scaleX = lift * pose.scale
-                    scaleY = lift * pose.scale
+                    scaleX = flattened.scale * pose.scale
+                    scaleY = flattened.scale * pose.scale
                     cameraDistance = (seat.width * 6f) / this.density
                 },
         ) {
@@ -750,10 +808,10 @@ private fun StagedCard(
                 faceUp = true,
                 back = back,
                 motion = motion,
-                eye = eye,
+                camera = camera,
                 magnified = seat.magnified,
             )
-            CardFace(art = art, faceUp = false, back = back, motion = motion, eye = eye)
+            CardFace(art = art, faceUp = false, back = back, motion = motion, camera = camera)
 
             if (seat.counters > 0 || seat.materials > 0) {
                 Badge(
@@ -778,7 +836,7 @@ private fun CardFace(
     faceUp: Boolean,
     back: com.kaiharimoto.mastertool.ui.components.CardBackChoice,
     motion: StageCard,
-    eye: Vec3,
+    camera: StageCameraState,
     /** Held up to be read, so it is worth fetching the art at full size. */
     magnified: Boolean = false,
 ) {
@@ -849,7 +907,7 @@ private fun CardFace(
                     drawCardSurface(
                         pose = motion.pose,
                         material = material,
-                        eye = eye,
+                        eye = camera.eye,
                         radiusPx = CardCornerRadius.toPx(),
                     )
                 },
@@ -877,7 +935,7 @@ private fun Badge(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun PlayTopBar(play: PlayState, onBack: () -> Unit) {
+private fun PlayTopBar(play: PlayState, camera: StageCameraState, onBack: () -> Unit) {
     val feedback = LocalFeedback.current
     Row(
         Modifier.fillMaxWidth().height(TOP_BAR).padding(horizontal = 10.dp),
@@ -895,6 +953,13 @@ private fun PlayTopBar(play: PlayState, onBack: () -> Unit) {
             BarButton(if (delta > 0) "+$delta" else "$delta") {
                 play.move { it.adjustLifePoints(delta) }
             }
+        }
+        Divider()
+        // The seats, as the touch idiom for the camera. A drag on bare felt
+        // turns the table and a key puts it back, but neither of those is
+        // discoverable, and a row of three words is.
+        StageSeat.entries.forEach { seat ->
+            BarButton(seat.label) { camera.rig.aimAt(seat) }
         }
         Divider()
         BarButton(play.field.phase.label) { play.move { it.nextPhase() } }

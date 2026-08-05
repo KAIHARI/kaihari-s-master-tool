@@ -2,6 +2,7 @@ package com.kaiharimoto.mastertool.core.layout
 
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
@@ -34,26 +35,85 @@ data class Flattened(val x: Float, val y: Float, val scale: Float)
  * forward. Lift is along the plane's **normal** rather than straight at the
  * camera, because that is what taking a card off a table does — and it gives
  * the up-the-screen parallax for free instead of as a second effect.
+ *
+ * ## Turning the table
+ *
+ * [yawDegrees] spins the mat about its own normal — the table turning on the
+ * spot — and it is applied **before** the tilt. That ordering is the whole
+ * reason this file is still a page long instead of a matrix library.
+ *
+ * A camera orbiting about the *world's* vertical would compose the other way
+ * round, and then [unproject] could no longer be solved in closed form: it
+ * would need a ray cast at a plane, which is fine until you remember that
+ * [flatten] is defined as projection composed with its own inverse, so an
+ * approximate inverse tears every pile edge, card thickness and airborne shadow
+ * at the same moment. Spin-then-tilt keeps the inverse exact, because spinning
+ * is a rigid rotation you simply undo.
+ *
+ * And it costs nothing to draw. Compose builds its layer transform as
+ * `Rx · Ry · Rz`, which turns a point about Z *first* and about X last — which
+ * is precisely spin-then-tilt. So the mat's own `graphicsLayer` reproduces this
+ * projection exactly with `rotationZ = -yaw`, `rotationX = tilt` and no third
+ * angle at all. Compose's order was already the order we wanted; `Rot3` was
+ * written to match it for the card renderer, and it pays a second time here.
  */
 data class StagePlane(
     val width: Float,
     val height: Float,
     val tiltDegrees: Float = TILT,
     val cameraDistance: Float,
+    /** How far the table has been turned on the spot, about its own normal. */
+    val yawDegrees: Float = 0f,
+    /**
+     * How large the table is drawn, before any perspective.
+     *
+     * Separate from [cameraDistance], and the separation is not pedantry — it
+     * is the thing that is easy to get wrong. In this projection (and in
+     * Compose's, which it has to match) `cameraDistance` sets how *strongly*
+     * perspective bites, and nothing else: a point at the centre of the plane
+     * projects at scale one however far back the camera is. So pulling the
+     * camera away does not make the table smaller, and a "dolly out until it
+     * fits" built on `cameraDistance` alone converges on nothing at all.
+     *
+     * A real camera moving back does both at once, which is why [CameraPose]
+     * ties them together — but they are two numbers, and the plane is the wrong
+     * place to hide that.
+     *
+     * Applied to the mat's coordinates *before* the spin and the tilt, because
+     * that is where Compose applies `scaleX`/`scaleY`: its layer transform is
+     * `Rx · Ry · Rz · S`, so the point is scaled first and turned afterwards.
+     */
+    val zoom: Float = 1f,
 ) {
     private val theta = tiltDegrees * (PI.toFloat() / 180f)
     private val sinTilt = sin(theta)
     private val cosTilt = cos(theta)
 
+    private val phi = yawDegrees * (PI.toFloat() / 180f)
+    private val sinYaw = sin(phi)
+    private val cosYaw = cos(phi)
+
     val centreX: Float get() = width / 2f
     val centreY: Float get() = height / 2f
 
+    /**
+     * The spin, and its undo. Kept as two private helpers rather than inlined so
+     * that the only place the sign of the yaw is decided is here — the layer
+     * that has to agree with it says `rotationZ = -yawDegrees` and nothing else
+     * in the app needs an opinion.
+     */
+    private fun spinX(x: Float, y: Float) = x * cosYaw + y * sinYaw
+    private fun spinY(x: Float, y: Float) = -x * sinYaw + y * cosYaw
+
     /** Where a point on the plane lands, raised [z] along the plane's normal. */
     fun project(x: Float, y: Float, z: Float = 0f): Projected {
-        val localX = x - centreX
-        val localY = y - centreY
-        val depth = localY * sinTilt + z * cosTilt   // toward the viewer
-        val flat = localY * cosTilt - z * sinTilt    // down the screen
+        val atX = (x - centreX) * zoom
+        val atY = (y - centreY) * zoom
+        val up = z * zoom
+        val localX = spinX(atX, atY)
+        val localY = spinY(atX, atY)
+        val depth = localY * sinTilt + up * cosTilt   // toward the viewer
+        val flat = localY * cosTilt - up * sinTilt    // down the screen
         val scale = cameraDistance / max(cameraDistance - depth, MIN_GAP)
 
         return Projected(
@@ -77,19 +137,30 @@ data class StagePlane(
      * flat overlay while the finger arrives in root coordinates — and it means
      * the screen never has to take Compose's word for the inverse of a layer
      * matrix it cannot inspect.
+     *
+     * The yaw costs one extra step and no accuracy: the tilt is undone exactly
+     * as it always was, in the spun frame, and then the spin itself is undone by
+     * turning back the other way. A rigid rotation is the one kind of transform
+     * whose inverse is free.
      */
     fun unproject(screenX: Float, screenY: Float): Vec3 {
         val localX = screenX - centreX
         val localY = screenY - centreY
         val onPlane = localY * cameraDistance / (cameraDistance * cosTilt + localY * sinTilt)
         val scale = cameraDistance / max(cameraDistance - onPlane * sinTilt, MIN_GAP)
+        val spunX = localX / scale
+        val safeZoom = if (abs(zoom) < 1e-4f) 1e-4f else zoom
 
-        return Vec3(centreX + localX / scale, centreY + onPlane, 0f)
+        return Vec3(
+            x = centreX + (spunX * cosYaw - onPlane * sinYaw) / safeZoom,
+            y = centreY + (spunX * sinYaw + onPlane * cosYaw) / safeZoom,
+            z = 0f,
+        )
     }
 
     /** How much bigger something gets by rising [z] off the mat at the centre. */
     fun liftScale(z: Float): Float =
-        cameraDistance / max(cameraDistance - z * cosTilt, MIN_GAP)
+        cameraDistance / max(cameraDistance - z * zoom * cosTilt, MIN_GAP)
 
     /**
      * Where to draw a point *on the mat* so that it appears to be [z] above it.
@@ -136,14 +207,31 @@ data class StagePlane(
     fun flatten(point: Vec3): Flattened = flatten(point.x, point.y, point.z)
 
     /**
-     * What the near edge grows to, which is what [BoardLayouter.solve] wants.
+     * What the nearest corner grows to, which is what [BoardLayouter.solve] wants.
      *
      * The projection reporting on itself, so the fitter and the renderer cannot
      * disagree about how much room the tilt costs. Before this it was a
      * constant someone derived in a comment and would eventually have forgotten
      * to change alongside the tilt.
+     *
+     * Every corner rather than the bottom edge, because once the table can turn
+     * there is no such thing as *the* near edge — at forty-five degrees of yaw
+     * the nearest thing to the camera is a corner, and a growth measured down
+     * the middle would under-report it and let the table overhang. At yaw zero
+     * the two answers are identical, which is why this did not need saying
+     * before and why changing it moved no existing number.
      */
-    val perspectiveGrowth: Float get() = project(centreX, height).scale
+    val perspectiveGrowth: Float
+        get() {
+            var worst = 1f
+            for (x in 0..1) {
+                for (y in 0..1) {
+                    val scale = project(x * width, y * height).scale
+                    if (scale > worst) worst = scale
+                }
+            }
+            return worst
+        }
 
     companion object {
         /**

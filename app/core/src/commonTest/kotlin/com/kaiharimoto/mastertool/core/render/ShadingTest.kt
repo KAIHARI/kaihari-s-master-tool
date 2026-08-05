@@ -85,20 +85,20 @@ class ShadingTest {
         // the fill exists for.
         val turnedAway = Rot3.normal(Pose3(rotY = 50f))
         val keyOnly = Shading.lit(turnedAway, key)
-        val both = StageRig.lit(turnedAway)
+        val both = StageRig.lit(turnedAway).amount
 
         assertTrue(both > keyOnly, "the fill should do something: $both vs $keyOnly")
         assertTrue(both <= 1f)
     }
 
     @Test
-    fun aSurfaceFacingIntoTheTableGetsNothingFromEitherLight() {
-        // Both lights are above the felt, so the underside of anything is on
+    fun aSurfaceFacingIntoTheTableGetsNothingFromAnyOfTheLights() {
+        // All three lamps are above the felt, so the underside of anything is on
         // ambient alone. Correct, and worth pinning down — a fill that lit the
         // bottom of a card would be a light coming up through the table.
         val downward = Vec3(0f, 0f, -1f)
 
-        assertClose(key.ambient, StageRig.lit(downward), note = "the underside:")
+        assertClose(key.ambient, StageRig.lit(downward).amount, note = "the underside:")
     }
 
     // ---- the highlight -----------------------------------------------------------
@@ -244,7 +244,7 @@ class ShadingTest {
         val faces = CardSolid.slab(Pose3(), 100f, 145f, depth = 30f)
         val far = faces.first { it.normal.y < -0.5f }
 
-        assertEquals(0f, StageRig.face(far, StageRig.eye(15f)))
+        assertEquals(0f, StageRig.face(far, StageRig.eye(15f)).amount)
     }
 
     @Test
@@ -256,10 +256,154 @@ class ShadingTest {
         val faces = CardSolid.slab(Pose3(), 100f, 145f, depth = 30f)
         val near = faces.first { it.normal.y > 0.5f }
 
-        val withFill = StageRig.face(near, StageRig.eye(15f))
+        val withFill = StageRig.face(near, StageRig.eye(15f)).amount
         val keyOnly = Shading.lit(near.normal, key)
 
         assertTrue(withFill > keyOnly, "$withFill should beat $keyOnly")
         assertTrue(withFill <= 1f)
+    }
+
+    // ---- separating a card from the felt -----------------------------------------------
+
+    /** The rim lamp switched off, for measuring what it was contributing. */
+    private val dark = Light(StageRig.Rim.direction, intensity = 0f, ambient = 0f)
+
+    @Test
+    fun theRimComesFromBehindTheTableAndFromTheOtherSideToTheKey() {
+        val rim = StageRig.Rim
+
+        // Travelling toward the player and only shallowly downward puts the lamp
+        // on the far side of the table and low, which is the only place a lamp
+        // can be and still put light along a silhouette.
+        assertTrue(rim.direction.y > 0.4f, "the rim travels toward the player, was ${rim.direction.y}")
+        assertTrue(rim.direction.x * key.direction.x < 0f, "and from the key's other side")
+        assertTrue(abs(rim.direction.z) < abs(key.direction.z), "lower than the key, was ${rim.direction.z}")
+        assertTrue(rim.intensity < key.intensity * 0.5f, "and weak, was ${rim.intensity}")
+        assertClose(1f, rim.direction.length, note = "the rim is a unit direction:")
+    }
+
+    @Test
+    fun theRimDoesNothingAtAllToACardFacingTheViewerSquareOn() {
+        // The one thing that would make the third lamp worthless: a backlight
+        // that simply added its own dot product would lift a card lying face-up
+        // toward the camera, which is an ambient with extra steps and a more
+        // expensive one. Gated on the graze it is exactly zero there.
+        val flat = Vec3(0f, 0f, 1f)
+
+        assertEquals(
+            StageRig.lit(flat, Vec3.Toward, rim = dark).amount,
+            StageRig.lit(flat, Vec3.Toward).amount,
+            "square on, the rim should contribute nothing whatever",
+        )
+
+        // And at the seat the stage opens at, where "square on" is fifteen
+        // degrees off it, still under one level of an eight-bit ramp.
+        val eye = StageRig.eye(15f)
+        val leak = StageRig.lit(flat, eye).amount - StageRig.lit(flat, eye, rim = dark).amount
+
+        assertTrue(leak < 1f / 255f, "the rim leaked onto a resting card face: $leak")
+    }
+
+    @Test
+    fun theRimLandsOnACardsSilhouetteAndNotOnItsFace() {
+        // What the stage was missing, on a real solid rather than on a chosen
+        // normal. A side edge the camera sees at a graze is drawn as a hairline,
+        // and a hairline of flat ambient grey on a true-black stage is a
+        // hairline nobody can see — which is why a dim card's outline used to
+        // dissolve into the felt. The same lamp, on the same card, at the same
+        // moment, has to leave the printed face alone.
+        val eye = StageRig.eye(15f, 270f)
+        val faces = CardSolid.slab(Pose3(), 100f, 145f, depth = 30f)
+        val silhouette = faces.first { it.normal.x > 0.5f }
+        val printed = faces.first { it.normal.z > 0.5f }
+
+        val edge = StageRig.face(silhouette, eye).amount -
+            StageRig.lit(silhouette.normal, eye, rim = dark).amount
+        val face = StageRig.face(printed, eye).amount -
+            StageRig.lit(printed.normal, eye, rim = dark).amount
+
+        assertTrue(edge > 0.02f, "the rim should be a line along the edge, was $edge")
+        assertTrue(face < 1f / 255f, "and nothing at all on the face, was $face")
+        assertTrue(StageRig.face(silhouette, eye).amount <= 1f, "and never brighter than white")
+    }
+
+    // ---- colour temperature --------------------------------------------------------
+
+    @Test
+    fun theKeyIsWarmAndTheFillIsCool() {
+        assertTrue(key.warmth > 0f, "the key, was ${key.warmth}")
+        assertTrue(StageRig.Bounce.warmth < 0f, "the fill, was ${StageRig.Bounce.warmth}")
+    }
+
+    @Test
+    fun aSurfaceNoDirectionalLightReachesStaysAchromatic() {
+        // The handbook's rule, arithmetically rather than by promise: the table
+        // is achromatic by identity and colour is light, so the ambient — which
+        // is the room, and the room is white — sits in the denominator of the
+        // mix and a face standing in nothing else comes back neutral.
+        val underside = Vec3(0f, 0f, -1f)
+
+        assertClose(0f, StageRig.lit(underside).warmth, note = "the underside:")
+    }
+
+    @Test
+    fun oneWhiteEdgeIsWarmWhereTheKeyLandsAndCoolWhereOnlyTheFillReaches() {
+        // The split across a single object, which is the point of having two
+        // temperatures rather than one warmer lamp. A difference *within* one
+        // pile edge reads at a size the same shift applied to the whole table
+        // never would — and the whole table shifting is the failure mode here.
+        val intoKey = StageRig.lit(key.toLight)
+        val faces = CardSolid.slab(Pose3(), 100f, 145f, depth = 30f)
+        val near = StageRig.face(faces.first { it.normal.y > 0.5f }, StageRig.eye(15f))
+
+        assertTrue(intoKey.warmth > 0.1f, "into the key, was ${intoKey.warmth}")
+        assertTrue(near.warmth < 0f, "the near edge the key cannot reach, was ${near.warmth}")
+    }
+
+    @Test
+    fun theWarmestLightOnTheStageIsStillAWhite() {
+        // The magnitude, pinned, because "a light's temperature is light" is a
+        // licence only up to the point where the table looks orange — past that
+        // it is decoration, which is not allowed anywhere. Read out through Tone
+        // because the number that matters is the one a screen is handed: the
+        // encoding curve is steep near white, so the sixteen per cent of blue
+        // *light* the key filters away is a far smaller step in the channel.
+        val lamp = Lit(1f, key.warmth)
+        val split = Tone.shade(1f, lamp.red) - Tone.shade(1f, lamp.blue)
+
+        assertTrue(split > 2f / 255f, "too subtle to be light at all: $split")
+        assertTrue(split < 24f / 255f, "that is an orange lamp rather than a warm one: $split")
+    }
+
+    @Test
+    fun aLampFiltersLightOutRatherThanInventingIt() {
+        // Which is why a temperature can never clip. The brightest surfaces on
+        // this table already sit near the top of the range, so a warm lamp that
+        // *added* red would have nowhere to put it and would quietly go white
+        // again exactly where it is most visible.
+        listOf(-1f, -0.4f, 0f, 0.75f, 1f).forEach { warmth ->
+            val lamp = Lit(1f, warmth)
+
+            listOf("red" to lamp.red, "green" to lamp.green, "blue" to lamp.blue)
+                .forEach { (channel, value) ->
+                    assertTrue(value <= 1f, "$channel at warmth $warmth was $value")
+                    assertTrue(value > 1f - 2f * Lit.TEMPERATURE, "$channel at warmth $warmth was $value")
+                }
+        }
+        assertClose(1f, Lit(1f, 0f).blue, note = "a white lamp filters nothing:")
+    }
+
+    @Test
+    fun theHighlightIsTheColourOfTheLampAndNotOfTheRoom() {
+        // A specular highlight is a mirror image of the source, so it takes the
+        // lamp's colour whole rather than diluted by the ambient the way every
+        // diffuse term on this stage is. It is also the only place a temperature
+        // can reach a card's face at all: the diffuse arrives there as a black
+        // veil, and a coloured wash over card art is the anti-pattern.
+        val shade = Shading.of(Pose3(), gloss, key)
+
+        assertEquals(key.warmth, shade.lamp.warmth, "the pool should be the key's own colour")
+        assertClose(1f, shade.lamp.amount, note = "at full strength, the specular being the amount:")
+        assertTrue(shade.lamp.blue < shade.lamp.red, "and warm means less blue, was ${shade.lamp.blue}")
     }
 }

@@ -20,6 +20,14 @@ data class Light(
     val direction: Vec3,
     val intensity: Float = 1f,
     /**
+     * The lamp's colour temperature: -1 fully cool, 0 white, +1 fully warm.
+     *
+     * A number rather than a colour, because a lamp does not have a colour
+     * until it lands on something — see [Lit], which is where the two are put
+     * together. What this says is only which way off white the lamp is.
+     */
+    val warmth: Float = 0f,
+    /**
      * What a surface facing away from the key still receives.
      *
      * High, and on purpose. This is a black stage: a card is the brightest
@@ -34,18 +42,98 @@ data class Light(
 }
 
 /**
+ * How much light a surface received, and what colour that light was.
+ *
+ * The temperature rides beside the scalar as one signed number rather than as
+ * three channels, and that is worth defending because all three of the obvious
+ * shapes would work. A plain RGB triple is the general answer and the wrong one
+ * *here*: the most important consumer of a diffuse term on this stage is a
+ * card's own art, which the renderer cannot read and can only darken with a
+ * single black veil at a single opacity ([Tone.veil]). A triple would be two
+ * thirds discarded at exactly the call site that matters most, with no honest
+ * way to fold it back — and a coloured wash over card art is banned outright by
+ * the handbook anyway. Leaving the temperature in the [Light] and having the
+ * renderer ask the rig fails the other way: the rig mixes three lamps, so by the
+ * time a face is shaded there is no single lamp left to ask.
+ *
+ * So [amount] is exactly the number this used to be — every existing consumer of
+ * it is still correct — and [warmth] is the new axis, an energy-weighted average
+ * of the lamps that actually reached the surface. The channels are derived here
+ * rather than at the call site so that no renderer can invent its own mapping,
+ * and they are multipliers on **linear** light meant to go through [Tone.shade]:
+ * a warm lamp *removes* blue rather than adding red, which is what a filter
+ * does, and which is what stops the brightest surfaces on the table from
+ * clipping their way back to white.
+ */
+data class Lit(val amount: Float, val warmth: Float = 0f) {
+
+    private val signed: Float get() = warmth.coerceIn(-1f, 1f)
+
+    val red: Float get() = amount * (1f - max(0f, -signed) * TEMPERATURE)
+    val green: Float get() = amount * (1f - abs(signed) * TEMPERATURE * MIDDLE)
+    val blue: Float get() = amount * (1f - max(0f, signed) * TEMPERATURE)
+
+    companion object {
+        /** Nothing at all: a face turned away from the camera. */
+        val None = Lit(0f)
+
+        /**
+         * How much of the far end of the spectrum a lamp at full warmth removes.
+         *
+         * The magnitude is the whole argument, so: at a white surface under full
+         * light this puts about nineteen levels of 255 between red and blue,
+         * which is a warm white — a bulb against daylight — and nowhere near an
+         * orange one. It is chosen in linear light and read out in sRGB, which
+         * is why it looks large written down: the encoding curve is steep near
+         * white, so a sixteen per cent cut in blue *light* is a seven per cent
+         * cut in the blue channel a screen is handed.
+         *
+         * The stage never sees the full number. Warmth is diluted by the rig's
+         * ambient, which is white and is most of the light on the table, so the
+         * brightest key-facing pile edge shifts by three or four levels and
+         * everything the key cannot reach stays achromatic. The one place it
+         * arrives undiluted is the specular pool, and that is correct: a
+         * highlight is a reflection of the lamp, not of the room.
+         */
+        const val TEMPERATURE = 0.16f
+
+        /**
+         * Green's share of the shift, either way.
+         *
+         * A black-body locus moves red and blue in opposite directions and
+         * leaves green nearly alone; making green move a third as far is what
+         * keeps a warm lamp reading as *warm* rather than as yellow.
+         */
+        private const val MIDDLE = 0.35f
+    }
+}
+
+/**
  * What one surface does with the light, ready to paint.
  *
- * Everything is 0..1 and nothing here knows what a colour is. That split is
- * deliberate: the renderer decides that a highlight is white and a fringe comes
- * off the prismatic ramp, and this decides *how much*, so the numbers can be
- * tested without a screen.
+ * Everything is 0..1 and nothing here knows what a `Color` is. That split is
+ * deliberate: the renderer decides that a fringe comes off the prismatic ramp,
+ * and this decides *how much*, so the numbers can be tested without a screen.
+ * [lamp] does not break it — a temperature is still three multipliers, and the
+ * renderer is still the only thing that owns a colour.
  */
 data class Shade(
     /** Ambient and lambert together: what to multiply the surface's own colour by. */
     val diffuse: Float,
     /** The highlight's strength at its centre. */
     val specular: Float,
+    /**
+     * The colour of the light itself, at full strength — what to paint the
+     * highlight with, [specular] being how much of it.
+     *
+     * Undiluted by the ambient, unlike everything else the temperature touches,
+     * and that is the physics rather than a licence: a specular highlight is a
+     * mirror image of the lamp, so it is the lamp's own colour and no part of
+     * the room's. It is also the only place on a card face where a temperature
+     * can legitimately show at all — the diffuse term reaches the art as a black
+     * veil, and a coloured wash over a card is the anti-pattern, not the effect.
+     */
+    val lamp: Lit,
     /** The grazing-angle rim, brightest when the surface is nearly edge-on. */
     val fresnel: Float,
     /**
@@ -126,6 +214,7 @@ object Shading {
         return Shade(
             diffuse = diffuse,
             specular = specular,
+            lamp = Lit(1f, light.warmth),
             fresnel = fresnel,
             hotspot = Vec2(
                 x = 0.5f + SPREAD * (half dot right) / depth,

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.isSecondaryPressed
@@ -19,7 +20,6 @@ import com.kaiharimoto.mastertool.core.board.toMat
 import com.kaiharimoto.mastertool.core.board.toPixels
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
-import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.mat.MatEvent
 import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
 import com.kaiharimoto.mastertool.core.mat.Touch
@@ -71,6 +71,24 @@ internal class MatPilot(
 ) {
     var onMenu: (DragOrigin) -> Unit = {}
 
+    /**
+     * The camera, and where the finger moved on the *glass* since the last frame.
+     *
+     * Orbit takes the one channel on this mat that was doing nothing: a drag
+     * whose press landed on empty felt. Every event still comes from the single
+     * arbiter — the machine decides that this is a drag, exactly as it always
+     * did — and all that changes is who acts on it when there is no card under
+     * the finger. No new phase, no second `pointerInput`, and nothing at all
+     * happens differently while a card *is* under the finger.
+     *
+     * The delta is in screen pixels rather than the mat's, and that is not
+     * fussiness: the mat's own coordinates are being turned by the very camera
+     * the gesture is turning, so driving yaw from them is a feedback loop that
+     * curves under your finger. What you want is the glass.
+     */
+    var camera: StageCameraState? = null
+    var screenDelta: Vec2 = Vec2.Zero
+
     /** What the press landed on. The one thing that has to survive both clocks. */
     private var grabbed: DragOrigin? = null
 
@@ -111,13 +129,46 @@ internal class MatPilot(
                 is MatEvent.Moved -> if (event.delta.length > ROUSE) attaching = false
                 else -> Unit
             }
+            if (grabbed == null && event is MatEvent.Moved) orbit()
             grabbed = handle(event, grabbed, play, layout, feedback, onMenu, attaching)
         }
+    }
+
+    /**
+     * A finger sweeping the felt turns the table under it.
+     *
+     * Across for yaw and up-down for pitch, which is the idiom every
+     * three-dimensional viewer has used for thirty years and therefore the one
+     * nobody has to be taught. The rates are per *screen height* rather than per
+     * pixel so the same sweep turns the table by the same amount on a phone and
+     * on a desk monitor — the same reason `CardDynamics` scales its bank by the
+     * card rather than by pixels.
+     */
+    private fun orbit() {
+        val state = camera ?: return
+        val across = state.rig.width
+        val down = state.rig.height
+        if (across <= 0f || down <= 0f) return
+
+        state.rig.nudge(
+            deltaYaw = -screenDelta.x / across * YAW_PER_SWEEP,
+            deltaPitch = -screenDelta.y / down * PITCH_PER_SWEEP,
+        )
+        state.refresh()
     }
 
     private companion object {
         /** Mat pixels of travel in one frame that count as having moved on. */
         const val ROUSE = 2.5f
+
+        /**
+         * Degrees for a finger dragged the whole way across, and the whole way
+         * down. Yaw is generous because a table is worth walking round; pitch is
+         * mean because its useful range is fifty degrees wide and a sweep that
+         * crosses it in a flick is a sweep you cannot stop in the middle of.
+         */
+        const val YAW_PER_SWEEP = 220f
+        const val PITCH_PER_SWEEP = 90f
     }
 }
 
@@ -126,23 +177,46 @@ internal fun MatInput(
     pilot: MatPilot,
     machine: MatGestureMachine,
     layout: BoardLayout,
-    stage: StagePlane,
+    camera: StageCameraState,
 ) {
     Box(
         Modifier
             .fillMaxSize()
-            .pointerInput(layout, stage) {
+            // Keyed on the layout alone. A camera in this key list would restart
+            // the whole loop on every frame it moved, tearing down the single
+            // arbiter's event stream mid-gesture while the machine went on
+            // believing the gesture was live — which would read as the orbit
+            // dying after one frame rather than as a keying mistake.
+            .pointerInput(layout) {
                 awaitPointerEventScope {
+                    var lastOnGlass: Offset? = null
                     while (true) {
                         // Main, not Initial: this is the deepest interactive node
                         // on the stage, and consuming here is what stops an
                         // ancestor pager or drawer from stealing a drag.
                         val event = awaitPointerEvent(PointerEventPass.Main)
 
+                        // The live camera, read now rather than captured: this
+                        // loop outlives any pose the stage happens to be in.
+                        val plane = camera.plane
+
                         fun onFelt(change: PointerInputChange): Touch {
-                            val onPlane = stage.unproject(change.position.x, change.position.y)
+                            val onPlane = plane.unproject(change.position.x, change.position.y)
                             return Touch(change.id.value, Vec2(onPlane.x, onPlane.y))
                         }
+
+                        // How far the primary pointer moved on the glass, which
+                        // is the frame the camera wants and the mat is not.
+                        val primary = event.changes.firstOrNull { it.pressed }
+                        pilot.screenDelta = when {
+                            primary == null -> Vec2.Zero.also { lastOnGlass = null }
+                            lastOnGlass == null -> Vec2.Zero
+                            else -> Vec2(
+                                primary.position.x - lastOnGlass!!.x,
+                                primary.position.y - lastOnGlass!!.y,
+                            )
+                        }
+                        lastOnGlass = primary?.position
 
                         // The mouse's right button, before the gesture machine
                         // sees anything: it is a request for a menu, never the

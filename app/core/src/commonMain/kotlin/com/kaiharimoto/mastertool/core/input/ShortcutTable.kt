@@ -62,6 +62,9 @@ enum class ShortcutAction {
     PLAY_NEW_HAND,
     PLAY_NEXT_PHASE,
     PLAY_END_TURN,
+    PLAY_SEAT_OVERHEAD,
+    PLAY_SEAT_TABLE,
+    PLAY_SEAT_SEATED,
 }
 
 /**
@@ -278,6 +281,22 @@ object ShortcutTable {
         ),
         Shortcut(
             KeyChord("t"), ShortcutAction.PLAY_END_TURN, ShortcutScope.PLAY, "End the turn",
+        ),
+
+        // The three seats. Digits, reusing the builder's pane-focus muscle
+        // memory — a chord means whatever the live scope says it means, which
+        // is what scopes are for, and `d` and `s` already do it.
+        Shortcut(
+            KeyChord("1"), ShortcutAction.PLAY_SEAT_OVERHEAD, ShortcutScope.PLAY,
+            "Look at the table from overhead",
+        ),
+        Shortcut(
+            KeyChord("2"), ShortcutAction.PLAY_SEAT_TABLE, ShortcutScope.PLAY,
+            "Sit back down at the table",
+        ),
+        Shortcut(
+            KeyChord("3"), ShortcutAction.PLAY_SEAT_SEATED, ShortcutScope.PLAY,
+            "Drop down into the player's chair",
         ),
         Shortcut(
             KeyChord("z", ctrl = true), ShortcutAction.UNDO, ShortcutScope.PLAY,
