@@ -91,6 +91,14 @@ internal fun DrawScope.drawFelt(layout: BoardLayout) {
         y = mat.centerY - key.y * mat.height * 0.55f,
     )
 
+    // These two alphas were picked by eye against the old, darker solids: a
+    // fully facing pile edge used to come back at 0.66 and now comes back at
+    // 0.79, because the shading it goes through stopped multiplying an sRGB
+    // encoding (see `Tone`). So the pool is currently a touch dim for the
+    // objects standing in it. Re-tuning it is a look-at-the-tablet judgement
+    // rather than a correctness fix, which is why it deliberately did not ride
+    // in with the encoding change — but the next pass over the felt should know
+    // that these numbers were chosen for a lamp that has since got brighter.
     drawRect(
         brush = Brush.radialGradient(
             colors = listOf(
@@ -158,6 +166,16 @@ internal fun DrawScope.drawCardShadow(
     height: Float,
     cardHeight: Float,
 ) {
+    // `shadow.alpha` is an opacity somebody chose rather than a fraction of
+    // light — `Shadows` keeps the constant behind it private for that reason —
+    // so the sRGB correction that went through the solids left it alone. There
+    // is no `1 - light` in it to correct.
+    //
+    // It is not untouched by that change, though. It was tuned against solids
+    // that came back up to a fifth darker than they now do, so a card currently
+    // throws the shadow of a dimmer lamp than the one lighting its own edges.
+    // That is a judgement to make with the tablet in hand rather than
+    // arithmetic, and it is left for the next tuning pass instead of guessed at.
     val shadow = Shadows.cast(pose, width, height, StageRig.Key, cardHeight) ?: return
     if (shadow.alpha <= 0.01f) return
 
@@ -280,7 +298,10 @@ internal fun DrawScope.drawCardSurface(
     // over it. Its opacity is solved in core rather than taken as `1 - diffuse`
     // — alpha composites in the encoding just as a raw multiply does, and a
     // face left uncorrected beside an edge that was corrected is worse than
-    // neither, because then the two disagree about where the lamp is.
+    // neither, because then the two disagree about where the lamp is. One alpha
+    // cannot be exact for every channel of a picture, and `Tone.MID_TONE` says
+    // which way it misses — dark art comes back a little bright — and how much
+    // worse that gets if the rig's ambient is ever brought down.
     val veil = Tone.veil(shade.diffuse)
     if (veil > 0.004f) {
         drawRoundRect(color = Color.Black.copy(alpha = veil), cornerRadius = radius)

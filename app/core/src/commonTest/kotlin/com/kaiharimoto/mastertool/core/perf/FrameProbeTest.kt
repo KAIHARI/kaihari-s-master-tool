@@ -9,9 +9,11 @@ import kotlin.test.assertTrue
  * An instrument nobody has checked is worse than no instrument, because a wrong
  * number is still believed. Every degeneracy below is one that a frame loop on
  * a real tablet produces within a minute of use — the first frame, a frame the
- * choreographer timestamps twice, and the app being backgrounded — and each of
- * them, taken naively, makes the readout say something false at exactly the
- * moment someone is reading it.
+ * choreographer timestamps twice, the app being backgrounded, and the stage
+ * grinding to a stop — and each of them, taken naively, makes the readout say
+ * something false at exactly the moment someone is reading it. The last of
+ * those is the one that matters most: a hang is the load this probe was built
+ * to catch, and a hang is what a naive pause rule deletes.
  */
 class FrameProbeTest {
 
@@ -21,6 +23,9 @@ class FrameProbeTest {
 
     /** Half a histogram bucket: the most a reported percentile can be out by. */
     private val quantisation = 0.07f
+
+    /** The same, above 64ms, where the buckets are four milliseconds wide. */
+    private val coarseQuantisation = 2.01f
 
     /** One frame of a 120Hz panel, in milliseconds. */
     private val perfect = 1000.0 / 120.0
@@ -72,6 +77,7 @@ class FrameProbeTest {
         assertClose(0f, probe.worstMillis)
         assertClose(0f, probe.p95Millis)
         assertEquals(0, probe.missedFrames)
+        assertClose(0f, probe.staleMillis)
     }
 
     // ---- the budget is the tablet's, not sixty hertz ---------------------------
@@ -103,6 +109,21 @@ class FrameProbeTest {
 
         assertClose(8.333f, tablet.budgetMillis)
         assertClose(16.667f, phone.budgetMillis)
+    }
+
+    @Test
+    fun aRefreshRateThatIsNotARateFallsBackOnTheDefault() {
+        // `Display.getRefreshRate()` is the intended source and it can answer
+        // with nothing useful. NaN is the dangerous one: every comparison against
+        // a NaN budget is false, so the miss count switches itself off silently
+        // and a stage at 200ms a frame reports a clean window.
+        for (bad in listOf(Float.NaN, 0f, -60f)) {
+            val probe = FrameProbe(refreshHz = bad)
+            Clock(probe).frames(50, 200.0)
+
+            assertClose(8.333f, probe.budgetMillis, note = "budget from $bad:")
+            assertEquals(50, probe.missedFrames, "drops uncounted at refreshHz $bad: ${probe.missedFrames}")
+        }
     }
 
     @Test
@@ -174,6 +195,86 @@ class FrameProbeTest {
         assertClose(200f, probe.worstMillis, 0.05f, "the hitch:")
     }
 
+    // ---- the hole a pause leaves --------------------------------------------------
+
+    @Test
+    fun aSustainedHangCannotPassForAHealthyWindow() {
+        // The failure this instrument exists for: a solver blows up and the
+        // stage runs at 1.7fps for twenty-four seconds. Every gap is too long to
+        // be a frame, so none of them may enter the statistics — but the window
+        // they leave behind is the healthy one from before the hang, and a probe
+        // that prints it and nothing else declares a perfect stage on a tablet
+        // nobody can use. The hole has to be on the line.
+        val probe = FrameProbe()
+        val clock = Clock(probe)
+        clock.frames(probe.capacity, perfect, moving = 700)
+        val healthy = probe.readout()
+
+        clock.frames(40, 600.0, moving = 700)
+
+        assertEquals(probe.capacity, probe.samples, "the hang became frames: ${probe.samples}")
+        assertEquals(0, probe.missedFrames, "the hang poisoned the drop count: ${probe.missedFrames}")
+        assertClose(8.333f, probe.meanMillis, note = "mean through a hang:")
+        assertEquals(40, probe.pauses, "the gaps went unnoticed: ${probe.pauses}")
+        assertClose(24_000f, probe.staleMillis, 1f, "the age of the window:")
+
+        assertTrue(probe.readout() != healthy, "a hung stage read exactly like a healthy one")
+        assertEquals(
+            "stalled 24.0s  gaps 40  8.3ms  p95 8.3  worst 8.3  miss 0  moving 700",
+            probe.readout(),
+        )
+    }
+
+    @Test
+    fun aBackgroundedAppAndAHungLoopAreTellableApart() {
+        // Both leave the window twenty-four seconds stale, so duration alone
+        // cannot say which happened. The count of gaps can: one gap across
+        // twenty-four seconds is an app that was not running, and forty is a
+        // frame loop that was, and was missing every deadline by seventy times.
+        val backgrounded = FrameProbe()
+        val awayClock = Clock(backgrounded)
+        awayClock.frames(60, perfect)
+        awayClock.frame(24_000.0)
+
+        val hung = FrameProbe()
+        val hungClock = Clock(hung)
+        hungClock.frames(60, perfect)
+        hungClock.frames(40, 600.0)
+
+        assertClose(24_000f, backgrounded.staleMillis, 1f, "backgrounded staleness:")
+        assertClose(24_000f, hung.staleMillis, 1f, "hung staleness:")
+        assertEquals(1, backgrounded.stalePauses, "a background became many gaps: ${backgrounded.stalePauses}")
+        assertEquals(40, hung.stalePauses, "a hang became one gap: ${hung.stalePauses}")
+    }
+
+    @Test
+    fun aFrameThatLandsClearsTheStall() {
+        // Staleness answers for now, so it has to end the moment the loop is
+        // drawing again — otherwise a single backgrounding marks the readout
+        // for the rest of the session and the warning stops meaning anything.
+        val probe = FrameProbe()
+        val clock = Clock(probe)
+        clock.frames(30, perfect)
+        clock.frames(3, 600.0)
+        assertTrue(probe.readout().startsWith("stalled"), "no stall on the line: ${probe.readout()}")
+
+        clock.frame(perfect)
+
+        assertClose(0f, probe.staleMillis, note = "staleness after a resumed frame:")
+        assertEquals(0, probe.stalePauses, "the stall outlived itself: ${probe.stalePauses}")
+        assertEquals(3, probe.pauses, "the session forgot the gaps: ${probe.pauses}")
+        assertTrue(!probe.readout().contains("stalled"), "a drawing stage read as stalled: ${probe.readout()}")
+    }
+
+    @Test
+    fun aStageThatIsDrawingIsNeverStale() {
+        val probe = FrameProbe()
+        Clock(probe).frames(200, perfect)
+
+        assertClose(0f, probe.staleMillis, note = "staleness of a healthy window:")
+        assertEquals(0, probe.stalePauses)
+    }
+
     // ---- a clock that misbehaves --------------------------------------------------
 
     @Test
@@ -194,11 +295,34 @@ class FrameProbeTest {
         assertEquals(10, probe.samples, "a backward clock became a frame: ${probe.samples}")
         assertClose(8f, probe.lastMillis)
 
-        // And it is not wedged afterwards: the last timestamp it was given is
-        // the origin for the next frame, whichever direction it came from.
+        // And it is not wedged afterwards: the next real timestamp is measured
+        // from the last one that was a frame, so a 3ms frame reads as 3ms.
         probe.sample(t + 3_000_000L, 0)
         assertEquals(11, probe.samples, "the probe never recovered: ${probe.samples}")
-        assertClose(8f, probe.lastMillis)
+        assertClose(3f, probe.lastMillis)
+    }
+
+    @Test
+    fun aBackwardTimestampDoesNotStretchTheFrameAfterIt() {
+        // Dropping the bad timestamp but keeping it as the origin charges the
+        // next genuine frame with the size of the backward step: an 8.3ms frame
+        // reads as 13.3 and is counted as a drop, on a stage where nothing at
+        // all went wrong.
+        val probe = FrameProbe()
+        var t = 1_000_000_000L
+        probe.sample(t, 0)
+        repeat(10) {
+            t += 8_333_333L
+            probe.sample(t, 0)
+        }
+
+        probe.sample(t - 5_000_000L, 0)
+        t += 8_333_333L
+        probe.sample(t, 0)
+
+        assertEquals(11, probe.samples, "the frame after the backward step was lost: ${probe.samples}")
+        assertClose(8.333f, probe.lastMillis, note = "the frame after a backward step:")
+        assertEquals(0, probe.missedFrames, "an invented drop: ${probe.missedFrames}")
     }
 
     // ---- the window ----------------------------------------------------------------
@@ -275,6 +399,27 @@ class FrameProbeTest {
     }
 
     @Test
+    fun aTailWellPastTheBudgetIsStillMeasuredNotJustFlagged() {
+        // 90 frames at 8ms, nine at 70 and one at 450: the honest P95 is 70, and
+        // a histogram that stopped resolving anywhere below the worst frame
+        // would answer 450 — printing the same number three times on a line
+        // whose whole purpose is to separate the tail from the disaster, about
+        // a window that is ninety per cent healthy.
+        val probe = FrameProbe()
+        val clock = Clock(probe)
+        clock.frames(90, 8.0)
+        clock.frames(9, 70.0)
+        clock.frame(450.0)
+
+        assertClose(70f, probe.p95Millis, coarseQuantisation, "p95 of a window with a tail past 64ms:")
+        assertClose(450f, probe.worstMillis, 0.05f, "worst:")
+        assertTrue(
+            probe.p95Millis < probe.worstMillis / 2f,
+            "p95 collapsed onto worst: ${probe.p95Millis} against ${probe.worstMillis}",
+        )
+    }
+
+    @Test
     fun thePercentileNeverExceedsTheWorstFrameThereWas() {
         // Two numbers side by side on one line: p95 above worst reads as a bug
         // in the readout, whatever the histogram thinks.
@@ -290,12 +435,13 @@ class FrameProbeTest {
 
     @Test
     fun aPercentileOffTheEndOfTheHistogramFallsBackOnTheWorst() {
-        // Every frame past the histogram's ceiling: there is no bucket edge left
-        // to report, so the honest answer is the frame itself.
-        val probe = FrameProbe()
-        Clock(probe).frames(30, 240.0)
+        // The buckets reach past half a second, so this needs a probe told to
+        // accept frames longer than that. Beyond the last bucket there is no
+        // edge left to report, and the honest answer is the frames themselves.
+        val probe = FrameProbe(pauseMillis = 5_000f)
+        Clock(probe).frames(30, 900.0)
 
-        assertClose(240f, probe.p95Millis, 0.05f, "p95 of a window of disasters:")
+        assertClose(900f, probe.p95Millis, 0.05f, "p95 of a window of disasters:")
     }
 
     // ---- the line the overlay draws -------------------------------------------------
@@ -336,9 +482,11 @@ class FrameProbeTest {
         assertEquals(0, probe.samples)
         assertEquals(0, probe.missedFrames)
         assertEquals(0, probe.pauses)
+        assertEquals(0, probe.stalePauses)
         assertClose(0f, probe.meanMillis)
         assertClose(0f, probe.worstMillis)
         assertClose(0f, probe.p95Millis)
+        assertClose(0f, probe.staleMillis)
 
         // Including the origin: the frame after a reset cannot be an interval
         // measured from before it.

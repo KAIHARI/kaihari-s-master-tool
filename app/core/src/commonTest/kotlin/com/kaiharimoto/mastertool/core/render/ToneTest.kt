@@ -80,6 +80,12 @@ class ToneTest {
         val cheap = dark.pow(1f / 2.2f)
 
         assertTrue(real < cheap * 0.6f, "gamma 2.2 says $cheap where the real curve says $real")
+
+        // And it is a curve at all, which the bound above does not say on its
+        // own: a function that just handed the channel back would satisfy it
+        // and encode nothing. Down here the real one is steep, so a linear
+        // 0.002 has to arrive an order of magnitude higher than it left.
+        assertTrue(real > dark * 12f, "an encoding this flat is no encoding: $real from $dark")
     }
 
     @Test
@@ -171,14 +177,75 @@ class ToneTest {
     }
 
     @Test
-    fun theVeilAndTheChannelAgreeAboutTheSameSurface() {
+    fun theVeilIsExactAtItsOwnChannelAndWithinTwoLevelsEverywhereElse() {
         // The one that matters for the stage: an edge corrected and a face not
         // corrected is worse than neither, because then the white band on a
-        // pile and the card sitting on it disagree about where the lamp is.
-        val diffuse = 0.72f
-        val veiled = Tone.MID_TONE * (1f - Tone.veil(diffuse))
+        // pile and the card sitting on it disagree about where the lamp is. One
+        // alpha over a picture cannot say the same thing to every channel
+        // underneath it, so what has to be held is how far off it is — and at
+        // the light the stage can actually produce, which is floored at the
+        // rig's own ambient because every drawn face goes through StageRig.lit.
+        val diffuse = StageRig.Key.ambient
+        val veil = Tone.veil(diffuse)
 
-        assertClose(Tone.shade(Tone.MID_TONE, diffuse), veiled, note = "a veiled mid grey:")
+        assertClose(
+            Tone.shade(Tone.MID_TONE, diffuse),
+            Tone.MID_TONE * (1f - veil),
+            note = "the reference channel should be exact:",
+        )
+
+        // One step of an eight-bit ramp is 1/255 and the whole ramp stays
+        // inside two of them. This is the bound that fails the day the veil is
+        // solved at a different reference channel — and the day the ambient
+        // comes down, which is what it is really here to argue with.
+        (0..100).forEach { step ->
+            val channel = step / 100f
+
+            assertClose(
+                Tone.shade(channel, diffuse),
+                channel * (1f - veil),
+                tolerance = 2f / 255f,
+                note = "at $channel:",
+            )
+        }
+    }
+
+    @Test
+    fun theVeilLeavesDarkChannelsTooBrightAndTheGapGrowsAsTheLightFalls() {
+        // The sign, because it is what someone picks the tablet up looking for
+        // and having it backwards sends them at the wrong constant: below the
+        // reference channel the veil is too thin, so dark art comes back
+        // lifted, not crushed. Above it, slightly the other way.
+        val diffuse = 0.72f
+        val veil = Tone.veil(diffuse)
+
+        listOf(0.05f, 0.10f, 0.20f).forEach { channel ->
+            val veiled = channel * (1f - veil)
+
+            assertTrue(veiled > Tone.shade(channel, diffuse), "dark channel $channel came back at $veiled")
+        }
+        listOf(0.75f, 0.90f).forEach { channel ->
+            val veiled = channel * (1f - veil)
+
+            assertTrue(veiled < Tone.shade(channel, diffuse), "light channel $channel came back at $veiled")
+        }
+
+        // And what a dimmer key would cost, which is the change this rig
+        // invites next. The error is not a constant: the veil thickens as the
+        // light falls and the fixed offset in the curve becomes a larger share
+        // of a smaller number, so the worst dark channel goes from a fifth too
+        // bright to nearly twice too bright.
+        val worst = listOf(0.72f, 0.5f, 0.3f).map { light ->
+            val thin = 1f - Tone.veil(light)
+            (1..100).maxOf { step ->
+                val channel = step / 100f
+                channel * thin / Tone.shade(channel, light)
+            }
+        }
+
+        assertEquals(worst.sorted(), worst, "the error should grow as the light falls: $worst")
+        assertClose(1.19f, worst[0], tolerance = 0.02f, note = "worst overshoot at the rig's ambient:")
+        assertClose(1.87f, worst[2], tolerance = 0.02f, note = "and at a diffuse of 0.3:")
     }
 
     @Test

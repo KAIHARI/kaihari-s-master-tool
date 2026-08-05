@@ -25,28 +25,43 @@ import kotlin.math.roundToInt
  *   whatever read it, which is a recomposition per frame bought with nothing.
  *   The overlay reads these inside its draw, the way `StageCard` reads pose
  *   inside `graphicsLayer`.
- * - **Believe every gap.** See [pauseMillis]. A backgrounded app comes back
- *   with a gap of seconds, and folding that in as one enormous frame makes
- *   every number useless for the whole window that follows.
+ * - **Report a hole as health.** See [pauseMillis] and [staleMillis]. An
+ *   interval of seconds is not a frame and folding it in as one would poison
+ *   every number for the window that follows — but silently dropping it and
+ *   carrying on printing the timings from before it is worse, because that is
+ *   the reading a hang produces and it looks perfect. The gap is kept out of
+ *   the statistics and put on the line instead.
  *
- * Reads are computed rather than cached, and cost one pass over the window
- * (256 floats) plus, for the percentile, a walk down a histogram. That is a
- * microsecond or two against a budget of eight thousand, and it keeps [sample]
- * — which runs every frame whether or not anyone is looking — down to a
- * handful of array writes.
+ * Reads are computed rather than cached. [worstMillis] is a pass over the
+ * window (256 floats), [p95Millis] is a walk up the histogram plus a call to
+ * [worstMillis] to clamp itself, and [readout] calls [worstMillis] again — so
+ * one line costs two passes over the ring and a few hundred int reads. That is
+ * still a microsecond or two against a budget of eight thousand, and it keeps
+ * [sample] — which runs every frame whether or not anyone is looking — down to
+ * a handful of array writes.
  *
  * @param refreshHz the panel's refresh rate. The default is the tablet this app
  *   is built for; 16.67ms is a comfortable frame on a phone and a missed one
- *   here, so the budget is derived rather than assumed.
- * @param pauseMillis a gap longer than this is not a frame at all.
+ *   here, so the budget is derived rather than assumed. A rate that is not a
+ *   rate — zero, negative, or the NaN that a platform API returns when it does
+ *   not know — falls back on the default rather than propagating into the
+ *   arithmetic, where it would silently switch the miss count off.
+ * @param pauseMillis a gap longer than this is not a frame at all; it is a
+ *   hole, and [staleMillis] measures it.
  */
 class FrameProbe(
-    val refreshHz: Float = 120f,
-    val pauseMillis: Float = PAUSE_MILLIS,
+    refreshHz: Float = DEFAULT_HZ,
+    pauseMillis: Float = PAUSE_MILLIS,
 ) {
 
+    /** The rate the budget is derived from — the one given, if it was usable. */
+    val refreshHz: Float = usable(refreshHz, DEFAULT_HZ)
+
+    /** See the constructor parameter; nonsense here would disable the pause rule. */
+    val pauseMillis: Float = usable(pauseMillis, PAUSE_MILLIS)
+
     /** What one frame has to fit into: 8.33ms at 120Hz, 16.67 at 60. */
-    val budgetMillis: Float = 1000f / refreshHz.coerceAtLeast(1f)
+    val budgetMillis: Float = 1000f / this.refreshHz
 
     /**
      * Over this, the frame missed.
@@ -81,6 +96,19 @@ class FrameProbe(
     var pauses: Int = 0
         private set
 
+    /**
+     * Consecutive gaps thrown away since the last frame that landed — this
+     * stall's worth, where [pauses] is the session's.
+     *
+     * With [staleMillis] this is what tells a backgrounded app from a hung one,
+     * which duration alone cannot: twenty-four seconds across one dropped gap
+     * is an app that was not running, and twenty-four seconds across forty of
+     * them is a frame loop that *is* running, at 1.7fps, which is the failure
+     * this probe exists to catch.
+     */
+    var stalePauses: Int = 0
+        private set
+
     private val ring = FloatArray(CAPACITY)
 
     /**
@@ -101,8 +129,28 @@ class FrameProbe(
 
     private var lastNanos = 0L
 
+    /** When the newest frame *in the window* arrived. See [staleMillis]. */
+    private var recordedNanos = 0L
+
     /** Whether [lastNanos] means anything yet — the first frame has no interval. */
     private var primed = false
+
+    /**
+     * How old the window is: the time between the last frame that landed in it
+     * and the last timestamp the probe was handed at all.
+     *
+     * Zero on a stage that is drawing, and the whole point of the field when it
+     * is not. Everything else here answers for the frames in the window, and
+     * during a stall those frames are from before the stall — a reading of a
+     * moment that has passed, which without this cannot be told from a reading
+     * of now.
+     *
+     * It can only ever count time the probe was told about. A loop that stops
+     * calling [sample] entirely stops moving this too, but that is a loop that
+     * has also stopped drawing the overlay, so there is no reading to mislead.
+     */
+    val staleMillis: Float
+        get() = (lastNanos - recordedNanos).toFloat() / NANOS_PER_MILLI
 
     /**
      * One frame. The caller passes the timestamp it was handed and how many
@@ -118,29 +166,42 @@ class FrameProbe(
             // into the window.
             primed = true
             lastNanos = frameNanos
+            recordedNanos = frameNanos
             return
         }
 
         val elapsed = frameNanos - lastNanos
-        // Adopted whichever direction it came from: a clock that jumped
-        // backwards is nonsense, but refusing to move the origin would leave the
-        // probe measuring from a timestamp in the future forever after.
+        if (elapsed <= 0L) {
+            // A timestamp that repeats or steps backwards is not a frame, and
+            // it is not an origin either: the last one that *was* a frame stays,
+            // so the next real timestamp yields the interval it actually took.
+            // Adopting the bad one instead would add the size of the backward
+            // step to that frame and count it as a miss. A clock that jumps back
+            // and stays back would leave the probe ignoring frames until real
+            // time catches up, but `withFrameNanos` is monotonic — a step back
+            // is a repeat or a test, and the repeat is what happens hourly.
+            return
+        }
         lastNanos = frameNanos
-        if (elapsed <= 0L) return
 
         val millis = elapsed.toFloat() / NANOS_PER_MILLI
         if (millis > pauseMillis) {
-            // Backgrounded, stopped in a debugger, or blocked on a load. Nothing
-            // rendered a 1400ms frame, and reporting one poisons the mean, the
-            // worst and the percentile for the next two seconds — precisely the
-            // two seconds someone is watching when they come back to the app.
-            // A 200ms hitch is under this and is kept: that one is real jank,
-            // and showing it is the point.
+            // Backgrounded, stopped in a debugger, blocked on a load — or hung.
+            // Nothing rendered a 1400ms frame, and reporting one poisons the
+            // mean, the worst and the percentile for the next two seconds. So it
+            // stays out of the statistics; but it does not vanish, because a
+            // discarded gap and a healthy window are indistinguishable and the
+            // second reading is a lie. [staleMillis] and [stalePauses] carry it,
+            // and [readout] leads with them. A 200ms hitch is under this and is
+            // kept: that one is real jank, and showing it is the point.
             pauses++
+            stalePauses++
             return
         }
 
         record(millis)
+        recordedNanos = frameNanos
+        stalePauses = 0
     }
 
     /** Forget everything, e.g. on leaving the stage. Not on the hot path. */
@@ -154,7 +215,9 @@ class FrameProbe(
         movingObjects = 0
         missedFrames = 0
         pauses = 0
+        stalePauses = 0
         lastNanos = 0L
+        recordedNanos = 0L
         primed = false
     }
 
@@ -183,46 +246,61 @@ class FrameProbe(
      * one bad frame in twenty is exactly the rate at which stutter becomes
      * visible.
      *
-     * Answered from the histogram, walking down from the top: the tail is only
-     * ever a twentieth of the window, so the walk stops within a few buckets of
-     * where the bad frames are. Reported at the bucket's midpoint, so it is
-     * accurate to an eighth of a millisecond either way, and clamped to
-     * [worstMillis] — a p95 printed above the worst frame on the same line
-     * reads as a broken readout whatever the arithmetic says.
+     * Answered from the histogram, counting up from the bottom until the rank
+     * is reached. Up rather than down because the answer sits near the bottom
+     * on every window anyone spends time looking at — bucket 66 of 624 on a
+     * healthy stage — so the walk is shortest exactly when the overlay is being
+     * read most. Reported at the bucket's midpoint, and clamped to
+     * [worstMillis]: a p95 printed above the worst frame on the same line reads
+     * as a broken readout whatever the arithmetic says.
      */
     val p95Millis: Float
         get() {
             if (samples == 0) return 0f
 
-            // Nearest rank: the ceil(0.95n)-th smallest frame, which is the
-            // same as the (n - rank + 1)-th largest counting down.
+            // Nearest rank: the ceil(0.95n)-th smallest frame in the window.
             val rank = (samples * PERCENTILE + 99) / 100
-            var remaining = samples - rank + 1
 
-            var i = BUCKETS
-            while (i > 0) {
-                remaining -= histogram[i]
-                if (remaining <= 0) break
-                i--
+            var counted = 0
+            var i = 0
+            while (i < BUCKETS) {
+                counted += histogram[i]
+                if (counted >= rank) break
+                i++
             }
 
             val worst = worstMillis
-            // The catch-all bucket has no upper edge to report, and a window
-            // that spends its tail past the ceiling has nothing to say but the
-            // truth: the frames themselves.
+            // Only reachable when the tail is past the histogram's ceiling,
+            // which takes a [pauseMillis] set above it — the buckets otherwise
+            // cover every interval that can be recorded at all. There is no
+            // bucket edge left to report, so the frames themselves are the
+            // honest answer.
             if (i >= BUCKETS) return worst
-            val midpoint = (i + 0.5f) * BUCKET_MILLIS
+            val midpoint = midpointOf(i)
             return if (midpoint < worst) midpoint else worst
         }
 
     /**
-     * The whole readout as one line: `8.1ms  p95 11.4  worst 24.9  miss 2  moving 7`.
+     * The whole readout as one line: `8.1ms  p95 11.4  worst 24.9  miss 2  moving 7`,
+     * and during a stall `stalled 24.0s  gaps 40  8.3ms  p95 8.3  ...`.
+     *
+     * "gaps" and not "pauses", even though [stalePauses] is what it prints,
+     * because there is a public [pauses] on this class holding a *different*
+     * number — the session's rather than this stall's. A line and a field that
+     * share a word and disagree about the value is the kind of thing somebody
+     * reads once, believes, and debugs for an afternoon.
      *
      * Here rather than in the overlay so there is no formatting for the UI layer
      * to get wrong, and so the wording of a number cannot drift from what the
      * number means. "miss" and not "drops" deliberately: these are frames that
      * came in over budget, which is not the same claim as a frame the
      * compositor never received.
+     *
+     * The stall leads rather than trails because it is a qualifier on
+     * everything after it — those timings are [staleMillis] old — and a reader
+     * who has already reached "8.3ms" has stopped reading. Its count is this
+     * stall's ([stalePauses]), not the session's, so the line only ever
+     * describes the hole it is inside.
      *
      * The one place in this file that allocates — a string and the builder
      * behind it. That is the tradeoff for the UI having no arithmetic: it is
@@ -231,9 +309,13 @@ class FrameProbe(
      * and [sample] — which runs always — stays clean. If it ever does show up,
      * the fields are all public and can be drawn one at a time.
      */
-    fun readout(): String =
-        "${oneDecimal(lastMillis)}ms  p95 ${oneDecimal(p95Millis)}" +
+    fun readout(): String {
+        val line = "${oneDecimal(lastMillis)}ms  p95 ${oneDecimal(p95Millis)}" +
             "  worst ${oneDecimal(worstMillis)}  miss $missedFrames  moving $movingObjects"
+        val stale = staleMillis
+        if (stale <= 0f) return line
+        return "stalled ${oneDecimal(stale / 1000f)}s  gaps $stalePauses  $line"
+    }
 
     private fun record(millis: Float) {
         if (samples == CAPACITY) {
@@ -258,9 +340,17 @@ class FrameProbe(
     }
 
     private fun bucketOf(millis: Float): Int {
-        val i = (millis / BUCKET_MILLIS).toInt()
+        if (millis < FINE_CEILING) return (millis / FINE_MILLIS).toInt()
+        val i = FINE_BUCKETS + ((millis - FINE_CEILING) / COARSE_MILLIS).toInt()
         return if (i >= BUCKETS) BUCKETS else i
     }
+
+    private fun midpointOf(bucket: Int): Float =
+        if (bucket < FINE_BUCKETS) {
+            (bucket + 0.5f) * FINE_MILLIS
+        } else {
+            FINE_CEILING + (bucket - FINE_BUCKETS + 0.5f) * COARSE_MILLIS
+        }
 
     /** One decimal place, without a formatter — common Kotlin has none. */
     private fun oneDecimal(value: Float): String {
@@ -287,18 +377,39 @@ class FrameProbe(
         /** See [FrameProbe.missMillis]. */
         private const val MISS_SLACK = 1.05f
 
+        /** The tablet this app is built for, and the fallback for a bad rate. */
+        private const val DEFAULT_HZ = 120f
+
         /** See [FrameProbe.pauseMillis]. Half a second is not a frame; it is a stop. */
         private const val PAUSE_MILLIS = 500f
 
         private const val PERCENTILE = 95
 
         /**
-         * The histogram: an eighth of a millisecond per bucket, up to 64ms, plus
-         * one catch-all above that. Fine enough that the quantisation disappears
-         * at the one decimal place the readout prints, coarse enough that the
-         * whole thing is two kilobytes and a walk down it is free.
+         * The histogram, in two resolutions.
+         *
+         * An eighth of a millisecond up to 64ms, where the quantisation
+         * disappears at the one decimal place the readout prints; then four
+         * milliseconds up to 512, which is past any interval a pause rule set
+         * anywhere sane can let through. Coarse up there because a window whose
+         * tail is at 70ms has already answered the question, and whether it was
+         * 70 or 72 changes nothing anyone would do about it.
+         *
+         * The second tier is what stops the percentile collapsing onto the
+         * worst frame. A single catch-all swallowed the whole tail, so five per
+         * cent of a window past the ceiling made p95 print the one worst frame
+         * in the window — an eightfold overstatement of a stage that was ninety
+         * per cent healthy, on the reading someone would act on.
          */
-        private const val BUCKET_MILLIS = 0.125f
-        private const val BUCKETS = 512
+        private const val FINE_MILLIS = 0.125f
+        private const val FINE_BUCKETS = 512
+        private const val FINE_CEILING = FINE_BUCKETS * FINE_MILLIS
+        private const val COARSE_MILLIS = 4f
+        private const val COARSE_BUCKETS = 112
+        private const val BUCKETS = FINE_BUCKETS + COARSE_BUCKETS
+
+        /** A rate or a threshold that is not a number is not a setting. */
+        private fun usable(value: Float, fallback: Float): Float =
+            if (value.isFinite() && value > 0f) value else fallback
     }
 }

@@ -45,11 +45,31 @@ object Tone {
     /**
      * The channel [veil] solves its opacity at.
      *
-     * A mid grey, because a veil is asked for when the surface underneath is
-     * card art nobody can inspect, and above the knee the correction is very
-     * nearly the same fraction whatever it lands on — the curve is close enough
-     * to a pure power there that the channel divides back out. One number is
-     * the right answer for a picture; the wrong one it replaces was 1 - light.
+     * A mid grey, and this is an approximation with a known error rather than a
+     * derivation. One opacity laid over a picture cannot be encoding-correct
+     * for every channel beneath it, because the veil a channel actually wants,
+     * `1 - shade(c, light) / c`, is a function of `c`. The +0.055 offset in the
+     * transfer function is what makes it one: it is precisely what stops the
+     * curve being a pure power, so the channel never divides back out — and it
+     * weighs most where the channel is smallest, which is the whole bottom half
+     * of the range and not merely the straight segment below [KNEE_ENCODED].
+     *
+     * Measured at the rig's own diffuse of 0.72, the veil each channel wants is
+     * 0.268 at c=0.05, 0.198 at 0.10, 0.163 at 0.20 and 0.142 at 0.50 — a 1.89x
+     * spread, every value of it far above the knee. Solving at 0.5 makes mid
+     * grey exact and leaves the rest out in a fixed direction: dark channels
+     * are veiled **too lightly** and come back brighter than the light puts
+     * them, light ones very slightly too heavily. At diffuse 0.72 that is 1.19x
+     * too bright at its worst (around c=0.04), 1.17x at c=0.05, 1.07x at 0.10,
+     * 1.03x at 0.20, and the other way by 0.99x at c=0.90.
+     *
+     * It is still the right call for a picture: nowhere on the ramp is it out
+     * by two levels of 255 at the light this stage actually uses, and the
+     * alternative is not a better constant but a per-channel shader no renderer
+     * can run over art it cannot read. What it is not is free at every light —
+     * [veil] carries the warning about that, and it is the reason the bound is
+     * pinned in a test rather than asserted here. The answer this replaces,
+     * `1 - light`, is out by far more than any of it at every channel.
      */
     const val MID_TONE = 0.5f
 
@@ -105,6 +125,26 @@ object Tone {
      * beside an edge that was corrected is worse than neither — then the white
      * band on a pile and the card resting on it disagree about where the lamp
      * is, which is the one thing the single rig exists to prevent.
+     *
+     * One opacity cannot be right for every channel underneath it; [MID_TONE]
+     * carries the size of what is left over. The sign is the part worth
+     * remembering at the tablet, because it sends you at a different constant
+     * if you have it backwards: dark art comes back **brighter** than the light
+     * puts it, lifted rather than crushed.
+     *
+     * **Read this before turning [StageRig]'s key ambient down.** That is the
+     * obvious next move now the encoding is right — the rig floors every face
+     * at 0.72 and the stage would take more contrast — but the leftover error
+     * is not a constant. It grows sharply as the light falls, because the veil
+     * thickens and the fixed +0.055 offset becomes a larger share of a smaller
+     * number. Worst dark channel: 1.19x too bright at a diffuse of 0.72, 1.44x
+     * at 0.5, 1.87x at 0.3 — where a channel of 0.10 lands on 0.056 against the
+     * 0.039 the light asks for, four and a half levels of 255, on the dark card
+     * art this file exists to keep readable against a true-black stage. Below
+     * about 0.5 the honest fix is not a different reference channel but drawing
+     * the face's shading some way other than one flat overlay. The bound is
+     * pinned in `ToneTest`, so lowering the ambient will be argued with there
+     * first.
      */
     fun veil(light: Float, over: Float = MID_TONE): Float {
         val base = unit(over)
