@@ -89,6 +89,16 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
     private var stillAt = Vec2.Zero
     private var stillSince = 0L
     private var dwelled = false
+    /**
+     * The most pointers any one event of this gesture carried.
+     *
+     * Monotonic, and counting everything the event held — including the palm
+     * the gesture never adopted. That is what makes it the right question for
+     * the gestures that commit on release (the flip, the tap, the menu, the
+     * peek) and the wrong one for a drag or a twist already under way: erring
+     * one way is silence, and erring the other is a card that stops turning
+     * because a hand came to rest on the far side of the mat.
+     */
     private var peakFingers = 0
     private var carried = false
     private var detent = 0
@@ -136,9 +146,14 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         for (touch in frame.touches) {
             if (owned.size >= 2) break
             if (touch.id in owned || touch.id in stale) continue
-            // A gesture starts only on a finger that just landed. One already
-            // resting when the last gesture ended is furniture.
-            if (phase == MatPhase.IDLE && touch.id in lastSeen) continue
+            // A gesture only ever takes a finger that just landed. One already
+            // resting when the last gesture ended is furniture — and so is one
+            // resting through this one, which is what the guard used to miss by
+            // asking only while idle. Mid-gesture a slot opens every time one
+            // of the two working fingers lifts, and the palm sitting motionless
+            // an inch away was adopted into it on the next frame; from there
+            // the weight of a hand shifting turned a card to defence.
+            if (touch.id in lastSeen) continue
             owned = owned + touch.id
         }
         stale = stale.filterTo(mutableSetOf()) { it in here }
@@ -251,6 +266,15 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
                     // One finger lifted mid-twist. The turn is finished — but
                     // the other finger is still holding the card, so it keeps
                     // it rather than the card going dead under it.
+                    //
+                    // Which also closes the grace window that lift may have
+                    // opened. The window asks what fills it, and this is the
+                    // answer: the gesture has changed hands deliberately, to a
+                    // finger that is dragging rather than resting. Left
+                    // running, nothing but a reset ever clears it, and a
+                    // seventh of a second later it would drop the card out of
+                    // a hand that never let go of it.
+                    orphanedAt = 0L
                     events += MatEvent.TwistCommitted(quarterTurns)
                     phase = MatPhase.DRAG_CARD
                     holdStill(fingers[0], frame.timeMillis)
@@ -342,13 +366,18 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
             dwelled = true
             listOf(MatEvent.Dwelled(focus))
         }
-        phase == MatPhase.PRESS && now - pressedAt >= limits.longPressMillis -> {
+        // Three fingers landing inside one event leave the press holding two of
+        // them, and a press held is a peek. A hand put down flat is not asking
+        // to read a card either.
+        phase == MatPhase.PRESS && peakFingers < 3 && now - pressedAt >= limits.longPressMillis -> {
             phase = MatPhase.PEEK
             listOf(MatEvent.PeekBegan(focus))
         }
         // `carried` is the second finger that arrived to steady the tablet
-        // during a drag. It must never open a menu or flip anything.
-        phase == MatPhase.TWO_UNDECIDED && !carried &&
+        // during a drag. It must never open a menu or flip anything. Nor may a
+        // third contact: two fingers held still is a menu, three is a hand
+        // resting, and answering the hand opens a menu nobody asked for.
+        phase == MatPhase.TWO_UNDECIDED && !carried && peakFingers < 3 &&
             now - secondAt >= limits.longPressMillis -> {
             phase = MatPhase.MENU
             listOf(MatEvent.MenuRequested(focus))
@@ -367,16 +396,21 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
     private fun settle(frame: TouchFrame, complete: Boolean): List<MatEvent> = when (phase) {
         // Nothing was ever pressed, but the event carried two pointers that had
         // already lifted: a two-finger tap delivered whole. The positions come
-        // from where they left, because there is no other record of them.
+        // from where they left, because there is no other record of them. Two
+        // exactly: batching does not care how many fingers it hands over at
+        // once, and *at least* two read a hand put down flat as a flip.
         MatPhase.IDLE -> when {
-            frame.seen >= 2 && frame.released.isNotEmpty() ->
+            frame.seen == 2 && frame.released.isNotEmpty() ->
                 listOf(MatEvent.Flipped(frame.released.first().at))
             else -> emptyList()
         }
         MatPhase.PRESS -> when {
             !complete -> emptyList()
+            // Three fingers is not a loud two, and it is not a tap either. The
+            // mat has nothing that means three, so it says nothing.
+            peakFingers >= 3 -> emptyList()
             // Both fingers landed and left inside one dispatched event.
-            peakFingers >= 2 -> listOf(MatEvent.Flipped(focus))
+            peakFingers == 2 -> listOf(MatEvent.Flipped(focus))
             (focus - pressPoint).length <= limits.touchSlop -> listOf(MatEvent.Tapped(focus))
             else -> emptyList()
         }
@@ -384,7 +418,7 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         MatPhase.DRAG_CARD, MatPhase.DRAG_STACK -> listOf(MatEvent.Dropped(focus, speed.value))
         MatPhase.TWO_UNDECIDED -> when {
             carried -> listOf(MatEvent.Dropped(focus, speed.value))
-            complete -> listOf(MatEvent.Flipped(focus))
+            complete && peakFingers == 2 -> listOf(MatEvent.Flipped(focus))
             else -> emptyList()
         }
         MatPhase.TWIST -> listOf(MatEvent.TwistCommitted(quarterTurns))

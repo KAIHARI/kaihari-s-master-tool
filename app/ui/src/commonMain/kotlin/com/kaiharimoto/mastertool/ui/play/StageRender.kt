@@ -21,6 +21,7 @@ import com.kaiharimoto.mastertool.core.render.Rot3
 import com.kaiharimoto.mastertool.core.render.Shading
 import com.kaiharimoto.mastertool.core.render.Shadows
 import com.kaiharimoto.mastertool.core.render.StageRig
+import com.kaiharimoto.mastertool.core.render.Tone
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlin.math.abs
 import kotlin.math.max
@@ -53,11 +54,19 @@ private const val SHADOW_STEPS = 5
  * what an unlit one does, and on a black stage the two happen to look similar
  * until something is drawn behind them, at which point only one of them is
  * still right.
+ *
+ * The multiply goes through [Tone] because a `Color`'s channels are sRGB, and
+ * multiplying an encoding is not multiplying light: raw, a surface at half
+ * illumination comes back nearer a quarter as bright, and every shaded edge on
+ * the table slides toward the same muddy grey instead of staying its own
+ * colour.
  */
-private fun Color.shaded(amount: Float): Color {
-    val lit = amount.coerceIn(0f, 1f)
-    return Color(red * lit, green * lit, blue * lit, alpha)
-}
+private fun Color.shaded(amount: Float): Color = Color(
+    Tone.shade(red, amount),
+    Tone.shade(green, amount),
+    Tone.shade(blue, amount),
+    alpha,
+)
 
 // ---- the table ------------------------------------------------------------------
 
@@ -266,9 +275,15 @@ internal fun DrawScope.drawCardSurface(
     val shade = Shading.of(pose, material, StageRig.Key, eye)
     val radius = CornerRadius(radiusPx)
 
-    val shadow = 1f - shade.diffuse
-    if (shadow > 0.004f) {
-        drawRoundRect(color = Color.Black.copy(alpha = shadow), cornerRadius = radius)
+    // The face darkens by the same law the edges do, but a card's art is a
+    // picture this cannot read, so the shading has to arrive as a veil laid
+    // over it. Its opacity is solved in core rather than taken as `1 - diffuse`
+    // — alpha composites in the encoding just as a raw multiply does, and a
+    // face left uncorrected beside an edge that was corrected is worse than
+    // neither, because then the two disagree about where the lamp is.
+    val veil = Tone.veil(shade.diffuse)
+    if (veil > 0.004f) {
+        drawRoundRect(color = Color.Black.copy(alpha = veil), cornerRadius = radius)
     }
 
     if (shade.specular > 0.004f) {
