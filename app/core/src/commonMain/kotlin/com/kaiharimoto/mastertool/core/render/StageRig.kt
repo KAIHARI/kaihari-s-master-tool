@@ -87,9 +87,23 @@ object StageRig {
      *   the viewer, which is an ambient with extra steps and a more expensive
      *   one. Weighted by how edge-on the camera sees a surface it can only
      *   land where the silhouette is, and it is exactly zero square on.
+     *
+     * And one thing about it is not what a photographer would expect. A rim
+     * light belongs *behind* the subject, and behind is the one place it would
+     * do nothing here: this stage draws solids with back-face culling and looks
+     * at them from above, so every surface a light behind the table could reach
+     * has already been culled before it is shaded. The first version of this
+     * lamp pointed that way and a test proved it changed exactly one face in a
+     * whole board — the far edge of a card held in the air — while leaving every
+     * pile it was written to outline byte-identical.
+     *
+     * So it sits on the *player's* side instead, low and cool: the light a room
+     * throws back off whoever is sitting at the table. That is a real lamp in a
+     * real room, it reaches the near edges — which are the only edges of a pile
+     * anybody ever sees — and the graze gate still keeps it off the faces.
      */
     val Rim = Light(
-        direction = Vec3(-0.62f, 0.66f, -0.42f).normalised(),
+        direction = Vec3(-0.62f, -0.66f, -0.42f).normalised(),
         intensity = 0.45f,
         warmth = -0.6f,
         ambient = 0f,
@@ -127,9 +141,12 @@ object StageRig {
     /**
      * All three lamps on one surface, which is all any renderer needs to ask for.
      *
-     * The three directional terms share the headroom above the key's ambient
-     * rather than each taking a slice of the whole range, which is what keeps a
-     * surface standing in all three of them from clipping to flat white.
+     * Each of the three directional terms is scaled by the headroom above the
+     * key's ambient, and they are then summed and clamped. A surface standing
+     * square in all three at once would sum past white and be clipped — which
+     * cannot happen, because the three lamps point in three different
+     * directions and no normal faces all of them. The clamp is the backstop,
+     * not the design.
      *
      * The temperature comes out as an energy-weighted average, and the ambient
      * is in the denominator as the white light it is. That one detail is what

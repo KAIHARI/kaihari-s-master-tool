@@ -17,6 +17,7 @@ import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardMaterial
 import com.kaiharimoto.mastertool.core.render.CardSolid
+import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.Rot3
 import com.kaiharimoto.mastertool.core.render.Shading
 import com.kaiharimoto.mastertool.core.render.Shadows
@@ -60,11 +61,16 @@ private const val SHADOW_STEPS = 5
  * illumination comes back nearer a quarter as bright, and every shaded edge on
  * the table slides toward the same muddy grey instead of staying its own
  * colour.
+ *
+ * Three channels rather than one, because the rig's lamps have temperatures now
+ * and a lamp's colour only exists once it has landed on something. [Lit] works
+ * out the three multipliers itself so that nothing here — and nothing in any
+ * other renderer — can invent its own mapping from a warmth to a colour.
  */
-private fun Color.shaded(amount: Float): Color = Color(
-    Tone.shade(red, amount),
-    Tone.shade(green, amount),
-    Tone.shade(blue, amount),
+private fun Color.shaded(lit: Lit): Color = Color(
+    Tone.shade(red, lit.red),
+    Tone.shade(green, lit.green),
+    Tone.shade(blue, lit.blue),
     alpha,
 )
 
@@ -309,12 +315,16 @@ internal fun DrawScope.drawCardSurface(
 
     if (shade.specular > 0.004f) {
         val hotspot = Offset(shade.hotspot.x * size.width, shade.hotspot.y * size.height)
+        // A highlight is a reflection of the lamp rather than of the room, so
+        // it is the one place a temperature arrives undiluted. Everywhere else
+        // on this table the rig's white ambient washes most of it back out.
+        val lamp = Color.White.shaded(shade.lamp)
 
         drawRoundRect(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    Color.White.copy(alpha = shade.specular),
-                    Color.White.copy(alpha = shade.specular * 0.3f),
+                    lamp.copy(alpha = shade.specular),
+                    lamp.copy(alpha = shade.specular * 0.3f),
                     Color.Transparent,
                 ),
                 center = hotspot,

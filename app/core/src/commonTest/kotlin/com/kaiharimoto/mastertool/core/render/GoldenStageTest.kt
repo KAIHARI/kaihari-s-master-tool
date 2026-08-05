@@ -15,12 +15,16 @@ import kotlin.test.fail
 /**
  * One fixed scene, three camera poses, written down.
  *
- * This is the only golden in the repository and it is meant to stay the only
- * one. Every other test here is an argument: it names a claim about the domain
- * in its own name, and when it fails it says which claim stopped being true. A
- * golden names nothing. It asserts that today equals yesterday, which is not a
- * claim about cards or light at all, and a suite full of them is a suite
- * nobody reads and everybody regenerates.
+ * This is the only recording of computed output in the repository and it is
+ * meant to stay the only one. `YdkCodecTest` also holds text in a `trimIndent`,
+ * but that text is a *format* — somebody else's specification, which the app
+ * does not get a vote on — and comparing against it is an ordinary claim.
+ *
+ * A golden is not. Every other test here is an argument: it names something
+ * about the domain in its own name, and when it fails it says which claim
+ * stopped being true. A golden names nothing. It asserts that today equals
+ * yesterday, which is not a claim about cards or light at all, and a suite full
+ * of them is a suite nobody reads and everybody regenerates.
  *
  * It earns its one place because of the shape of the renderer. Six small
  * pieces — [Rot3], [CardSolid], [Shading], [Shadows], [StageRig] and
@@ -44,7 +48,9 @@ import kotlin.test.fail
  * why the new number is right, and then re-record this.
  *
  * There is no `assertClose` in this file, and its absence is the design rather
- * than an omission — see [fixed]. The quantum *is* the tolerance.
+ * than an omission: every number is quantised to a grid on the way into the
+ * text, and that grid *is* the tolerance. See the formatter at the foot of the
+ * file, which is the one part of this worth reading twice.
  */
 class GoldenStageTest {
 
@@ -56,19 +62,19 @@ class GoldenStageTest {
             seat = "home",
             expected = """
             rest face   364.3,571.4  485.9,571.4  475.7,749.6  350.2,749.6
-            rest solid  near 0.745/-0.034 413.0,749.6  front 1.000/0.099 419.1,659.1
+            rest solid  near 0.791/-0.067 413.0,749.6  front 1.000/0.099 419.1,659.1
             rest shadow 364.3,571.4  485.9,571.4  475.7,749.6  350.2,749.6  dark 0.660  soft 3.1
-            rest shade  diff 0.955  spec 0.207  rim 0.000  hot 0.309,0.378
+            rest shade  diff 0.955  spec 0.225  rim 0.000  hot 0.309,0.378
             held face   860.5,261.1  968.1,264.4  965.9,443.1  859.7,446.9
-            held solid  far 1.000/0.101 915.2,262.8  left 0.895/0.106 859.9,354.6  front 0.919/0.007 914.6,354.5
+            held solid  far 0.927/0.159 915.2,262.8  left 0.895/0.106 859.9,354.6  front 0.920/0.006 914.6,354.5
             held shadow 907.5,394.1  992.9,351.0  975.2,471.6  887.6,516.7  dark 0.351  soft 34.4
-            held shade  diff 0.837  spec 0.000  rim 0.003  hot -0.383,-0.228
+            held shade  diff 0.837  spec 0.000  rim 0.002  hot -0.383,-0.228
             set  face   1130.7,628.6  1138.1,752.8  1320.2,752.8  1308.8,628.6
-            set  solid  back 1.000/0.099 1224.6,689.9  right 0.745/-0.034 1229.2,752.7
+            set  solid  back 1.000/0.099 1224.6,689.9  right 0.791/-0.067 1229.2,752.7
             set  shadow 1130.7,628.6  1138.1,752.8  1320.2,752.8  1308.8,628.6  dark 0.660  soft 3.1
             set  shade  diff 0.955  spec 0.132  rim 0.000  hot 0.622,0.309
             pile face   293.9,174.5  408.5,174.5  396.5,329.9  278.4,329.9
-            pile solid  near 0.745/-0.034 340.8,334.0  front 1.000/0.099 344.5,251.1
+            pile solid  near 0.791/-0.067 340.8,334.0  front 1.000/0.099 344.5,251.1
             pile shadow 307.3,194.5  420.6,194.5  409.1,348.7  292.5,348.7  dark 0.545  soft 10.6
             pile shade  diff 0.955  spec 0.207  rim 0.000  hot 0.309,0.378
             """.trimIndent(),
@@ -82,19 +88,19 @@ class GoldenStageTest {
             seat = "turned",
             expected = """
             rest face   488.2,830.3  591.4,751.0  701.0,899.9  596.5,983.4
-            rest solid  near 0.745/-0.034 649.2,941.3  left 0.804/0.078 541.7,905.8  front 1.000/0.099 593.9,864.9
+            rest solid  near 0.798/-0.071 649.2,941.3  left 0.804/0.078 541.7,905.8  front 1.000/0.099 593.9,864.9
             rest shadow 488.2,830.3  591.4,751.0  701.0,899.9  596.5,983.4  dark 0.660  soft 3.1
-            rest shade  diff 0.955  spec 0.120  rim 0.000  hot 0.207,0.343
+            rest shade  diff 0.955  spec 0.089  rim 0.000  hot 0.207,0.343
             held face   721.5,266.8  798.9,211.9  898.8,356.9  828.0,418.1
-            held solid  far 0.996/0.106 761.0,238.8  left 0.895/0.106 775.1,343.3  front 0.921/0.006 813.2,313.4
+            held solid  far 0.927/0.159 761.0,238.8  left 0.895/0.106 775.1,343.3  front 0.923/0.004 813.2,313.4
             held shadow 817.0,353.7  856.2,271.4  917.8,375.7  878.8,461.4  dark 0.351  soft 34.4
-            held shade  diff 0.837  spec 0.000  rim 0.014  hot -0.574,-0.330
+            held shade  diff 0.837  spec 0.000  rim 0.009  hot -0.574,-0.330
             set  face   1128.9,408.4  1208.3,498.2  1335.1,396.7  1255.1,310.3
-            set  solid  back 1.000/0.099 1232.3,402.4  far 0.804/0.078 1168.3,452.9  right 0.745/-0.034 1272.4,446.9
+            set  solid  back 1.000/0.099 1232.3,402.4  far 0.804/0.078 1168.3,452.9  right 0.798/-0.071 1272.4,446.9
             set  shadow 1128.9,408.4  1208.3,498.2  1335.1,396.7  1255.1,310.3  dark 0.660  soft 3.1
             set  shade  diff 0.955  spec 0.107  rim 0.000  hot 0.657,0.207
             pile face   153.1,546.5  257.3,473.7  354.6,610.3  249.1,686.9
-            pile solid  near 0.745/-0.034 306.0,650.2  left 0.804/0.078 205.0,617.8  front 1.000/0.099 253.3,578.2
+            pile solid  near 0.798/-0.071 306.0,650.2  left 0.804/0.078 205.0,617.8  front 1.000/0.099 253.3,578.2
             pile shadow 175.8,555.9  278.3,484.1  374.7,619.0  271.0,694.6  dark 0.545  soft 10.6
             pile shade  diff 0.955  spec 0.120  rim 0.000  hot 0.207,0.343
             """.trimIndent(),
@@ -108,19 +114,19 @@ class GoldenStageTest {
             seat = "steep",
             expected = """
             rest face   464.1,535.1  557.8,535.1  543.4,625.9  444.0,625.9
-            rest solid  near 0.745/-0.034 493.7,626.1  front 1.000/0.094 502.6,579.2
+            rest solid  near 0.749/-0.037 493.7,626.1  front 1.000/0.094 502.6,579.2
             rest shadow 464.1,535.1  557.8,535.1  543.4,625.9  444.0,625.9  dark 0.660  soft 3.1
-            rest shade  diff 0.955  spec 0.103  rim 0.046  hot 0.263,0.767
+            rest shade  diff 0.955  spec 0.069  rim 0.069  hot 0.263,0.767
             held face   842.1,324.9  919.6,348.5  923.9,456.2  843.7,433.7
-            held solid  near 0.720/0.000 884.1,445.2  left 0.895/0.106 842.8,378.4  front 0.922/0.005 882.7,390.0
+            held solid  near 0.734/-0.011 884.1,445.2  left 0.895/0.106 842.8,378.4  front 0.925/0.003 882.7,390.0
             held shadow 880.8,449.2  944.2,429.0  933.1,486.2  867.0,508.1  dark 0.351  soft 34.4
-            held shade  diff 0.837  spec 0.000  rim 0.020  hot -0.414,0.299
+            held shade  diff 0.837  spec 0.000  rim 0.014  hot -0.414,0.299
             set  face   1057.1,563.7  1067.7,627.6  1211.9,627.6  1195.6,563.7
-            set  solid  back 1.000/0.094 1133.0,594.6  right 0.745/-0.034 1139.8,627.4
+            set  solid  back 1.000/0.094 1133.0,594.6  right 0.749/-0.037 1139.8,627.4
             set  shadow 1057.1,563.7  1067.7,627.6  1211.9,627.6  1195.6,563.7  dark 0.660  soft 3.1
             set  shade  diff 0.955  spec 0.101  rim 0.032  hot 0.233,0.263
             pile face   433.8,340.4  516.7,340.4  501.8,409.9  414.5,409.9
-            pile solid  near 0.745/-0.034 459.1,416.4  front 1.000/0.094 466.9,374.2
+            pile solid  near 0.749/-0.037 459.1,416.4  front 1.000/0.094 466.9,374.2
             pile shadow 439.8,357.6  522.5,357.6  508.0,427.9  420.9,427.9  dark 0.545  soft 10.6
             pile shade  diff 0.955  spec 0.103  rim 0.046  hot 0.263,0.767
             """.trimIndent(),
@@ -209,6 +215,15 @@ class GoldenStageTest {
         const val TIE_MARGIN = 0.002f
 
         /**
+         * Twenty-six cards in the graveyard, which is a mid-game board.
+         *
+         * Declared before the scene that reads it, because a companion's
+         * properties initialise in the order they are written and a forward
+         * reference here would silently hand the pile a depth of zero.
+         */
+        val GRAVEYARD_DEPTH = CardSolid.pileDepth(26, CARD_WIDTH)
+
+        /**
          * The scene, at fixed coordinates, hand-built.
          *
          * Deliberately *not* routed through
@@ -255,7 +270,7 @@ class GoldenStageTest {
             StageObject(
                 name = "rest",
                 pose = Pose3(position = Vec3(430f, 660f, 0f)),
-                material = CardMaterial.Gloss,
+                material = CardMaterial.Foil,
                 depth = CardSolid.thickness(CARD_WIDTH),
             ),
             StageObject(
@@ -265,7 +280,7 @@ class GoldenStageTest {
                     rotX = -21f,
                     rotY = 27f,
                 ),
-                material = CardMaterial.Foil,
+                material = CardMaterial.Gloss,
                 depth = CardSolid.thickness(CARD_WIDTH),
             ),
             StageObject(
@@ -280,11 +295,13 @@ class GoldenStageTest {
             ),
             StageObject(
                 name = "pile",
-                pose = Pose3(
-                    position = Vec3(330f, 240f, CardSolid.pileDepth(26, CARD_WIDTH)),
-                ),
+                // The z and the depth are one number twice, and that is the
+                // arrangement rather than a coincidence: a pile's pose is the
+                // top card, so the body it extrudes downward has to be exactly
+                // the height it is standing at, or the deck floats or sinks.
+                pose = Pose3(position = Vec3(330f, 240f, GRAVEYARD_DEPTH)),
                 material = CardMaterial.Gloss,
-                depth = CardSolid.pileDepth(26, CARD_WIDTH),
+                depth = GRAVEYARD_DEPTH,
             ),
         )
 
@@ -405,9 +422,12 @@ private class StageDump(private val plane: StagePlane) {
         val slab = CardSolid.slab(pose, CARD_WIDTH, CARD_HEIGHT, subject.depth)
         val shown = CardSolid.visible(slab, eye)
 
-        row(subject.name, "face", CardSolid.face(pose, CARD_WIDTH, CARD_HEIGHT).joinToString("  ") {
-            at(plane.project(it))
-        })
+        row(
+            subject.name,
+            "face",
+            CardSolid.face(pose, CARD_WIDTH, CARD_HEIGHT)
+                .joinToString("  ") { at(plane.project(it)) },
+        )
 
         row(
             subject.name,

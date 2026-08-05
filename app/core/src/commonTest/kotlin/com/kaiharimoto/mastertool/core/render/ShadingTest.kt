@@ -269,62 +269,86 @@ class ShadingTest {
     private val dark = Light(StageRig.Rim.direction, intensity = 0f, ambient = 0f)
 
     @Test
-    fun theRimComesFromBehindTheTableAndFromTheOtherSideToTheKey() {
+    fun theRimReachesTheOneEdgeOfAPileAnybodyEverSees() {
+        // The claim the first version of this test could not make, and the
+        // reason it had to be rewritten. A rim light belongs behind the subject;
+        // behind is the one place it does nothing here, because this stage culls
+        // back faces and looks down at the table, so every surface a lamp behind
+        // could reach has already been thrown away before it is shaded. The lamp
+        // pointed that way for a while and a golden proved it changed exactly
+        // one face in a whole board — the far edge of a card held in the air —
+        // while leaving every pile it was written to outline byte-identical.
+        //
+        // The old assertion could not have caught that: it only asked that the
+        // lamp travel toward the player, which the key does too.
         val rim = StageRig.Rim
+        val nearEdge = Vec3(0f, 1f, 0f)
 
-        // Travelling toward the player and only shallowly downward puts the lamp
-        // on the far side of the table and low, which is the only place a lamp
-        // can be and still put light along a silhouette.
-        assertTrue(rim.direction.y > 0.4f, "the rim travels toward the player, was ${rim.direction.y}")
-        assertTrue(rim.direction.x * key.direction.x < 0f, "and from the key's other side")
-        assertTrue(abs(rim.direction.z) < abs(key.direction.z), "lower than the key, was ${rim.direction.z}")
+        assertTrue(
+            nearEdge dot rim.toLight > 0.4f,
+            "the rim cannot reach a pile's near edge, was ${nearEdge dot rim.toLight}",
+        )
+        assertTrue(
+            nearEdge dot key.toLight < 0f,
+            "and it is only worth having because the key cannot",
+        )
+        assertTrue(rim.direction.x * key.direction.x < 0f, "from the key's other side")
+        assertTrue(
+            abs(rim.direction.z) < abs(key.direction.z),
+            "lower than the key, was ${rim.direction.z}",
+        )
         assertTrue(rim.intensity < key.intensity * 0.5f, "and weak, was ${rim.intensity}")
         assertClose(1f, rim.direction.length, note = "the rim is a unit direction:")
     }
 
     @Test
-    fun theRimDoesNothingAtAllToACardFacingTheViewerSquareOn() {
+    fun theRimVanishesAsASurfaceTurnsToFaceTheCamera() {
         // The one thing that would make the third lamp worthless: a backlight
         // that simply added its own dot product would lift a card lying face-up
         // toward the camera, which is an ambient with extra steps and a more
-        // expensive one. Gated on the graze it is exactly zero there.
-        val flat = Vec3(0f, 0f, 1f)
+        // expensive one.
+        //
+        // Measured against a dimmed key on purpose. A card square into the full
+        // key is already at white, so the clamp alone hides the difference and a
+        // test run at full strength would pass with no gate in the rig at all.
+        val dim = key.copy(intensity = 0.25f)
 
-        assertEquals(
-            StageRig.lit(flat, Vec3.Toward, rim = dark).amount,
-            StageRig.lit(flat, Vec3.Toward).amount,
-            "square on, the rim should contribute nothing whatever",
+        // One card turning from face-on to nearly edge-on, toward the side the
+        // rim lamp stands on.
+        val turning = listOf(
+            Vec3(0f, 0f, 1f),
+            Vec3(0.34f, 0f, 0.94f),
+            Vec3(0.71f, 0f, 0.71f),
+            Vec3(0.94f, 0f, 0.34f),
+            Vec3(1f, 0f, 0.02f),
         )
+        val gains = turning.map { normal ->
+            StageRig.lit(normal, Vec3.Toward, key = dim).amount -
+                StageRig.lit(normal, Vec3.Toward, key = dim, rim = dark).amount
+        }
 
-        // And at the seat the stage opens at, where "square on" is fifteen
-        // degrees off it, still under one level of an eight-bit ramp.
-        val eye = StageRig.eye(15f)
-        val leak = StageRig.lit(flat, eye).amount - StageRig.lit(flat, eye, rim = dark).amount
-
-        assertTrue(leak < 1f / 255f, "the rim leaked onto a resting card face: $leak")
+        assertEquals(0f, gains.first(), "square on the rim should contribute nothing whatever")
+        assertEquals(gains.sorted(), gains, "and only grow toward the silhouette: $gains")
+        assertTrue(gains.last() > 0.02f, "arriving at a real line of light: ${gains.last()}")
     }
 
     @Test
-    fun theRimLandsOnACardsSilhouetteAndNotOnItsFace() {
-        // What the stage was missing, on a real solid rather than on a chosen
-        // normal. A side edge the camera sees at a graze is drawn as a hairline,
-        // and a hairline of flat ambient grey on a true-black stage is a
-        // hairline nobody can see — which is why a dim card's outline used to
-        // dissolve into the felt. The same lamp, on the same card, at the same
-        // moment, has to leave the printed face alone.
+    fun theRimLandsOnTheSilhouetteEdgeOfARealSolid() {
+        // What the stage was missing, on a card rather than on a chosen normal.
+        // A side edge the camera sees at a graze is drawn as a hairline, and a
+        // hairline of flat ambient grey on a true-black stage is a hairline
+        // nobody can see — which is why a dim card's outline used to dissolve
+        // into the felt. Seen from round the side of the table, because that is
+        // where a flat card's side edge has any width on the glass at all.
         val eye = StageRig.eye(15f, 270f)
-        val faces = CardSolid.slab(Pose3(), 100f, 145f, depth = 30f)
-        val silhouette = faces.first { it.normal.x > 0.5f }
-        val printed = faces.first { it.normal.z > 0.5f }
+        val silhouette = CardSolid.slab(Pose3(), 100f, 145f, depth = 30f)
+            .first { it.normal.x > 0.5f }
 
-        val edge = StageRig.face(silhouette, eye).amount -
-            StageRig.lit(silhouette.normal, eye, rim = dark).amount
-        val face = StageRig.face(printed, eye).amount -
-            StageRig.lit(printed.normal, eye, rim = dark).amount
+        val withRim = StageRig.face(silhouette, eye).amount
+        val without = StageRig.lit(silhouette.normal, eye, rim = dark).amount
 
-        assertTrue(edge > 0.02f, "the rim should be a line along the edge, was $edge")
-        assertTrue(face < 1f / 255f, "and nothing at all on the face, was $face")
-        assertTrue(StageRig.face(silhouette, eye).amount <= 1f, "and never brighter than white")
+        assertTrue(withRim > without + 0.02f, "a line of light, was $withRim against $without")
+        assertTrue(withRim <= 1f, "and never brighter than white, was $withRim")
     }
 
     // ---- colour temperature --------------------------------------------------------
