@@ -77,8 +77,10 @@ import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
 import com.kaiharimoto.mastertool.ui.input.ShortcutHost
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.PI
 import kotlin.random.Random
 
@@ -98,19 +100,55 @@ private const val HAND_LIFT = LIFT_Z * 1.6f
 /**
  * How far a hand card leans back, so hand and table read as two objects.
  *
- * Raised from seven degrees, which was a lean you could measure and not one you
- * could see. This is the cheapest three-dimensionality on the whole stage and
- * for a while it was the least used: a card leaned about its own centre keeps
- * that centre exactly where it was, so nothing about hit-testing, the fan or the
- * layout has an opinion — while its top edge rises a fifth of a card height off
- * the mat, its bottom edge presses into it, and the shadow it throws stops being
- * a rectangle underneath it and becomes a rectangle behind it.
+ * A hand that is *standing up* off the table is the difference between five
+ * cards laid out on a mat and five cards being held, and it is the cheapest
+ * three-dimensionality on the whole stage.
  *
- * Which is the whole trick, and the reason it is worth this much comment: a hand
- * that is *standing up* off the table is the difference between five cards laid
- * out on a mat and five cards being held.
+ * But **it has to pivot on the card's bottom edge, not its centre**, and getting
+ * that wrong shipped. A rotation about the centre keeps the centre where it is
+ * and swings the *near edge down*: at twenty-four degrees that put the bottom of
+ * every hand card a fifth of a card height underneath the felt. Two things then
+ * go wrong at once, and both of them are visible from across a room. The card is
+ * buried in the table — which nobody could see while the mat was black, and
+ * everybody could see the moment the mat became a surface. And its shadow turns
+ * inside out: `Shadows.cast` slides each corner along the light until it reaches
+ * the table, and for a corner already *below* the table that distance is
+ * negative, so half the shadow quad folds back through itself.
+ *
+ * The third thing is subtler and is the reason the fix is a fix rather than a
+ * patch. A card leaned about its centre does not look tilted. It looks
+ * *compressed* — foreshortened by nine per cent and otherwise unchanged, because
+ * nothing about it has moved relative to the surface it is on. Pivot it on the
+ * bottom edge instead and the bottom stays welded to the felt while the top
+ * lifts a third of a card height into the air, its shadow lies down behind it,
+ * and it reads as a card standing in a hand. See [HAND_LIFT_OF].
  */
 private const val HAND_LEAN = -24f
+
+/**
+ * The lift that turns [HAND_LEAN] from a rotation about the centre into a
+ * rotation about the bottom edge.
+ *
+ * Pure trigonometry rather than a number somebody liked: raising the centre by
+ * `(h/2)·sin θ` puts the near edge back on the felt exactly, for any lean and
+ * any card size.
+ *
+ * The hand's hit target is its [handPointFor] centre at z = 0, so the drawn card
+ * now sits a little higher on the glass than the box that grabs it. That is
+ * deliberate and safe here: the hand is a horizontal fan, cards are chosen by
+ * which one your finger is *across*, and the vertical offset is a fraction of a
+ * card that still lies well inside its own footprint. It would not be safe on
+ * the mat, where cards are anywhere.
+ */
+private fun handLiftOf(cardHeight: Float, bodyDepth: Float): Float {
+    val lean = abs(HAND_LEAN) * (PI.toFloat() / 180f)
+    // The face's own half-height, plus the body hanging behind it — a card is a
+    // slab and it is the *lowest point of the slab* that has to clear the felt,
+    // not the lowest point of the printed side. Leaving the second term out
+    // leaves one corner of the body a few pixels under the table, which is the
+    // whole bug again in miniature and would fold one corner of the shadow.
+    return cardHeight / 2f * sin(lean) + bodyDepth * cos(lean)
+}
 
 /**
  * A peeked card comes off the table and turns to face the reader.
@@ -401,7 +439,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                     drawIndicator(play.carry?.intent, play.field, layout)
                     seats.filter { !it.carried }.forEach { seat ->
                         val pose = cards[seat.id]?.pose ?: seat.pose
-                        drawCardShadow(pose, seat.width, seat.height, seat.height)
+                        drawCardShadow(pose, seat.width, seat.height, seat.height, seat.solid)
                     }
                     seats.filter { !it.carried }.forEach { seat ->
                         val pose = cards[seat.id]?.pose ?: seat.pose
@@ -422,7 +460,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 Canvas(Modifier.fillMaxSize()) {
                     seats.filter { it.carried }.forEach { seat ->
                         val pose = cards[seat.id]?.pose ?: seat.pose
-                        drawCardShadow(pose, seat.width, seat.height, seat.height)
+                        drawCardShadow(pose, seat.width, seat.height, seat.height, seat.solid)
                     }
                     // A card in the air is the one a hand is actually looking
                     // at, and it is the one whose thickness used to go missing:
@@ -581,7 +619,13 @@ private fun seatsFor(
             card = card,
             pose = poseAt(
                 at = if (carrying) carry.at else at,
-                z = if (carrying) cardHeight * HAND_LIFT else 0f,
+                // Not zero. A leaned card pivots on its bottom edge, and this
+                // is what buys that — see [handLiftOf].
+                z = if (carrying) {
+                    cardHeight * HAND_LIFT
+                } else {
+                    handLiftOf(cardHeight, CardSolid.pileDepth(1, cardWidth))
+                },
                 turned = carrying && carry.quarterTurns % 2 != 0,
                 faceUp = faceUp,
                 lean = if (carrying) 0f else HAND_LEAN,

@@ -57,7 +57,7 @@ private val CardSeamColour = Color(0xFF16130E)
  * — which is the one cue that says the thing you are turning is a solid object
  * rather than a picture being sheared.
  */
-private val TableColour = Color(0xFF23252B)
+private val TableColour = Color(0xFF141519)
 
 /** The playmat itself. Near enough to ink that the cards still own the screen. */
 private val MatColour = Color(0xFF0A0A0E)
@@ -66,16 +66,27 @@ private val MatColour = Color(0xFF0A0A0E)
  * How far the playmat runs past the cards, and the table past the mat, in card
  * widths.
  *
- * Both are eyeballed from a real setup: a playmat has a border on it, and a
- * table is bigger than the mat you put on it. The table's is the larger of the
- * two because a table whose edge is close behind the mat's reads as one object
- * with a stripe on it.
+ * Both were nearly three times this and both were wrong. A table margin of a
+ * whole card width put a broad grey border round every side of the mat, and a
+ * grey border is not furniture — on a stage whose entire premise is sharp white
+ * on true black, it is a large light rectangle competing with the cards, which
+ * is the one thing §11 of the handbook lists first under anti-patterns.
+ *
+ * What the table is for is the *edge*: the moment the camera comes down and a
+ * solid side swings into view. That needs the table to extend past the mat far
+ * enough to be a table and no further. A narrow reveal does the whole job.
  */
-private const val MAT_MARGIN = 0.34f
-private const val TABLE_MARGIN = 1.05f
+private const val MAT_MARGIN = 0.22f
+private const val TABLE_MARGIN = 0.38f
 
-/** How thick the table top is, in card widths. A lip you can see, not a plinth. */
-private const val TABLE_THICKNESS = 0.38f
+/**
+ * How thick the table top is, in card widths.
+ *
+ * A lip, not a plinth. Cut with the margin, and for the same reason: this is a
+ * cue you should notice when you go looking for it at a low camera and never
+ * think about at the reading seat.
+ */
+private const val TABLE_THICKNESS = 0.17f
 
 /** The playmat's outline: everything the board occupies, plus its border. */
 internal fun matSurface(layout: BoardLayout): Slot =
@@ -273,6 +284,17 @@ internal fun DrawScope.drawCardShadow(
     width: Float,
     height: Float,
     cardHeight: Float,
+    /**
+     * How deep the body under this face is, so a pile shadows from the felt.
+     *
+     * Without it a deck is shadowed as its top card, which is forty cards up in
+     * the air: the shadow walks out from under the deck by the deck's own
+     * height, softens as though it were being held, and loses the contact
+     * darkness that is the only thing saying it is *resting*. The deck then
+     * reads as a card hovering beside two floating white edges. See
+     * [Shadows.cast].
+     */
+    bodyDepth: Float = 0f,
 ) {
     // `shadow.alpha` is an opacity somebody chose rather than a fraction of
     // light — `Shadows` keeps the constant behind it private for that reason —
@@ -284,7 +306,8 @@ internal fun DrawScope.drawCardShadow(
     // throws the shadow of a dimmer lamp than the one lighting its own edges.
     // That is a judgement to make with the tablet in hand rather than
     // arithmetic, and it is left for the next tuning pass instead of guessed at.
-    val shadow = Shadows.cast(pose, width, height, StageRig.Key, cardHeight) ?: return
+    val shadow = Shadows.cast(pose, width, height, StageRig.Key, cardHeight, bodyDepth = bodyDepth)
+        ?: return
     if (shadow.alpha <= 0.01f) return
 
     val corners = shadow.corners.map { Offset(it.x, it.y) }

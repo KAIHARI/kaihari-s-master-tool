@@ -21,6 +21,8 @@ import com.kaiharimoto.mastertool.core.board.toMat
 import com.kaiharimoto.mastertool.core.board.toPixels
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
+import com.kaiharimoto.mastertool.core.layout.CameraFit
+import com.kaiharimoto.mastertool.core.layout.planeFor
 import com.kaiharimoto.mastertool.core.mat.MatEvent
 import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
 import com.kaiharimoto.mastertool.core.mat.Touch
@@ -166,6 +168,7 @@ internal class MatPilot(
             // is the camera's.
             if (event is MatEvent.Pressed && grabbed == null) machine.claimForCamera()
             if (event is MatEvent.CameraMoved) fly(event.fingers)
+            if (event is MatEvent.CameraEnded) settle()
         }
     }
 
@@ -195,11 +198,44 @@ internal class MatPilot(
 
         val dolly = if (fingers >= 2 && spanRatio > 0.01f) 1f / spanRatio - 1f else 0f
         state.rig.nudge(
-            deltaYaw = -screenDelta.x / across * YAW_PER_SWEEP,
+            deltaYaw = screenDelta.x / across * YAW_PER_SWEEP,
             deltaPitch = -screenDelta.y / down * PITCH_PER_SWEEP,
             dollyBy = dolly,
         )
         state.refresh()
+    }
+
+    /**
+     * Let go, and the table comes back onto the glass.
+     *
+     * [CameraFit] has existed, tested, since the camera was written, and has
+     * never once been called: the comment in `PlayScreen` promising "CameraFit
+     * dollies back instead" was describing an intention. What actually kept the
+     * board on screen was [com.kaiharimoto.mastertool.core.layout.CameraEnvelope]'s
+     * distance floor, which is a guard against the *mat crossing the lens* and
+     * not a guarantee about anything staying visible — so a turned table could
+     * simply walk its own corners off the screen, and the pinch that now ships
+     * is the shortest route to doing it.
+     *
+     * On release rather than per frame, which is what the fitter was written
+     * for: sixteen projections of four points is nothing once, and a correction
+     * applied *during* a drag is a camera fighting the finger holding it.
+     * Sprung rather than assigned, so it reads as the table settling.
+     */
+    private fun settle() {
+        val state = camera ?: return
+        val rig = state.rig
+        if (rig.width <= 0f || rig.height <= 0f) return
+
+        val fitted = CameraFit.fit(
+            wanted = rig.pose,
+            bounds = layout.bounds,
+            envelope = rig.envelope,
+            surfaceWidth = rig.width,
+            surfaceHeight = rig.height,
+            plane = { it.planeFor(rig.width, rig.height) },
+        )
+        if (fitted != rig.pose) rig.aimAt(fitted)
     }
 
     private companion object {
@@ -208,12 +244,22 @@ internal class MatPilot(
 
         /**
          * Degrees for a finger dragged the whole way across, and the whole way
-         * down. Yaw is generous because a table is worth walking round; pitch is
-         * mean because its useful range is fifty degrees wide and a sweep that
-         * crosses it in a flick is a sweep you cannot stop in the middle of.
+         * down.
+         *
+         * Both were far too fast — two hundred and twenty degrees across meant a
+         * casual four-hundred-pixel drag spun the table fifty-five degrees, and
+         * ninety down crossed the envelope's entire useful range in two thirds
+         * of a screen. A control you cannot stop in the middle of does not read
+         * as imprecise, it reads as *broken*, because every attempt to make a
+         * small correction overshoots and you conclude the thing is not
+         * listening to you.
+         *
+         * Yaw is still the more generous of the two, because a table is worth
+         * walking round and its range is unbounded, where pitch has fifty-four
+         * degrees to spend in total.
          */
-        const val YAW_PER_SWEEP = 220f
-        const val PITCH_PER_SWEEP = 90f
+        const val YAW_PER_SWEEP = 110f
+        const val PITCH_PER_SWEEP = 50f
 
         /**
          * How much of the distance to the table one wheel notch is worth.

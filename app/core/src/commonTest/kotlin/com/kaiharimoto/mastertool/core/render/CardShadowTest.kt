@@ -24,6 +24,88 @@ class CardShadowTest {
     private fun centre(corners: List<Vec3>) = corners
         .fold(Vec3.Zero) { sum, c -> sum + c } / corners.size.toFloat()
 
+    // ---- a solid resting on the table ------------------------------------------------
+    //
+    // The bug these were written for shipped in v1.2.19 and was visible from
+    // across a room. A pile's pose is its *top card* — that is the arrangement
+    // the whole stage depends on, because it is what puts the top of a deck on
+    // top of the deck — so casting from the pose casts from forty cards up in
+    // the air. The deck walked away from its own shadow and left its white
+    // edges standing where the card was not.
+
+    @Test
+    fun aDeckShadowsFromTheFeltAndNotFromItsTopCard() {
+        val deck = CardSolid.pileDepth(40, width)
+        val top = at(deck)
+
+        val asPile = Shadows.cast(top, width, height, key, height, bodyDepth = deck)!!
+        val asCard = Shadows.cast(top, width, height, key, height)!!
+
+        val under = centre(asPile.corners)
+        assertTrue(
+            abs(under.x - 600f) < 1f && abs(under.y - 400f) < 1f,
+            "a deck's shadow belongs under the deck, was $under",
+        )
+
+        val floating = centre(asCard.corners)
+        assertTrue(
+            (floating - under).length > width * 0.2f,
+            "the test is worthless unless the two readings differ; they were $floating and $under",
+        )
+    }
+
+    @Test
+    fun aDeckIsPressedOntoTheTableRatherThanHeldAboveIt() {
+        val deck = CardSolid.pileDepth(40, width)
+        val resting = Shadows.cast(at(deck), width, height, key, height, bodyDepth = deck)!!
+        val lying = shadow(0f)
+
+        // The three numbers that say "resting" rather than "held": as dark, as
+        // tight, and as much contact as a single card lying on the felt.
+        assertTrue(abs(resting.alpha - lying.alpha) < 1e-3f, "as dark: ${resting.alpha}")
+        assertTrue(abs(resting.spread - lying.spread) < 1e-3f, "as tight: ${resting.spread}")
+        assertTrue(resting.contact > 0.98f, "and touching: ${resting.contact}")
+    }
+
+    @Test
+    fun aCarriedCardStillReadsAsBeingInTheAir() {
+        // The same rule must not flatten the one case the whole shadow model was
+        // built for. A carried card's body is one card thick, so telling the
+        // caster about it moves nothing that matters.
+        val lift = height * 0.55f
+        val body = CardSolid.thickness(width)
+        val held = Shadows.cast(at(lift), width, height, key, height, bodyDepth = body)!!
+
+        assertTrue(held.contact < 0.05f, "a held card has let go of the table: ${held.contact}")
+        assertTrue(held.spread > height * 0.15f, "and its shadow has softened: ${held.spread}")
+        assertTrue(
+            (centre(held.corners) - Vec3(600f, 400f, 0f)).length > width * 0.3f,
+            "and separated from underneath it",
+        )
+    }
+
+    @Test
+    fun aCardLeanedOnItsBottomEdgeKeepsEveryCornerAboveTheTable() {
+        // The hand's lean. Rotating about the centre puts the near edge below
+        // the felt, and a corner below the surface travels a *negative* distance
+        // along the light — the shadow quad folds back through itself. Lifting
+        // by (h/2)·sin θ is exactly what stops that, for any lean.
+        val lean = -24f
+        val lift = height / 2f * kotlin.math.sin(abs(lean) * (kotlin.math.PI.toFloat() / 180f))
+
+        val sunk = CardSolid.face(at(0f, Pose3(rotX = lean)), width, height)
+        assertTrue(sunk.any { it.z < -1f }, "the test needs the broken case to be broken")
+
+        val standing = CardSolid.face(at(lift, Pose3(rotX = lean)), width, height)
+        standing.forEach {
+            assertTrue(it.z > -0.01f, "every corner is on or above the felt, found z = ${it.z}")
+        }
+        assertTrue(
+            standing.maxOf { it.z } > height * 0.3f,
+            "and the top edge is properly up in the air: ${standing.maxOf { it.z }}",
+        )
+    }
+
     // ---- resting -------------------------------------------------------------------
 
     @Test

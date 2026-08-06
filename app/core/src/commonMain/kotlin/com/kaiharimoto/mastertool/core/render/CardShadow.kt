@@ -52,6 +52,21 @@ object Shadows {
     /**
      * The shadow a card at [pose] casts onto the plane at [surfaceZ].
      *
+     * [bodyDepth] is how far the solid's body hangs behind its printed face, and
+     * it is the difference between a deck and a card hovering above one. A pile's
+     * pose is its *top card* — that is the arrangement the whole stage is built
+     * on, because it is what puts the top of a deck on top of the deck — so a
+     * shadow cast from the pose is cast from forty cards up in the air. It comes
+     * out displaced by the pile's whole height, softened as if held, and with its
+     * contact darkness faded to nothing, which reads exactly as what it is: a
+     * card floating over the table with some white geometry standing where the
+     * card is not.
+     *
+     * A solid resting on a table shadows from the part of it *touching the
+     * table*. So the casting face is the base, and the height that decides how
+     * soft and how faint the shadow is comes from the base too — for a deck that
+     * is zero, which is the point: a deck presses onto the felt.
+     *
      * Null when the card is at or below the surface, or when the light is
      * parallel to it — a light that never reaches the table cannot cast
      * anything, and the arithmetic that says so is a division by zero.
@@ -63,11 +78,16 @@ object Shadows {
         light: Light,
         cardHeight: Float = height,
         surfaceZ: Float = 0f,
+        bodyDepth: Float = 0f,
     ): CardShadow? {
         val travel = light.direction.normalised()
         if (abs(travel.z) < 1e-3f) return null
 
-        val corners = CardSolid.face(pose, width, height).map { corner ->
+        // The face that is actually against the table. At bodyDepth = 0 this is
+        // the printed face and everything below behaves exactly as it always did.
+        val base = CardSolid.face(pose, width, height, atDepth = bodyDepth)
+
+        val corners = base.map { corner ->
             // Slide along the light until it reaches the surface. The card can
             // be tilted, so every corner gets its own distance to travel, which
             // is exactly the part an offset copy cannot do.
@@ -79,7 +99,10 @@ object Shadows {
             )
         }
 
-        val above = max(0f, pose.position.z - surfaceZ)
+        // Averaged over the four corners rather than taken from the pose, so a
+        // card tilted in the air reports the height of its *body* and not of a
+        // point that may be nowhere near the surface it is casting onto.
+        val above = max(0f, base.map { it.z }.average().toFloat() - surfaceZ)
         val reference = max(cardHeight, 1f)
         val lift = above / reference
 

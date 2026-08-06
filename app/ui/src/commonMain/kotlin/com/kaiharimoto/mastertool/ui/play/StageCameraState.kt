@@ -44,8 +44,28 @@ internal class StageCameraState(val rig: CameraRig) {
      * cannot end up shaded from two different eyes — which is exactly what they
      * used to be, one hard-coded straight-on and one tilted, back when a card in
      * the air lived in a frame of its own.
+     *
+     * **Snapshot state, and it has to be.** It was a plain field, on the same
+     * reasoning that keeps the rest of the camera out of the snapshot — and that
+     * reasoning was wrong for this one value. Every reader of it is a *draw*
+     * scope: `drawCardSurface` inside a `drawBehind`, the felt and the solids
+     * inside a `Canvas`. A draw scope subscribes to the snapshot state it reads
+     * and re-draws when that changes; it does not recompose anything. So a plain
+     * field here does not save a recomposition, it silently skips a redraw —
+     * and since a resting card's pose does not change when the camera moves,
+     * nothing else was invalidating those faces either.
+     *
+     * The visible result was the whole complaint in one line: orbit the table
+     * and every specular pool stays exactly where it was, frozen, riding along
+     * with the card underneath it. The handbook's rule for the material model is
+     * "the highlight moves; the brightness does not" — and the highlight was
+     * painted on.
+     *
+     * Read it in a draw lambda. Never in a composable body: there it *would* be
+     * a recomposition of sixty cards a frame, which is the thing the plain-field
+     * rule exists to prevent, and it is still true of [plane] and of the rig.
      */
-    var eye: Vec3 = Vec3.Toward
+    var eye: Vec3 by mutableStateOf(Vec3.Toward)
         private set
 
     /** Told the surface, and asked for the plane that goes with it. */
