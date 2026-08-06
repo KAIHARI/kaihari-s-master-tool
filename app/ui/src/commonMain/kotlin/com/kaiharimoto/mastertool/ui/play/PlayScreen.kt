@@ -732,6 +732,11 @@ private fun seatsFor(
                 faceUp = true,
                 carried = true,
                 pinned = false,
+                // One card, held up to be read — not the pile it came off. Left
+                // as the pile's depth it would draw a deck's worth of body
+                // behind a card floating in the air, and shadow from the base of
+                // a pile that is still lying on the table.
+                depth = 1,
                 magnified = true,
             )
         }
