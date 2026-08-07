@@ -267,6 +267,18 @@ object CardSolid {
      *
      * Two square pixels, which is a quad that could at best be a faint mark and
      * at worst is an aliasing accident.
+     *
+     * **What this does not do, said plainly, because it was once claimed to.**
+     * Two square pixels only catches a face within about a quarter of a degree
+     * of edge-on, which [EDGE_ON] very nearly caught already; the hairlines
+     * that shipped in v1.2.19 measured a hundred and ten. Raising the number
+     * would not fix them either — at a turned seat a card's genuinely visible
+     * sides cover eighty to two hundred and forty, so any threshold high enough
+     * to cull the artefact culls the geometry. What actually cured a leaned
+     * card's edges landing away from its own picture was [Homography]: the
+     * picture is now drawn through the same corners the edges are. This stays
+     * as what it honestly is — a guard against a quad with no area at all, and
+     * the degeneracy test that map needs before it is asked for.
      */
     const val MIN_DRAWN_AREA = 2f
 
@@ -275,6 +287,12 @@ object CardSolid {
      *
      * Unsigned, because the caller wants to know whether there is anything there
      * and not which way round it was wound.
+     *
+     * Measured in the mat's own coordinates, which is where its callers already
+     * have their points and is *not* quite screen pixels — the mat's layer
+     * magnifies by a further ten to fifteen per cent near the camera. For a
+     * near-zero test that difference cannot change the answer; for anything
+     * that wanted a true pixel count it would.
      */
     fun flatArea(points: List<Vec2>): Float {
         if (points.size < 3) return 0f

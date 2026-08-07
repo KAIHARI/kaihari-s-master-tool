@@ -28,11 +28,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -61,10 +64,12 @@ import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
+import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.haptics.Haptic
 import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.CardStock
+import com.kaiharimoto.mastertool.core.render.Homography
 import com.kaiharimoto.mastertool.core.render.Rot3
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CardBack
@@ -203,13 +208,22 @@ private const val ANNOUNCEMENT_MILLIS = 1_600L
  * are solids in `core/render`: they have a thickness, a normal, an orientation
  * you can ask questions of, a light they respond to and a shadow they throw by
  * having each of their corners projected onto the felt. All of that arithmetic
- * lives in core where it is tested, and it reaches the screen through the one
- * thing Compose does give you for free — a `graphicsLayer` is a real
- * perspective-correct textured quad — plus a canvas for the geometry a layer
- * cannot hold. `StagePlane.flatten` is the join: it turns a point with a height
- * into the point on the mat that will look like it once the plane's own
- * transform has run, so shadows, pile edges and card thickness can all be drawn
- * by a canvas that only speaks two dimensions.
+ * lives in core where it is tested, and it reaches the screen through exactly
+ * two things: the mat's own `graphicsLayer`, which is one real
+ * perspective-correct divide applied to everything at once, and a canvas for
+ * the geometry a layer cannot hold. `StagePlane.flatten` is the join: it turns
+ * a point with a height into the point on the mat that will look like it once
+ * the plane's own transform has run, so shadows, pile edges, card thickness —
+ * *and each card's own picture* — can all be drawn by a canvas that only speaks
+ * two dimensions.
+ *
+ * A card's picture is the newest member of that list and the one that was
+ * wrong. It used to have a `graphicsLayer` of its own, with its own three
+ * angles and its own divide, and a layer's divide is forced through the layer's
+ * centre and then pasted flat into its parent — so a leaned card came out as a
+ * picture lying *in* the table a few pixels away from its own drawn edges.
+ * `Homography` replaces the four channels with the eight the map actually has;
+ * see [StagedCard].
  */
 @Composable
 fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
@@ -858,6 +872,26 @@ private fun DrawScope.drawIndicator(
  * would recompose the card on every frame of a flip, which is the thing the
  * whole one-loop pattern exists to avoid — and you cannot branch inside a
  * `graphicsLayer` block, because it is a draw lambda, not composition.
+ *
+ * ## Why the card's picture is not drawn by a `graphicsLayer`
+ *
+ * It was, and that was the bug the user could see: a hand card's *picture* lay
+ * flat in the table while its *edges* — drawn by the canvas from the same
+ * card's true corners — stood up and tilted, a few pixels away from it.
+ *
+ * A layer offers three Euler angles and a `cameraDistance`, and it spends them
+ * the wrong way. It is itself a projective *2-D* map, its divide forced through
+ * the card's own centre, and whatever it produces is pasted flat at z = 0 into
+ * its parent — so the card's z is consumed before the mat's projection ever
+ * sees it. Four parameters, and the map wanted is a homography with eight.
+ *
+ * So the card is drawn through the map that takes its rectangle to its four
+ * real corners, and those corners come from
+ * `CardSolid.face` → `StagePlane.flatten` — *the identical call `drawSolidEdges`
+ * makes*. Both then take the mat layer's single divide, so the picture and the
+ * geometry agree structurally instead of being tuned until they nearly did.
+ * The composition of two projective maps is projective, which is why this is
+ * exact in the card's interior and not only at its corners.
  */
 @Composable
 private fun StagedCard(
@@ -871,56 +905,53 @@ private fun StagedCard(
     val motion = cards[seat.id] ?: return
     val art = state.index.byId(seat.card.cardId)
 
+    // One scratch matrix per card, rewritten by every frame's draw. Remembered
+    // rather than allocated because sixty cards minting a FloatArray(16) each
+    // frame is a hundred kilobytes a second of garbage for a value that lives
+    // for one draw call. It reads nothing, so it never invalidates anything.
+    val values = remember { FloatArray(16) }
+
     with(density) {
         Box(
             Modifier
                 .size(seat.width.toDp(), seat.height.toDp())
-                .graphicsLayer {
+                .drawWithContent {
+                    // Every moving value is read *here*, in a draw lambda, for
+                    // the same reason `CardFace` reads the pose in its own: a
+                    // card that took the pose or the plane as an argument would
+                    // recompose whenever either twitched, and sixty of those is
+                    // the frame budget. See `StageCameraState`'s KDoc.
                     val pose = motion.pose
+                    val plane = camera.plane
+
                     // One frame, one answer. Every card on this stage — resting
                     // on the felt, sitting on top of a deck, or held in the air
                     // — is drawn inside the mat's own layer, so its height is
-                    // folded into a point on the felt that will *look* like that
-                    // height once the camera has run. That is what puts the top
-                    // card of a deck on top of the deck, and it is what keeps a
-                    // card in your hand turning with the table it left.
-                    val flattened = camera.plane.flatten(pose.position)
+                    // folded into points on the felt that will *look* like that
+                    // height once the camera has run. `Rot3.place` carries the
+                    // card's own scale, so the peek needs no separate term, and
+                    // a per-vertex flatten carries `Flattened.scale` too.
+                    val quad = CardSolid.face(pose, seat.width, seat.height).map { corner ->
+                        val flat = plane.flatten(corner)
+                        Vec2(flat.x, flat.y)
+                    }
 
-                    translationX = flattened.x - seat.width / 2f
-                    translationY = flattened.y - seat.height / 2f
-                    rotationX = pose.rotX
-                    rotationY = pose.rotY
-                    rotationZ = pose.rotZ
-                    scaleX = flattened.scale * pose.scale
-                    scaleY = flattened.scale * pose.scale
-                    // A second perspective divide, nested inside the mat's, and
-                    // it is worth writing down that this is **not** exact for a
-                    // card that is rotated.
-                    //
-                    // For a card lying flat the two agree to the pixel — the
-                    // layer is a translate and a uniform scale, and the mat
-                    // keystones it correctly. Lean one, though, and the mat's
-                    // projection wants *both* of its ends larger than its
-                    // centre: the top because it is further off the felt, the
-                    // bottom because it is further down the tilted plane, and
-                    // both are therefore nearer the lens. A perspective divide
-                    // about the card's own centre cannot produce that — it has
-                    // to shrink whichever end it does not magnify — so a
-                    // twenty-four degree hand card comes out about five per cent
-                    // short. No value of `cameraDistance` repairs it; matching
-                    // it to the mat's makes it worse. Compose composes two
-                    // projective *2-D* maps, and the card's own z is spent on
-                    // this divide before the mat's ever sees it.
-                    //
-                    // Five per cent on a leaned card is not visible. What was
-                    // visible is that the canvas draws that card's *geometry*
-                    // from the true 3-D corners, so its edges landed a few
-                    // pixels off its sprite — and an edge seen almost level is a
-                    // hundred-pixel bright hairline. That is culled by area now
-                    // (`CardSolid.MIN_DRAWN_AREA`), which is the right fix for
-                    // the artefact; the five per cent is left alone deliberately
-                    // rather than papered over.
-                    cameraDistance = (seat.width * 6f) / this.density
+                    // A card the eye is exactly level with presents no area,
+                    // and a quad with no area has no map — so this is the same
+                    // guard the renderer already applies to a solid's faces,
+                    // asked here before a division rather than after one.
+                    if (CardSolid.flatArea(quad) < CardSolid.MIN_DRAWN_AREA) return@drawWithContent
+
+                    // And exactly edge-on, where four collinear corners
+                    // determine no map at all — a state every card passes
+                    // through twice on every flip.
+                    val map = Homography.rectToQuad(seat.width, seat.height, quad)
+                        ?: return@drawWithContent
+
+                    map.writeComposeMatrix(values)
+                    withTransform({ transform(Matrix(values)) }) {
+                        this@drawWithContent.drawContent()
+                    }
                 },
         ) {
             CardFace(
@@ -979,8 +1010,10 @@ private fun CardFace(
                     if (facing > 0f) 0f else 1f
                 }
                 // The back is drawn mirrored, or it would read as reversed once
-                // the card has turned to show it.
-                if (!faceUp) rotationY = 180f
+                // the card has turned to show it. A negative scale rather than
+                // a half turn: identical output, and one fewer knob on this
+                // stage that carries a z and a perspective divide with it.
+                if (!faceUp) scaleX = -1f
             },
     ) {
         Box(
