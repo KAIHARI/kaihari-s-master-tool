@@ -12,6 +12,7 @@ import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlayField
 import com.kaiharimoto.mastertool.core.board.toMat
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
+import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.model.CardId
 import kotlin.random.Random
 
@@ -64,6 +65,67 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
     fun peek(at: DragOrigin?) {
         peeking = at
     }
+
+    /**
+     * The pile that is spread out to be searched, if any.
+     *
+     * UI state and not a move, exactly like [peeking]: spreading a pile out to
+     * look at it changes nothing about the game, so it must not land on the undo
+     * stack. Undoing a search would be undoing having looked.
+     *
+     * It names a pile rather than holding a layout, because where the cards go
+     * is `PileFan`'s answer and depends on a board size this class has never
+     * needed to know.
+     */
+    var fanned by mutableStateOf<BoardSlot?>(null)
+        private set
+
+    /** Spreads a pile out. Opening one closes whichever was open. */
+    fun fan(slot: BoardSlot?) {
+        if (slot == fanned) return
+        if (fanned != null) closeFan()
+        fanned = slot
+    }
+
+    /**
+     * Squares the pile back up, and says whether that shuffled anything.
+     *
+     * **Closing the deck's fan shuffles the deck**, because you just searched
+     * it. It is what the rules say, it costs nothing, and the alternative is a
+     * tool that teaches you a habit which loses games. The graveyard and the
+     * banished pile are ordered and public, so they close as they were, and the
+     * extra deck is public too — it has a button for when you want one.
+     */
+    fun closeFan(): Boolean {
+        val slot = fanned ?: return false
+        fanned = null
+        return slot == BoardSlot.Deck && shuffle(slot)
+    }
+
+    /**
+     * Shuffles a pile, and says whether anything moved.
+     *
+     * The seed comes off this table's own stream rather than being derived from
+     * the position. It used to be `turn * 31 + deck.size`, written out at three
+     * separate call sites — a pure function of the board, so shuffling twice in
+     * a row without drawing produced *the identical permutation*, `move` saw a
+     * field equal to the one before it, and the second shuffle silently did
+     * nothing at all.
+     */
+    fun shuffle(slot: BoardSlot): Boolean = when (slot) {
+        BoardSlot.Deck -> move { it.shuffleDeck(entropy.nextLong()) }
+        BoardSlot.ExtraDeck -> move { it.shuffleExtraDeck(entropy.nextLong()) }
+        else -> false
+    }
+
+    /**
+     * Where every shuffle after the deal comes from.
+     *
+     * Seeded off the session's own seed, so a table opened with a known seed
+     * plays out identically twice — which is what makes a reported opening hand
+     * something anybody else can reproduce.
+     */
+    private val entropy = Random(seed)
 
     private val past = ArrayDeque<PlayField>()
     private val future = ArrayDeque<PlayField>()

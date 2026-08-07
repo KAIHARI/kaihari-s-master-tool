@@ -61,6 +61,9 @@ import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.layout.Slot
 import com.kaiharimoto.mastertool.core.layout.CameraRig
+import com.kaiharimoto.mastertool.core.layout.MatControl
+import com.kaiharimoto.mastertool.core.layout.MatControls
+import com.kaiharimoto.mastertool.core.layout.PileFan
 import com.kaiharimoto.mastertool.core.layout.StageSeat
 import com.kaiharimoto.mastertool.core.layout.planeFor
 import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
@@ -104,6 +107,18 @@ private const val LIFT_Z = 0.55f
 
 /** A card raised to be *read* comes closer than one being slid. */
 private const val HAND_LIFT = LIFT_Z * 1.6f
+
+/**
+ * How far a spread-out pile floats over the board it is covering.
+ *
+ * Lower than a card in the hand and higher than one resting, which is exactly
+ * what it is: a spread held over the table while you look through it. The lift
+ * is doing real work rather than decorating — it is what gives every card in the
+ * fan a cast shadow, and those shadows are the only thing separating the fan
+ * from the board underneath. The alternative was dimming the board, and a
+ * translucent wash over content is the second line of §11.
+ */
+private const val FAN_LIFT = LIFT_Z * 0.85f
 
 /**
  * How far a hand card leans back, so hand and table read as two objects.
@@ -268,8 +283,20 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 ShortcutAction.PLAY_DRAW ->
                     if (play.move { it.draw() }) feedback.play(SoundEffect.DEAL, Haptic.DEAL)
                 ShortcutAction.PLAY_SHUFFLE ->
-                    if (play.move { it.shuffleDeck(it.turn * 31L + it.deck.size) }) {
+                    if (play.shuffle(BoardSlot.Deck)) {
                         feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+                    }
+                // The keyboard half of the fan. It names the deck because a
+                // keyboard has no way to say "this pile" — the same reason every
+                // other play shortcut is about the table rather than about a
+                // card — and the deck is the pile anybody wanting a key for this
+                // is reaching for.
+                ShortcutAction.PLAY_SEARCH_DECK ->
+                    if (play.fanned != null) {
+                        if (play.closeFan()) feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+                    } else if (play.field.deck.isNotEmpty()) {
+                        play.fan(BoardSlot.Deck)
+                        feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
                     }
                 ShortcutAction.PLAY_NEW_HAND -> play.restart()
                 ShortcutAction.PLAY_NEXT_PHASE -> play.move { it.nextPhase() }
@@ -286,6 +313,11 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 ShortcutAction.DISMISS -> when {
                     guide -> guide = false
                     menuFor != null -> menuFor = null
+                    // A spread pile is a layer over the table too, and Esc with
+                    // one open should square it up rather than walk out of the
+                    // stage and lose the board.
+                    play.fanned != null ->
+                        if (play.closeFan()) feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
                     else -> onBack()
                 }
                 else -> Unit
@@ -331,7 +363,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 return@BoxWithConstraints
             }
 
-            val seats = remember(play.field, layout, play.carry, play.peeking) {
+            val seats = remember(play.field, layout, play.carry, play.peeking, play.fanned) {
                 // The camera is read as a plain field, not as observable state:
                 // this must not re-run sixty times a second while the table is
                 // turning. The cost is that a card already held up does not
@@ -342,6 +374,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                     layout = layout,
                     carry = play.carry,
                     peeking = play.peeking,
+                    fanned = play.fanned,
                     facingReader = Rot3.facingViewer(
                         camera.pose.pitchDegrees,
                         camera.pose.yawDegrees,
@@ -422,12 +455,16 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             // the hand already there, which reads as a redraw of the screen
             // rather than as a card being dealt — and the opening five, all new
             // at once, are the first thing anyone sees.
-            val dealFrom = remember(layout) {
-                val deck = layout[BoardSlot.Deck]
+            // Keyed on the fanned pile as well, because a pile spread out to be
+            // searched is forty cards the stage has never seen, and every one of
+            // them should come *out of that pile* — which is the spread, and is
+            // worth watching.
+            val dealFrom = remember(layout, play.fanned) {
+                val from = layout[play.fanned ?: BoardSlot.Deck]
                 Pose3(
                     position = Vec3(
-                        deck?.centerX ?: layout.field.centerX,
-                        deck?.centerY ?: layout.field.centerY,
+                        from?.centerX ?: layout.field.centerX,
+                        from?.centerY ?: layout.field.centerY,
                         0f,
                     ),
                     rotY = 180f,
@@ -507,6 +544,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 Canvas(Modifier.fillMaxSize()) {
                     drawTable(layout, camera.plane, camera.eye)
                     drawFelt(layout)
+                    drawMatControls(layout, play.field)
                     drawIndicator(play.carry?.intent, play.field, layout)
                 }
 
@@ -602,6 +640,8 @@ private fun seatsFor(
     layout: BoardLayout,
     carry: Carry?,
     peeking: DragOrigin? = null,
+    /** The pile that has been spread out to be searched, if any. */
+    fanned: BoardSlot? = null,
     /**
      * The three angles that, inside the mat's own layer, come out square to the
      * viewer. Passed in rather than computed here because it is a fact about
@@ -700,13 +740,16 @@ private fun seatsFor(
         )
     }
 
-    // The tops of the piles, so a stack is a card and a number the way a stack is.
+    // The tops of the piles, so a stack is a card and a number the way a stack is
+    // — except the one that has been spread out, whose cards are all on the
+    // table below and would otherwise be drawn twice.
     listOf(
         BoardSlot.Deck to field.deck,
         BoardSlot.ExtraDeck to field.extraDeck,
         BoardSlot.Graveyard to field.graveyard,
         BoardSlot.Banished to field.banished,
     ).forEach { (slot, pile) ->
+        if (slot == fanned) return@forEach
         val top = pile.firstOrNull() ?: return@forEach
         val rect = layout[slot] ?: return@forEach
         val faceUp = slot == BoardSlot.Graveyard || slot == BoardSlot.Banished
@@ -757,6 +800,41 @@ private fun seatsFor(
                 depth = 1,
                 materials = 0,
                 counters = 0,
+                width = cardWidth,
+                height = cardHeight,
+            )
+        }
+    }
+
+    // The pile that has been spread out, laid across the board so a card can be
+    // taken out of the middle of it.
+    //
+    // Face-up, all of it, because that is what a search *is* — and lifted off
+    // the felt, so it reads as a spread being held over the board rather than as
+    // sixty cards that have somehow been played. The lift is what gives every
+    // one of them a shadow, and the shadows are what keep the board underneath
+    // legible without a wash over it.
+    //
+    // The order is the pile's own order, unchanged. For the graveyard and the
+    // banished pile that order is a fact about the game; for the deck it is the
+    // shuffle, and seeing it is the whole point of searching — which is why
+    // closing the deck's fan shuffles it again.
+    if (fanned != null) {
+        val pile = field.pile(fanned)
+        val spread = PileFan.spread(pile.size, layout.field, cardWidth, cardHeight)
+        spread.cards.forEach { fan ->
+            val card = pile.getOrNull(fan.index) ?: return@forEach
+            if (carry?.from == DragOrigin.Pile(fanned, fan.index)) return@forEach
+            seats += Seat(
+                id = card.instanceId,
+                card = card,
+                pose = Pose3(position = Vec3(fan.x, fan.y, cardHeight * FAN_LIFT)),
+                faceUp = true,
+                carried = false,
+                pinned = false,
+                depth = 1,
+                materials = card.materials.size,
+                counters = card.counters,
                 width = cardWidth,
                 height = cardHeight,
             )
@@ -1222,9 +1300,7 @@ private fun PlayTopBar(
             if (play.move { it.draw() }) feedback.play(SoundEffect.DEAL, Haptic.DEAL)
         }
         BarButton("Shuffle") {
-            if (play.move { it.shuffleDeck(it.turn * 31L + it.deck.size) }) {
-                feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
-            }
+            if (play.shuffle(BoardSlot.Deck)) feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
         }
         BarButton("Undo", enabled = play.canUndo) { play.undo() }
         BarButton("Redo", enabled = play.canRedo) { play.redo() }
@@ -1332,7 +1408,7 @@ private fun CardActions(play: PlayState, origin: DragOrigin, onDismiss: () -> Un
                 item("Remove a counter") { play.move { it.addCounter(id, -1) } }
             }
         } else if (origin is DragOrigin.Pile) {
-            item("Shuffle the deck") { play.move { it.shuffleDeck(it.turn * 31L + it.deck.size) } }
+            item("Shuffle the deck") { play.shuffle(BoardSlot.Deck) }
             item("Draw") { play.move { it.draw() } }
         }
     }

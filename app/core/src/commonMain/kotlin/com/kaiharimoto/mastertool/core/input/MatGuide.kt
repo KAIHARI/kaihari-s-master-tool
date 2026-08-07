@@ -105,15 +105,35 @@ object MatGuide {
         Gesture(
             GestureGroup.MOVING,
             what = "Draw a card",
-            touch = "Tap the deck",
-            pointer = "Click the deck",
+            touch = "Drag the top card off the deck",
+            pointer = "Drag the top card off the deck",
             key = "D",
         ),
         Gesture(
             GestureGroup.MOVING,
-            what = "Take a card back out of a pile",
-            touch = "Drag off the graveyard, banished or extra",
-            pointer = "Drag off the graveyard, banished or extra",
+            what = "Search a pile",
+            touch = "Tap the deck, graveyard, banished or extra",
+            pointer = "Click the deck, graveyard, banished or extra",
+            key = "F",
+        ),
+        Gesture(
+            GestureGroup.MOVING,
+            what = "Take a card out of a pile you are searching",
+            touch = "Tap it for your hand, or drag it anywhere",
+            pointer = "Click it for your hand, or drag it anywhere",
+        ),
+        Gesture(
+            GestureGroup.MOVING,
+            what = "Put a pile back the way it was",
+            touch = "Tap the table between the cards",
+            pointer = "Click the table between the cards, or press Esc",
+        ),
+        Gesture(
+            GestureGroup.MOVING,
+            what = "Shuffle the deck or the extra deck",
+            touch = "Tap the mark under it",
+            pointer = "Click the mark under it",
+            key = "S",
         ),
 
         // ---- turning ---------------------------------------------------------

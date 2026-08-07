@@ -12,8 +12,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
+import com.kaiharimoto.mastertool.core.layout.MatControls
 import com.kaiharimoto.mastertool.core.layout.Slot
 import com.kaiharimoto.mastertool.core.layout.StagePlane
+import com.kaiharimoto.mastertool.core.board.PlayField
 import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
@@ -601,4 +603,92 @@ internal fun DrawScope.drawCardSurface(
         cornerRadius = radius,
         style = Stroke(hairline),
     )
+}
+
+// ---- the two things on the table that are not cards -----------------------------
+
+/** The chip a control is printed on: the felt, lifted just enough to be a thing. */
+private val ControlColour = Color(0xFF1A1A21)
+
+/**
+ * The shuffle marks, lying on the felt under the deck and the extra deck.
+ *
+ * A mark rather than a label, and that is not a style choice — the mat is a
+ * tilted plane, so a word printed on it keystones, and eight-point type read at
+ * twenty-one degrees off square is a smudge. Two arrows crossing is the one
+ * glyph that means shuffle in every card game anybody has played, and an arrow
+ * survives being seen at an angle in a way a letterform does not.
+ *
+ * Drawn flat at z = 0, where `StagePlane.flatten` is the identity, so this needs
+ * no geometry at all — it turns with the table because the table's own layer
+ * turns it, which is the whole point of it being *on* the table.
+ *
+ * This is the first thing ever drawn on this felt that is not a card, and
+ * `docs/DESIGN.md` §10 says there should be nothing. The exception is argued for
+ * where the geometry lives, in `MatControls`.
+ */
+internal fun DrawScope.drawMatControls(layout: BoardLayout, field: PlayField) {
+    MatControls.all(layout).forEach { (control, slot) ->
+        // A control for a pile that is not there is a button that does nothing,
+        // and a button that does nothing is worse than no button.
+        if (field.pile(control.pile).size < 2) return@forEach
+
+        val radius = CornerRadius(slot.height * 0.28f)
+        drawRoundRect(
+            color = ControlColour,
+            topLeft = Offset(slot.left, slot.top),
+            size = Size(slot.width, slot.height),
+            cornerRadius = radius,
+        )
+        drawRoundRect(
+            color = MasterToolPalette.LineLight,
+            topLeft = Offset(slot.left, slot.top),
+            size = Size(slot.width, slot.height),
+            cornerRadius = radius,
+            style = Stroke(max(1f, slot.height * 0.045f)),
+        )
+
+        drawShuffleMark(slot, MasterToolPalette.TextMuted)
+    }
+}
+
+/**
+ * Two arrows crossing, drawn inside [slot].
+ *
+ * Built from the slot rather than from constants so it is the same mark at every
+ * card size the fitter can solve for — the board resizes with the deck, and a
+ * glyph in absolute pixels would be a postage stamp on one board and a poster on
+ * another.
+ */
+private fun DrawScope.drawShuffleMark(slot: Slot, colour: Color) {
+    val inset = slot.height * 0.28f
+    val left = slot.left + inset * 1.4f
+    val right = slot.right - inset * 1.4f
+    val top = slot.top + inset
+    val bottom = slot.bottom - inset
+    val stroke = max(1f, slot.height * 0.075f)
+    val head = slot.height * 0.16f
+
+    // Two paths that cross in the middle, each ending in an arrowhead — one
+    // going down the way, one going up, which is what says "these two swapped".
+    listOf(top to bottom, bottom to top).forEach { (from, to) ->
+        val path = Path().apply {
+            moveTo(left, from)
+            cubicTo(
+                left + (right - left) * 0.35f, from,
+                right - (right - left) * 0.35f, to,
+                right, to,
+            )
+        }
+        drawPath(path, colour, style = Stroke(stroke))
+
+        // The head, pointing the way the line arrived.
+        val point = Path().apply {
+            moveTo(right, to)
+            lineTo(right - head, to - head * 0.62f)
+            lineTo(right - head, to + head * 0.62f)
+            close()
+        }
+        drawPath(point, colour)
+    }
 }

@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.core.board
 
+import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.model.CardId
 import kotlin.random.Random
 
@@ -104,10 +105,47 @@ data class PlayField(
     val onMat: List<BoardCard>
         get() = mat.flatMap { placed -> placed.pile.flatMap { listOf(it) + it.materials } }
 
+    /**
+     * The pile a slot names, for anything that has to treat all four alike.
+     *
+     * There were four copies of this `when` before there was one — in the drop
+     * resolver, in the committer, in the seat builder and in the hit test — and
+     * the fan would have made it five. A zone is not a pile and never holds one.
+     */
+    fun pile(slot: BoardSlot): List<BoardCard> = when (slot) {
+        BoardSlot.Deck -> deck
+        BoardSlot.ExtraDeck -> extraDeck
+        BoardSlot.Graveyard -> graveyard
+        BoardSlot.Banished -> banished
+        is BoardSlot.Zone -> emptyList()
+    }
+
     // ---- the deck -----------------------------------------------------------
 
-    fun shuffleDeck(seed: Long): PlayField {
-        val shuffled = deck.toMutableList()
+    fun shuffleDeck(seed: Long): PlayField = copy(deck = deck.riffled(seed))
+
+    /**
+     * And the extra deck, which by the rules never needs it.
+     *
+     * It is public information in a real game, so its order carries nothing and
+     * shuffling it changes nothing anybody could know. It is here because the
+     * extra deck can be fanned out and searched like any other pile, and a
+     * search that leaves a pile in the order you left it in is a search that has
+     * quietly told you where everything is — which matters not at all against an
+     * opponent and matters when the person you are practising against is you.
+     */
+    fun shuffleExtraDeck(seed: Long): PlayField = copy(extraDeck = extraDeck.riffled(seed))
+
+    /**
+     * Fisher-Yates, written out rather than `shuffled(Random(seed))`.
+     *
+     * The stdlib's shuffle is free to change its algorithm between Kotlin
+     * versions and between platforms, and this app has two of those. A seed that
+     * produced one deal on a tablet and another on a desktop would make every
+     * bug report about an opening hand unreproducible.
+     */
+    private fun List<BoardCard>.riffled(seed: Long): List<BoardCard> {
+        val shuffled = toMutableList()
         val random = Random(seed)
         for (i in shuffled.indices.reversed()) {
             val j = random.nextInt(i + 1)
@@ -115,7 +153,7 @@ data class PlayField(
             shuffled[i] = shuffled[j]
             shuffled[j] = swap
         }
-        return copy(deck = shuffled)
+        return shuffled
     }
 
     fun draw(): PlayField? {

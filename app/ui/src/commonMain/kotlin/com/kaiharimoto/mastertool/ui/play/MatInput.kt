@@ -12,6 +12,7 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import com.kaiharimoto.mastertool.core.board.DragOrigin
+import com.kaiharimoto.mastertool.core.board.DropCommit
 import com.kaiharimoto.mastertool.core.board.DropIntent
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlayField
@@ -21,6 +22,10 @@ import com.kaiharimoto.mastertool.core.board.toMat
 import com.kaiharimoto.mastertool.core.board.toPixels
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
+import com.kaiharimoto.mastertool.core.layout.FanSpread
+import com.kaiharimoto.mastertool.core.layout.MatControl
+import com.kaiharimoto.mastertool.core.layout.MatControls
+import com.kaiharimoto.mastertool.core.layout.PileFan
 import com.kaiharimoto.mastertool.core.layout.CameraFit
 import com.kaiharimoto.mastertool.core.layout.planeFor
 import com.kaiharimoto.mastertool.core.mat.MatEvent
@@ -103,6 +108,16 @@ internal class MatPilot(
     /** What the press landed on. The one thing that has to survive both clocks. */
     private var grabbed: DragOrigin? = null
 
+    /**
+     * The control the press landed on, if it landed on one rather than on a card.
+     *
+     * A second thing to remember across the two clocks, and it is deliberately
+     * *not* folded into [grabbed]: `DragOrigin` names a card in the domain, and
+     * a shuffle mark is not a card. Widening a domain type so the input layer
+     * can remember something is how a domain stops meaning anything.
+     */
+    private var pressedControl: MatControl? = null
+
     /** Whether the carried card is going *under* what it is over, not on top. */
     private var attaching = false
 
@@ -146,7 +161,7 @@ internal class MatPilot(
         if (!down) return
 
         machine.cancel()
-        whatIsUnder(play.field, layout, at)?.let(onMenu)
+        whatIsUnder(play.field, layout, at, play.fanned)?.let(onMenu)
     }
 
     private fun carryOut(events: List<MatEvent>) {
@@ -166,7 +181,40 @@ internal class MatPilot(
             // so this is the first moment anything knows whether the finger
             // landed on a card. Nothing under it means the felt, and the felt
             // is the camera's.
-            if (event is MatEvent.Pressed && grabbed == null) machine.claimForCamera()
+            //
+            // Two things are neither a card nor the felt, and both of them have
+            // to be taken out before that claim is made, because a claimed
+            // gesture can never become a tap again: a shuffle mark, and the
+            // space *inside* an open fan. Miss either and pressing between two
+            // cards of a spread deck starts orbiting the table.
+            if (event is MatEvent.Pressed) {
+                pressedControl =
+                    if (grabbed == null) MatControls.at(layout, event.at.x, event.at.y) else null
+                if (grabbed == null && pressedControl == null && !onFan(event.at)) {
+                    machine.claimForCamera()
+                }
+            }
+
+            // A tap on a mark shuffles the pile it is under. A tap on the fan's
+            // own backdrop — inside it, but between the cards — squares the pile
+            // back up, which is the way out of a search you have changed your
+            // mind about.
+            if (event is MatEvent.Tapped) {
+                val control = pressedControl
+                when {
+                    control != null ->
+                        if (play.shuffle(control.pile)) {
+                            feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+                        }
+                    grabbed == null && play.fanned != null ->
+                        if (play.closeFan()) {
+                            feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+                        } else {
+                            feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
+                        }
+                }
+                pressedControl = null
+            }
             if (event is MatEvent.CameraMoved) fly(event.fingers)
             if (event is MatEvent.CameraEnded) settle()
         }
@@ -190,6 +238,21 @@ internal class MatPilot(
      * because a pinch is a scale — the same spread means the same zoom whether
      * it started with the fingers an inch apart or a hand's width.
      */
+    /**
+     * Whether a point is inside an open fan, cards or the gaps between them.
+     *
+     * The fan is a *mode*, and its footprint is the extent of it: a press there
+     * is about the spread even when it lands on felt showing through, or the
+     * table would start turning under a finger reaching for a card. Outside it,
+     * the felt is the camera's exactly as it always was — so the board can still
+     * be looked at from another angle while a pile is open, which is the whole
+     * reason a search is not a sheet.
+     */
+    private fun onFan(at: Vec2): Boolean {
+        val slot = play.fanned ?: return false
+        return fanOf(play.field, layout, slot).bounds.contains(at.x, at.y)
+    }
+
     private fun fly(fingers: Int) {
         val state = camera ?: return
         val across = state.rig.width
@@ -420,21 +483,31 @@ private fun handle(
     fun mat(at: Vec2): MatPoint = layout.toMat(at.x to at.y)
 
     when (event) {
-        is MatEvent.Pressed -> return whatIsUnder(play.field, layout, event.at)
+        is MatEvent.Pressed -> return whatIsUnder(play.field, layout, event.at, play.fanned)
 
         is MatEvent.Tapped -> {
             when (val what = grabbed) {
-                is DragOrigin.Pile -> when (what.pile) {
-                    // The deck is drawn from. Every other pile used to open its
-                    // menu here, which sounds reasonable and was not: the menu a
-                    // pile gets is the deck's — Draw, and Shuffle the deck — so
-                    // tapping the graveyard offered to shuffle something else
-                    // entirely. A pile is read by holding it and emptied by
-                    // dragging off it, and both of those already worked.
-                    BoardSlot.Deck ->
-                        if (play.move { it.draw() }) feedback.play(SoundEffect.DEAL, Haptic.DEAL)
-                    else -> Unit
-                }
+                // A pile opens. Tapping the deck used to draw from it, which is
+                // the one thing a deck does that already had a better idiom —
+                // dragging the top card off it, which is what taking a card off
+                // a deck actually is — and it spent the only gesture a pile has
+                // on the one question a pile cannot otherwise answer: *what is
+                // in it*. Every pile now spreads out when you tap it, and a card
+                // in a spread pile goes to your hand when you tap that.
+                is DragOrigin.Pile ->
+                    if (play.fanned == what.pile) {
+                        if (play.move { field ->
+                                DropCommit.commit(field, what, DropIntent.Hand)
+                            }
+                        ) {
+                            play.fan(null)
+                            feedback.play(SoundEffect.DEAL, Haptic.DEAL)
+                        }
+                    } else if (play.field.pile(what.pile).isNotEmpty()) {
+                        play.fan(what.pile)
+                        feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
+                    }
+
                 is DragOrigin.Mat ->
                     if (play.move { it.bringToFront(what.id) }) {
                         feedback.play(SoundEffect.LIFT, Haptic.LIFT)
@@ -476,8 +549,14 @@ private fun handle(
             // tell; landing on felt is one.
             val onto = play.carry?.intent
             val stacked = onto is DropIntent.Stack || onto is DropIntent.Attach
+            val from = play.carry?.from
             if (play.carry != null && play.release()) {
                 feedback.play(SoundEffect.SNAP, HapticScore.landing(stacked))
+                // You searched, you found it, you are done — and the deck gets
+                // shuffled on the way out, which is what `closeFan` is for.
+                if (from is DragOrigin.Pile && from.pile == play.fanned) {
+                    if (play.closeFan()) feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+                }
             }
         }
 
@@ -554,9 +633,31 @@ private fun handle(
  * the hand, then the bare piles. A pile is only reachable when no card is
  * sitting on it, which is right: the card you can see is the card you meant.
  */
-private fun whatIsUnder(field: PlayField, layout: BoardLayout, at: Vec2): DragOrigin? {
+private fun whatIsUnder(
+    field: PlayField,
+    layout: BoardLayout,
+    at: Vec2,
+    fanned: BoardSlot? = null,
+): DragOrigin? {
     val halfWidth = layout.cardWidth / 2f
     val halfHeight = layout.cardHeight / 2f
+
+    // A spread pile is over the board, so it is asked first — and inside its
+    // own footprint it is asked *instead*, or a finger reaching for a card in
+    // the fan would come back holding whatever happens to be on the board
+    // underneath it.
+    //
+    // This is the whole of the search feature at the input end, and it is one
+    // line of it: `DragOrigin.Pile` has carried an index since it was written,
+    // `DropCommit` dispatches it straight to `playFromDeck(index, …)`, and the
+    // only reason nothing in this app could ask for a card that was not on top
+    // of a pile is that this function returned a hard-coded zero.
+    if (fanned != null) {
+        val spread = fanOf(field, layout, fanned)
+        val index = PileFan.cardAt(spread, at.x, at.y, layout.cardWidth, layout.cardHeight)
+        if (index != null) return DragOrigin.Pile(fanned, index)
+        if (spread.bounds.contains(at.x, at.y)) return null
+    }
 
     fun covers(centre: Pair<Float, Float>): Boolean =
         abs(at.x - centre.first) <= halfWidth && abs(at.y - centre.second) <= halfHeight
@@ -576,9 +677,25 @@ private fun whatIsUnder(field: PlayField, layout: BoardLayout, at: Vec2): DragOr
         BoardSlot.Graveyard to field.graveyard.size,
         BoardSlot.Banished to field.banished.size,
     ).forEach { (slot, count) ->
+        // The pile that is spread out has no cards at its own slot — they are
+        // all on the table below. Left in, its empty square would still answer
+        // for the top card, so tapping the gap the deck used to be in would
+        // silently take a card out of the fan.
+        if (slot == fanned) return@forEach
         val rect = layout[slot] ?: return@forEach
         if (count > 0 && rect.holds(at.x, at.y)) return DragOrigin.Pile(slot, 0)
     }
 
     return null
 }
+
+/**
+ * Where a spread pile's cards are, asked the same way the renderer asks it.
+ *
+ * `PileFan` is pure and cheap, so both the hit test and `seatsFor` call it
+ * rather than one of them being handed the other's answer. Two readings of one
+ * function cannot drift; a value passed between them can, and the thing that
+ * would drift is *which card you are pointing at*.
+ */
+private fun fanOf(field: PlayField, layout: BoardLayout, slot: BoardSlot): FanSpread =
+    PileFan.spread(field.pile(slot).size, layout.field, layout.cardWidth, layout.cardHeight)

@@ -59,6 +59,7 @@ enum class ShortcutAction {
     // where cards are anywhere rather than in numbered zones.
     PLAY_DRAW,
     PLAY_SHUFFLE,
+    PLAY_SEARCH_DECK,
     PLAY_NEW_HAND,
     PLAY_NEXT_PHASE,
     PLAY_END_TURN,
@@ -272,6 +273,14 @@ object ShortcutTable {
         ),
         Shortcut(
             KeyChord("s"), ShortcutAction.PLAY_SHUFFLE, ShortcutScope.PLAY, "Shuffle the deck",
+        ),
+        // The hot path of the whole game, and the reason the fan exists: fetching
+        // a specific card out of a sixty-card deck is the most frequent
+        // non-trivial thing anybody does. `f` for find, because `s` is spent on
+        // the shuffle that closing the search performs anyway.
+        Shortcut(
+            KeyChord("f"), ShortcutAction.PLAY_SEARCH_DECK, ShortcutScope.PLAY,
+            "Search the deck",
         ),
         Shortcut(
             KeyChord("n"), ShortcutAction.PLAY_NEW_HAND, ShortcutScope.PLAY,
