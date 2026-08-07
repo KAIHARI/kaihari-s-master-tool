@@ -63,6 +63,7 @@ enum class ShortcutAction {
     PLAY_NEW_HAND,
     PLAY_NEXT_PHASE,
     PLAY_END_TURN,
+    PLAY_SCENE,
     PLAY_SEAT_OVERHEAD,
     PLAY_SEAT_TABLE,
     PLAY_SEAT_SEATED,
@@ -291,6 +292,13 @@ object ShortcutTable {
         ),
         Shortcut(
             KeyChord("t"), ShortcutAction.PLAY_END_TURN, ShortcutScope.PLAY, "End the turn",
+        ),
+        // `r` for room. The touch idiom is the button on the bar beside the
+        // seats, which is where it belongs: choosing a room is the same kind of
+        // act as choosing where to sit, and neither of them is about a card.
+        Shortcut(
+            KeyChord("r"), ShortcutAction.PLAY_SCENE, ShortcutScope.PLAY,
+            "Change the room the table is in",
         ),
 
         // The three seats. Digits, reusing the builder's pane-focus muscle

@@ -21,13 +21,12 @@ import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardMaterial
 import com.kaiharimoto.mastertool.core.render.CardSolid
-import com.kaiharimoto.mastertool.core.render.Face
-import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.Rot3
 import com.kaiharimoto.mastertool.core.render.Shading
 import com.kaiharimoto.mastertool.core.render.Shadows
 import com.kaiharimoto.mastertool.core.render.StageRig
 import com.kaiharimoto.mastertool.core.render.Tone
+import com.kaiharimoto.mastertool.core.scene.Scenery
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlin.math.abs
 import kotlin.math.max
@@ -44,180 +43,21 @@ import kotlin.math.pow
  * the composable is left with no opinions to have.
  */
 
-/** Card stock, seen edge-on. Warm, because bleached white card does not exist. */
-private val CardStockColour = Color(0xFFE8E3D8)
-
-/** The seam between two cards in a pile: a shadow, not a line somebody drew. */
-private val CardSeamColour = Color(0xFF16130E)
-
-/**
- * The furniture the playmat is lying on.
- *
- * Dark, but nothing like as dark as the mat, and that gap is the whole reason
- * it exists. A true-black stage has no *place* in it: a mat drawn as gradients
- * on black is a mat floating in a void, and no amount of shading on the cards
- * makes a void into a room. Give it a table and the table has a thickness, and
- * a thickness has sides, and the sides swing into view as the camera comes down
- * — which is the one cue that says the thing you are turning is a solid object
- * rather than a picture being sheared.
- */
-private val TableColour = Color(0xFF141519)
-
-/** The playmat itself. Near enough to ink that the cards still own the screen. */
-private val MatColour = Color(0xFF0A0A0E)
-
-/**
- * What a shadow takes the mat down to — not black.
- *
- * A shadow was `Color.Black` at up to 0.66, laid over a mat that measures about
- * twelve levels of two hundred and fifty-five. It landed at **two**, which is
- * *below the void behind the table*. A shadow darker than the background is not
- * a shadow; it is a hole, and it is why nothing on this stage looks like it is
- * resting on anything.
- *
- * `docs/AAA.md` #18 says what it should be instead, and says it better than
- * this comment could: *"A shadow on lit felt is the felt, darker and a little
- * cooler. Neutral black is what a shadow looks like when nobody chose a colour
- * for it."* So this is the mat, most of its light removed and the little that
- * is left pushed cool — the colour of a surface reached only by the sky.
- *
- * It is deliberately still very dark. The real cure is that the mat has to
- * carry enough light to have some taken away, and that belongs to the daylight
- * pass rather than to a bug fix; what this changes is only that the shadow now
- * subtracts something instead of punching through to nothing.
- */
-private val ShadowColour = Color(0xFF04060A)
-
-/**
- * How far the playmat runs past the cards, and the table past the mat, in card
- * widths.
- *
- * Both were nearly three times this and both were wrong. A table margin of a
- * whole card width put a broad grey border round every side of the mat, and a
- * grey border is not furniture — on a stage whose entire premise is sharp white
- * on true black, it is a large light rectangle competing with the cards, which
- * is the one thing §11 of the handbook lists first under anti-patterns.
- *
- * What the table is for is the *edge*: the moment the camera comes down and a
- * solid side swings into view. That needs the table to extend past the mat far
- * enough to be a table and no further. A narrow reveal does the whole job.
- */
-private const val MAT_MARGIN = 0.22f
-private const val TABLE_MARGIN = 0.38f
-
-/**
- * How thick the table top is, in card widths.
- *
- * A lip, not a plinth. Cut with the margin, and for the same reason: this is a
- * cue you should notice when you go looking for it at a low camera and never
- * think about at the reading seat.
- */
-private const val TABLE_THICKNESS = 0.17f
-
-/** The playmat's outline: everything the board occupies, plus its border. */
-internal fun matSurface(layout: BoardLayout): Slot =
-    layout.bounds.inflated(layout.cardWidth * MAT_MARGIN)
-
-/** The table top's outline. */
-internal fun tableSurface(layout: BoardLayout): Slot =
-    matSurface(layout).inflated(layout.cardWidth * TABLE_MARGIN)
+/** Steps in a soft shadow. Five is where another one stops being visible. */
+private const val SHADOW_STEPS = 5
 
 /** The one radius every card on the stage is cut to. §8 of the handbook. */
 internal val CardCornerRadius = 4.dp
 
-/** Steps in a soft shadow. Five is where another one stops being visible. */
-private const val SHADOW_STEPS = 5
-
 /**
- * A colour under a light, which is a multiply and not an alpha.
+ * The playmat's outline: everything the board occupies, plus its border.
  *
- * Fading toward transparent is what a *thinner* object does; getting darker is
- * what an unlit one does, and on a black stage the two happen to look similar
- * until something is drawn behind them, at which point only one of them is
- * still right.
- *
- * The multiply goes through [Tone] because a `Color`'s channels are sRGB, and
- * multiplying an encoding is not multiplying light: raw, a surface at half
- * illumination comes back nearer a quarter as bright, and every shaded edge on
- * the table slides toward the same muddy grey instead of staying its own
- * colour.
- *
- * Three channels rather than one, because the rig's lamps have temperatures now
- * and a lamp's colour only exists once it has landed on something. [Lit] works
- * out the three multipliers itself so that nothing here — and nothing in any
- * other renderer — can invent its own mapping from a warmth to a colour.
+ * Solved in core beside the room it is a hole in. It was a pair of file-private
+ * functions here, over a pair of file-private margins, and the moment the desk
+ * needed to know where the felt stopped, a renderer was the only place that
+ * answer existed. See `Scenery` for the numbers and the argument for them.
  */
-private fun Color.shaded(lit: Lit): Color = Color(
-    Tone.shade(red, lit.red),
-    Tone.shade(green, lit.green),
-    Tone.shade(blue, lit.blue),
-    alpha,
-)
-
-/**
- * The faces of a solid you can actually see, in the order they must be painted.
- *
- * Two jobs and one traversal, because they are the same question asked twice.
- * [CardSolid.visible] answers *whether* a face is toward the camera, and it is
- * asked with the camera's **position** — `StagePlane.eyePoint` — rather than
- * with the direction the whole stage is lit from, because the projection those
- * faces are about to go through divides by distance and a direction is a lens
- * infinitely far away. That disagreement is what used to leave the deck with no
- * side walls to see it through.
- *
- * Then the order. A slab's walls were painted in the order the geometry happens
- * to list them — back, far, right, near, left — and near a corner-on view that
- * paints the far wall over the near one. Sorting by the depth of each face's own
- * centre is the painter's algorithm applied to six quads, which is cheap enough
- * to be beneath discussion and is the only thing that makes a solid look solid
- * from a corner.
- */
-private fun List<Face>.facingTheCamera(stage: StagePlane, eye: Vec3): List<Face> =
-    CardSolid.visible(this, stage.eyePoint(eye))
-        .sortedBy { stage.project(it.centre).depth }
-
-// ---- the table ------------------------------------------------------------------
-
-/**
- * The table: a top, and the sides of it you can see from where you are sitting.
- *
- * The same slab the cards are, at fifty times the size, and that is not a joke
- * about reuse — it is the reason this is eleven lines. A table is a rectangular
- * solid with a thickness lying flat on the stage, which is precisely what
- * [CardSolid.slab] describes and [CardSolid.visible] culls, so it gets the
- * back-face culling, the per-face normals and the rig's three lamps for free and
- * cannot end up lit by a different room than the cards standing on it.
- *
- * Drawn before everything, because it is under everything. The one face that is
- * skipped is the top, which is drawn flat afterwards: it sits at z = 0, where
- * [StagePlane.flatten] is the identity, so it needs no geometry at all.
- */
-internal fun DrawScope.drawTable(layout: BoardLayout, stage: StagePlane, eye: Vec3) {
-    val table = tableSurface(layout)
-    val thickness = layout.cardWidth * TABLE_THICKNESS
-    val pose = Pose3(position = Vec3(table.centerX, table.centerY, 0f))
-
-    CardSolid.slab(pose, table.width, table.height, thickness)
-        .facingTheCamera(stage, eye)
-        .forEach { face ->
-            // The top, which is the next thing drawn and is drawn flat.
-            if (face.normal.z > 0.99f) return@forEach
-
-            val path = Path()
-            face.corners.forEachIndexed { index, corner ->
-                val flat = stage.flatten(corner)
-                if (index == 0) path.moveTo(flat.x, flat.y) else path.lineTo(flat.x, flat.y)
-            }
-            path.close()
-            drawPath(path, TableColour.shaded(StageRig.face(face, eye)))
-        }
-
-    drawRect(
-        color = TableColour.shaded(StageRig.lit(Rot3.FaceNormal, eye)),
-        topLeft = Offset(table.left, table.top),
-        size = Size(table.width, table.height),
-    )
-}
+internal fun matSurface(layout: BoardLayout): Slot = Scenery.mat(layout)
 
 /**
  * The playmat: a pool of light, a fall-off into the corners, and the zones.
@@ -233,47 +73,57 @@ internal fun DrawScope.drawTable(layout: BoardLayout, stage: StagePlane, eye: Ve
  * A hand fanned out on bare void beneath a mat that stopped short of it was the
  * one place on this stage where the cards were demonstrably resting on nothing.
  */
-internal fun DrawScope.drawFelt(layout: BoardLayout) {
+internal fun DrawScope.drawFelt(layout: BoardLayout, look: StageLook) {
     val mat = matSurface(layout)
     val span = max(mat.width, mat.height)
-    val key = StageRig.Key.direction
+    val key = look.lighting.key.direction
 
     val corner = CornerRadius(layout.cardWidth * 0.16f)
     val matTopLeft = Offset(mat.left, mat.top)
     val matSize = Size(mat.width, mat.height)
 
     // The mat itself, as a surface rather than as an absence.
-    drawRoundRect(color = MatColour, topLeft = matTopLeft, size = matSize, cornerRadius = corner)
+    drawRoundRect(color = look.mat, topLeft = matTopLeft, size = matSize, cornerRadius = corner)
 
-    // Upstream of the light's travel: where it is coming from.
+    // Upstream of the light's travel: where it is coming from. Read off the
+    // active rig, so the pool is on the same side of the table as the shadows
+    // in every room — which is the one thing `StageRig` exists to guarantee and
+    // the one thing a second rig would have made it possible to break.
     val pool = Offset(
         x = mat.centerX - key.x * mat.width * 0.55f,
         y = mat.centerY - key.y * mat.height * 0.55f,
     )
 
-    // These two alphas were picked by eye against the old, darker solids: a
+    // The pool alphas were picked by eye against the old, darker solids: a
     // fully facing pile edge used to come back at 0.66 and now comes back at
     // 0.79, because the shading it goes through stopped multiplying an sRGB
-    // encoding (see `Tone`). So the pool is currently a touch dim for the
-    // objects standing in it. Re-tuning it is a look-at-the-tablet judgement
-    // rather than a correctness fix, which is why it deliberately did not ride
-    // in with the encoding change — but the next pass over the felt should know
-    // that these numbers were chosen for a lamp that has since got brighter.
+    // encoding (see `Tone`). So the minimal room's pool is still a touch dim for
+    // the objects standing in it. Re-tuning it is a look-at-the-tablet judgement
+    // rather than a correctness fix, which is why it did not ride in with the
+    // encoding change and has not ridden in with the rooms either — the two desk
+    // presets were chosen fresh, and the minimal one is deliberately untouched.
     //
-    // Both are bounded by the mat now rather than by a rectangle half again its
+    // All of it is bounded by the mat rather than by a rectangle half again its
     // size. That was harmless while there was nothing outside the mat to spoil;
     // with a table under it, the fall-off's job — darkening toward the corners —
     // was being done to the table's corners too, and eating the one surface that
     // tells you the mat is lying on something.
+    //
+    // The pool is the colour of the lamp rather than white, which is the same
+    // rule a card's specular obeys: a highlight is a reflection of the light
+    // source, not of the room, so it is the one place a temperature arrives
+    // undiluted. Under the desk lamp it is the difference between a bulb and a
+    // torch.
+    val lamp = look.poolColour
     drawRoundRect(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.062f),
-                Color.White.copy(alpha = 0.022f),
+                lamp.copy(alpha = look.poolCore),
+                lamp.copy(alpha = look.poolEdge),
                 Color.Transparent,
             ),
             center = pool,
-            radius = span * 0.95f,
+            radius = span * look.poolReach,
         ),
         topLeft = matTopLeft,
         size = matSize,
@@ -281,10 +131,12 @@ internal fun DrawScope.drawFelt(layout: BoardLayout) {
     )
 
     // And the fall-off, which is what stops the pool from reading as a
-    // rectangle of grey rather than as light landing on something.
+    // rectangle of grey rather than as light landing on something. At night it
+    // is doing a second job as well: it is where the darkness comes from, since
+    // the rig's ambient is not allowed to supply any. See `StageLighting`.
     drawRoundRect(
         brush = Brush.radialGradient(
-            colors = listOf(Color.Transparent, MasterToolPalette.Ink.copy(alpha = 0.55f)),
+            colors = listOf(Color.Transparent, MasterToolPalette.Ink.copy(alpha = look.falloff)),
             center = Offset(mat.centerX, mat.centerY),
             radius = span * 0.78f,
         ),
@@ -344,6 +196,7 @@ internal fun DrawScope.drawCardShadow(
      * [Shadows.cast].
      */
     bodyDepth: Float = 0f,
+    look: StageLook,
 ) {
     // `shadow.alpha` is an opacity somebody chose rather than a fraction of
     // light — `Shadows` keeps the constant behind it private for that reason —
@@ -355,7 +208,13 @@ internal fun DrawScope.drawCardShadow(
     // throws the shadow of a dimmer lamp than the one lighting its own edges.
     // That is a judgement to make with the tablet in hand rather than
     // arithmetic, and it is left for the next tuning pass instead of guessed at.
-    val shadow = Shadows.cast(pose, width, height, StageRig.Key, cardHeight, bodyDepth = bodyDepth)
+    //
+    // Cast from the room's own key, which is what makes changing the hour a
+    // change of *room* rather than of colour: every shadow on the board swings
+    // to the other side of the thing throwing it, because the lamp did.
+    // Still one light. A second shadow would not read as a second lamp, it would
+    // read as a duplicated card.
+    val shadow = Shadows.cast(pose, width, height, look.lighting.key, cardHeight, bodyDepth = bodyDepth)
         ?: return
     if (shadow.alpha <= 0.01f) return
 
@@ -378,7 +237,7 @@ internal fun DrawScope.drawCardShadow(
         val grow = shadow.spread * ring / rings
         drawPath(
             path = polygon(corners, middle, grow),
-            color = ShadowColour.copy(alpha = step),
+            color = look.shadow.copy(alpha = step),
         )
     }
 
@@ -392,7 +251,7 @@ internal fun DrawScope.drawCardShadow(
         val centre = footprint.fold(Offset.Zero) { sum, c -> sum + c } / footprint.size.toFloat()
         drawPath(
             path = polygon(footprint, centre, cardHeight * 0.012f),
-            color = ShadowColour.copy(alpha = 0.5f * shadow.contact),
+            color = look.shadow.copy(alpha = 0.5f * shadow.contact),
         )
     }
 }
@@ -435,6 +294,7 @@ internal fun DrawScope.drawSolidEdges(
     depth: Float,
     stage: StagePlane,
     eye: Vec3,
+    look: StageLook,
     /** How many cards are in this body, so its side can be ruled into that many. */
     layers: Int = 1,
 ) {
@@ -471,7 +331,7 @@ internal fun DrawScope.drawSolidEdges(
             if (index == 0) path.moveTo(at.x, at.y) else path.lineTo(at.x, at.y)
         }
         path.close()
-        drawPath(path, CardStockColour.shaded(StageRig.face(face, eye)))
+        drawPath(path, CardStockColour.shaded(StageRig.face(face, eye, look.lighting)))
 
         // And the seams. A pile's side is not a white band — it is thirty cards
         // seen end-on, and the dark lines between them are most of what says so.
@@ -482,7 +342,7 @@ internal fun DrawScope.drawSolidEdges(
         val seams = CardSolid.layerLines(layers, down)
         if (seams == 0) return@forEach
 
-        val seam = CardSeamColour.shaded(StageRig.face(face, eye))
+        val seam = CardSeamColour.shaded(StageRig.face(face, eye, look.lighting))
         for (line in 1..seams) {
             val t = line.toFloat() / (seams + 1)
             drawLine(
@@ -521,9 +381,10 @@ internal fun DrawScope.drawCardSurface(
     pose: Pose3,
     material: CardMaterial,
     eye: Vec3,
+    look: StageLook,
     radiusPx: Float,
 ) {
-    val shade = Shading.of(pose, material, StageRig.Key, eye)
+    val shade = Shading.of(pose, material, look.lighting.key, eye)
     val radius = CornerRadius(radiusPx)
 
     // The face darkens by the same law the edges do, but a card's art is a

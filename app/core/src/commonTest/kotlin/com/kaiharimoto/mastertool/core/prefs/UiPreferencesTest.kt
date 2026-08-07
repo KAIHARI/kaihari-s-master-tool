@@ -2,6 +2,8 @@ package com.kaiharimoto.mastertool.core.prefs
 
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.model.DeckSection
+import com.kaiharimoto.mastertool.core.scene.DeskLight
+import com.kaiharimoto.mastertool.core.scene.Scene
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -41,6 +43,17 @@ class UiPreferencesTest {
             ThemeMode.SYSTEM,
             json.decodeFromString(UiPreferences.serializer(), old).themeMode,
         )
+    }
+
+    @Test
+    fun theStageOpensMinimalOnADocumentWrittenBeforeThereWereRooms() {
+        // A build that arrived one morning with a bedroom in it would have
+        // changed the tool on somebody who had not asked for it. The desk is a
+        // thing you go and choose.
+        val old = """{"searchWeight":0.5}"""
+        val parsed = json.decodeFromString(UiPreferences.serializer(), old)
+        assertEquals(Scene.MINIMAL, parsed.scene)
+        assertEquals(DeskLight.AUTO, parsed.deskLight)
     }
 
     @Test

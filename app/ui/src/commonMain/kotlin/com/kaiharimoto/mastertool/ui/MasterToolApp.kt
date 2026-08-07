@@ -109,6 +109,7 @@ fun MasterToolApp(deps: AppDependencies) {
 
             Screen.Play -> PlayScreen(
                 state = builderState,
+                prefs = layoutState,
                 onBack = { screen = Screen.DeckBuilder },
             )
 

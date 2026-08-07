@@ -182,6 +182,18 @@ object StageRig {
     }
 
     /**
+     * The same three lamps, handed over as one value instead of three.
+     *
+     * The only overload that exists, and it exists so that no call site has to
+     * take a rig apart to pass it on. Every renderer in the app takes a
+     * [StageLighting] and hands it straight here; none of them holds a [Light]
+     * of its own, which is what keeps the unanimity [StageLighting]'s KDoc
+     * inherits from this object's.
+     */
+    fun lit(normal: Vec3, eye: Vec3, lighting: StageLighting): Lit =
+        lit(normal, eye, lighting.key, lighting.bounce, lighting.rim)
+
+    /**
      * One face of a solid: how bright to paint it.
      *
      * It used to answer `Lit.None` for anything whose normal was not within
@@ -209,5 +221,9 @@ object StageRig {
      * the whole reason a card's outline used to dissolve into the felt whenever
      * the card itself was dim.
      */
-    fun face(face: Face, eye: Vec3 = Vec3.Toward): Lit = lit(face.normal, eye)
+    fun face(
+        face: Face,
+        eye: Vec3 = Vec3.Toward,
+        lighting: StageLighting = StageLighting.Minimal,
+    ): Lit = lit(face.normal, eye, lighting)
 }

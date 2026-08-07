@@ -151,6 +151,7 @@ private fun Key.chordName(): String? = when (this) {
     Key.G -> "g"
     Key.I -> "i"
     Key.N -> "n"
+    Key.R -> "r"
     Key.S -> "s"
     Key.T -> "t"
     Key.Z -> "z"

@@ -305,7 +305,12 @@ fun DeckBuilderTopBar(
                         layout.update {
                             // Keep what is about the deck or the person — the
                             // format, the stacked view, the pinned easter-egg
-                            // pool, the theme — and reset what is about the room.
+                            // pool, the theme, which room the table is in — and
+                            // reset what is about the layout. "The room" in the
+                            // comment this replaces meant the panes; the play
+                            // stage now has a literal one, and it is a taste
+                            // rather than a layout, so it survives like the
+                            // theme beside it.
                             UiPreferences.DEFAULT.copy(
                                 format = it.format,
                                 stacked = it.stacked,
@@ -314,6 +319,8 @@ fun DeckBuilderTopBar(
                                 feedbackEnabled = it.feedbackEnabled,
                                 cardBack = it.cardBack,
                                 cardBackUrl = it.cardBackUrl,
+                                scene = it.scene,
+                                deskLight = it.deskLight,
                             )
                         }
                     },

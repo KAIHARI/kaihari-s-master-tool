@@ -3,6 +3,7 @@ package com.kaiharimoto.mastertool.ui.play
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -42,6 +43,9 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,6 +78,11 @@ import com.kaiharimoto.mastertool.core.motion.SpringSpec
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.haptics.Haptic
+import com.kaiharimoto.mastertool.core.perf.FrameProbe
+import com.kaiharimoto.mastertool.core.scene.DeskClock
+import com.kaiharimoto.mastertool.core.scene.DeskLight
+import com.kaiharimoto.mastertool.core.scene.Scene
+import com.kaiharimoto.mastertool.core.scene.Scenery
 import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.CardStock
 import com.kaiharimoto.mastertool.core.render.Homography
@@ -82,11 +91,14 @@ import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CardBack
 import com.kaiharimoto.mastertool.ui.components.LocalCardBack
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
+import com.kaiharimoto.mastertool.ui.deckbuilder.DeckLayoutState
 import com.kaiharimoto.mastertool.core.input.ShortcutAction
 import com.kaiharimoto.mastertool.core.input.ShortcutContext
 import com.kaiharimoto.mastertool.core.input.ShortcutLayer
 import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
+import com.kaiharimoto.mastertool.ui.fx.localHour
+import com.kaiharimoto.mastertool.ui.fx.rememberRefreshHz
 import com.kaiharimoto.mastertool.ui.input.ShortcutHost
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlin.math.abs
@@ -187,6 +199,26 @@ private const val PEEK_SCALE = 1.9f
 
 private val TOP_BAR = 44.dp
 
+/** The hidden way in to the frame readout. `ChibiLogo`'s window, and its count. */
+private const val READOUT_TAPS = 3
+private const val READOUT_TAP_WINDOW_MS = 600L
+
+/**
+ * How often the desk asks what time it is, when it has been left to the clock.
+ *
+ * Ten minutes, which is six wake-ups an hour against a rule — nothing idles —
+ * that is about the frame loop. A dusk the app sleeps through is a setting that
+ * silently does not work, and the alternative to a slow timer is re-reading a
+ * clock on every recomposition of a screen that recomposes for other reasons.
+ */
+private const val DUSK_POLL_MS = 10 * 60 * 1000L
+
+/** What the bar's room button says, which is also the whole cycle written down. */
+private fun roomLabel(scene: Scene, light: DeskLight): String = when (scene) {
+    Scene.MINIMAL -> Scene.MINIMAL.displayName
+    Scene.DESK -> "${Scene.DESK.displayName} · ${light.displayName}"
+}
+
 /** Long enough to read "To the graveyard", short enough not to become scenery. */
 private const val ANNOUNCEMENT_MILLIS = 1_600L
 
@@ -254,7 +286,7 @@ private const val ANNOUNCEMENT_MILLIS = 1_600L
  * see [StagedCard].
  */
 @Composable
-fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
+fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Unit) {
     val deck = state.deck
     // A fresh shuffle each time the table is opened. The seed defaults to a
     // constant so tests can ask for a known deal; a demo that dealt the same
@@ -271,6 +303,63 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
     val back = LocalCardBack.current
     var menuFor by remember { mutableStateOf<DragOrigin?>(null) }
     var guide by remember { mutableStateOf(false) }
+
+    // ---- which room the table is in -----------------------------------------
+    //
+    // Two preferences and a clock, resolved to one value. `look` is an ordinary
+    // parameter rather than snapshot state, unlike the camera's `eye` beside
+    // it, and `SceneRender.kt` carries the reason: the eye changes sixty times
+    // a second and this changes twice a day.
+    val scene = prefs.preferences.scene
+    val deskLight = prefs.preferences.deskLight
+
+    // The hour, re-read on a slow timer rather than watched. This is not an
+    // idle animation — it is a preference that happens to have a clock behind
+    // it — and a room that stayed in daylight because the app was already open
+    // at dusk would be the setting quietly not working.
+    var hour by remember { mutableStateOf(localHour()) }
+    LaunchedEffect(scene, deskLight) {
+        if (scene != Scene.DESK || deskLight != DeskLight.AUTO) return@LaunchedEffect
+        while (true) {
+            delay(DUSK_POLL_MS)
+            hour = localHour()
+        }
+    }
+    val look = remember(scene, deskLight, hour) {
+        StageLook.of(scene, DeskClock.resolve(deskLight, hour))
+    }
+
+    /** Minimal, then the desk on the clock, then the two the clock cannot argue with. */
+    val cycleScene: () -> Unit = {
+        prefs.update {
+            when {
+                it.scene == Scene.MINIMAL -> it.copy(scene = Scene.DESK, deskLight = DeskLight.AUTO)
+                it.deskLight == DeskLight.AUTO -> it.copy(deskLight = DeskLight.DAY)
+                it.deskLight == DeskLight.DAY -> it.copy(deskLight = DeskLight.NIGHT)
+                else -> it.copy(scene = Scene.MINIMAL)
+            }
+        }
+    }
+
+    // The instrument, and the one thing that reads it.
+    //
+    // Off by default and behind a gesture nobody finds by accident, because it
+    // is not a feature — it is the answer to "is this actually fast", which
+    // every claim about the stage has so far had to be argued rather than
+    // measured. The rate comes from the panel rather than from an assumption:
+    // 16.7ms is a comfortable frame at sixty hertz and a missed one at a
+    // hundred and twenty, so a probe told the wrong number reports health on a
+    // stage dropping half its frames.
+    val refreshHz = rememberRefreshHz()
+    val probe = remember(refreshHz) { FrameProbe(refreshHz = refreshHz) }
+    var readout by remember { mutableStateOf(false) }
+    // Written by the frame loop only while the overlay is up. `FrameProbe`'s
+    // fields are deliberately plain, so nothing about the probe invalidates
+    // anything — which is right for the ninety-nine per cent of the time the
+    // overlay is off, and means the overlay has to be given a clock of its own.
+    // Read inside a draw lambda and nowhere else, the way `EasterEgg` reads its
+    // tick: it re-runs one draw, not a composition.
+    var probeTick by remember { mutableStateOf(0L) }
 
     // The pointer half of the standing rule that every gesture ships with both
     // idioms. Only the actions that need no card selected are here: a keyboard
@@ -307,6 +396,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 ShortcutAction.PLAY_SEAT_OVERHEAD -> camera.rig.aimAt(StageSeat.OVERHEAD)
                 ShortcutAction.PLAY_SEAT_TABLE -> camera.rig.aimAt(StageSeat.TABLE)
                 ShortcutAction.PLAY_SEAT_SEATED -> camera.rig.aimAt(StageSeat.SEATED)
+                ShortcutAction.PLAY_SCENE -> cycleScene()
                 ShortcutAction.PLAY_GUIDE -> guide = !guide
                 // Outward one layer at a time, and the guide is the outermost
                 // thing over the table: Esc with it open should close it, not
@@ -352,6 +442,14 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                         .planeFor(widthPx, heightPx)
                         .perspectiveGrowth,
                 )
+            }
+
+            // Solved once per room and per surface, never per frame. The same
+            // discipline the board layout above obeys, and for the same reason:
+            // this is geometry, and geometry that is re-derived while the camera
+            // moves is geometry that can change under a gesture.
+            val scenery = remember(scene, layout, widthPx, heightPx) {
+                Scenery.of(scene, layout, widthPx, heightPx)
             }
 
             if (!layout.fits) {
@@ -514,12 +612,20 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                         // events, so the long press has to be driven from here.
                         pilot.tick(now / 1_000_000L)
                         val step = dt.coerceAtMost(0.05f)
-                        cards.values.forEach { it.step(SpringSpec.Bouncy, step) }
+                        // Counted rather than sized: `step` already answers "did
+                        // this one move", and the load a frame's timings belong
+                        // to is the things that were moving in it, not the sixty
+                        // that were parked.
+                        var moving = 0
+                        cards.values.forEach { if (it.step(SpringSpec.Bouncy, step)) moving++ }
                         // Snappy rather than Bouncy: a card overshooting reads as
                         // weight, and a whole table overshooting reads as a lurch.
                         if (camera.rig.step(SpringSpec.Snappy, step)) {
                             camera.sync(widthPx, heightPx)
+                            moving++
                         }
+                        probe.sample(now, moving)
+                        if (readout) probeTick = now
                     }
                 }
             }
@@ -565,8 +671,8 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 // every card, and the only thing on the stage that is not part
                 // of one.
                 Canvas(Modifier.fillMaxSize()) {
-                    drawTable(layout, camera.plane, camera.eye)
-                    drawFelt(layout)
+                    drawScene(scenery, camera.plane, camera.eye, look)
+                    drawFelt(layout, look)
                     drawMatControls(layout, play.field)
                     drawIndicator(play.carry?.intent, play.field, layout)
                 }
@@ -593,7 +699,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                     // different card — which throws away exactly the image
                     // caches and layer state the reorder was cheap because of.
                     key(seat.id) {
-                        StagedCard(seat, cards, state, back, density, camera)
+                        StagedCard(seat, cards, state, back, density, camera, look)
                     }
                 }
             }
@@ -605,7 +711,19 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             }
         }
 
-        PlayTopBar(play, camera, onBack, onGuide = { guide = true })
+        PlayTopBar(
+            play = play,
+            camera = camera,
+            onBack = onBack,
+            onGuide = { guide = true },
+            onReadout = { readout = !readout },
+            room = roomLabel(scene, deskLight),
+            onRoom = cycleScene,
+        )
+
+        if (readout) {
+            FrameReadout(probe, { probeTick }, Modifier.align(Alignment.TopStart))
+        }
 
         // Over the bar as well as the table, because it is answering a question
         // about both of them.
@@ -1108,6 +1226,7 @@ private fun StagedCard(
     back: com.kaiharimoto.mastertool.ui.components.CardBackChoice,
     density: androidx.compose.ui.unit.Density,
     camera: StageCameraState,
+    look: StageLook,
 ) {
     val motion = cards[seat.id] ?: return
     val art = state.index.byId(seat.card.cardId)
@@ -1144,10 +1263,12 @@ private fun StagedCard(
                     // than by the layout — so a draw scope here *is* the mat's
                     // frame, which is the frame `Shadows.cast` and `CardSolid`
                     // already speak.
-                    drawCardShadow(pose, seat.width, seat.height, seat.height, seat.solid)
+                    drawCardShadow(
+                        pose, seat.width, seat.height, seat.height, seat.solid, look,
+                    )
                     drawSolidEdges(
                         pose, seat.width, seat.height, seat.solid,
-                        plane, camera.eye, seat.depth,
+                        plane, camera.eye, look, seat.depth,
                     )
 
                     // One frame, one answer. Every card on this stage — resting
@@ -1186,9 +1307,17 @@ private fun StagedCard(
                 back = back,
                 motion = motion,
                 camera = camera,
+                look = look,
                 magnified = seat.magnified,
             )
-            CardFace(art = art, faceUp = false, back = back, motion = motion, camera = camera)
+            CardFace(
+                art = art,
+                faceUp = false,
+                back = back,
+                motion = motion,
+                camera = camera,
+                look = look,
+            )
 
             seat.tally?.let { tally ->
                 Badge(text = tally, modifier = Modifier.align(Alignment.BottomEnd))
@@ -1211,6 +1340,7 @@ private fun CardFace(
     back: com.kaiharimoto.mastertool.ui.components.CardBackChoice,
     motion: StageCard,
     camera: StageCameraState,
+    look: StageLook,
     /** Held up to be read, so it is worth fetching the art at full size. */
     magnified: Boolean = false,
 ) {
@@ -1284,6 +1414,7 @@ private fun CardFace(
                         pose = motion.pose,
                         material = material,
                         eye = camera.eye,
+                        look = look,
                         radiusPx = CardCornerRadius.toPx(),
                     )
                 },
@@ -1310,12 +1441,54 @@ private fun Badge(text: String, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * The frame clock, on the glass.
+ *
+ * A `Canvas` rather than a `Text`, and the whole reason is the thing it is
+ * measuring. A `Text` whose string changes every frame recomposes every frame,
+ * which is a cost the instrument would be adding to the very number it prints —
+ * an ammeter wired through itself. Drawing it instead invalidates one draw and
+ * touches no composition, which is the rule [StageCard] and `EasterEgg` already
+ * follow for everything that moves at frame rate.
+ *
+ * It still allocates: [FrameProbe.readout] builds a string and the measurer lays
+ * it out, once a frame, and only while this is on screen. That is the price of
+ * the UI layer having no arithmetic in it, and it is paid by a debug overlay
+ * rather than by the stage.
+ */
+@Composable
+private fun FrameReadout(probe: FrameProbe, tick: () -> Long, modifier: Modifier = Modifier) {
+    val measurer = rememberTextMeasurer()
+    val style = TextStyle(fontSize = 10.sp, color = MasterToolPalette.Text)
+    Canvas(
+        modifier
+            .padding(start = 10.dp, top = TOP_BAR + 6.dp)
+            .size(width = 340.dp, height = 15.dp),
+    ) {
+        // The read that subscribes this draw to the frame loop. Its value is
+        // never used — it is the clock, not the reading.
+        if (tick() == Long.MIN_VALUE) return@Canvas
+        val laid = measurer.measure(probe.readout(), style)
+        val width = laid.size.width.toFloat()
+        val height = laid.size.height.toFloat()
+        drawRect(
+            color = MasterToolPalette.Ink.copy(alpha = 0.78f),
+            topLeft = Offset(-3f, 0f),
+            size = Size(width + 6f, height),
+        )
+        drawText(laid)
+    }
+}
+
 @Composable
 private fun PlayTopBar(
     play: PlayState,
     camera: StageCameraState,
     onBack: () -> Unit,
     onGuide: () -> Unit,
+    onReadout: () -> Unit,
+    room: String,
+    onRoom: () -> Unit,
 ) {
     val feedback = LocalFeedback.current
     Row(
@@ -1330,10 +1503,38 @@ private fun PlayTopBar(
         // it is not going at the far end of a row of fifteen.
         BarButton("? Guide", onClick = onGuide)
         Divider()
+        // Three taps on the life-point *number* opens the frame readout.
+        //
+        // The number is the one thing in this bar that is pure output — every
+        // other element here already means something when you touch it — which
+        // is what makes it the only place a hidden gesture can go without taking
+        // a real one away. `ChibiLogo` established the idiom and this is the
+        // same window and the same count.
+        //
+        // Deliberately **not** in `ShortcutTable`, and that is the one house
+        // rule this knowingly steps around. The table is the help sheet, so
+        // anything in it is documented to the user by construction; a debug
+        // instrument that advertises itself in the help sheet is not hidden, and
+        // an instrument is not a feature that owes anybody both idioms.
+        var taps by remember { mutableStateOf(0) }
+        LaunchedEffect(taps) {
+            if (taps == 0) return@LaunchedEffect
+            if (taps >= READOUT_TAPS) {
+                taps = 0
+                onReadout()
+                return@LaunchedEffect
+            }
+            delay(READOUT_TAP_WINDOW_MS)
+            taps = 0
+        }
         Text(
             play.field.lifePoints.toString(),
             style = MaterialTheme.typography.titleMedium,
             color = if (play.field.lifePoints <= 0) MasterToolPalette.Danger else Color.Unspecified,
+            modifier = Modifier.clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+            ) { taps++ },
         )
         listOf(-1000, -500, -100, 100).forEach { delta ->
             BarButton(if (delta > 0) "+$delta" else "$delta") {
@@ -1347,6 +1548,12 @@ private fun PlayTopBar(
         StageSeat.entries.forEach { seat ->
             BarButton(seat.label) { camera.rig.aimAt(seat) }
         }
+        // Beside the seats, because choosing a room and choosing where to sit
+        // are the same kind of act — neither is about a card — and because one
+        // button that cycles is what the theme setting already does with three
+        // values. A submenu for four would be a menu to open, read and dismiss
+        // in order to change something the whole screen previews instantly.
+        BarButton(room, onClick = onRoom)
         Divider()
         BarButton(play.field.phase.label) { play.move { it.nextPhase() } }
         BarButton("Turn ${play.field.turn} ⟳") { play.move { it.endTurn() } }

@@ -3,6 +3,8 @@ package com.kaiharimoto.mastertool.core.prefs
 import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
+import com.kaiharimoto.mastertool.core.scene.DeskLight
+import com.kaiharimoto.mastertool.core.scene.Scene
 import kotlinx.serialization.Serializable
 
 /** Which colour scheme the app renders in. */
@@ -128,6 +130,25 @@ data class UiPreferences(
     val cardBackUrl: String = "",
     val format: Format = Format.TCG,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /**
+     * Which room the play stage is in.
+     *
+     * [Scene.MINIMAL] by default, and that is a decision rather than caution.
+     * The minimal stage is what `docs/DESIGN.md` describes and it is what the
+     * app *is*; a desk is a thing you go and choose, the way you choose a card
+     * back. A build that arrived one morning with a bedroom in it would have
+     * changed the tool on somebody who had not asked.
+     */
+    val scene: Scene = Scene.MINIMAL,
+    /**
+     * Which lamp is on in the desk scene.
+     *
+     * [DeskLight.AUTO] reads the hour off the device, so a table opened at
+     * midnight is lit by a lamp without anybody having said so. The two manual
+     * values exist because a preference that can only be inferred is a
+     * preference the user cannot disagree with.
+     */
+    val deskLight: DeskLight = DeskLight.AUTO,
     /**
      * Sound and haptic feedback. Null means "the platform's default" — on for
      * a tablet in the hands, off at a desk — until the user says otherwise.
