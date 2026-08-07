@@ -351,14 +351,56 @@ class CardSolidTest {
         }
     }
 
+    /**
+     * An eye standing off in [direction], at about the distance the stage's own
+     * lens sits at.
+     *
+     * A *place*, because that is what [CardSolid.visible] asks for now and what
+     * the projection always meant. Straight out from the card under test unless
+     * a test says otherwise, so the claims below are about the card's own
+     * geometry rather than about where on the table it happens to be — which is
+     * a separate claim, and has its own test.
+     */
+    private fun eyeAt(
+        direction: Vec3 = Vec3.Toward,
+        from: Vec3 = flat.position,
+        distance: Float = 1450f,
+    ): Vec3 = from + direction * distance
+
     @Test
     fun aCardFlatOnTheTableShowsItsFaceAndNothingElse() {
         // Straight on, the four edges are exactly edge-on and the back is
         // hidden: one visible face, which is what a card on a table looks like.
-        val visible = CardSolid.visible(CardSolid.slab(flat, width, height, 20f))
+        val visible = CardSolid.visible(CardSolid.slab(flat, width, height, 20f), eyeAt())
 
         assertEquals(1, visible.size)
         assertClose(1f, visible.single().normal.z)
+    }
+
+    @Test
+    fun aCardOffToOneSideShowsTheWallTurnedTowardTheCamera() {
+        // The bug this replaced, stated as the property that was missing. Asked
+        // as a *direction*, a flat card's left and right walls score exactly
+        // zero and are culled — so at every unturned camera, every object on the
+        // board lost both of them, and the deck, which is the tallest thing on
+        // the table and sits in the right-hand column, was a hole you could see
+        // the felt through.
+        //
+        // The eye is where it is for the whole board, and the card is where the
+        // deck is: off to the right of it. Its left wall is therefore turned
+        // toward the camera and has to be drawn.
+        val eye = eyeAt(from = Vec3(500f, 400f, 0f))
+        val deck = flat.copy(position = Vec3(1050f, 400f, 0f))
+        val visible = CardSolid.visible(CardSolid.slab(deck, width, height, 55f), eye)
+
+        assertTrue(
+            visible.any { it.normal.x < -0.5f },
+            "the wall on the camera's side of an off-centre pile is drawn",
+        )
+        assertTrue(
+            visible.none { it.normal.x > 0.5f },
+            "and the wall on the far side of it is not",
+        )
     }
 
     @Test
@@ -366,8 +408,10 @@ class CardSolidTest {
         // Which is the whole point of the solid. The table is tilted, so the
         // eye is up and toward the player, and the near edge of a pile comes
         // into view — that white band is what says "these are objects".
-        val eye = StageRig.eye(15f)
-        val visible = CardSolid.visible(CardSolid.slab(flat, width, height, 30f), eye)
+        val visible = CardSolid.visible(
+            CardSolid.slab(flat, width, height, 30f),
+            eyeAt(StageRig.eye(15f)),
+        )
 
         assertEquals(2, visible.size, "the face and the near edge")
         assertTrue(visible.any { it.normal.y > 0.5f }, "the near edge is visible")
@@ -375,8 +419,34 @@ class CardSolidTest {
     }
 
     @Test
+    fun aLeaningPileIsCulledByTheWayItActuallyLeans() {
+        // Normals used to be the un-leaned solid's, rotated by the pose, and a
+        // forty-card deck leans about fourteen degrees. Fourteen degrees is the
+        // difference between drawing a wall and not drawing it, on a solid whose
+        // two printed faces this path never draws at all.
+        val depth = 55f
+        val lean = CardSolid.pileLean(depth, width)
+        val leaned = CardSolid.slab(flat, width, height, depth, lean)
+        val upright = CardSolid.slab(flat, width, height, depth)
+
+        val near = leaned[3]
+        assertTrue(
+            near.normal.z > 1e-3f,
+            "a pile slouching toward the player tips its near wall up at the camera: ${near.normal}",
+        )
+        assertClose(
+            0f,
+            upright[3].normal.z,
+            note = "and an upright one's near wall does not:",
+        )
+    }
+
+    @Test
     fun aCardTurnedOverShowsItsBackAndNotItsFace() {
-        val visible = CardSolid.visible(CardSolid.slab(flat.copy(rotY = 180f), width, height, 2f))
+        val visible = CardSolid.visible(
+            CardSolid.slab(flat.copy(rotY = 180f), width, height, 2f),
+            eyeAt(),
+        )
 
         assertEquals(1, visible.size)
         assertClose(1f, visible.single().normal.z, note = "the back is now pointing at us:")
@@ -385,9 +455,40 @@ class CardSolidTest {
     @Test
     fun aCardTiltedInTheAirShowsOneOfItsLongEdges() {
         val held = flat.copy(rotY = -22f)
-        val visible = CardSolid.visible(CardSolid.slab(held, width, height, 4f))
+        val visible = CardSolid.visible(CardSolid.slab(held, width, height, 4f), eyeAt())
 
         assertTrue(visible.any { abs(it.normal.x) > 0.3f }, "a side edge should appear")
+    }
+
+    @Test
+    fun everyWallOfASlabPointsOutOfIt() {
+        // The winding, which nothing had ever checked and two faces got wrong.
+        // A normal read off the corners is only the *outward* one if every face
+        // goes round the same way; the far and right edges did not, and it went
+        // unnoticed because a convex quad fills identically either way and the
+        // declared normals were quietly correcting for it.
+        val faces = CardSolid.slab(flat, width, height, depth = 20f)
+        val middle = Vec3(flat.position.x, flat.position.y, -10f)
+
+        val outward = listOf(
+            Vec3(0f, 0f, -1f),   // back
+            Vec3(0f, -1f, 0f),   // far
+            Vec3(1f, 0f, 0f),    // right
+            Vec3(0f, 1f, 0f),    // near
+            Vec3(-1f, 0f, 0f),   // left
+            Vec3(0f, 0f, 1f),    // front
+        )
+
+        faces.forEachIndexed { index, face ->
+            val expected = outward[index]
+            assertClose(expected.x, face.normal.x, note = "face $index x:")
+            assertClose(expected.y, face.normal.y, note = "face $index y:")
+            assertClose(expected.z, face.normal.z, note = "face $index z:")
+            assertTrue(
+                face.normal dot (face.centre - middle) > 0f,
+                "face $index points away from the middle of the solid",
+            )
+        }
     }
 
     @Test

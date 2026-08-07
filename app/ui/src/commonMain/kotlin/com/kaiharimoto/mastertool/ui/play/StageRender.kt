@@ -19,6 +19,7 @@ import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardMaterial
 import com.kaiharimoto.mastertool.core.render.CardSolid
+import com.kaiharimoto.mastertool.core.render.Face
 import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.Rot3
 import com.kaiharimoto.mastertool.core.render.Shading
@@ -151,6 +152,28 @@ private fun Color.shaded(lit: Lit): Color = Color(
     alpha,
 )
 
+/**
+ * The faces of a solid you can actually see, in the order they must be painted.
+ *
+ * Two jobs and one traversal, because they are the same question asked twice.
+ * [CardSolid.visible] answers *whether* a face is toward the camera, and it is
+ * asked with the camera's **position** — `StagePlane.eyePoint` — rather than
+ * with the direction the whole stage is lit from, because the projection those
+ * faces are about to go through divides by distance and a direction is a lens
+ * infinitely far away. That disagreement is what used to leave the deck with no
+ * side walls to see it through.
+ *
+ * Then the order. A slab's walls were painted in the order the geometry happens
+ * to list them — back, far, right, near, left — and near a corner-on view that
+ * paints the far wall over the near one. Sorting by the depth of each face's own
+ * centre is the painter's algorithm applied to six quads, which is cheap enough
+ * to be beneath discussion and is the only thing that makes a solid look solid
+ * from a corner.
+ */
+private fun List<Face>.facingTheCamera(stage: StagePlane, eye: Vec3): List<Face> =
+    CardSolid.visible(this, stage.eyePoint(eye))
+        .sortedBy { stage.project(it.centre).depth }
+
 // ---- the table ------------------------------------------------------------------
 
 /**
@@ -172,7 +195,8 @@ internal fun DrawScope.drawTable(layout: BoardLayout, stage: StagePlane, eye: Ve
     val thickness = layout.cardWidth * TABLE_THICKNESS
     val pose = Pose3(position = Vec3(table.centerX, table.centerY, 0f))
 
-    CardSolid.visible(CardSolid.slab(pose, table.width, table.height, thickness), eye)
+    CardSolid.slab(pose, table.width, table.height, thickness)
+        .facingTheCamera(stage, eye)
         .forEach { face ->
             // The top, which is the next thing drawn and is drawn flat.
             if (face.normal.z > 0.99f) return@forEach
@@ -419,7 +443,9 @@ internal fun DrawScope.drawSolidEdges(
     // says so from directly overhead, where its height has gone.
     val lean = if (layers > 1) CardSolid.pileLean(depth, width) else Vec3.Zero
 
-    CardSolid.visible(CardSolid.slab(pose, width, height, depth, lean), eye).forEach { face ->
+    CardSolid.slab(pose, width, height, depth, lean)
+        .facingTheCamera(stage, eye)
+        .forEach { face ->
         // Everything except the printed face, which the card's own composable
         // is about to draw over the top of this anyway.
         if (abs(face.normal dot printed) > 0.99f) return@forEach

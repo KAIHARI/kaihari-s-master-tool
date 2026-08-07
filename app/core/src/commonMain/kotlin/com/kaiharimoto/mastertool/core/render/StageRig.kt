@@ -182,7 +182,21 @@ object StageRig {
     }
 
     /**
-     * One face of a solid: how bright to paint it, or nothing if it is turned away.
+     * One face of a solid: how bright to paint it.
+     *
+     * It used to answer `Lit.None` for anything whose normal was not within
+     * ninety degrees of the direction the viewer lies in — a back-face cull,
+     * done a second time, in the wrong place, with the wrong test. Culling is
+     * `CardSolid.visible`'s job and it asks a better question: whether the face
+     * is turned toward *where the camera is*, rather than toward the direction
+     * the stage as a whole is seen from. The two disagree exactly where it
+     * matters, and while this function kept its own opinion the walls that
+     * disagreement had been hiding came back **painted black** — which is a hole
+     * in a deck of a different colour and no more convincing.
+     *
+     * So there is no opinion here any more. A face this is asked about is a face
+     * the culler already passed, and the answer is how the three lamps land on
+     * it.
      *
      * The bounce earns its place here. The key is toward the player, so the
      * *near* edge of every pile — the one edge of it anybody can see — faces
@@ -195,6 +209,5 @@ object StageRig {
      * the whole reason a card's outline used to dissolve into the felt whenever
      * the card itself was dim.
      */
-    fun face(face: Face, eye: Vec3 = Vec3.Toward): Lit =
-        if (face.facing(eye) <= 0f) Lit.None else lit(face.normal, eye)
+    fun face(face: Face, eye: Vec3 = Vec3.Toward): Lit = lit(face.normal, eye)
 }

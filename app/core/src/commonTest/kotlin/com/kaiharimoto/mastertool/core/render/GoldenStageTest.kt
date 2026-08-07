@@ -62,23 +62,23 @@ class GoldenStageTest {
             seat = "home",
             expected = """
             rest face   362.1,569.4  484.3,569.4  469.8,745.6  342.0,745.6
-            rest solid  near 0.779/-0.059 406.0,745.7  front 1.000/0.098 414.8,655.5
+            rest solid  right 0.817/-0.080 477.3,655.6  near 0.779/-0.059 406.0,745.7  front 1.000/0.098 414.8,655.5
             rest shadow 361.9,569.1  484.1,569.1  469.6,745.2  341.9,745.2  dark 0.660  soft 3.1
             rest shade  diff 0.955  spec 0.264  rim 0.001  hot 0.305,0.440
             held face   859.4,256.2  965.2,265.5  965.2,441.4  859.4,439.1
-            held solid  left 0.895/0.106 859.4,347.8  front 0.920/0.007 913.4,350.6
+            held solid  near 0.788/-0.066 913.3,440.4  left 0.804/0.078 859.4,347.8  front 0.920/0.007 913.4,350.6
             held shadow 906.4,398.1  990.7,357.2  974.6,472.3  887.5,515.8  dark 0.352  soft 34.2
             held shade  diff 0.837  spec 0.000  rim 0.002  hot -0.382,-0.134
             set  face   1134.8,625.4  1145.3,748.8  1330.8,748.8  1314.5,625.4
-            set  solid  back 1.000/0.098 1231.1,686.3  right 0.779/-0.059 1238.0,748.8
+            set  solid  back 1.000/0.098 1231.1,686.3  far 0.804/0.078 1139.9,686.2  right 0.779/-0.059 1238.0,748.8
             set  shadow 1134.5,625.1  1145.1,748.4  1330.5,748.4  1314.3,625.1  dark 0.660  soft 3.1
             set  shade  diff 0.955  spec 0.137  rim 0.000  hot 0.560,0.305
             pile face   297.7,176.7  411.4,176.7  394.9,323.5  276.3,323.5
-            pile solid  near 0.779/-0.059 342.5,334.5  front 1.000/0.098 345.3,248.6
+            pile solid  right 0.817/-0.080 409.1,260.4  near 0.779/-0.059 342.5,334.5  front 1.000/0.098 345.3,248.6
             pile shadow 311.9,201.6  422.4,201.6  406.8,345.1  291.7,345.1  dark 0.660  soft 3.1
             pile shade  diff 0.955  spec 0.228  rim 0.001  hot 0.305,0.440
             deck face   1340.7,222.3  1224.8,222.3  1243.2,374.0  1364.1,374.0
-            deck solid  back 1.000/0.098 1276.4,322.1  near 0.779/-0.059 1294.9,385.9
+            deck solid  back 1.000/0.098 1276.4,322.1  right 0.804/0.078 1226.4,309.5  near 0.779/-0.059 1294.9,385.9
             deck shadow 1322.9,249.8  1210.9,249.8  1228.0,397.4  1344.8,397.4  dark 0.660  soft 3.1
             deck shade  diff 0.955  spec 0.137  rim 0.000  hot 0.305,0.440
             """.trimIndent(),
@@ -92,11 +92,11 @@ class GoldenStageTest {
             seat = "turned",
             expected = """
             rest face   488.2,830.3  591.4,751.0  701.0,899.9  596.5,983.4
-            rest solid  near 0.798/-0.071 649.2,941.3  left 0.804/0.078 541.7,905.8  front 1.000/0.099 593.9,864.9
+            rest solid  right 0.794/-0.065 645.5,824.5  near 0.798/-0.071 649.2,941.3  front 1.000/0.099 593.9,864.9
             rest shadow 487.8,830.1  591.0,750.9  700.6,899.7  596.1,983.2  dark 0.660  soft 3.1
             rest shade  diff 0.955  spec 0.089  rim 0.000  hot 0.207,0.343
             held face   721.5,266.8  798.9,211.9  898.8,356.9  828.0,418.1
-            held solid  far 0.927/0.159 761.2,238.8  left 0.895/0.106 775.3,343.3  front 0.923/0.004 813.2,313.4
+            held solid  near 0.814/-0.083 864.3,386.8  left 0.804/0.078 775.3,343.3  front 0.923/0.004 813.2,313.4
             held shadow 816.7,353.6  855.8,271.3  917.4,375.6  878.5,461.3  dark 0.352  soft 34.2
             held shade  diff 0.837  spec 0.000  rim 0.009  hot -0.574,-0.330
             set  face   1129.6,407.9  1209.1,497.6  1335.9,396.2  1255.9,309.7
@@ -104,7 +104,7 @@ class GoldenStageTest {
             set  shadow 1129.3,407.8  1208.7,497.5  1335.5,396.1  1255.5,309.6  dark 0.660  soft 3.1
             set  shade  diff 0.955  spec 0.107  rim 0.000  hot 0.657,0.207
             pile face   141.6,540.4  247.8,466.4  346.6,605.3  239.0,683.2
-            pile solid  near 0.798/-0.071 301.6,648.0  left 0.804/0.078 199.7,615.4  front 1.000/0.099 243.5,572.7
+            pile solid  right 0.794/-0.065 304.8,540.7  near 0.798/-0.071 301.6,648.0  front 1.000/0.099 243.5,572.7
             pile shadow 162.7,551.5  265.3,479.8  361.3,614.5  257.4,689.9  dark 0.660  soft 3.1
             pile shade  diff 0.955  spec 0.120  rim 0.000  hot 0.207,0.343
             deck face   1048.3,-30.9  961.6,30.3  1069.7,147.9  1157.1,83.8
@@ -122,23 +122,23 @@ class GoldenStageTest {
             seat = "steep",
             expected = """
             rest face   464.1,535.1  557.8,535.1  543.4,625.9  444.0,625.9
-            rest solid  near 0.749/-0.037 493.7,626.1  front 1.000/0.094 502.6,579.2
+            rest solid  right 0.817/-0.080 550.8,579.4  near 0.749/-0.037 493.7,626.1  front 1.000/0.094 502.6,579.2
             rest shadow 463.9,534.9  557.7,534.9  543.2,625.7  443.9,625.7  dark 0.660  soft 3.1
             rest shade  diff 0.955  spec 0.069  rim 0.069  hot 0.263,0.767
             held face   842.1,324.9  919.6,348.5  923.9,456.2  843.7,433.7
-            held solid  near 0.734/-0.011 884.2,445.2  left 0.895/0.106 842.9,378.5  front 0.925/0.003 882.7,390.0
+            held solid  near 0.753/-0.041 884.2,445.2  left 0.804/0.078 842.9,378.5  front 0.925/0.003 882.7,390.0
             held shadow 880.6,449.1  944.0,428.9  933.0,486.1  866.8,508.0  dark 0.352  soft 34.2
             held shade  diff 0.837  spec 0.000  rim 0.014  hot -0.414,0.299
             set  face   1057.9,563.7  1068.5,627.6  1212.7,627.6  1196.4,563.7
-            set  solid  back 1.000/0.094 1133.7,595.4  right 0.749/-0.037 1140.6,627.7
+            set  solid  back 1.000/0.094 1133.7,595.4  far 0.804/0.078 1063.1,595.2  right 0.749/-0.037 1140.6,627.7
             set  shadow 1057.7,563.5  1068.3,627.4  1212.5,627.4  1196.1,563.5  dark 0.660  soft 3.1
             set  shade  diff 0.955  spec 0.101  rim 0.032  hot 0.233,0.263
             pile face   431.6,325.4  515.0,325.4  500.0,394.6  412.2,394.6
-            pile solid  near 0.749/-0.037 458.0,408.8  front 1.000/0.094 464.9,359.1
+            pile solid  right 0.817/-0.080 509.3,373.2  near 0.749/-0.037 458.0,408.8  front 1.000/0.094 464.9,359.1
             pile shadow 435.6,353.1  518.1,353.1  503.3,422.9  416.5,422.9  dark 0.660  soft 3.1
             pile shade  diff 0.955  spec 0.103  rim 0.046  hot 0.263,0.767
             deck face   1196.7,344.3  1111.7,344.3  1128.5,415.8  1218.1,415.8
-            deck solid  back 1.000/0.094 1158.9,411.6  near 0.749/-0.037 1170.8,432.4
+            deck solid  back 1.000/0.094 1158.9,411.6  right 0.804/0.078 1117.8,395.5  near 0.749/-0.037 1170.8,432.4
             deck shadow 1191.8,376.4  1107.8,376.4  1124.2,448.7  1212.6,448.7  dark 0.660  soft 3.1
             deck shade  diff 0.955  spec 0.101  rim 0.032  hot 0.263,0.767
             """.trimIndent(),
@@ -463,7 +463,7 @@ private class StageDump(private val plane: StagePlane) {
     private fun record(subject: StageObject) {
         val pose = subject.pose
         val slab = CardSolid.slab(pose, CARD_WIDTH, CARD_HEIGHT, subject.depth)
-        val shown = CardSolid.visible(slab, eye)
+        val shown = CardSolid.visible(slab, plane.eyePoint(eye))
 
         row(
             subject.name,

@@ -240,11 +240,21 @@ class ShadingTest {
     // ---- the edges of a solid ----------------------------------------------------------
 
     @Test
-    fun anEdgeTurnedAwayIsNotLitAtAll() {
+    fun anEdgeTurnedAwayIsNeverReachedByTheRigAtAll() {
+        // This used to say that the rig returns nothing for a face pointing
+        // away, which was a back-face cull done twice — once by the culler and
+        // once by the lamps — and the second copy asked the cheaper, wronger
+        // question. Two culls that disagree is one cull too many, so the rig
+        // stopped having an opinion and this says the same thing where it is
+        // actually decided: the far edge never gets as far as being lit.
         val faces = CardSolid.slab(Pose3(), 100f, 145f, depth = 30f)
         val far = faces.first { it.normal.y < -0.5f }
+        val eyeAt = Vec3.Zero + StageRig.eye(15f) * 1450f
 
-        assertEquals(0f, StageRig.face(far, StageRig.eye(15f)).amount)
+        assertTrue(
+            far !in CardSolid.visible(faces, eyeAt),
+            "the edge on the far side of a pile is culled before it is painted",
+        )
     }
 
     @Test

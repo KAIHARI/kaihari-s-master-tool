@@ -19,6 +19,26 @@ data class Face(
     /** How square-on the face is to an eye looking along [eye]. Negative is away. */
     fun facing(eye: Vec3 = Vec3.Toward): Float = normal dot eye
 
+    /**
+     * How square-on the face is to an eye standing at [eyeAt]. Negative is away.
+     *
+     * The same question as [facing] and a different answer, because a real
+     * camera is a *point* and not a direction. This one is what decides whether
+     * a face can be seen; [facing] is what decides how the light lands on it,
+     * where a direction is the honest model because the lamps are miles away
+     * and the camera is three feet from the table.
+     *
+     * The difference is not academic. At the reading seat the deck sits in the
+     * right-hand column, about a third of the screen off the middle, so the
+     * true line from the eye to it is more than twenty degrees off the view
+     * axis — its left-hand wall genuinely faces the camera. Asked as a
+     * direction, that wall's answer is **exactly zero** and it is culled, and
+     * because a slab's two printed faces are never drawn by this path the gap
+     * it leaves is a hole straight through the deck to the felt. Asked as a
+     * point, it is drawn, which is what a deck looks like.
+     */
+    fun facingFrom(eyeAt: Vec3): Float = normal dot (eyeAt - centre).normalised()
+
     val centre: Vec3
         get() = corners.fold(Vec3.Zero) { sum, c -> sum + c } / corners.size.toFloat()
 }
@@ -214,11 +234,21 @@ object CardSolid {
      *
      * [lean] slides the *back* of the body sideways, which turns the four edges
      * from rectangles into parallelograms and is how a pile is told to slouch.
-     * The face normals are left as the un-leaned solid's, deliberately: they are
-     * used to light the faces and to cull them, and at the few degrees a
-     * [pileLean] actually reaches, the error in the shading is far smaller than
-     * the error of having every pile on the table stand to attention. A lean of
-     * a quarter of the body's depth is about fourteen degrees.
+     *
+     * **Every normal here is read off the geometry rather than declared.** They
+     * used to be the un-leaned solid's, rotated by the pose, on the argument
+     * that a [pileLean] is only a few degrees and shading is forgiving. Shading
+     * is; culling is not. A forty-card deck leans about fourteen degrees, and a
+     * fourteen-degree error is the difference between drawing a wall and not
+     * drawing it at all — which on a solid whose printed faces this path never
+     * draws is the difference between a deck and a hole. Taking the normal from
+     * the corners costs a cross product and cannot drift from the shape.
+     *
+     * That is only sound if every face is wound the same way round, and two of
+     * them were not: the far and right edges walked their front corners in the
+     * same screen direction as the near and left ones, so their outward normals
+     * came out inverted. Nothing had ever noticed, because a convex quad fills
+     * identically either way and the declared normals were papering over it.
      */
     fun slab(
         pose: Pose3,
@@ -230,21 +260,48 @@ object CardSolid {
         val front = face(pose, width, height, atDepth = 0f)
         val back = face(pose, width, height, atDepth = depth).map { it + lean }
 
-        fun side(a: Int, b: Int, normal: Vec3) = Face(
+        fun side(a: Int, b: Int, outward: Vec3): Face {
             // Round the loop: along the front edge, down the body, back along
-            // the rear edge. A quad, always, so it can never self-intersect.
-            corners = listOf(front[a], front[b], back[b], back[a]),
-            normal = Rot3.rotate(pose, normal),
-        )
+            // the rear edge. A quad, always, so it can never self-intersect —
+            // and corners 0→3 and 1→2 are the two that run through the body,
+            // which is the axis a pile's side is ruled along.
+            val corners = listOf(front[a], front[b], back[b], back[a])
+            return Face(corners, sheared(corners, Rot3.rotate(pose, outward)))
+        }
 
         return listOf(
             Face(back.reversed(), Rot3.rotate(pose, Vec3(0f, 0f, -1f))),
-            side(0, 1, Vec3(0f, -1f, 0f)),   // the far edge
-            side(1, 2, Vec3(1f, 0f, 0f)),    // the right edge
+            side(1, 0, Vec3(0f, -1f, 0f)),   // the far edge
+            side(2, 1, Vec3(1f, 0f, 0f)),    // the right edge
             side(3, 2, Vec3(0f, 1f, 0f)),    // the near edge
             side(0, 3, Vec3(-1f, 0f, 0f)),   // the left edge
             Face(front, Rot3.rotate(pose, Rot3.FaceNormal)),
         )
+    }
+
+    /**
+     * A wall's real normal: its shape says how it is sheared, the pose says
+     * which way is out.
+     *
+     * The cross product of the two *diagonals* rather than of two edges, which
+     * is the same answer for a rectangle and a better one for the sheared
+     * parallelograms a leaning pile's sides become — it averages the quad
+     * rather than trusting one corner of it.
+     *
+     * And then it is turned to agree with [outward], which is not belt and
+     * braces. A body hangs straight down the **stage's** z whichever way the
+     * card it belongs to is pointing — that is the whole of the face-down pile
+     * fix — so a card turned over has its front ring reversed while its body
+     * stays where it was, and every one of its four walls comes out wound the
+     * other way. Read naïvely, a face-down deck's walls would all point into
+     * itself and every one of them would be culled. Half the piles on this table
+     * are face-down.
+     */
+    private fun sheared(corners: List<Vec3>, outward: Vec3): Vec3 {
+        val axis = (corners[2] - corners[0]) cross (corners[3] - corners[1])
+        if (axis.length < 1e-6f) return outward
+        val normal = axis.normalised()
+        return if (normal dot outward < 0f) -normal else normal
     }
 
     /**
@@ -318,12 +375,26 @@ object CardSolid {
     private const val EDGE_ON = 1e-4f
 
     /**
-     * Only the faces an eye at [eye] can see.
+     * Only the faces an eye standing at [eyeAt] can see.
      *
      * Back-face culling, which for a slab is not an optimisation but the whole
      * of the effect: draw all six and the edges on the far side paint over the
      * near ones, and the pile turns inside out.
+     *
+     * **[eyeAt] is a place, not a direction**, and that distinction is the whole
+     * of a bug that shipped for three versions. Asked as a direction, a face is
+     * culled on `normal · eye`, which for the left and right walls of anything
+     * lying flat on a table seen from straight ahead is **exactly zero** — so at
+     * every unturned camera, every object on the board lost both of its side
+     * walls at once. Nothing showed it except the one object tall enough and far
+     * enough off-centre to matter: the deck, which stands half a card width
+     * proud in the right-hand column, and which you could see straight through.
+     *
+     * The projection this has to agree with was never orthographic —
+     * `StagePlane` divides by distance and always has — so the cull is now asked
+     * the same question the projection answers: is this face pointing at the
+     * place the camera is. `StagePlane.eyePoint` is where that place comes from.
      */
-    fun visible(faces: List<Face>, eye: Vec3 = Vec3.Toward): List<Face> =
-        faces.filter { it.facing(eye) > EDGE_ON }
+    fun visible(faces: List<Face>, eyeAt: Vec3): List<Face> =
+        faces.filter { it.facingFrom(eyeAt) > EDGE_ON }
 }

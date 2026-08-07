@@ -19,9 +19,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -180,10 +183,19 @@ private const val ANNOUNCEMENT_MILLIS = 1_600L
  * with the rules of the game living entirely in your head, which is what a
  * table is.
  *
- * **One plane, and one invariant that removes the need to sort anything: draw
- * order is depth.** Felt, then what is resting on it, then the shadows of what
- * is in the air, then what is in the air. There is no per-card depth sort
- * anywhere and there does not need to be.
+ * **One plane, and one invariant: draw order is depth.** The room first, then
+ * every card in turn, each painting its own shadow, its own white edges and its
+ * own picture before the next one is touched.
+ *
+ * That invariant used to be asserted rather than arranged. Nothing was sorted
+ * by depth at all — the mat's cards were ordered by raw mat-space y, which
+ * stops meaning anything the moment the table can turn, and the hand and the
+ * four piles were appended afterwards in the order somebody typed them. The
+ * graveyard is one row further from the camera than the deck and was painted
+ * over it. And because the passes were *global* — every shadow, then every
+ * edge, then every picture — no card could ever be occluded by a pile's wall,
+ * whatever the order. Both are gone: `ordered` sorts the whole stage by
+ * projected depth, and a card is one thing to paint.
  *
  * There used to be a second layer above this one, flat, holding whatever a hand
  * was carrying. It worked because there was only ever one camera angle, so
@@ -337,6 +349,48 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                 )
             }
 
+            // Painter's order: far to near, and it is the only thing on this
+            // stage that says what is in front of what.
+            //
+            // It is sorted **here** rather than in `seatsFor` because the answer
+            // depends on where the camera is and the seats do not. `seatsFor` is
+            // remembered against the field, and rightly — turning the table does
+            // not move a card. What turning the table does change is which cards
+            // are behind which, and asking `seatsFor` that question would re-solve
+            // sixty seats on every frame of an orbit.
+            //
+            // `derivedStateOf` is the whole of the trick and the reason this is
+            // affordable. The calculation reads `camera.plane`, so it re-runs on
+            // every frame the camera moves — sixty projections and a sort, which
+            // is nothing — but a *structural* policy means the composition is only
+            // invalidated on the frames the resulting order actually differs. Over
+            // a full sweep round the table that is a handful of frames out of
+            // hundreds, and on every other frame this costs one comparison.
+            //
+            // Depth rather than mat-space y, which is what it used to be. `y` is
+            // the right answer only while the table faces you: spin it half a turn
+            // and the far edge is the near one, and every card on the board is
+            // sorted backwards. `StagePlane.project` already computes the number
+            // that is true at every angle, and until now nothing read it.
+            val ordered by remember(seats, layout, camera) {
+                derivedStateOf(structuralEqualityPolicy()) {
+                    val plane = camera.plane
+                    val quantum = layout.field.height * DEPTH_QUANTUM
+                    seats.sortedWith(
+                        compareBy(
+                            // Whatever is in your hand is between you and the
+                            // table, whatever the arithmetic says: a card lifted
+                            // over the far edge is still the one you are holding.
+                            { if (it.carried) 1 else 0 },
+                            { quantised(plane.project(it.pose.position).depth, quantum) },
+                            // Recency, for two cards in the same place — the
+                            // reason `mat` is ordered the way it is.
+                            { it.id },
+                        ),
+                    )
+                }
+            }
+
             // What the last release did, said once and then withdrawn. Left up,
             // it stops being news and starts being furniture that lies about
             // what just happened.
@@ -447,50 +501,39 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             ) {
                 // The felt, what is about to happen to it, and the shadow and
                 // the white edge of everything resting on it.
+                // The room, and what is about to happen in it. Everything under
+                // every card, and the only thing on the stage that is not part
+                // of one.
                 Canvas(Modifier.fillMaxSize()) {
                     drawTable(layout, camera.plane, camera.eye)
                     drawFelt(layout)
                     drawIndicator(play.carry?.intent, play.field, layout)
-                    seats.filter { !it.carried }.forEach { seat ->
-                        val pose = cards[seat.id]?.pose ?: seat.pose
-                        drawCardShadow(pose, seat.width, seat.height, seat.height, seat.solid)
-                    }
-                    seats.filter { !it.carried }.forEach { seat ->
-                        val pose = cards[seat.id]?.pose ?: seat.pose
-                        drawSolidEdges(
-                            pose, seat.width, seat.height, seat.solid,
-                            camera.plane, camera.eye, seat.depth,
-                        )
-                    }
                 }
 
-                seats.filter { !it.carried }.forEach { seat ->
-                    StagedCard(seat, cards, state, back, density, camera)
-                }
-
-                // Then the shadow of anything in the air, over the cards it
-                // falls across rather than under them, and then the thing
-                // casting it. Parent order is still the whole depth sort.
-                Canvas(Modifier.fillMaxSize()) {
-                    seats.filter { it.carried }.forEach { seat ->
-                        val pose = cards[seat.id]?.pose ?: seat.pose
-                        drawCardShadow(pose, seat.width, seat.height, seat.height, seat.solid)
+                // Then one card at a time, each drawing its own shadow, its own
+                // body and its own face, in that order, as a unit.
+                //
+                // It used to be four passes — every shadow, then every white
+                // edge, then every card's picture, then the same three again for
+                // whatever was in the air — and the reason that was wrong is not
+                // subtle once it is written down: **no card's picture could ever
+                // be behind any pile's wall**, because all the walls were painted
+                // before any of the pictures. The graveyard sits one row further
+                // from the camera than the deck, and its top card drew straight
+                // over the deck standing in front of it.
+                //
+                // A card, its body and its shadow are one object, so they are one
+                // thing to paint, and then the parent's order really is the whole
+                // depth sort — which is what this file has claimed all along.
+                ordered.forEach { seat ->
+                    // Keyed, because this list *reorders*. Unkeyed, Compose
+                    // matches children by position, so the frame a card
+                    // overtakes another every node from there on is handed a
+                    // different card — which throws away exactly the image
+                    // caches and layer state the reorder was cheap because of.
+                    key(seat.id) {
+                        StagedCard(seat, cards, state, back, density, camera)
                     }
-                    // A card in the air is the one a hand is actually looking
-                    // at, and it is the one whose thickness used to go missing:
-                    // only the cards resting on the mat had their bodies drawn,
-                    // so picking a card up made it flat.
-                    seats.filter { it.carried }.forEach { seat ->
-                        val pose = cards[seat.id]?.pose ?: seat.pose
-                        drawSolidEdges(
-                            pose, seat.width, seat.height, seat.solid,
-                            camera.plane, camera.eye, seat.depth,
-                        )
-                    }
-                }
-
-                seats.filter { it.carried }.forEach { seat ->
-                    StagedCard(seat, cards, state, back, density, camera)
                 }
             }
 
@@ -614,11 +657,13 @@ private fun seatsFor(
         )
     }
 
-    // Depth first, recency second. `mat` is ordered by recency alone, which is
-    // right for two cards in the same place and wrong for two at different
-    // depths: on a tilted plane a card played early near the front must still
-    // occlude one played later further back.
-    seats.sortWith(compareBy({ quantised(it.pose.position.y, layout.field.height) }, { it.id }))
+    // Deliberately not sorted here any more. This function knows where the
+    // cards are and nothing about where the camera is, and which card is in
+    // front of which is a question about both — so the whole list is ordered by
+    // projected depth at the call site, hand and piles included. It used to sort
+    // the mat cards alone, by raw mat-space y, before the hand and the four piles
+    // were even appended: those went in last, in a hard-coded order, and the
+    // graveyard therefore painted over the deck standing in front of it.
 
     // The hand, fanned along the band the solver set aside.
     field.hand.forEachIndexed { index, card ->
@@ -772,9 +817,26 @@ private fun seatIdOf(field: PlayField, origin: DragOrigin): Int? = when (origin)
     }.getOrNull(origin.index)?.instanceId
 }
 
-/** Quantised so a small wobble in y cannot reshuffle the whole paint order. */
-private fun quantised(y: Float, height: Float): Int =
-    if (height <= 0f) 0 else (y / (height * 0.02f)).toInt()
+/**
+ * How coarsely depth is measured before recency takes over, as a share of the
+ * table's height.
+ *
+ * Two jobs, and the second one is the reason it is not simply zero. It keeps two
+ * cards *at the same place* ordered by when they were played rather than by the
+ * last bit of a sine — which is what `mat`'s own recency order is for. And it
+ * keeps the paint order still: an unquantised sort re-orders on any wobble, and
+ * every re-order is a recomposition of the whole stage.
+ *
+ * Finer than the two per cent of mat-space y it replaces, because depth is a
+ * shorter ruler than y — the tilt multiplies every height on this table by
+ * `sin θ`, about a third — so the same fraction would have been three times as
+ * coarse a bucket as the one it replaced.
+ */
+private const val DEPTH_QUANTUM = 0.006f
+
+/** Quantised so a small wobble cannot reshuffle the whole paint order. */
+private fun quantised(depth: Float, quantum: Float): Int =
+    if (quantum <= 0f) 0 else (depth / quantum).toInt()
 
 /**
  * Where hand card [index] of [count] sits.
@@ -923,6 +985,25 @@ private fun StagedCard(
                     // the frame budget. See `StageCameraState`'s KDoc.
                     val pose = motion.pose
                     val plane = camera.plane
+
+                    // A card, its body and the shadow it throws are one object,
+                    // so they are painted as one — shadow, then the white edges
+                    // of the stock, then the picture, all before the next card
+                    // is touched. Drawn here rather than on a canvas of their
+                    // own because a canvas can only come wholly before or wholly
+                    // after sixty composables, and either way something ends up
+                    // in front of a thing it is behind.
+                    //
+                    // The coordinates work out because this box is laid out at
+                    // the mat's own origin and moved by the matrix below rather
+                    // than by the layout — so a draw scope here *is* the mat's
+                    // frame, which is the frame `Shadows.cast` and `CardSolid`
+                    // already speak.
+                    drawCardShadow(pose, seat.width, seat.height, seat.height, seat.solid)
+                    drawSolidEdges(
+                        pose, seat.width, seat.height, seat.solid,
+                        plane, camera.eye, seat.depth,
+                    )
 
                     // One frame, one answer. Every card on this stage — resting
                     // on the felt, sitting on top of a deck, or held in the air

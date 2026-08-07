@@ -163,6 +163,29 @@ data class StagePlane(
         cameraDistance / max(cameraDistance - z * zoom * cosTilt, MIN_GAP)
 
     /**
+     * Where the camera actually is, in the mat's own coordinates.
+     *
+     * [direction] is the way the viewer lies from the table — `StageRig.eye`,
+     * which is the one place the tilt and the yaw are turned into a heading, and
+     * is passed in rather than recomputed so this file keeps its promise that
+     * the sign of the yaw is decided in exactly one place.
+     *
+     * This is the camera the projection has always had and never said out loud.
+     * [project] divides by `cameraDistance − depth`, which is a lens at a
+     * *point*; everything that asked where the viewer was got a *direction*
+     * instead, and a direction is a camera infinitely far away. The two agree
+     * about the middle of the table and disagree by more than twenty degrees at
+     * the right-hand column, which is where the deck lives.
+     *
+     * The zoom divides because it is applied to the mat's coordinates before the
+     * spin and the tilt: making the table twice the size, seen from the same
+     * lens, is the same picture as leaving it alone and standing half as far
+     * back — so in the mat's own frame the camera comes half as far.
+     */
+    fun eyePoint(direction: Vec3): Vec3 =
+        Vec3(centreX, centreY, 0f) + direction * (cameraDistance / max(zoom, MIN_ZOOM))
+
+    /**
      * Where to draw a point *on the mat* so that it appears to be [z] above it.
      *
      * The mat is one `graphicsLayer`, and everything drawn inside it gets the
@@ -255,6 +278,9 @@ data class StagePlane(
          */
         const val TILT = 21f
         private const val MIN_GAP = 1f
+
+        /** A zoom of nothing is not a camera; keep [eyePoint] out of infinity. */
+        private const val MIN_ZOOM = 1e-4f
 
         /**
          * The lens, solved from the growth wanted at the near edge:
