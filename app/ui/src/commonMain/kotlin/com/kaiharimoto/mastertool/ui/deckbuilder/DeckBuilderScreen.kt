@@ -162,6 +162,7 @@ fun DeckBuilderScreen(
             // check, and the reason this file is where it was caught.
             ShortcutAction.PLAY_DRAW,
             ShortcutAction.PLAY_SHUFFLE,
+            ShortcutAction.PLAY_SEARCH_DECK,
             ShortcutAction.PLAY_NEW_HAND,
             ShortcutAction.PLAY_NEXT_PHASE,
             ShortcutAction.PLAY_END_TURN,
