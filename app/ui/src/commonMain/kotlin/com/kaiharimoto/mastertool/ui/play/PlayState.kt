@@ -8,6 +8,7 @@ import com.kaiharimoto.mastertool.core.board.DragOrigin
 import com.kaiharimoto.mastertool.core.board.DropCommit
 import com.kaiharimoto.mastertool.core.board.DropIntent
 import com.kaiharimoto.mastertool.core.board.DropTargets
+import com.kaiharimoto.mastertool.core.board.fanSource
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlayField
 import com.kaiharimoto.mastertool.core.board.toMat
@@ -67,39 +68,44 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
     }
 
     /**
-     * The pile that is spread out to be searched, if any.
+     * What is spread out to be searched, if anything.
      *
      * UI state and not a move, exactly like [peeking]: spreading a pile out to
      * look at it changes nothing about the game, so it must not land on the undo
      * stack. Undoing a search would be undoing having looked.
      *
-     * It names a pile rather than holding a layout, because where the cards go
-     * is `PileFan`'s answer and depends on a board size this class has never
-     * needed to know.
+     * A `DragOrigin` rather than a pile, and that is what makes a stack on the
+     * mat searchable by the same feature: whatever the press landed on is what
+     * gets spread. It holds no geometry, because where the cards go is
+     * `PileFan`'s answer and depends on a board size this class has never needed
+     * to know.
      */
-    var fanned by mutableStateOf<BoardSlot?>(null)
+    var fanned by mutableStateOf<DragOrigin?>(null)
         private set
 
-    /** Spreads a pile out. Opening one closes whichever was open. */
-    fun fan(slot: BoardSlot?) {
-        if (slot == fanned) return
+    /** Spreads something out. Opening one closes whichever was open. */
+    fun fan(what: DragOrigin?) {
+        val source = what?.fanSource
+        if (source == fanned) return
         if (fanned != null) closeFan()
-        fanned = slot
+        fanned = source
     }
 
     /**
-     * Squares the pile back up, and says whether that shuffled anything.
+     * Squares it back up, and says whether that shuffled anything.
      *
      * **Closing the deck's fan shuffles the deck**, because you just searched
      * it. It is what the rules say, it costs nothing, and the alternative is a
      * tool that teaches you a habit which loses games. The graveyard and the
-     * banished pile are ordered and public, so they close as they were, and the
-     * extra deck is public too — it has a button for when you want one.
+     * banished pile are ordered and public, so they close as they were; the
+     * extra deck is public too and has a button for when you want one; and a
+     * stack on the mat keeps its order, because the order of a stack on a table
+     * is a thing you arranged on purpose.
      */
     fun closeFan(): Boolean {
-        val slot = fanned ?: return false
+        val what = fanned ?: return false
         fanned = null
-        return slot == BoardSlot.Deck && shuffle(slot)
+        return what == DragOrigin.Pile(BoardSlot.Deck, 0) && shuffle(BoardSlot.Deck)
     }
 
     /**

@@ -14,6 +14,20 @@ sealed interface DragOrigin {
     data class Hand(val index: Int) : DragOrigin
     data class Mat(val id: Int) : DragOrigin
     data class Pile(val pile: BoardSlot, val index: Int) : DragOrigin
+
+    /**
+     * A card underneath one on the mat: the id of the card on top, and how far
+     * down [PlayField.under] the one you mean is.
+     *
+     * The one place on this table where a card had no name. `Mat` names the top
+     * of a stack and nothing else, so everything buried in one — the rest of a
+     * pile, and an Xyz monster's materials — was unreachable by any gesture,
+     * which for an Xyz monster means you could not see what it was made of.
+     *
+     * Index 1 and up, always: index 0 of that list is the card on top, and that
+     * card already has a name.
+     */
+    data class Buried(val under: Int, val index: Int) : DragOrigin
 }
 
 /**
@@ -47,12 +61,16 @@ object DropCommit {
             is DragOrigin.Mat -> field.toHand(from.id)
             is DragOrigin.Hand -> null
             is DragOrigin.Pile -> field.movePile(from) { card -> copy(hand = hand + card) }
+            is DragOrigin.Buried -> field.moveBuried(from) { card -> copy(hand = hand + card) }
         }
 
         DropIntent.Graveyard -> when (from) {
             is DragOrigin.Mat -> field.toGraveyard(from.id)
             is DragOrigin.Hand -> field.handToGraveyard(from.index)
             is DragOrigin.Pile -> field.movePile(from) { card ->
+                copy(graveyard = listOf(card) + graveyard)
+            }
+            is DragOrigin.Buried -> field.moveBuried(from) { card ->
                 copy(graveyard = listOf(card) + graveyard)
             }
         }
@@ -63,6 +81,9 @@ object DropCommit {
             is DragOrigin.Pile -> field.movePile(from) { card ->
                 copy(banished = listOf(card) + banished)
             }
+            is DragOrigin.Buried -> field.moveBuried(from) { card ->
+                copy(banished = listOf(card) + banished)
+            }
         }
 
         DropIntent.Deck -> when (from) {
@@ -71,11 +92,17 @@ object DropCommit {
             is DragOrigin.Pile -> field.movePile(from) { card ->
                 copy(deck = listOf(card) + deck)
             }
+            is DragOrigin.Buried -> field.moveBuried(from) { card ->
+                copy(deck = listOf(card) + deck)
+            }
         }
 
         DropIntent.ExtraDeck -> when (from) {
             is DragOrigin.Mat -> field.toExtraDeck(from.id)
             is DragOrigin.Pile -> field.movePile(from) { card ->
+                copy(extraDeck = listOf(card) + extraDeck)
+            }
+            is DragOrigin.Buried -> field.moveBuried(from) { card ->
                 copy(extraDeck = listOf(card) + extraDeck)
             }
             is DragOrigin.Hand -> null
@@ -99,6 +126,7 @@ object DropCommit {
             BoardSlot.Banished -> playFromBanished(from.index, at, position)
             is BoardSlot.Zone -> null
         }
+        is DragOrigin.Buried -> takeFromUnder(from.under, from.index, at, position)
     }
 
     /**
@@ -148,6 +176,24 @@ object DropCommit {
         arrive: PlayField.(BoardCard) -> PlayField,
     ): PlayField? {
         val (without, card) = lifted(from) ?: return null
+        val landed = without.arrive(card)
+        return if (landed == this) null else landed
+    }
+
+    /**
+     * A card dug out from under another one and put somewhere else by [arrive].
+     *
+     * The same two steps [movePile] takes and the same reason for writing them
+     * once — but the lifting is [PlayField.liftFromUnder]'s job, because taking
+     * a card out of a stack on the mat has to decide whether it came from the
+     * pile or from the top card's materials, and that is a fact about the board
+     * rather than about the drag.
+     */
+    private fun PlayField.moveBuried(
+        from: DragOrigin.Buried,
+        arrive: PlayField.(BoardCard) -> PlayField,
+    ): PlayField? {
+        val (without, card) = liftFromUnder(from.under, from.index) ?: return null
         val landed = without.arrive(card)
         return if (landed == this) null else landed
     }

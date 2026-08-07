@@ -14,6 +14,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import com.kaiharimoto.mastertool.core.board.DragOrigin
 import com.kaiharimoto.mastertool.core.board.DropCommit
 import com.kaiharimoto.mastertool.core.board.DropIntent
+import com.kaiharimoto.mastertool.core.board.fanCardAt
+import com.kaiharimoto.mastertool.core.board.fanSource
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlayField
 import com.kaiharimoto.mastertool.core.haptics.Haptic
@@ -118,6 +120,21 @@ internal class MatPilot(
      */
     private var pressedControl: MatControl? = null
 
+    /**
+     * How far the hand has swept while the camera has had the gesture.
+     *
+     * A press on bare felt is claimed for the camera immediately and can never
+     * become a tap again — that is what makes the control scheme sayable in one
+     * line, and it is not worth giving up. But it also means the most obvious way
+     * out of an open search, *touching the table beside it*, produced nothing at
+     * all: the fan sat there while the camera turned by a pixel.
+     *
+     * So the camera answers the question afterwards. A gesture that turned the
+     * table is a camera move; a gesture that did not is a tap that happened to
+     * land on felt, and with a pile spread out that means put it back.
+     */
+    private var cameraTravel = 0f
+
     /** Whether the carried card is going *under* what it is over, not on top. */
     private var attaching = false
 
@@ -188,6 +205,7 @@ internal class MatPilot(
             // space *inside* an open fan. Miss either and pressing between two
             // cards of a spread deck starts orbiting the table.
             if (event is MatEvent.Pressed) {
+                cameraTravel = 0f
                 pressedControl =
                     if (grabbed == null) MatControls.at(layout, event.at.x, event.at.y) else null
                 if (grabbed == null && pressedControl == null && !onFan(event.at)) {
@@ -215,8 +233,22 @@ internal class MatPilot(
                 }
                 pressedControl = null
             }
-            if (event is MatEvent.CameraMoved) fly(event.fingers)
-            if (event is MatEvent.CameraEnded) settle()
+            if (event is MatEvent.CameraMoved) {
+                cameraTravel += screenDelta.length
+                fly(event.fingers)
+            }
+            if (event is MatEvent.CameraEnded) {
+                // Touched the felt beside an open fan and did not turn anything:
+                // that is a change of mind, and the pile goes back the way it was.
+                if (cameraTravel < STILL && play.fanned != null) {
+                    if (play.closeFan()) {
+                        feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+                    } else {
+                        feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
+                    }
+                }
+                settle()
+            }
         }
     }
 
@@ -465,6 +497,17 @@ private fun spanRatio(before: Map<Long, Vec2>, now: Map<Long, Vec2>): Float {
 private const val MIN_PINCH_SPAN = 48f
 
 /**
+ * How far the hand may sweep and still count as not having moved the camera.
+ *
+ * A real finger never lands and lifts from the same pixel, and this is a tablet:
+ * the whole travel of a firm tap is a few pixels across. Generous, because the
+ * cost of being wrong in one direction is a fan that will not close and in the
+ * other is a fan that closes when you meant to nudge the table by a hair — and
+ * reopening it costs one tap.
+ */
+private const val STILL = 24f
+
+/**
  * Carries out one thing the arbiter says happened.
  *
  * Returns what is currently grabbed, which only [MatEvent.Pressed] changes —
@@ -495,23 +538,33 @@ private fun handle(
                 // in it*. Every pile now spreads out when you tap it, and a card
                 // in a spread pile goes to your hand when you tap that.
                 is DragOrigin.Pile ->
-                    if (play.fanned == what.pile) {
-                        if (play.move { field ->
-                                DropCommit.commit(field, what, DropIntent.Hand)
-                            }
-                        ) {
-                            play.fan(null)
-                            feedback.play(SoundEffect.DEAL, Haptic.DEAL)
-                        }
+                    if (play.fanned == what.fanSource) {
+                        takeFromFan(play, what, feedback)
                     } else if (play.field.pile(what.pile).isNotEmpty()) {
                         play.fan(what.pile)
                         feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
                     }
 
+                // A card on the mat with anything under it is a stack, and a
+                // stack is searched exactly like a pile — which is the whole of
+                // what makes an Xyz monster's materials reachable. A card with
+                // nothing under it has nothing to spread, so it does the one
+                // thing a tap has always done to a card: comes to the top.
                 is DragOrigin.Mat ->
-                    if (play.move { it.bringToFront(what.id) }) {
+                    if (play.fanned == what) {
+                        // Its own spread is open, and the card is still sitting
+                        // where it was: tapping it again puts everything back.
+                        play.fan(null)
+                        feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
+                    } else if (play.field.under(what.id).size > 1) {
+                        play.fan(what)
+                        feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
+                    } else if (play.move { it.bringToFront(what.id) }) {
                         feedback.play(SoundEffect.LIFT, Haptic.LIFT)
                     }
+
+                is DragOrigin.Buried -> takeFromFan(play, what, feedback)
+
                 else -> Unit
             }
         }
@@ -637,7 +690,7 @@ private fun whatIsUnder(
     field: PlayField,
     layout: BoardLayout,
     at: Vec2,
-    fanned: BoardSlot? = null,
+    fanned: DragOrigin? = null,
 ): DragOrigin? {
     val halfWidth = layout.cardWidth / 2f
     val halfHeight = layout.cardHeight / 2f
@@ -655,7 +708,7 @@ private fun whatIsUnder(
     if (fanned != null) {
         val spread = fanOf(field, layout, fanned)
         val index = PileFan.cardAt(spread, at.x, at.y, layout.cardWidth, layout.cardHeight)
-        if (index != null) return DragOrigin.Pile(fanned, index)
+        if (index != null) return fanned.fanCardAt(index)
         if (spread.bounds.contains(at.x, at.y)) return null
     }
 
@@ -677,11 +730,11 @@ private fun whatIsUnder(
         BoardSlot.Graveyard to field.graveyard.size,
         BoardSlot.Banished to field.banished.size,
     ).forEach { (slot, count) ->
-        // The pile that is spread out has no cards at its own slot — they are
-        // all on the table below. Left in, its empty square would still answer
-        // for the top card, so tapping the gap the deck used to be in would
-        // silently take a card out of the fan.
-        if (slot == fanned) return@forEach
+        // A pile that is spread out has no cards at its own slot — they are all
+        // on the table below. Left in, its empty square would still answer for
+        // the top card, so tapping the gap the deck used to be in would silently
+        // take a card out of the fan.
+        if (fanned == DragOrigin.Pile(slot, 0)) return@forEach
         val rect = layout[slot] ?: return@forEach
         if (count > 0 && rect.holds(at.x, at.y)) return DragOrigin.Pile(slot, 0)
     }
@@ -697,5 +750,26 @@ private fun whatIsUnder(
  * function cannot drift; a value passed between them can, and the thing that
  * would drift is *which card you are pointing at*.
  */
-private fun fanOf(field: PlayField, layout: BoardLayout, slot: BoardSlot): FanSpread =
-    PileFan.spread(field.pile(slot).size, layout.field, layout.cardWidth, layout.cardHeight)
+private fun fanOf(field: PlayField, layout: BoardLayout, what: DragOrigin): FanSpread =
+    PileFan.spread(field.fanOf(what).size, layout.field, layout.cardWidth, layout.cardHeight)
+
+/**
+ * A card tapped in a spread pile goes to the hand, and the pile squares up.
+ *
+ * The common case by a distance — you search for a card in order to hold it —
+ * and the one place it is written, so the deck, the graveyard, the extra deck
+ * and a stack on the mat all do the same thing. Anywhere else is a drag, which
+ * costs nothing extra because every drop rule on this table already works from
+ * a pile.
+ */
+private fun takeFromFan(play: PlayState, what: DragOrigin, feedback: Feedback) {
+    if (!play.move { field -> DropCommit.commit(field, what, DropIntent.Hand) }) return
+    // Closing the deck's fan shuffles it, which is the point at which a search
+    // is over — so the sound is whichever of the two actually happened.
+    if (play.closeFan()) {
+        feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+    } else {
+        play.fan(null)
+        feedback.play(SoundEffect.DEAL, Haptic.DEAL)
+    }
+}

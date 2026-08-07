@@ -111,9 +111,9 @@ object MatGuide {
         ),
         Gesture(
             GestureGroup.MOVING,
-            what = "Search a pile",
-            touch = "Tap the deck, graveyard, banished or extra",
-            pointer = "Click the deck, graveyard, banished or extra",
+            what = "Search a pile, or a stack on the table",
+            touch = "Tap it — a pile, or any card with cards under it",
+            pointer = "Click it — a pile, or any card with cards under it",
             key = "F",
         ),
         Gesture(
@@ -125,8 +125,8 @@ object MatGuide {
         Gesture(
             GestureGroup.MOVING,
             what = "Put a pile back the way it was",
-            touch = "Tap the table between the cards",
-            pointer = "Click the table between the cards, or press Esc",
+            touch = "Tap the table anywhere outside it",
+            pointer = "Click the table anywhere outside it, or press Esc",
         ),
         Gesture(
             GestureGroup.MOVING,

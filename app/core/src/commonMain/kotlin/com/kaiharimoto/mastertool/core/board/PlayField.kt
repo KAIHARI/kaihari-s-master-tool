@@ -120,6 +120,93 @@ data class PlayField(
         is BoardSlot.Zone -> emptyList()
     }
 
+    /**
+     * Everything [id] has under it, top card first.
+     *
+     * The pile it is the top of, and then whatever is attached to it as
+     * material. Two different relationships — one is *resting on*, the other is
+     * *part of* — and they are listed together because a hand reaching into a
+     * stack does not distinguish them: what you want to know is what is under
+     * this card, and for an Xyz monster the answer is its materials.
+     *
+     * Index 0 is [id] itself, so the list reads as "this card and what is beneath
+     * it" and an index into it is an index into the whole object.
+     */
+    fun under(id: Int): List<BoardCard> {
+        val placed = placed(id) ?: return emptyList()
+        return placed.pile + placed.card.materials
+    }
+
+    /**
+     * Pulls the card [index] deep in [id]'s stack out onto the mat at [at].
+     *
+     * The move nothing could ask for. `unstack` could take the card directly
+     * beneath one, one at a time, and `detachMaterial` could send the
+     * bottom-most material to the graveyard — so the third card down of a pile,
+     * and any material that was not the last one, were cards on the table that
+     * no operation could name.
+     *
+     * Index 0 is the top card, which is already a card on the mat and is simply
+     * moved; that keeps a fanned-out stack's first card behaving like every
+     * other card rather than being a special case at the call site.
+     */
+    fun takeFromUnder(id: Int, index: Int, at: MatPoint, position: CardPosition): PlayField? {
+        if (index == 0) return moveOnMat(id, at)
+        val (without, card) = liftFromUnder(id, index) ?: return null
+        return without.place(card, at, position)
+    }
+
+    /**
+     * The field without the card [index] deep in [id]'s stack, and that card.
+     *
+     * Materials come off with nothing attached to them — a material is a plain
+     * card that happens to be under a monster — and a card taken out of the pile
+     * keeps whatever was attached to *it*, because that is a different object
+     * that happened to be resting in the same place.
+     */
+    internal fun liftFromUnder(id: Int, index: Int): Pair<PlayField, BoardCard>? {
+        val placed = placed(id) ?: return null
+        if (index <= 0) return null
+
+        val buried = placed.beneath
+        if (index <= buried.size) {
+            val card = buried[index - 1]
+            val left = copy(mat = mat.replace(id) { it.copy(beneath = buried.remove(index - 1)) })
+            return left to card
+        }
+
+        val materials = placed.card.materials
+        val at = index - buried.size - 1
+        val card = materials.getOrNull(at) ?: return null
+        val left = copy(
+            mat = mat.replace(id) {
+                it.copy(card = it.card.copy(materials = materials.remove(at)))
+            },
+        )
+        return left to card
+    }
+
+    /**
+     * The cards a fan opened on [what] spreads out, in the order they spread.
+     *
+     * One function so the hit test and the renderer cannot disagree about which
+     * card is third from the left — and so that a pile and a stack on the mat
+     * are the same feature rather than two that look alike. A hand is not
+     * something you search; you can already see all of it.
+     */
+    fun fanOf(what: DragOrigin): List<BoardCard> = when (what) {
+        is DragOrigin.Pile -> pile(what.pile)
+        // What is *under* the card, and not the card. A monster stays where it
+        // is while you look through what it is made of — which is the honest
+        // picture, and it also settles a question the alternative could not
+        // answer: the top of a stack takes the stack with it when it leaves, so
+        // a spread with the monster in it would have one card that behaved
+        // differently from the rest and no way to say why.
+        is DragOrigin.Mat -> under(what.id).drop(1)
+        is DragOrigin.Buried -> under(what.under).drop(1)
+        is DragOrigin.Hand -> emptyList()
+    }
+
     // ---- the deck -----------------------------------------------------------
 
     fun shuffleDeck(seed: Long): PlayField = copy(deck = deck.riffled(seed))
@@ -408,3 +495,30 @@ private fun List<PlacedCard>.without(id: Int): List<PlacedCard> = filterNot { it
 
 private fun List<PlacedCard>.replace(id: Int, change: (PlacedCard) -> PlacedCard): List<PlacedCard> =
     map { if (it.id == id) change(it) else it }
+
+/**
+ * The card [index] along a fan opened on this origin, named so it can be moved.
+ *
+ * The join between "where my finger is in the spread" and "which card that is",
+ * and the only place that mapping exists. A pile indexes straight through. A
+ * stack's index zero is the card on top, which is already a card on the mat and
+ * already has a name — everything below it is [DragOrigin.Buried].
+ */
+fun DragOrigin.fanCardAt(index: Int): DragOrigin? = when (this) {
+    is DragOrigin.Pile -> DragOrigin.Pile(pile, index)
+    // Offset by one, because a stack's spread leaves the card on top out of it
+    // and `under` counts from the card itself. Every card in the spread is
+    // therefore buried, and every one of them behaves the same way.
+    is DragOrigin.Mat -> DragOrigin.Buried(id, index + 1)
+    is DragOrigin.Buried -> DragOrigin.Buried(under, index + 1)
+    is DragOrigin.Hand -> null
+}
+
+/** What a fan opened on this origin is *about*, so two names for it compare equal. */
+val DragOrigin.fanSource: DragOrigin
+    get() = when (this) {
+        is DragOrigin.Pile -> DragOrigin.Pile(pile, 0)
+        is DragOrigin.Mat -> this
+        is DragOrigin.Buried -> DragOrigin.Mat(under)
+        is DragOrigin.Hand -> this
+    }

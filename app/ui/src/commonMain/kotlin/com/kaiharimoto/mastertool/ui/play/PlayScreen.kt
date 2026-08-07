@@ -55,6 +55,7 @@ import com.kaiharimoto.mastertool.core.board.DropIntent
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlacedCard
 import com.kaiharimoto.mastertool.core.board.PlayField
+import com.kaiharimoto.mastertool.core.board.fanCardAt
 import com.kaiharimoto.mastertool.core.board.toPixels
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
@@ -411,14 +412,25 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                     val quantum = layout.field.height * DEPTH_QUANTUM
                     seats.sortedWith(
                         compareBy(
-                            // Whatever is in your hand is between you and the
-                            // table, whatever the arithmetic says: a card lifted
-                            // over the far edge is still the one you are holding.
-                            { if (it.carried) 1 else 0 },
-                            { quantised(plane.project(it.pose.position).depth, quantum) },
-                            // Recency, for two cards in the same place — the
+                            // Three bands, and the order between them is not up
+                            // for arithmetic. A spread pile is held over the
+                            // board, and whatever is in your hand is between you
+                            // and both — a card lifted over the far edge of the
+                            // table is still the one you are holding.
+                            { if (it.carried) 2 else if (it.fanned) 1 else 0 },
+                            // Depth within a band, except inside a fan, where
+                            // every card is at one height and the order is the
+                            // one the spread was laid out in. Asking the
+                            // projection instead is what made the overlap
+                            // reshuffle itself every time the table turned.
+                            {
+                                if (it.fanned) 0
+                                else quantised(plane.project(it.pose.position).depth, quantum)
+                            },
+                            // Then the spread's own order, or — for two cards in
+                            // the same place on the mat — recency, which is the
                             // reason `mat` is ordered the way it is.
-                            { it.id },
+                            { it.order },
                         ),
                     )
                 }
@@ -613,9 +625,58 @@ private data class Seat(
     val counters: Int,
     val width: Float,
     val height: Float,
+    /**
+     * Part of a spread-out pile, which is one object and paints in one piece.
+     *
+     * Its own flag rather than a depth, because a fan is *coplanar*: forty cards
+     * lying at one height, overlapping, in an order fixed when the hand laid them
+     * out. Projected depth cannot recover that order — inside a row every card is
+     * the same distance away until the table turns, and then the depths fan out
+     * sideways and the overlap reshuffles itself as you orbit, which is exactly
+     * what it did.
+     */
+    val fanned: Boolean = false,
     /** Held up to be read rather than played, which changes the art it loads. */
     val magnified: Boolean = false,
+    /**
+     * The tiebreak when two seats are the same distance away.
+     *
+     * The instance id for a card on the mat, which is the order it was played
+     * and is what "bring to front" moves. For a card in a fan it is the position
+     * in the spread, so the overlap reads left to right whatever the camera does.
+     */
+    val order: Int = id,
 ) {
+
+    /**
+     * What is on and under this card, in one short string, or null for nothing.
+     *
+     * Three different facts about a card and one place to read them, because
+     * they compete for the same corner and used to resolve it by *hiding one*:
+     * the badge showed counters, or materials if there were no counters, and
+     * said nothing at all about a card being the top of a stack.
+     *
+     * That last omission is the one that mattered. An Xyz monster's whole
+     * identity is what it is made of, and the number of cards underneath one was
+     * the single most important thing about it that the table would not tell
+     * you — you could not see it, and until the fan you could not reach it
+     * either. `▤` is what is resting under this card, `◈` what is attached to it
+     * as material, `●` counters on it.
+     *
+     * It stays inside the card's own bounds, which is the constraint that rules
+     * out the alternative — drawing the buried cards peeking out from under the
+     * near edge. Peeking cards read beautifully for a stack of two and turn a
+     * monster zone into a smear at five, and five is an ordinary Xyz.
+     */
+    val tally: String?
+        get() {
+            val parts = buildList {
+                if (depth > 1) add("▤${depth - 1}")
+                if (materials > 0) add("◈$materials")
+                if (counters > 0) add("●$counters")
+            }
+            return parts.takeIf { it.isNotEmpty() }?.joinToString(" ")
+        }
     /**
      * How far the body of this card, or this pile, hangs below its printed face.
      *
@@ -640,8 +701,8 @@ private fun seatsFor(
     layout: BoardLayout,
     carry: Carry?,
     peeking: DragOrigin? = null,
-    /** The pile that has been spread out to be searched, if any. */
-    fanned: BoardSlot? = null,
+    /** What has been spread out to be searched, if anything. */
+    fanned: DragOrigin? = null,
     /**
      * The three angles that, inside the mat's own layer, come out square to the
      * viewer. Passed in rather than computed here because it is a fact about
@@ -749,7 +810,7 @@ private fun seatsFor(
         BoardSlot.Graveyard to field.graveyard,
         BoardSlot.Banished to field.banished,
     ).forEach { (slot, pile) ->
-        if (slot == fanned) return@forEach
+        if (fanned == DragOrigin.Pile(slot, 0)) return@forEach
         val top = pile.firstOrNull() ?: return@forEach
         val rect = layout[slot] ?: return@forEach
         val faceUp = slot == BoardSlot.Graveyard || slot == BoardSlot.Banished
@@ -780,15 +841,13 @@ private fun seatsFor(
     // still in the pile as far as the field is concerned — so it gets one here,
     // or dragging out of the graveyard would carry something invisible.
     val from = carry?.from
-    if (from is DragOrigin.Pile) {
-        val pile = when (from.pile) {
-            BoardSlot.Deck -> field.deck
-            BoardSlot.ExtraDeck -> field.extraDeck
-            BoardSlot.Graveyard -> field.graveyard
-            BoardSlot.Banished -> field.banished
-            is BoardSlot.Zone -> emptyList()
+    if (from is DragOrigin.Pile || from is DragOrigin.Buried) {
+        val held = when (from) {
+            is DragOrigin.Pile -> field.pile(from.pile).getOrNull(from.index)
+            is DragOrigin.Buried -> field.under(from.under).getOrNull(from.index)
+            else -> null
         }
-        pile.getOrNull(from.index)?.let { card ->
+        held?.let { card ->
             val faceUp = !carry.faceDown
             seats += Seat(
                 id = card.instanceId,
@@ -820,11 +879,11 @@ private fun seatsFor(
     // shuffle, and seeing it is the whole point of searching — which is why
     // closing the deck's fan shuffles it again.
     if (fanned != null) {
-        val pile = field.pile(fanned)
-        val spread = PileFan.spread(pile.size, layout.field, cardWidth, cardHeight)
+        val cards = field.fanOf(fanned)
+        val spread = PileFan.spread(cards.size, layout.field, cardWidth, cardHeight)
         spread.cards.forEach { fan ->
-            val card = pile.getOrNull(fan.index) ?: return@forEach
-            if (carry?.from == DragOrigin.Pile(fanned, fan.index)) return@forEach
+            val card = cards.getOrNull(fan.index) ?: return@forEach
+            if (carry?.from == fanned.fanCardAt(fan.index)) return@forEach
             seats += Seat(
                 id = card.instanceId,
                 card = card,
@@ -837,6 +896,8 @@ private fun seatsFor(
                 counters = card.counters,
                 width = cardWidth,
                 height = cardHeight,
+                fanned = true,
+                order = fan.index,
             )
         }
     }
@@ -886,13 +947,8 @@ private fun seatsFor(
 private fun seatIdOf(field: PlayField, origin: DragOrigin): Int? = when (origin) {
     is DragOrigin.Mat -> origin.id
     is DragOrigin.Hand -> field.hand.getOrNull(origin.index)?.instanceId
-    is DragOrigin.Pile -> when (origin.pile) {
-        BoardSlot.Deck -> field.deck
-        BoardSlot.ExtraDeck -> field.extraDeck
-        BoardSlot.Graveyard -> field.graveyard
-        BoardSlot.Banished -> field.banished
-        is BoardSlot.Zone -> emptyList()
-    }.getOrNull(origin.index)?.instanceId
+    is DragOrigin.Pile -> field.pile(origin.pile).getOrNull(origin.index)?.instanceId
+    is DragOrigin.Buried -> field.under(origin.under).getOrNull(origin.index)?.instanceId
 }
 
 /**
@@ -1123,11 +1179,8 @@ private fun StagedCard(
             )
             CardFace(art = art, faceUp = false, back = back, motion = motion, camera = camera)
 
-            if (seat.counters > 0 || seat.materials > 0) {
-                Badge(
-                    text = if (seat.counters > 0) "●${seat.counters}" else "◈${seat.materials}",
-                    modifier = Modifier.align(Alignment.BottomEnd),
-                )
+            seat.tally?.let { tally ->
+                Badge(text = tally, modifier = Modifier.align(Alignment.BottomEnd))
             }
         }
     }
@@ -1358,6 +1411,12 @@ private fun hasMenu(origin: DragOrigin): Boolean = when (origin) {
     // holding it or dragging off it does not already do better.
     is DragOrigin.Pile -> origin.pile == BoardSlot.Deck
     is DragOrigin.Hand -> false
+    // A card in a spread pile is somewhere you are passing through, not somewhere
+    // it lives. Everything the menu could offer it — the graveyard, banished, the
+    // hand — is a place on the table it can be dragged to instead, which is one
+    // gesture rather than two and is the argument `docs/TABLE.md` §6 makes
+    // against the drawer in the first place.
+    is DragOrigin.Buried -> false
 }
 
 /**
