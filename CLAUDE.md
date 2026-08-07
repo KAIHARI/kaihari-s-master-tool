@@ -199,9 +199,12 @@ first:
   The whole control scheme, and it has to stay sayable in one line. The split
   is made once, on the press, by `claimForCamera` when the hit test finds
   nothing; from there the gesture cannot become a drag, a peek or a menu. One
-  finger orbits, two also pinch. The table has no affordances drawn on it, so
-  it has a guide — `core/input/MatGuide.kt`, data rather than prose, rendered
-  by the button on the bar and held to both-idioms-present by a test.
+  finger orbits, two also pinch. The table has almost no affordances drawn on
+  it, so it has a guide — `core/input/MatGuide.kt`, data rather than prose,
+  rendered by the button on the bar and held to both-idioms-present by a test.
+  The one exception is the two shuffle marks (`core/layout/MatControls.kt`),
+  argued for there and in `docs/DESIGN.md` §10; a third needs its own argument
+  rather than their precedent.
 - **Both of its clocks report to `MatPilot`.** Pointer events and the frame
   loop each produce gesture events, and both must act on the same memory of
   what the press landed on. `onTick` called for its side effects, with its
@@ -212,10 +215,22 @@ first:
   It opens a grace window instead; a hand left resting on the mat loses the
   gesture when the window closes.
 
+**Any pile can be searched.** Tap one and it spreads across the board —
+`core/layout/PileFan.kt` solves the geometry, and the cards never change size
+because a search shows you the cards that are on the table. Take one by
+dragging it anywhere (every existing drop rule applies unchanged) or tap it to
+send it to your hand. The deck fans in its own order and closing it shuffles,
+which is correct by the rules. This was `docs/TABLE.md` §3's "hole", and the
+whole of it at the input end was that the hit test returned
+`DragOrigin.Pile(slot, 0)` — the domain had taken an arbitrary index since it
+was written.
+
 Next: attaching as material is reachable in the domain and not yet by gesture
 (`DropIntent.Attach` needs an idiom that is not already spoken for). After
 that: the deck **showcase** stage, and play polish (deal-origin projection,
-stack shuffle/cut).
+stack shuffle/cut). `docs/TABLE.md` §5 is the ordered list of everything else,
+and its first three — tokens, a scrubbable history, card text on the peek —
+are now the cheapest things on it.
 
 **Explicitly deferred by the user — do not build on the legacy designs:**
 siding patterns and shootout mode will be redesigned from scratch in a future

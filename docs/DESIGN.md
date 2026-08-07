@@ -312,14 +312,27 @@ the card it is over rather than on top. Both are driven from the frame loop,
 because a finger that has stopped moving stops producing pointer events, which
 is precisely the condition being detected.
 
-**The table has no affordances on it, so it has a guide.** Nothing is drawn on
-the felt to tell you what you may do, because a table does not do that either.
-The price of that stance has to be payable on a press: `MatGuide` in core is the
-gesture vocabulary as data, and the button on the bar renders it beside the
-keyboard table. It is data for the same reason `ShortcutTable` is — a control
+**The table has almost no affordances on it, so it has a guide.** Nothing is
+drawn on the felt to tell you what you may do, because a table does not do that
+either. The price of that stance has to be payable on a press: `MatGuide` in core
+is the gesture vocabulary as data, and the button on the bar renders it beside
+the keyboard table. It is data for the same reason `ShortcutTable` is — a control
 list written by hand beside the code it describes is wrong within two changes,
 and a wrong guide is worse than none, because it turns a user who does not know
 a gesture into one who believes the table is broken.
+
+*Almost*, and the exception is worth stating rather than hiding, because the
+rule is only load-bearing while it costs something. There are two shuffle marks
+on the felt, one under the deck and one under the extra deck (`MatControls`).
+Shuffling earns them on one point: it is the only thing in the game you do to a
+*pile as a whole* rather than to a card, and every other route to it was
+somewhere else — a button in a bar and a key on a keyboard nobody holding a
+tablet has, both a long way from the deck they are about, when the place your
+hand already is when you think about shuffling is exactly where the deck is.
+They are marks rather than labels because the mat is a tilted plane and type set
+on it keystones, and they go through the one gesture arbiter like every card, so
+"a gesture detector attached to a card rather than to the mat" stays true. **A
+third one needs a better argument than this one, not a precedent.**
 
 **The indicator is the intent, not a picture of it.** `DropTargets` resolves
 the finger's position to one `DropIntent`, the highlight draws that value, and
@@ -328,6 +341,19 @@ time that could disagree with what the user was shown. Every threshold in the
 resolver is a pair — harder to enter than to leave — because a single number
 makes a finger resting on a boundary flicker between two answers several times
 a second, and which one you get is luck.
+
+**Draw order is depth, and it is arranged rather than asserted.** The stage
+paints the room, then every card in turn — each one its own shadow, its own white
+edges and its own picture, before the next is touched — sorted by
+`StagePlane.project(...).depth`. Both halves of that were wrong for a long time
+and neither was visible until the mat stopped being black. Nothing was sorted by
+depth at all: the mat's cards went by raw mat-space `y`, which stops meaning
+anything the moment the table can turn, and the hand and the four piles were
+appended afterwards in the order somebody typed them, so the graveyard painted
+over the deck standing in front of it. And the passes were *global* — every
+shadow, then every edge, then every picture — which meant no card could ever be
+occluded by a pile's wall whatever the order was. A card, its body and its shadow
+are one object, so they are one thing to paint.
 
 **One tilted plane, and everything on it.** The plane is a `graphicsLayer`;
 everything on the stage — the table, the mat, a card resting on the felt, the
