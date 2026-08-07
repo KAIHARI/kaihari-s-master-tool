@@ -235,15 +235,38 @@ whole of it at the input end was that the hit test returned
 `DragOrigin.Pile(slot, 0)` — the domain had taken an arbitrary index since it
 was written.
 
-The room arrived in one release and is deliberately two objects: a desk and the
-wall it is pushed against. `docs/AAA.md` #62 is the whole brief — *"there is a
-room past it. Dark, out of focus, present. It does not need detail; it needs to
-exist."* Next for it: the window and the lamp become real light sources with
-distance falloff and a size (`AAA.md` #16 and #17), which is what makes day and
-night two rooms rather than two colour grades; then props on the desk, hit-
-tested against their flattened silhouettes before `claimForCamera` fires, and
-the Millennium Puzzle as an easter egg that answers a finger and never moves on
-its own.
+The room is ten pieces: a floor, the desk, four wall pieces around a window
+opening, the pane, and three for the lamp. `docs/AAA.md` #62 was the brief —
+*"there is a room past it. Dark, out of focus, present."* — and #16 and #17 are
+what made day and night two rooms rather than two colour grades: a `Light` may
+now have a **position**, a **radius** and a **distance**, so shadows diverge
+from a point, the far corner of the table is dimmer than the near one, and a
+window's edge is soft where a lamp's is hard.
+
+Four things about it are load-bearing, and three of them were bugs first:
+
+- **A light with no place is a no-op to the bit.** Every new term returns a
+  literal before touching a float when `position` is null, which is why
+  `GoldenStageTest` is green without being re-recorded across a release that
+  changed how every surface is lit.
+- **The lamp's height is solved, not chosen.** The shipped night key's
+  horizontal-to-vertical ratio *is* how long a night shadow is per unit of
+  height, so the lamp stands where the ray to the middle of the table has
+  exactly that ratio. Its mast is then foreshortened five to one, because an
+  honest desk lamp is off the top of the picture — the foot and the light are
+  exact and `SceneryTest` pins the compression.
+- **Paint order is a separating axis, not a depth sort.** Sorting boxes by
+  nearest-corner depth puts a 511px wall after a 241px lamp and paints it over
+  the top. `ScenePainter` picks the separating axis the camera is most nearly
+  looking along; pairs that are diagonal are separated on several axes and those
+  disagree, which is not a contradiction because no ray hits both.
+- **The felt is lit by the rig now.** It was a gradient aimed by a *direction* —
+  the one surface that could disagree with the shadows on it. Its highlight is
+  the lamp's mirror image, so it slides toward you as you sit down.
+
+Next for the room: props on the desk, hit-tested against their flattened
+silhouettes before `claimForCamera` fires, and the Millennium Puzzle as an
+easter egg that answers a finger and never moves on its own.
 
 Next: attaching as material is reachable in the domain and not yet by gesture
 (`DropIntent.Attach` needs an idiom that is not already spoken for). After

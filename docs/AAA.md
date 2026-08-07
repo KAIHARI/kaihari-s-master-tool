@@ -56,9 +56,9 @@ The three rooms all run on one rig, made a value in `StageLighting`. Read the no
 
 15. **Shade in linear space.** The multiply happens in sRGB today, so everything darkens too fast and the midtones go muddy. Convert up, shade, convert back.
 
-16. **Make the key a point light.** Distance attenuation means the far corner of the mat is genuinely dimmer than the near one — which, in a room with a lamp in it, it is.
+16. ~~**Make the key a point light.**~~ **Done.** `Light` takes an optional position and the falloff is the on-axis irradiance of a uniform disc, `R²/(R² + d²)` — so #16 and #17 share one term instead of guessing two. Normalised at the lamp's own height, because a form normalised at the mat's centre reaches 1.7 near the lamp and clips half the table flat to white. The near corner of the mat is 21 levels of 255 brighter than the far one, where it was 0. The falloff lands on the *directional* term only, which is what keeps `NIGHT_FLOOR` a guarantee rather than a hope.
 
-17. **Give the light a size.** Real soft shadows come from an area source. Offsetting the cast by the light's radius is closer to correct than growing one polygon outward, and costs the same.
+17. ~~**Give the light a size.**~~ **Half done, and the half that was wrong.** `SOFT_PER_HEIGHT` was always standing in for a source's angular radius; now the angle is measured and the constant is only what a light with no size falls back on. Daylight loses its edge at 0.67 card heights and lamplight at 1.24. Shadows also *straddle* their edge now rather than feathering outward, which was making a soft shadow read as a hard one wearing a halo. What is **not** done is the stronger half — sampling N points on the source disc and running the projection N times, so the anisotropy and the round corners emerge rather than being modelled. That needs a layer per card to composite coverage linearly, and a layer per card at sixty cards is a cost to measure with `FrameProbe` before it enters a signed build.
 
 18. **Shadows are not black.** A shadow on lit felt is the felt, darker and a little cooler. Neutral black is what a shadow looks like when nobody chose a colour for it.
 
@@ -67,6 +67,8 @@ The three rooms all run on one rig, made a value in `StageLighting`. Read the no
 20. **Bloom the specular.** Threshold, blur, add. Without a shader that is a second additive pass at half resolution, which is enough to sell it.
 
 21. **Stretch the foil highlight.** Holofoil is a diffraction grating, so its highlight is a streak along one axis rather than a circular pool. This is the single change that would make foils read as foil.
+
+21b. **`DARKEST` and `FADE_OVER` are now computable rather than chosen.** Under the night lamp the directional share of the felt's light is 38%, so a full umbra can only remove 0.38 — and `FADE_OVER` halves a shadow at 96 px where the umbra survives to 317. Both are golden lines, and re-recording the golden in the same release that gave light a position is how you lose the ability to say which change moved it. A clean separable release, and it is now computable, which is the thing this one bought.
 
 22. **Draw a card's own edge in the air.** `CardSolid` already computes the slab for every card and only piles render it. A card banked in your hand should be showing its white edge.
 
@@ -166,9 +168,9 @@ Motion explains a change and never announces one. That rule stays; these are the
 
 Nine things beyond the felt. A table floating in a void is the most common way a three-dimensional scene looks cheap.
 
-61. **The table has an edge** — *three of the four are there.* The desk runs off both sides of the picture, and because `BoardLayouter` centres a seven-column field, a third of the width down each side is bare wood, plus a strip above the mat before the wall. That is where the felt stops and the wood starts, at every seat. The **near** edge is not reachable: the board fills the stage vertically, so the desk's near edge projects below the glass at every seat and dollying out does not bring it back (the term that puts it there is `flat`, which distance does not scale). It would take a smaller board or a wider envelope. See `Scenery.DESK_NEAR`.
+61. **The table has an edge** — *three of the four are there.* The desk runs off both sides of the picture, and because `BoardLayouter` centres a seven-column field, a third of the width down each side is bare wood, plus a strip above the mat before the wall. That is where the felt stops and the wood starts, at every seat — and the strip is its full forty pixels now: the wall used to carry a skirt down to the desk's underside, which was hidden by the desk top from every angle **and painted over it**, eating thirty of them. The wall stands on z = 0 and the desk runs back under it. The **near** edge is still not reachable: the board fills the stage vertically, so it projects below the glass at every seat and dollying out does not bring it back (the term that puts it there is `flat`, which distance does not scale). It would take a smaller board or a wider envelope. See `Scenery.DESK_NEAR`.
 
-62. ~~**There is a room past it.**~~ **Done, at the size this asked for.** One wall behind the desk, dark, and nothing else. The sentence was the specification and it is worth keeping: *dark, out of focus, present; it does not need detail, it needs to exist.*
+62. ~~**There is a room past it.**~~ **Done, and then furnished.** A wall with a window in it, a floor under the desk, and a lamp standing on it — ten pieces against a budget of twenty. The window is a *hole*: four wall pieces and a pane that tile the old single wall exactly, which is one line of test. It sits low because it has to — at the wall's plane the largest z that lands anywhere on the glass is 86 px at the table seat, so a window at a realistic sill height would be geometry nobody could ever see. The floor earns its place on a measurement rather than an opinion about floors: turned side-on it takes the uncovered points of a screen grid down by nearly half.
 
 63. **The opponent's half exists.** A duel mat has two sides and the geometry reads as wrong without the other one, even empty, even unplayable.
 

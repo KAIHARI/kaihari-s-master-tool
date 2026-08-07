@@ -454,6 +454,33 @@ or the table stops reading as one room. That guarantee now lives one level down
 holds a lamp of its own — which is the whole of what the singleton was buying.
 The wood does not change at dusk; the lamp does.
 
+**A fixture and the light it throws are one value.** The lamp on the desk is
+not a picture of a lamp standing near where the key light happens to point: its
+position *is* the key's position, and the key's direction is derived from it.
+`Scenery` computes the foot once and emits both the boxes and the `Light`, so
+the object and the lamp cannot end up in two places. The same rule sends the
+window's aperture through the identical function that casts a card's shadow —
+one arithmetic, two consumers, and no second place for the light to be.
+
+**A lamp's mast is foreshortened, and its foot and its light are exact.** This
+is §10's height rule run the other way. A physically honest desk lamp on this
+stage stands seven hundred pixels up and is off the top of the picture at every
+seat; one low enough to draw honestly throws shadows two and a third times too
+long. So the light is at its true height and the shade is drawn at a fifth of
+it. What survives the compression is the pair that survives for a pile: the
+*foot* is exact — the shade is directly above the source, the pool is centred on
+it, every shadow points away from it, the sheen is its mirror — and the *light*
+is exact, because the height was solved from the shadow length the preset
+already shipped rather than chosen. Nobody can measure a mast. `SceneryTest`
+pins the ratio so it cannot drift into a lie by accident.
+
+**A light with no place must be a no-op, to the bit.** Every term a positioned
+lamp adds — the direction to it, the falloff, the angular size, the umbra —
+returns a literal before touching a float when there is no position. That is
+what lets `GoldenStageTest` stay green without being re-recorded across a
+release that changed how every surface is lit, and it is the difference between
+"we think the minimal stage is unchanged" and knowing it.
+
 **Night does not lower the ambient.** `Tone.veil` carries the numbers: card art
 is a picture the renderer cannot read, so it is shaded by one black overlay at
 one opacity, and that approximation goes wrong quickly as the light falls —
