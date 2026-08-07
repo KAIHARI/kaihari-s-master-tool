@@ -18,9 +18,36 @@ data class CardShadow(
     val corners: List<Vec3>,
     val alpha: Float,
     val spread: Float,
+    /**
+     * How far *inside* the cast edge the fully dark core stops.
+     *
+     * A real penumbra straddles the geometric edge: it begins a little inside it
+     * and ends the same distance outside. Feathering only outward — which is
+     * what this renderer has always done — makes the solid core exactly as big
+     * as the shadow, so a soft shadow reads as a hard one wearing a halo.
+     *
+     * Zero when the light has no stated size, which is when [spread] is a
+     * heuristic and there is no umbra to find. That is also what keeps the
+     * shipped ring renderer producing the pixels it always did.
+     */
+    val umbra: Float,
     val contact: Float,
     val height: Float,
 )
+
+/**
+ * Where a set of corners lands when the light pushes them onto a plane, and how
+ * far each one had to travel to get there.
+ *
+ * Extracted from [Shadows.cast] rather than written beside it, because the
+ * daylight patch needs the identical arithmetic: a window's aperture thrown onto
+ * a desk is a card's outline thrown onto the felt with different numbers, and
+ * two copies of that is two places the light can be.
+ *
+ * [rays] is what a penumbra is measured along — the further a shadow has been
+ * thrown, the wider the source looks from where it lands.
+ */
+data class Landed(val corners: List<Vec3>, val rays: List<Float>)
 
 /**
  * The one thing that makes a card look like it is off the table.
@@ -80,24 +107,10 @@ object Shadows {
         surfaceZ: Float = 0f,
         bodyDepth: Float = 0f,
     ): CardShadow? {
-        val travel = light.direction.normalised()
-        if (abs(travel.z) < 1e-3f) return null
-
         // The face that is actually against the table. At bodyDepth = 0 this is
         // the printed face and everything below behaves exactly as it always did.
         val base = CardSolid.face(pose, width, height, atDepth = bodyDepth)
-
-        val corners = base.map { corner ->
-            // Slide along the light until it reaches the surface. The card can
-            // be tilted, so every corner gets its own distance to travel, which
-            // is exactly the part an offset copy cannot do.
-            val distance = (surfaceZ - corner.z) / travel.z
-            Vec3(
-                x = corner.x + travel.x * distance,
-                y = corner.y + travel.y * distance,
-                z = surfaceZ,
-            )
-        }
+        val landed = landOn(base, light, surfaceZ) ?: return null
 
         // Averaged over the four corners rather than taken from the pose, so a
         // card tilted in the air reports the height of its *body* and not of a
@@ -106,10 +119,27 @@ object Shadows {
         val reference = max(cardHeight, 1f)
         val lift = above / reference
 
+        // How wide the source looks from the card, which is the one number a
+        // penumbra depends on. Multiplied by how far the shadow was thrown, it
+        // *is* the width of the soft edge — where the two terms below were a
+        // curve fitted by eye to stand in for exactly this.
+        val angle = light.angularRadius(centreOf(base))
+        val soft = if (angle <= 0f) {
+            // The heuristic, character for character. A light with no stated
+            // size has no angle to derive anything from, and the golden records
+            // this number.
+            reference * (SOFT_AT_REST + lift * SOFT_PER_HEIGHT)
+        } else {
+            // Floored at the same hairline, because even a point source's edge
+            // needs a pixel to be antialiased across.
+            max(reference * SOFT_AT_REST, angle * landed.rays.average().toFloat())
+        }
+
         return CardShadow(
-            corners = corners,
+            corners = landed.corners,
             alpha = DARKEST / (1f + lift / FADE_OVER),
-            spread = reference * (SOFT_AT_REST + lift * SOFT_PER_HEIGHT),
+            spread = soft,
+            umbra = if (angle <= 0f) 0f else soft,
             // Squared, so it is gone rather than merely faint by the time a
             // card is properly in the air. A linear tail leaves a smudge under
             // a held card, which is precisely the reading the separation
@@ -117,5 +147,51 @@ object Shadows {
             contact = 1f / (1f + (lift / CONTACT_OVER) * (lift / CONTACT_OVER)),
             height = above,
         )
+    }
+
+    /**
+     * Every corner slid along the light until it reaches the plane at [surfaceZ].
+     *
+     * The card can be tilted and the lamp can be close, so **every corner gets
+     * its own ray** — its own direction as well as its own distance. That is the
+     * half of this an offset copy cannot do at all, and with a placed lamp it is
+     * also what makes a shadow *diverge*: the corners of a card near the bulb
+     * spread further apart than the card itself, which is the single most
+     * recognisable thing a lamp on a table does and which no directional light
+     * can produce.
+     *
+     * Null when any ray runs parallel to the plane — a light that never reaches
+     * the table cannot cast anything, and the arithmetic that says so is a
+     * division by zero.
+     *
+     * **There is deliberately no guard against a negative distance.**
+     * `CardSolid.face(…, atDepth)` drops a resting solid's base one thickness
+     * *below* the felt, so a card lying on the table legitimately reports a
+     * small negative travel today, and the golden records the result. Rejecting
+     * it would return null for every card on the board at once.
+     */
+    fun landOn(corners: List<Vec3>, light: Light, surfaceZ: Float = 0f): Landed? {
+        val landedAt = ArrayList<Vec3>(corners.size)
+        val rays = ArrayList<Float>(corners.size)
+
+        corners.forEach { corner ->
+            val travel = light.travelFrom(corner)
+            if (abs(travel.z) < 1e-3f) return null
+            val distance = (surfaceZ - corner.z) / travel.z
+            landedAt += Vec3(
+                x = corner.x + travel.x * distance,
+                y = corner.y + travel.y * distance,
+                z = surfaceZ,
+            )
+            rays += abs(distance)
+        }
+        return Landed(landedAt, rays)
+    }
+
+    private fun centreOf(corners: List<Vec3>): Vec3 {
+        if (corners.isEmpty()) return Vec3.Zero
+        var sum = Vec3.Zero
+        corners.forEach { sum += it }
+        return sum / corners.size.toFloat()
     }
 }

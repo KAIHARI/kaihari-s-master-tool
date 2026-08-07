@@ -2,7 +2,14 @@ package com.kaiharimoto.mastertool.core.scene
 
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.Slot
+import com.kaiharimoto.mastertool.core.motion.Vec2
+import com.kaiharimoto.mastertool.core.motion.Vec3
+import com.kaiharimoto.mastertool.core.render.Light
+import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.StageLighting
+import kotlin.math.abs
+import kotlin.math.hypot
+import kotlin.math.sqrt
 import kotlinx.serialization.Serializable
 
 /**
@@ -84,8 +91,17 @@ enum class Surface {
     /** The table the mat is lying on: the minimal stage's slab, or the desk. */
     TABLE,
 
-    /** The wall the desk is pushed against. */
+    /** The wall the desk is pushed against, and the jambs the window leaves in it. */
     WALL,
+
+    /** What the desk is standing on. Dark, and mostly out of frame. */
+    FLOOR,
+
+    /** The window pane: sky by day, near enough to nothing at night. */
+    GLASS,
+
+    /** The lamp — its base, its mast and the shade that is the light. */
+    SHADE,
 }
 
 /**
@@ -96,7 +112,26 @@ enum class Surface {
  * because nothing looks a piece up; the room is drawn whole, every frame, in
  * the order the camera puts it in.
  */
-data class ScenePiece(val name: String, val surface: Surface, val box: SceneBox)
+data class ScenePiece(
+    val name: String,
+    val surface: Surface,
+    val box: SceneBox,
+    /**
+     * Light this piece *emits*, rather than light it receives. Null for anything
+     * that is only a surface.
+     *
+     * A [Lit] because that type already means exactly "an amount of light, and
+     * what colour it was", and because the room's two fixtures disagree about
+     * colour: the shade at night is tungsten and the pane by day is sky.
+     *
+     * A renderer handed one of these does not call the rig at all, and that is
+     * the physics rather than a shortcut — an emissive surface's brightness does
+     * not depend on what is lighting the room it is in. It is also the only way
+     * to draw one: `Tone.shade` can darken a colour and can never brighten it,
+     * so radiance has to arrive as the base colour itself.
+     */
+    val emission: Lit? = null,
+)
 
 /**
  * Everything past the felt, solved.
@@ -105,7 +140,29 @@ data class ScenePiece(val name: String, val surface: Surface, val box: SceneBox)
  * because which piece is in front of which is a fact about where the camera is
  * and this is computed before the camera has been consulted.
  */
-data class SceneModel(val pieces: List<ScenePiece>) {
+data class SceneModel(
+    val pieces: List<ScenePiece>,
+    /**
+     * The rig this room is lit by.
+     *
+     * Here rather than beside the preset because a lamp with a *place* has that
+     * place in mat pixels, and mat pixels are a fact about the board's layout.
+     * A rig and the room it lights are solved together or they are solved
+     * against different tables.
+     */
+    val lighting: StageLighting = StageLighting.Minimal,
+) {
+    /**
+     * Everything at or below the table top, and everything standing on it.
+     *
+     * The felt is drawn between the two, because the felt lies *on* the desk and
+     * *under* the lamp, and a single pass could only ever put it on one side.
+     * Well defined because no piece of this room straddles z = 0 — which is a
+     * test, not a hope.
+     */
+    val ground: List<ScenePiece> get() = pieces.filter { it.box.max.z <= 0f }
+    val standing: List<ScenePiece> get() = pieces.filter { it.box.max.z > 0f }
+
     companion object {
         val Empty = SceneModel(emptyList())
     }
@@ -231,8 +288,133 @@ object Scenery {
     /** How far the wall runs past the ends of the desk. Walls do not stop. */
     const val WALL_OVERHANG = 1.12f
 
+    // ---- the room below the desk ---------------------------------------------------
+
+    /** How far the desk top stands off the floor, in card widths — about 73cm. */
+    const val DESK_STAND = 12.4f
+
+    /** How thick the floor is. Only its top face is ever seen. */
+    const val FLOOR_THICKNESS = 0.4f
+
+    /** How far the floor runs past the desk, in card widths. */
+    const val FLOOR_MARGIN = 8.0f
+
+    // ---- the window ------------------------------------------------------------------
+
     /**
-     * The room, for a scene and a board.
+     * How wide the opening in the wall is, in card widths, and where its centre
+     * sits as a fraction of the mat's width from the mat's left edge.
+     *
+     * Off to the left, opposite the lamp, so that the two fixtures are never
+     * both on the same side of the table and the room has a direction whichever
+     * hour it is.
+     */
+    const val WINDOW_SPAN = 3.4f
+    const val WINDOW_AT = 0.12f
+
+    /**
+     * How high the sill and the head are, in card *heights* above the desk.
+     *
+     * Low, and this is measured rather than chosen. At the wall's plane the
+     * largest z that lands anywhere on the glass is 94 pixels from overhead, 86
+     * at the table seat and 128 seated — half a card height. So a window on this
+     * wall is either low or invisible, and one at a realistic sill height would
+     * be a piece of geometry nobody could ever see, lighting a room through a
+     * hole above the frame.
+     */
+    const val WINDOW_SILL = 0.10f
+    const val WINDOW_HEAD = 2.05f
+
+    /**
+     * How big the sky is, and how far off, in card widths.
+     *
+     * Only ever divided into one another, to give the source an angular size:
+     * 21.7 degrees, which is what a window looks like from a desk beside it and
+     * about three times the lamp's. That ratio is the whole reason day and night
+     * read as two rooms rather than two colour grades — at the height a card is
+     * carried at, daylight's shadow edge is two and a half times softer.
+     *
+     * The window keeps its **direction** and gains no position. See
+     * [lightingFor] for why, which is a fact about this wall rather than a
+     * preference.
+     */
+    const val SKY_RADIUS = 12.9f
+    const val SKY_DISTANCE = 34.0f
+
+    // ---- the lamp --------------------------------------------------------------------
+
+    /**
+     * Where the lamp stands: past the mat's right edge in card widths, and down
+     * the mat's depth as a fraction of it.
+     *
+     * Beyond the felt, because nothing in this room may stand over the mat, and
+     * on the far right because that is where a right-handed player's lamp is and
+     * where it shadows *away* from the hand.
+     */
+    const val LAMP_OUT = 1.15f
+    const val LAMP_ALONG = 0.26f
+
+    /** How big the bulb is, in card widths: a 14cm shade. */
+    const val LAMP_RADIUS = 1.2f
+
+    /**
+     * How high the lamp is **drawn**, in card widths — which is not how high its
+     * light is. See [lampHeight].
+     */
+    const val LAMP_DRAWN = 2.2f
+
+    /** The shade: half its width, half its depth, and how deep it hangs. */
+    const val LAMP_SHADE_HALF = 0.55f
+    const val LAMP_SHADE_DEPTH = 0.40f
+    const val LAMP_SHADE_THICK = 0.42f
+
+    /** The mast's half-width, and the base's half-width and thickness. */
+    const val LAMP_MAST = 0.07f
+    const val LAMP_BASE = 0.38f
+    const val LAMP_BASE_THICK = 0.10f
+
+    /** Where the lamp stands on the desk, in mat pixels. */
+    fun lampFoot(layout: BoardLayout): Vec2 {
+        val mat = mat(layout)
+        return Vec2(
+            x = mat.right + layout.cardWidth * LAMP_OUT,
+            y = mat.top + mat.height * LAMP_ALONG,
+        )
+    }
+
+    /**
+     * How high the lamp's light is, in mat pixels.
+     *
+     * **Solved, not chosen**, and the reference quantity is the preset that
+     * already ships. The ratio of horizontal to vertical in
+     * `StageLighting.DeskNight.key.direction` is 0.854, and that ratio *is* how
+     * long a night shadow is per unit of height. So the lamp stands at whatever
+     * height makes the ray from it to the middle of the table have exactly that
+     * ratio: every shadow on the board keeps the length it ships with, to the
+     * last digit, and all that is new is that they now diverge from a point
+     * instead of running parallel.
+     *
+     * It comes out at 704 pixels — about 38cm above the desk, which is a desk
+     * lamp. That the honest number and the shipped preset agree this well is the
+     * argument for solving it rather than typing one.
+     */
+    fun lampHeight(layout: BoardLayout): Float {
+        val mat = mat(layout)
+        val foot = lampFoot(layout)
+        val shipped = StageLighting.DeskNight.key.direction.normalised()
+        val ratio = sqrt(shipped.x * shipped.x + shipped.y * shipped.y) / abs(shipped.z)
+        if (ratio <= 1e-4f) return layout.cardWidth * LAMP_DRAWN
+        return hypot(mat.centerX - foot.x, mat.centerY - foot.y) / ratio
+    }
+
+    /** The lamp, as a point of light. */
+    fun lamp(layout: BoardLayout): Vec3 {
+        val foot = lampFoot(layout)
+        return Vec3(foot.x, foot.y, lampHeight(layout))
+    }
+
+    /**
+     * The room, for a scene, an hour and a board.
      *
      * @param surfaceWidth the stage's own width in pixels. The desk is sized
      *   against the *surface* rather than against the mat because its job is to
@@ -241,12 +423,13 @@ object Scenery {
      */
     fun of(
         scene: Scene,
+        time: TimeOfDay,
         layout: BoardLayout,
         surfaceWidth: Float,
         surfaceHeight: Float,
     ): SceneModel = when (scene) {
         Scene.MINIMAL -> minimal(layout)
-        Scene.DESK -> desk(layout, surfaceWidth, surfaceHeight)
+        Scene.DESK -> desk(time, layout, surfaceWidth, surfaceHeight)
     }
 
     /**
@@ -260,7 +443,7 @@ object Scenery {
     fun minimal(layout: BoardLayout): SceneModel {
         val table = table(layout)
         return SceneModel(
-            listOf(
+            pieces = listOf(
                 ScenePiece(
                     name = "table",
                     surface = Surface.TABLE,
@@ -274,27 +457,49 @@ object Scenery {
                     ),
                 ),
             ),
+            lighting = StageLighting.Minimal,
         )
     }
 
     /**
-     * The desk, and the wall behind it.
+     * The desk, the wall it is pushed against with a window in it, the lamp
+     * standing on it, and the floor underneath.
      *
-     * Two objects, and `docs/AAA.md` #62 is the argument for stopping there:
-     * *"There is a room past it. Dark, out of focus, present. It does not need
-     * detail; it needs to exist."* A wall behind a desk is the cheapest true
-     * statement about where the table is, and everything else — the window, the
-     * lamp, the floor, the things on it — is a later release rather than a
-     * smaller version of itself now.
+     * Ten pieces against a budget of twenty, and **the same ten at every hour** —
+     * a room does not repaint itself at dusk. What the hour changes is which
+     * fixture is emitting and which rig is lighting the rest, which is the whole
+     * of the difference between a scene and a colour grade.
+     *
+     * Two joints are worth knowing about, because both were bugs first:
+     *
+     * - **The wall stands *on* the desk and the desk runs *under* the wall.**
+     *   The wall used to have a skirt down to the desk's underside, and that
+     *   skirt is hidden by the desk top from every angle *and painted over it*,
+     *   because the wall's tall front-top corner outruns the desk's near edge
+     *   below about twenty-seven degrees of pitch. It ate thirty pixels of the
+     *   forty-pixel band of bare wood between the wall and the mat — most of the
+     *   thing `docs/AAA.md` #61 asks for. Sitting the wall on z = 0 and running
+     *   the desk back under it leaves the two sharing exactly one face.
+     * - **The four wall pieces and the pane tile the old single wall exactly.**
+     *   No gap and no overlap, which is one line of test and the reason a window
+     *   can be a *hole* rather than a bright rectangle stuck on a wall.
      */
-    fun desk(layout: BoardLayout, surfaceWidth: Float, surfaceHeight: Float): SceneModel {
+    fun desk(
+        time: TimeOfDay,
+        layout: BoardLayout,
+        surfaceWidth: Float,
+        surfaceHeight: Float,
+    ): SceneModel {
         val mat = mat(layout)
         val card = layout.cardWidth
+        val tall = layout.cardHeight
 
         val halfSpan = maxOf(surfaceWidth, mat.width) * DESK_SPAN / 2f
         val left = mat.centerX - halfSpan
         val right = mat.centerX + halfSpan
-        val far = mat.top - card * DESK_FAR
+        // Where the wall's face stands, and where the desk's far edge is behind it.
+        val face = mat.top - card * DESK_FAR
+        val back = face - card * WALL_THICKNESS
         // Past the bottom of the picture as well as past the mat, and the
         // difference matters on a screen the board does not fill: an edge that
         // stops at the last card is a border round the board, and an edge that
@@ -302,22 +507,40 @@ object Scenery {
         val near = maxOf(mat.bottom, surfaceHeight) + card * DESK_NEAR
 
         val wallOverhang = halfSpan * WALL_OVERHANG
-        val wallHeight = layout.cardHeight * WALL_HEIGHT
+        val wallLeft = mat.centerX - wallOverhang
+        val wallRight = mat.centerX + wallOverhang
+        val wallTop = tall * WALL_HEIGHT
+
+        val openingHalf = card * WINDOW_SPAN / 2f
+        val openingAt = mat.left + mat.width * WINDOW_AT
+        val openingLeft = openingAt - openingHalf
+        val openingRight = openingAt + openingHalf
+        val sill = tall * WINDOW_SILL
+        val head = tall * WINDOW_HEAD
+
+        val foot = lampFoot(layout)
+        val shadeTop = card * LAMP_DRAWN
+        val shadeBottom = shadeTop - card * LAMP_SHADE_THICK
+        val baseTop = card * LAMP_BASE_THICK
+
+        fun wall(name: String, l: Float, r: Float, bottom: Float, top: Float) = ScenePiece(
+            name = name,
+            surface = Surface.WALL,
+            box = SceneBox.standing(l, back, r, face, bottom, top),
+        )
 
         return SceneModel(
-            listOf(
+            pieces = listOf(
                 ScenePiece(
-                    name = "wall",
-                    surface = Surface.WALL,
+                    name = "floor",
+                    surface = Surface.FLOOR,
                     box = SceneBox.standing(
-                        left = mat.centerX - wallOverhang,
-                        top = far - card * WALL_THICKNESS,
-                        right = mat.centerX + wallOverhang,
-                        bottom = far,
-                        // Down as far as the desk goes, so that no seam of void
-                        // shows between the two where the camera catches them.
-                        floor = -card * DESK_THICKNESS,
-                        ceiling = wallHeight,
+                        left = left - card * FLOOR_MARGIN,
+                        top = back - card * FLOOR_MARGIN,
+                        right = right + card * FLOOR_MARGIN,
+                        bottom = near + card * FLOOR_MARGIN,
+                        floor = -card * (DESK_STAND + FLOOR_THICKNESS),
+                        ceiling = -card * DESK_STAND,
                     ),
                 ),
                 ScenePiece(
@@ -325,23 +548,145 @@ object Scenery {
                     surface = Surface.TABLE,
                     box = SceneBox.standing(
                         left = left,
-                        top = far,
+                        top = back,
                         right = right,
                         bottom = near,
                         floor = -card * DESK_THICKNESS,
                         ceiling = 0f,
                     ),
                 ),
+                wall("wall left", wallLeft, openingLeft, 0f, wallTop),
+                wall("wall right", openingRight, wallRight, 0f, wallTop),
+                wall("sill", openingLeft, openingRight, 0f, sill),
+                wall("header", openingLeft, openingRight, head, wallTop),
+                ScenePiece(
+                    name = "pane",
+                    surface = Surface.GLASS,
+                    // Flush with the wall rather than set back in a reveal. Set
+                    // back, it shows a twelve-pixel band at the table seat and
+                    // nothing at all from overhead, because anything pushed back
+                    // in y projects straight off the top of the picture. Flush,
+                    // it gets the whole band, and the left jamb's inner face
+                    // still reads as the edge of a frame.
+                    box = SceneBox.standing(openingLeft, back, openingRight, face, sill, head),
+                    emission = paneLight(time),
+                ),
+                ScenePiece(
+                    name = "lamp base",
+                    surface = Surface.SHADE,
+                    box = SceneBox.standing(
+                        left = foot.x - card * LAMP_BASE,
+                        top = foot.y - card * LAMP_BASE,
+                        right = foot.x + card * LAMP_BASE,
+                        bottom = foot.y + card * LAMP_BASE,
+                        floor = 0f,
+                        ceiling = baseTop,
+                    ),
+                ),
+                ScenePiece(
+                    name = "lamp mast",
+                    surface = Surface.SHADE,
+                    box = SceneBox.standing(
+                        left = foot.x - card * LAMP_MAST,
+                        top = foot.y - card * LAMP_MAST,
+                        right = foot.x + card * LAMP_MAST,
+                        bottom = foot.y + card * LAMP_MAST,
+                        floor = baseTop,
+                        ceiling = shadeBottom,
+                    ),
+                ),
+                ScenePiece(
+                    name = "lamp shade",
+                    surface = Surface.SHADE,
+                    box = SceneBox.standing(
+                        left = foot.x - card * LAMP_SHADE_HALF,
+                        top = foot.y - card * LAMP_SHADE_DEPTH,
+                        right = foot.x + card * LAMP_SHADE_HALF,
+                        bottom = foot.y + card * LAMP_SHADE_DEPTH,
+                        floor = shadeBottom,
+                        ceiling = shadeTop,
+                    ),
+                    emission = shadeLight(time),
+                ),
             ),
+            lighting = lightingFor(Scene.DESK, time, layout),
         )
     }
 
-    /** Which rig lights which room. The one place that mapping is made. */
-    fun lightingFor(scene: Scene, time: TimeOfDay): StageLighting = when (scene) {
-        Scene.MINIMAL -> StageLighting.Minimal
-        Scene.DESK -> when (time) {
-            TimeOfDay.DAY -> StageLighting.DeskDay
-            TimeOfDay.NIGHT -> StageLighting.DeskNight
-        }
+    /**
+     * What the window is showing.
+     *
+     * It always carries an emission and only the amount changes, because a
+     * window always shows the outside and the outside at night is very nearly
+     * black. Routed through the rig instead, a night pane would come back as a
+     * mid-grey rectangle — a lit window in a dark room, with the light behind it.
+     */
+    private fun paneLight(time: TimeOfDay): Lit = when (time) {
+        TimeOfDay.DAY -> Lit(1f, StageLighting.DeskDay.key.warmth)
+        TimeOfDay.NIGHT -> Lit(0.02f, -0.85f)
     }
+
+    /**
+     * What the lamp is doing.
+     *
+     * Null by day, which is not the lamp being switched off so much as it being
+     * a pale ceramic object in a bright room — shaded like everything else. At
+     * night it is the brightest thing in the frame after a card, and its warmth
+     * comes off the rig's own key so a fixture and the light it throws cannot be
+     * different colours.
+     */
+    private fun shadeLight(time: TimeOfDay): Lit? = when (time) {
+        TimeOfDay.DAY -> null
+        TimeOfDay.NIGHT -> Lit(1f, StageLighting.DeskNight.key.warmth)
+    }
+
+    /**
+     * Which rig lights which room, once the board's size is known.
+     *
+     * The presets in `StageLighting` are pure ratios and directions and stay
+     * that way — not one byte of that file changes for this. What is added here
+     * is everything measured in **mat pixels**, because a lamp's position and a
+     * source's size are lengths, and a length is a fact about the board's layout
+     * rather than about a preset.
+     *
+     * **The lamp gets a place; the window does not**, and that is geometry
+     * rather than laziness. Three constructions were tried for a positioned
+     * window and all three fail on this wall: a source at the aperture's centre
+     * gives a horizontal-to-vertical ratio of 3.4, so a carried card's shadow
+     * lands four hundred pixels away instead of eighty; a source pushed back
+     * along the shipped ray drifts its direction by seven and a half degrees and
+     * moves every daylight shadow in the app; and a source at sky height on the
+     * shipped ray crosses this wall's plane at z = 991 against a wall 511 tall —
+     * it enters *above* the window rather than through it. There is no position
+     * inside this wall that produces daylight. What the window gets instead is
+     * its real angular *size*, which is the half of the physics that is visible:
+     * daylight's shadows are soft and lamplight's are not.
+     */
+    fun lightingFor(scene: Scene, time: TimeOfDay, layout: BoardLayout): StageLighting =
+        when (scene) {
+            Scene.MINIMAL -> StageLighting.Minimal
+            Scene.DESK -> when (time) {
+                TimeOfDay.DAY -> StageLighting.DeskDay.let { rig ->
+                    rig.copy(
+                        key = rig.key.copy(
+                            radius = layout.cardWidth * SKY_RADIUS,
+                            distance = layout.cardWidth * SKY_DISTANCE,
+                        ),
+                    )
+                }
+                TimeOfDay.NIGHT -> StageLighting.DeskNight.let { rig ->
+                    val mat = mat(layout)
+                    rig.copy(
+                        key = Light.at(
+                            position = lamp(layout),
+                            aimedAt = Vec3(mat.centerX, mat.centerY, 0f),
+                            intensity = rig.key.intensity,
+                            warmth = rig.key.warmth,
+                            ambient = rig.key.ambient,
+                            radius = layout.cardWidth * LAMP_RADIUS,
+                        ),
+                    )
+                }
+            }
+        }
 }

@@ -239,4 +239,174 @@ class CardShadowTest {
         assertTrue(nothing != null)
         assertTrue(nothing.spread.isFinite() && nothing.alpha.isFinite())
     }
+
+    // ---- a light with a size, and a light with a place ---------------------------
+
+    private val board = com.kaiharimoto.mastertool.core.layout.BoardLayouter
+        .solve(1600f, 856f, 59f / 86f, perspectiveGrowth = 1.2f)
+    private val mat = com.kaiharimoto.mastertool.core.scene.Scenery.mat(board)
+    private val lamp = com.kaiharimoto.mastertool.core.scene.Scenery.lightingFor(
+        com.kaiharimoto.mastertool.core.scene.Scene.DESK,
+        com.kaiharimoto.mastertool.core.scene.TimeOfDay.NIGHT,
+        board,
+    ).key
+    private val window = com.kaiharimoto.mastertool.core.scene.Scenery.lightingFor(
+        com.kaiharimoto.mastertool.core.scene.Scene.DESK,
+        com.kaiharimoto.mastertool.core.scene.TimeOfDay.DAY,
+        board,
+    ).key
+
+    private fun spread(light: Light, z: Float, x: Float = mat.centerX, y: Float = mat.centerY) =
+        Shadows.cast(
+            Pose3(position = Vec3(x, y, z)),
+            width,
+            height,
+            light,
+            cardHeight = height,
+        )!!.spread
+
+    @Test
+    fun aLampWithNoSizeCastsExactlyTheEdgeItAlwaysDid() {
+        // The golden records this number, so it is guarded twice: here to the
+        // bit, and there as a recording. A light with no stated size has no
+        // angle to derive a penumbra from, and the heuristic it falls back on is
+        // the expression that shipped, character for character.
+        for (step in 0..40) {
+            val lift = step / 40f
+            val z = lift * height
+            val expected = height * (0.018f + lift * 0.34f)
+            val cast = Shadows.cast(at(z), width, height, key, cardHeight = height)!!
+            assertEquals(expected, cast.spread, "at a lift of $lift")
+            assertEquals(0f, cast.umbra, "a sizeless light has no umbra")
+        }
+    }
+
+    @Test
+    fun aPointLampThrowsItsShadowsOutwardFromWhereItStands() {
+        // The visible prize, and the one thing no directional light can do: the
+        // shadows of two cards on opposite sides of the table point in different
+        // directions, because they point away from the same lamp.
+        val near = Shadows.cast(
+            Pose3(position = Vec3(mat.right - 60f, mat.top + 60f, 90f)),
+            width, height, lamp, cardHeight = height,
+        )!!
+        val far = Shadows.cast(
+            Pose3(position = Vec3(mat.left + 60f, mat.bottom - 60f, 90f)),
+            width, height, lamp, cardHeight = height,
+        )!!
+
+        fun swing(cast: CardShadow, from: Vec3): Vec3 {
+            val middle = cast.corners.fold(Vec3.Zero) { sum, corner -> sum + corner } /
+                cast.corners.size.toFloat()
+            return middle - from
+        }
+        val a = swing(near, Vec3(mat.right - 60f, mat.top + 60f, 0f)).normalised()
+        val b = swing(far, Vec3(mat.left + 60f, mat.bottom - 60f, 0f)).normalised()
+        val apart = a dot b
+        assertTrue(apart < 0.8f, "the two shadows run parallel: $a and $b")
+
+        // And under the rig that shipped, they are exactly parallel.
+        val flatNear = Shadows.cast(
+            Pose3(position = Vec3(mat.right - 60f, mat.top + 60f, 90f)),
+            width, height, StageLighting.DeskNight.key, cardHeight = height,
+        )!!
+        val flatFar = Shadows.cast(
+            Pose3(position = Vec3(mat.left + 60f, mat.bottom - 60f, 90f)),
+            width, height, StageLighting.DeskNight.key, cardHeight = height,
+        )!!
+        val flatA = swing(flatNear, Vec3(mat.right - 60f, mat.top + 60f, 0f)).normalised()
+        val flatB = swing(flatFar, Vec3(mat.left + 60f, mat.bottom - 60f, 0f)).normalised()
+        assertEquals(1f, flatA dot flatB, 1e-3f, "the shipped rig is not parallel after all")
+    }
+
+    @Test
+    fun aBiggerSourceMakesASofterEdgeAndTheWindowIsBiggerThanTheLamp() {
+        // The second-loudest difference between the two rooms, and it costs one
+        // field: at the height a card is carried at, daylight's shadow edge is
+        // more than twice as soft as lamplight's.
+        listOf(0.55f * height, 0.88f * height, 1.35f * height).forEach { z ->
+            assertTrue(
+                spread(window, z) > spread(lamp, z) * 1.5f,
+                "at $z the window (${spread(window, z)}) is not softer than the lamp " +
+                    "(${spread(lamp, z)})",
+            )
+        }
+    }
+
+    @Test
+    fun aRestingCardsShadowIsHardWhateverTheSourceIs() {
+        // The one shadow that must stay crisp, because it is the whole cue that
+        // says a card is on the table. An area source big enough to soften a
+        // held card must not smear this one.
+        val floor = height * 0.018f
+        listOf(key, lamp, window).forEach { light ->
+            assertEquals(floor, spread(light, 0f), floor * 0.01f, "a resting card under $light")
+        }
+    }
+
+    @Test
+    fun daylightLosesItsUmbraLongBeforeLamplightDoes() {
+        // What makes day and night two rooms rather than two colour grades: the
+        // height at which a shadow's soft edge is as wide as the card itself.
+        fun dissolvesAt(light: Light): Float {
+            var z = 0f
+            while (z < height * 4f) {
+                if (2f * spread(light, z) >= width) return z / height
+                z += height / 200f
+            }
+            return Float.MAX_VALUE
+        }
+        val sky = dissolvesAt(window)
+        val bulb = dissolvesAt(lamp)
+        // Under a card height for the window: daylight has lost its edge before a
+        // card is even properly off the table.
+        assertTrue(sky < 1f, "daylight stays hard until $sky card heights")
+        // And the lamp holds an edge for most of a card height longer — measured
+        // at 0.67 against 1.24, a ratio of 1.8. It is not the 2.4 the widths
+        // alone suggest, because both spreads share an antialiasing floor that
+        // dominates near the felt and compresses the difference; the bar is set
+        // at where it actually lands rather than at where the ratio of the two
+        // radii would put it.
+        assertTrue(bulb > sky * 1.6f, "the two sources are the same size: $sky and $bulb")
+    }
+
+    @Test
+    fun aCardRestingOnTheFeltStillCastsUnderAPlacedLamp() {
+        // The trap. `CardSolid.face(..., atDepth)` puts a resting solid's base
+        // one thickness *below* the felt, so the ray to the surface legitimately
+        // runs backwards — and a guard against that would return null for every
+        // card on the board at once.
+        val thickness = CardSolid.thickness(width)
+        listOf(key, lamp, window).forEach { light ->
+            val cast = Shadows.cast(
+                Pose3(position = Vec3(mat.centerX, mat.centerY, 0f)),
+                width,
+                height,
+                light,
+                cardHeight = height,
+                bodyDepth = thickness,
+            )
+            assertTrue(cast != null, "a card lying on the felt casts nothing under $light")
+        }
+    }
+
+    @Test
+    fun theApertureAndTheCardAreCastByTheSameArithmetic() {
+        // One function, two consumers — a window's opening thrown onto a desk is
+        // a card's outline thrown onto the felt with different numbers.
+        val pose = Pose3(position = Vec3(mat.centerX, mat.centerY, 140f))
+        val corners = CardSolid.face(pose, width, height)
+        val direct = Shadows.landOn(corners, lamp)!!
+        val cast = Shadows.cast(pose, width, height, lamp, cardHeight = height)!!
+        direct.corners.zip(cast.corners).forEach { (a, b) ->
+            assertEquals(a.x, b.x, 1e-3f)
+            assertEquals(a.y, b.y, 1e-3f)
+        }
+    }
+
+    @Test
+    fun aLightParallelToTheTableStillCastsNothing() {
+        val sideways = Light(direction = Vec3(1f, 0f, 0f))
+        assertNull(Shadows.landOn(CardSolid.face(at(40f), width, height), sideways))
+    }
 }

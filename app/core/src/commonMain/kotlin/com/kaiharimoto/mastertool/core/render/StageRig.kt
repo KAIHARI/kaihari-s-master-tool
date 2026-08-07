@@ -1,9 +1,11 @@
 package com.kaiharimoto.mastertool.core.render
 
+import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
  * The lighting rig for the play stage: a key, a bounce, a rim, one eye.
@@ -161,18 +163,36 @@ object StageRig {
         key: Light = Key,
         bounce: Light = Bounce,
         rim: Light = Rim,
+        /**
+         * Where on the stage this surface is, for a lamp that has a place.
+         *
+         * Last, and it has to be: every existing caller passes its arguments
+         * positionally up to [rim], and a parameter inserted before them would
+         * be a silent re-binding rather than a compile error.
+         *
+         * Null is not "the origin" — it is *no point offered*, which every lamp
+         * without a position ignores anyway. All three lamps get the treatment
+         * rather than only the key, because [Light.toLightFrom] and
+         * [Light.attenuation] both short-circuit on a null position, so doing it
+         * uniformly costs nothing and removes a special case. In practice only
+         * the key is ever placed: a fill is the room and a rim is the player,
+         * and neither is a fixture.
+         */
+        at: Vec3? = null,
     ): Lit {
         val unit = normal.normalised()
         val headroom = 1f - key.ambient
 
-        val direct = max(0f, unit dot key.toLight) * key.intensity * headroom
-        val fill = max(0f, unit dot bounce.toLight) * bounce.intensity * headroom
+        val direct = max(0f, unit dot key.toLightFrom(at)) * key.intensity *
+            key.attenuation(at) * headroom
+        val fill = max(0f, unit dot bounce.toLightFrom(at)) * bounce.intensity *
+            bounce.attenuation(at) * headroom
 
         // Zero when the camera is square on to the surface and largest along the
         // silhouette, which is the only place a rim light is supposed to exist.
         val graze = (1f - abs(unit dot eye.normalised())).coerceIn(0f, 1f)
-        val kick = max(0f, unit dot rim.toLight) * rim.intensity *
-            graze.pow(GRAZE_FALLOFF) * headroom
+        val kick = max(0f, unit dot rim.toLightFrom(at)) * rim.intensity *
+            rim.attenuation(at) * graze.pow(GRAZE_FALLOFF) * headroom
 
         val amount = (key.ambient + direct + fill + kick).coerceIn(0f, 1f)
         if (amount <= 0f) return Lit.None
@@ -190,8 +210,8 @@ object StageRig {
      * of its own, which is what keeps the unanimity [StageLighting]'s KDoc
      * inherits from this object's.
      */
-    fun lit(normal: Vec3, eye: Vec3, lighting: StageLighting): Lit =
-        lit(normal, eye, lighting.key, lighting.bounce, lighting.rim)
+    fun lit(normal: Vec3, eye: Vec3, lighting: StageLighting, at: Vec3? = null): Lit =
+        lit(normal, eye, lighting.key, lighting.bounce, lighting.rim, at)
 
     /**
      * One face of a solid: how bright to paint it.
@@ -225,5 +245,155 @@ object StageRig {
         face: Face,
         eye: Vec3 = Vec3.Toward,
         lighting: StageLighting = StageLighting.Minimal,
-    ): Lit = lit(face.normal, eye, lighting)
+    ): Lit = lit(face.normal, eye, lighting, at = face.centre)
+
+    // ---- what a placed lamp does to a flat surface --------------------------------
+
+    /**
+     * Where the lamp's own reflection lands on the plane at [surfaceZ].
+     *
+     * The mirror image of the source, chased down to the plane — exact and one
+     * line, because the surface is flat and its normal is +z.
+     *
+     * This exists because a *diffuse* pool on this mat cannot be seen. Derived
+     * honestly from the rig, the night mat runs 11 levels of 255 under the lamp
+     * down to 7 at the far corner: four levels, against the twenty-nine the
+     * shipped additive pool gives. The physics is right and the picture is dead,
+     * because a near-black matte surface has no albedo left to modulate. What
+     * you actually see on a playmat under a lamp is a *sheen* — a reflection of
+     * the source rather than of its light — which is exactly what [Shade.lamp]
+     * already models for a card and exactly why `drawCardSurface` composites it
+     * additively. So the felt gets both: the diffuse pool as a multiply, and
+     * this as the additive highlight it always secretly was.
+     *
+     * Null for a lamp with no place. A directional source's reflection is a lobe
+     * with no centre a plane this small can hold.
+     */
+    fun sheen(light: Light, eyeAt: Vec3, surfaceZ: Float = 0f): Vec2? {
+        val lamp = light.position ?: return null
+        val eyeUp = eyeAt.z - surfaceZ
+        val lampUp = lamp.z - surfaceZ
+        if (eyeUp <= 0f || eyeUp + lampUp <= 0f) return null
+        val along = eyeUp / (eyeUp + lampUp)
+        return Vec2(
+            x = eyeAt.x + (lamp.x - eyeAt.x) * along,
+            y = eyeAt.y + (lamp.y - eyeAt.y) * along,
+        )
+    }
+
+    /**
+     * How wide that reflection is: the source's mirror image, broadened by how
+     * rough the surface reflecting it is.
+     *
+     * [roughness] is an RMS slope — a tangent, dimensionless — so it adds to the
+     * source's own angular radius before both are carried down the same mirror
+     * path [sheen] walks and scaled onto the plane by the same fraction.
+     */
+    fun sheenRadius(
+        light: Light,
+        eyeAt: Vec3,
+        roughness: Float,
+        surfaceZ: Float = 0f,
+    ): Float {
+        val lamp = light.position ?: return 0f
+        val eyeUp = eyeAt.z - surfaceZ
+        val lampUp = lamp.z - surfaceZ
+        if (eyeUp <= 0f || eyeUp + lampUp <= 0f) return 0f
+        val along = eyeUp / (eyeUp + lampUp)
+        val mirror = Vec3(lamp.x, lamp.y, surfaceZ - lampUp)
+        return (light.radius + roughness * (mirror - eyeAt).length) * along
+    }
+
+    /** Where the key's own share of the light has run out, as a fraction of it. */
+    const val POOL_FLOOR = 0.10f
+
+    /** How many colours the pool is drawn as. Nine is where a tenth stops showing. */
+    const val POOL_STOPS = 9
+
+    /**
+     * The key's light on a flat plane: one shape, and every horizontal surface
+     * in the room is a consumer of it.
+     *
+     * **Nothing here is a second lighting model**, and that is the whole point of
+     * it living in this object. [LightPool.stops] is [lit] itself, evaluated on a
+     * ray of radii with the plane's own normal — the identical function that
+     * shades every card and every wall — so the pool and the shadows cannot
+     * disagree about where the lamp is, by construction rather than by care. The
+     * felt's pool was a hand-placed gradient aimed by a *direction*, and it is
+     * the one surface on the stage that has never been told a lamp exists.
+     *
+     * Sampling one ray is exact rather than an approximation: for a fixed normal
+     * the bounce and the rim have no position, the graze is a constant, and the
+     * only radially varying term is the key's — and a point source over a plane
+     * is radially symmetric about its own foot.
+     *
+     * Null when the key has no place. A directional lamp has no foot to pool
+     * around, which is why the shipped felt keeps the shipped drawing.
+     */
+    fun pool(
+        lighting: StageLighting,
+        eye: Vec3,
+        surfaceZ: Float = 0f,
+        steps: Int = POOL_STOPS,
+        floor: Float = POOL_FLOOR,
+    ): LightPool? {
+        val key = lighting.key
+        val lamp = key.position ?: return null
+        val height = lamp.z - surfaceZ
+        if (height <= 0f) return null
+
+        val foot = Vec2(lamp.x, lamp.y)
+        val reach = reachOf(key, height, floor)
+        val count = max(2, steps)
+
+        return LightPool(
+            foot = foot,
+            radius = reach,
+            stops = (0 until count).map { step ->
+                val radius = reach * step / (count - 1f)
+                lit(Rot3.FaceNormal, eye, lighting, at = Vec3(lamp.x + radius, lamp.y, surfaceZ))
+            },
+        )
+    }
+
+    /**
+     * How far out the key still carries [floor] of the light it throws straight
+     * down, for a lamp [height] above the plane.
+     *
+     * Bisected rather than solved, because the closed form is a quartic and this
+     * is called once a frame for a whole room. Thirty halvings of a bracket that
+     * starts twenty times the lamp's height leaves the answer exact to a
+     * millionth of a pixel, which is a great deal more than a gradient needs.
+     */
+    private fun reachOf(key: Light, height: Float, floor: Float): Float {
+        val size = key.radius * key.radius
+        // The key's own share at radius r: lambert times attenuation. Both fall,
+        // so the product is monotonic and a bracket cannot miss.
+        fun share(radius: Float): Float {
+            val span = radius * radius + height * height
+            val lambert = height / sqrt(span)
+            return key.intensity * lambert * ((size + height * height) / (size + span))
+        }
+
+        var near = 0f
+        var far = height * 20f
+        if (share(far) > floor) return far
+        repeat(30) {
+            val middle = (near + far) / 2f
+            if (share(middle) > floor) near = middle else far = middle
+        }
+        return far
+    }
 }
+
+/**
+ * The light a placed lamp throws on a flat surface, as a gradient can draw it.
+ *
+ * [foot] is where the lamp stands, in the surface's own coordinates — which is
+ * also the centre of the pool, because a point source over a plane is symmetric
+ * about the point directly beneath it. [stops] runs from that foot out to
+ * [radius] in equal steps, and each one is a real [Lit] rather than an opacity,
+ * so a renderer multiplies its own surface colour by them and never composites
+ * a wash over something it does not know the colour of.
+ */
+data class LightPool(val foot: Vec2, val radius: Float, val stops: List<Lit>)

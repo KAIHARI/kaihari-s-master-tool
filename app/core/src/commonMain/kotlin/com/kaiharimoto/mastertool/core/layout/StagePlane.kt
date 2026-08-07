@@ -230,6 +230,31 @@ data class StagePlane(
     fun flatten(point: Vec3): Flattened = flatten(point.x, point.y, point.z)
 
     /**
+     * Whether a point is far enough short of the lens to be drawn honestly.
+     *
+     * [project] divides by `cameraDistance - depth`, and it already refuses to
+     * divide by nothing: the gap is clamped at one pixel, so a point level with
+     * the lens does not crash, it flies to a few hundred thousand pixels away
+     * and takes its whole quad with it. That is worse than a crash in one
+     * specific way — it draws.
+     *
+     * Nothing on this stage reaches it today. The tallest thing in the room is
+     * the wall, and at the closest legal pose in [CameraEnvelope] — four degrees
+     * of pitch at eight tenths of the distance — its top corner comes back at
+     * 1.23 times the camera's own distance, which is past the lens; the quad
+     * then lands entirely above the glass and nothing is painted. So this is
+     * insurance against the day a piece of room is a little taller or the
+     * envelope opens a little wider, and the test that goes with it carries the
+     * measurement rather than merely asserting the guard exists.
+     *
+     * Raising the room's height ceiling is the wrong instrument for the same
+     * problem: the danger is a function of the *pose*, and the ceiling is a
+     * budget.
+     */
+    fun reaches(point: Vec3, clearance: Float = SAFE_DEPTH): Boolean =
+        project(point).depth < cameraDistance * clearance
+
+    /**
      * What the nearest corner grows to, which is what [BoardLayouter.solve] wants.
      *
      * The projection reporting on itself, so the fitter and the renderer cannot
@@ -277,6 +302,16 @@ data class StagePlane(
          * degrees, and this is only the angle the table opens at.
          */
         const val TILT = 21f
+
+        /**
+         * How much of the way to the lens a point may be and still be drawn.
+         *
+         * Half, which is generous: at that depth the projection is already
+         * doubling everything, so a surface past it is not a surface anybody is
+         * reading. See [reaches].
+         */
+        const val SAFE_DEPTH = 0.5f
+
         private const val MIN_GAP = 1f
 
         /** A zoom of nothing is not a camera; keep [eyePoint] out of infinity. */

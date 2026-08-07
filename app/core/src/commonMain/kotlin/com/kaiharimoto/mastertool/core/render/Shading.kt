@@ -36,9 +36,132 @@ data class Light(
      * left is enough, because the specular term is doing the talking.
      */
     val ambient: Float = 0.72f,
+    /**
+     * Where the lamp is, in the mat's own frame — or null for infinitely far.
+     *
+     * Null is every lamp that shipped before this, and it is the only state in
+     * which everything below is a no-op. That matters more than it sounds:
+     * `GoldenStageTest` renders the minimal stage against [StageRig.Key], and
+     * the whole of this file's new arithmetic has to be invisible to it.
+     *
+     * A direction says which way light *arrives* and nothing about where from,
+     * which is exactly right for the sky and exactly wrong for a bulb standing
+     * on a desk. Given a position the direction becomes a function of the point
+     * being lit, and three things follow that a direction cannot produce:
+     * shadows *diverge* instead of running parallel, the far corner of the table
+     * is genuinely dimmer than the near one, and the pool on the wood has
+     * somewhere to be.
+     *
+     * [direction] does not become redundant. It stays the answer for every call
+     * with no surface point to offer, and `Scenery` derives a placed lamp's
+     * direction *from* its position, so the two cannot disagree about where the
+     * light is coming from.
+     */
+    val position: Vec3? = null,
+    /** How big the source is, in mat pixels. Zero is a point, and casts hard. */
+    val radius: Float = 0f,
+    /**
+     * How far off a source with no [position] is, in mat pixels.
+     *
+     * Only ever read to turn [radius] into an angle, and that is the whole of
+     * its job. How soft a shadow is depends on the source's *angular* size —
+     * R over L — and a directional lamp has an R with no L. This is that L,
+     * stated rather than implied. Zero leaves a directional lamp a point.
+     */
+    val distance: Float = 0f,
 ) {
     /** From the surface toward the light — the vector every shading term wants. */
     val toLight: Vec3 = (-direction).normalised()
+
+    /** The way the light travels. The expression `Shadows.cast` used to inline. */
+    val travel: Vec3 = direction.normalised()
+
+    /**
+     * Toward the lamp from [at] — or the stored vector, when there is nowhere to
+     * be toward.
+     *
+     * Returns the [toLight] **val itself** in that case rather than an equal
+     * copy, which is not fastidiousness: the identity is what a test can assert
+     * without a tolerance, and it is the cheapest possible proof that a scene
+     * with no placed lamp is shaded by exactly the arithmetic it always was.
+     */
+    fun toLightFrom(at: Vec3?): Vec3 =
+        if (position == null || at == null) toLight else (position - at).normalised()
+
+    /** The way the light travels as it passes through [at]. */
+    fun travelFrom(at: Vec3?): Vec3 =
+        if (position == null || at == null) travel else (at - position).normalised()
+
+    /**
+     * How much of this lamp reaches [at], against the surface directly beneath it.
+     *
+     * Exactly the on-axis irradiance of a uniform disc of radius [radius]:
+     * `E ∝ R² / (R² + d²)`. So the source's *size* and its *distance* are one
+     * term rather than two guesses — it degrades to inverse-square once you are
+     * well away from the bulb, and it saturates instead of diverging as you
+     * reach it, which is what stops a card lifted toward the lamp from blowing
+     * out.
+     *
+     * Normalised at the lamp's own height above the surface rather than at some
+     * reference distance, and that is a decision with a number behind it: a
+     * `(d₀/d)²` form normalised at the middle of the mat comes back at 1.70 at
+     * the near corner, and against the night rig's 0.45 of headroom that clips
+     * the whole near half of the table flat to white. Normalised at the height,
+     * the clamp never engages on the felt at all — only for something lifted
+     * toward the bulb, which is the one place a light is allowed to run out of
+     * headroom.
+     *
+     * **Nothing here touches [ambient].** The falloff lands on the *directional*
+     * term — on the mat, the wood and the cards — and never on the floor under
+     * everything, which is what keeps [StageLighting.NIGHT_FLOOR] a guarantee
+     * rather than a hope.
+     */
+    fun attenuation(at: Vec3?, surfaceZ: Float = 0f): Float {
+        val lamp = position ?: return 1f
+        if (at == null) return 1f
+        val height = lamp.z - surfaceZ
+        val size = radius * radius
+        val away = at - lamp
+        return ((size + height * height) / (size + (away dot away))).coerceAtMost(1f)
+    }
+
+    /**
+     * How wide the source looks from [at], in radians.
+     *
+     * The one number a penumbra depends on. A placed lamp measures it against
+     * the real distance; a directional one has only [distance] to divide by, and
+     * a source with no size is a point from everywhere.
+     */
+    fun angularRadius(at: Vec3?): Float = when {
+        radius <= 0f -> 0f
+        position != null && at != null -> radius / max(1f, (position - at).length)
+        distance > 0f -> radius / distance
+        else -> 0f
+    }
+
+    companion object {
+        /**
+         * A lamp that is an object: the direction follows from where it stands.
+         *
+         * The one constructor a fixture should use, so that the thing drawn on
+         * the desk and the thing lighting the table cannot end up in two places.
+         */
+        fun at(
+            position: Vec3,
+            aimedAt: Vec3,
+            intensity: Float = 1f,
+            warmth: Float = 0f,
+            ambient: Float = 0.72f,
+            radius: Float = 0f,
+        ) = Light(
+            direction = (aimedAt - position).normalised(),
+            intensity = intensity,
+            warmth = warmth,
+            ambient = ambient,
+            position = position,
+            radius = radius,
+        )
+    }
 }
 
 /**
@@ -186,18 +309,27 @@ object Shading {
         val facing = normal dot eye
         val visible = if (facing < 0f) -normal else normal
 
-        val lambert = max(0f, visible dot light.toLight)
-        val diffuse = (light.ambient + (1f - light.ambient) * lambert * light.intensity)
+        // The card already knows where it is, so a placed lamp needs no new
+        // parameter here — which is the whole reason this signature survives a
+        // release that gave light a position. `pose.position` is in the mat's
+        // frame, the same frame the rig is in, and it is the point every term
+        // below should have been asking about all along.
+        val at = pose.position
+        val toLight = light.toLightFrom(at)
+        val reach = light.attenuation(at)
+
+        val lambert = max(0f, visible dot toLight)
+        val diffuse = (light.ambient + (1f - light.ambient) * lambert * light.intensity * reach)
             .coerceIn(0f, 1f)
 
         // Blinn-Phong: the half-vector between the eye and the light, which is
         // the direction a mirror at this point would have to face.
-        val half = (light.toLight + eye.normalised()).normalised()
+        val half = (toLight + eye.normalised()).normalised()
         val alignment = max(0f, visible dot half)
         val specular = if (lambert <= 0f) {
             0f
         } else {
-            (alignment.pow(material.shininess) * material.specular * light.intensity)
+            (alignment.pow(material.shininess) * material.specular * light.intensity * reach)
                 .coerceIn(0f, 1f)
         }
 
