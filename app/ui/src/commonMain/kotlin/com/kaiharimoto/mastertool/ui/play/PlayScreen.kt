@@ -87,6 +87,7 @@ import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.CardStock
 import com.kaiharimoto.mastertool.core.render.Homography
 import com.kaiharimoto.mastertool.core.render.Rot3
+import com.kaiharimoto.mastertool.core.render.StageRig
 import com.kaiharimoto.mastertool.ui.components.CARD_ASPECT_RATIO
 import com.kaiharimoto.mastertool.ui.components.CardBack
 import com.kaiharimoto.mastertool.ui.components.LocalCardBack
@@ -306,10 +307,13 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
 
     // ---- which room the table is in -----------------------------------------
     //
-    // Two preferences and a clock, resolved to one value. `look` is an ordinary
-    // parameter rather than snapshot state, unlike the camera's `eye` beside
-    // it, and `SceneRender.kt` carries the reason: the eye changes sixty times
-    // a second and this changes twice a day.
+    // Two preferences and a clock, resolved to an hour. The room and its palette
+    // are solved further down, beside the board layout, because a placed lamp's
+    // position is in mat pixels and this does not know how big the board is yet.
+    //
+    // Both travel as ordinary parameters rather than as snapshot state, unlike
+    // the camera's `eye` beside them, and `SceneRender.kt` carries the reason:
+    // the eye changes sixty times a second and these change twice a day.
     val scene = prefs.preferences.scene
     val deskLight = prefs.preferences.deskLight
 
@@ -325,9 +329,7 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
             hour = localHour()
         }
     }
-    val look = remember(scene, deskLight, hour) {
-        StageLook.of(scene, DeskClock.resolve(deskLight, hour))
-    }
+    val time = remember(deskLight, hour) { DeskClock.resolve(deskLight, hour) }
 
     /** Minimal, then the desk on the clock, then the two the clock cannot argue with. */
     val cycleScene: () -> Unit = {
@@ -448,8 +450,16 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
             // discipline the board layout above obeys, and for the same reason:
             // this is geometry, and geometry that is re-derived while the camera
             // moves is geometry that can change under a gesture.
-            val scenery = remember(scene, layout, widthPx, heightPx) {
-                Scenery.of(scene, layout, widthPx, heightPx)
+            val scenery = remember(scene, time, layout, widthPx, heightPx) {
+                Scenery.of(scene, time, layout, widthPx, heightPx)
+            }
+            // The palette and the rig, together. The rig is solved beside the
+            // room rather than looked up from the scene, because a placed lamp's
+            // position is in mat pixels and mat pixels move when the board
+            // resizes — so this changes twice a day *and* on a resize, which is
+            // still nothing like per frame.
+            val look = remember(scene, time, scenery) {
+                StageLook.of(scene, time, scenery.lighting)
             }
 
             if (!layout.fits) {
@@ -671,8 +681,24 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
                 // every card, and the only thing on the stage that is not part
                 // of one.
                 Canvas(Modifier.fillMaxSize()) {
-                    drawScene(scenery, camera.plane, camera.eye, look)
-                    drawFelt(layout, look)
+                    // The room, then the mat lying on it, then the room again —
+                    // because the felt is *on* the desk and *under* the lamp,
+                    // and one pass could only ever put it on one side. Nothing
+                    // in a `SceneModel` straddles the table top, which is what
+                    // makes that split well defined rather than a guess.
+                    //
+                    // The pool is solved here rather than carried on the scene
+                    // because it depends on where the camera is, and the camera
+                    // moves. It is one bisection and nine evaluations of the
+                    // same function that shades every card — a few hundred
+                    // floating-point operations against a frame budget of eight
+                    // thousand microseconds — and it is null for every room with
+                    // no lamp in it, which is every room but one.
+                    val pool = StageRig.pool(look.lighting, camera.eye)
+                    drawScene(scenery.ground, camera.plane, camera.eye, look, pool)
+                    drawFelt(layout, camera.plane, camera.eye, look, pool)
+                    drawDaylight(scenery, layout, look)
+                    drawScene(scenery.standing, camera.plane, camera.eye, look)
                     drawMatControls(layout, play.field)
                     drawIndicator(play.carry?.intent, play.field, layout)
                 }

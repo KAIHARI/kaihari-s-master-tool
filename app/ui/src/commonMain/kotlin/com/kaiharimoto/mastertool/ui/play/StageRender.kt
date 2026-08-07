@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
@@ -21,15 +22,21 @@ import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardMaterial
 import com.kaiharimoto.mastertool.core.render.CardSolid
+import com.kaiharimoto.mastertool.core.render.Light
+import com.kaiharimoto.mastertool.core.render.Lit
+import com.kaiharimoto.mastertool.core.render.LightPool
 import com.kaiharimoto.mastertool.core.render.Rot3
 import com.kaiharimoto.mastertool.core.render.Shading
 import com.kaiharimoto.mastertool.core.render.Shadows
 import com.kaiharimoto.mastertool.core.render.StageRig
 import com.kaiharimoto.mastertool.core.render.Tone
+import com.kaiharimoto.mastertool.core.scene.SceneModel
 import com.kaiharimoto.mastertool.core.scene.Scenery
+import com.kaiharimoto.mastertool.core.scene.Surface
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.pow
 
 /**
@@ -73,77 +80,111 @@ internal fun matSurface(layout: BoardLayout): Slot = Scenery.mat(layout)
  * A hand fanned out on bare void beneath a mat that stopped short of it was the
  * one place on this stage where the cards were demonstrably resting on nothing.
  */
-internal fun DrawScope.drawFelt(layout: BoardLayout, look: StageLook) {
+internal fun DrawScope.drawFelt(
+    layout: BoardLayout,
+    stage: StagePlane,
+    eye: Vec3,
+    look: StageLook,
+    pool: LightPool?,
+) {
     val mat = matSurface(layout)
     val span = max(mat.width, mat.height)
-    val key = look.lighting.key.direction
+    val key = look.lighting.key
 
     val corner = CornerRadius(layout.cardWidth * 0.16f)
     val matTopLeft = Offset(mat.left, mat.top)
     val matSize = Size(mat.width, mat.height)
 
     // The mat itself, as a surface rather than as an absence.
-    drawRoundRect(color = look.mat, topLeft = matTopLeft, size = matSize, cornerRadius = corner)
-
-    // Upstream of the light's travel: where it is coming from. Read off the
-    // active rig, so the pool is on the same side of the table as the shadows
-    // in every room — which is the one thing `StageRig` exists to guarantee and
-    // the one thing a second rig would have made it possible to break.
-    val pool = Offset(
-        x = mat.centerX - key.x * mat.width * 0.55f,
-        y = mat.centerY - key.y * mat.height * 0.55f,
-    )
-
-    // The pool alphas were picked by eye against the old, darker solids: a
-    // fully facing pile edge used to come back at 0.66 and now comes back at
-    // 0.79, because the shading it goes through stopped multiplying an sRGB
-    // encoding (see `Tone`). So the minimal room's pool is still a touch dim for
-    // the objects standing in it. Re-tuning it is a look-at-the-tablet judgement
-    // rather than a correctness fix, which is why it did not ride in with the
-    // encoding change and has not ridden in with the rooms either — the two desk
-    // presets were chosen fresh, and the minimal one is deliberately untouched.
     //
-    // All of it is bounded by the mat rather than by a rectangle half again its
-    // size. That was harmless while there was nothing outside the mat to spoil;
-    // with a table under it, the fall-off's job — darkening toward the corners —
-    // was being done to the table's corners too, and eating the one surface that
-    // tells you the mat is lying on something.
+    // Under a lamp that has a real place it is drawn as the pool instead: the
+    // same rubber, lit by the rig that lights everything else on the stage
+    // rather than by a gradient positioned by hand. That is the whole of what
+    // this release does to the felt — the mat has never been told a lamp exists,
+    // and it was the one surface here that could disagree with the shadows on it.
+    if (pool == null) {
+        drawRoundRect(color = look.mat, topLeft = matTopLeft, size = matSize, cornerRadius = corner)
+    } else {
+        drawRoundRect(
+            brush = feltPool(pool, look.mat),
+            topLeft = matTopLeft,
+            size = matSize,
+            cornerRadius = corner,
+        )
+    }
+
+    // Where the highlight goes.
     //
-    // The pool is the colour of the lamp rather than white, which is the same
-    // rule a card's specular obeys: a highlight is a reflection of the light
-    // source, not of the room, so it is the one place a temperature arrives
-    // undiluted. Under the desk lamp it is the difference between a bulb and a
-    // torch.
+    // With no lamp to reflect, upstream of the light's *travel* — the shipped
+    // answer, and the best a direction can give, since a direction has no place
+    // and so the highlight cannot move when the head does.
+    //
+    // With a lamp that has a place, the lamp's own mirror image chased down to
+    // the felt. That is what a highlight is, and the difference does not need
+    // pointing at: it slides a quarter of the mat's depth toward you between the
+    // overhead seat and the player's chair.
+    val eyeAt = stage.eyePoint(eye)
+    val mirror = StageRig.sheen(key, eyeAt)
+    val highlight = if (mirror != null) {
+        Offset(mirror.x, mirror.y)
+    } else {
+        Offset(
+            x = mat.centerX - key.direction.x * mat.width * 0.55f,
+            y = mat.centerY - key.direction.y * mat.height * 0.55f,
+        )
+    }
+    val reach = if (mirror != null) {
+        StageRig.sheenRadius(key, eyeAt, FELT_ROUGHNESS)
+    } else {
+        span * look.poolReach
+    }
+
+    // The alphas were picked by eye against the old, darker solids: a fully
+    // facing pile edge used to come back at 0.66 and now comes back at 0.79,
+    // because the shading it goes through stopped multiplying an sRGB encoding
+    // (see `Tone`). So the minimal room's highlight is still a touch dim for the
+    // objects standing in it. Re-tuning it is a look-at-the-tablet judgement
+    // rather than a correctness fix, and it *cannot* ride in now: the minimal
+    // stage coming out pixel-for-pixel is this release's acceptance criterion.
+    //
+    // It is the colour of the lamp rather than white, which is the same rule a
+    // card's specular obeys: a highlight is a reflection of the light source and
+    // not of the room, so it is the one place a temperature arrives undiluted.
     val lamp = look.poolColour
     drawRoundRect(
         brush = Brush.radialGradient(
             colors = listOf(
-                lamp.copy(alpha = look.poolCore),
-                lamp.copy(alpha = look.poolEdge),
+                lamp.copy(alpha = look.sheenCore),
+                lamp.copy(alpha = look.sheenEdge),
                 Color.Transparent,
             ),
-            center = pool,
-            radius = span * look.poolReach,
+            center = highlight,
+            radius = reach,
         ),
         topLeft = matTopLeft,
         size = matSize,
         cornerRadius = corner,
     )
 
-    // And the fall-off, which is what stops the pool from reading as a
-    // rectangle of grey rather than as light landing on something. At night it
-    // is doing a second job as well: it is where the darkness comes from, since
-    // the rig's ambient is not allowed to supply any. See `StageLighting`.
-    drawRoundRect(
-        brush = Brush.radialGradient(
-            colors = listOf(Color.Transparent, MasterToolPalette.Ink.copy(alpha = look.falloff)),
-            center = Offset(mat.centerX, mat.centerY),
-            radius = span * 0.78f,
-        ),
-        topLeft = matTopLeft,
-        size = matSize,
-        cornerRadius = corner,
-    )
+    // And the fall-off, which is what stops the highlight from reading as a
+    // rectangle of grey rather than as light landing on something.
+    //
+    // Only where there is no lamp. Where there is one the fall-off *is* the
+    // attenuation and has already been drawn; a second vignette centred on the
+    // mat would be darkening the table from a place no light comes from, which
+    // is exactly the disagreement this release exists to end.
+    if (pool == null) {
+        drawRoundRect(
+            brush = Brush.radialGradient(
+                colors = listOf(Color.Transparent, MasterToolPalette.Ink.copy(alpha = look.falloff)),
+                center = Offset(mat.centerX, mat.centerY),
+                radius = span * 0.78f,
+            ),
+            topLeft = matTopLeft,
+            size = matSize,
+            cornerRadius = corner,
+        )
+    }
 
     layout.slots.forEach { (slot, rect) ->
         val pile = slot !is BoardSlot.Zone
@@ -232,9 +273,21 @@ internal fun DrawScope.drawCardShadow(
     }
     val step = 1f - (1f - shadow.alpha).pow(1f / rings)
 
+    // A real penumbra straddles the geometric edge: it begins a little *inside*
+    // it and ends the same distance outside. Feathering only outward — which is
+    // what this did — leaves the solid core exactly as wide as the shadow, so a
+    // soft shadow reads as a hard one wearing a halo, and under a source the
+    // size of a window that halo is forty-five pixels of it.
+    //
+    // One sign buys the right shape. `umbra` is zero for a light with no stated
+    // size, which is every light the minimal stage has, so those shadows come
+    // out as the pixels they always were.
+    val half = corners.minOf { (it - middle).getDistance() }
+    val inset = min(shadow.umbra, half * 0.9f)
+
     // Outermost first, so the overlaps build toward the core.
     for (ring in rings downTo 1) {
-        val grow = shadow.spread * ring / rings
+        val grow = -inset + (inset + shadow.spread) * ring / rings
         drawPath(
             path = polygon(corners, middle, grow),
             color = look.shadow.copy(alpha = step),
@@ -551,5 +604,119 @@ private fun DrawScope.drawShuffleMark(slot: Slot, colour: Color) {
             close()
         }
         drawPath(point, colour)
+    }
+}
+
+/**
+ * How rough the playmat is, as an RMS slope.
+ *
+ * **Solved rather than chosen**, and the reference quantity is the highlight
+ * that ships. The night mat's radius today is `max(matWidth, matHeight) × 0.62`,
+ * which on the reference stage is 550 pixels; at the table seat the lamp's
+ * mirror image lies 2083 pixels from the eye and is scaled onto the felt by
+ * 0.629. Solving `(lampRadius + ρ × 2083) × 0.629 = 550` gives ρ = 0.357, and
+ * this reproduces 554 — within one per cent of what a player has already seen.
+ *
+ * So the size of the highlight does not change; only what decides it does. It
+ * was a number, and it is now a property of the surface, which is why it can
+ * shrink when the camera comes down and a number never could.
+ */
+private const val FELT_ROUGHNESS = 0.36f
+
+/** Rings in the daylight patch. Five, for the same reason a shadow has five. */
+private const val PATCH_RINGS = 5
+
+/**
+ * The felt, under a lamp that has a place.
+ *
+ * The same gradient the wood gets, over the mat's own colour — one shape and two
+ * consumers, so the light on the playmat and the light on the desk it is lying
+ * on cannot disagree.
+ */
+private fun feltPool(pool: LightPool, surface: Color): Brush = Brush.radialGradient(
+    colorStops = pool.stops.mapIndexed { index, lit ->
+        (index / (pool.stops.size - 1f)) to surface.shaded(lit)
+    }.toTypedArray(),
+    center = Offset(pool.foot.x, pool.foot.y),
+    radius = pool.radius,
+)
+
+/**
+ * The patch of daylight the window throws on the desk.
+ *
+ * The aperture's own corners, slid along the key onto the plane at z = 0 by the
+ * identical function that casts a card's shadow — a window's opening thrown onto
+ * a desk *is* a card's outline thrown onto the felt, with different numbers, and
+ * two copies of that arithmetic would be two places the light could be.
+ *
+ * ## Why it is a multiply and not an additive pass
+ *
+ * A patch of extra illumination on a diffuse surface is more light landing on an
+ * albedo, which is precisely what [Tone.shade] computes. Composited additively
+ * instead, one alpha would have to be right for both the wood and the felt at
+ * once, and they are thirty levels apart — so it would be wrong on at least one
+ * of them, and the seam would land exactly where the patch crosses the mat's
+ * edge. Drawn twice with each surface's own colour, there is no seam and no
+ * constant to be wrong.
+ *
+ * The outermost ring is the surface's *unpatched* colour exactly, so the patch
+ * fades into the room rather than ending at a line.
+ *
+ * ## Why the edge is a gradient and not a blur
+ *
+ * The window is a wide source, so the further the patch is thrown the softer its
+ * edge — hard at the sill, a hundred and sixty-eight pixels soft at the head.
+ * That falls out of [Light.angularRadius] for free and it is the truest single
+ * thing daylight does.
+ */
+internal fun DrawScope.drawDaylight(
+    scenery: SceneModel,
+    layout: BoardLayout,
+    look: StageLook,
+) {
+    val pane = scenery.pieces.firstOrNull { it.surface == Surface.GLASS } ?: return
+    val sky = pane.emission ?: return
+    if (sky.amount < 0.5f) return
+
+    val key = look.lighting.key
+    // The face of the pane that is toward the room, which is the aperture the
+    // light comes through.
+    val aperture = pane.box.faces().firstOrNull { it.normal.y > 0.99f } ?: return
+    val landed = Shadows.landOn(aperture.corners, key) ?: return
+
+    val corners = landed.corners.map { Offset(it.x, it.y) }
+    val middle = corners.fold(Offset.Zero) { sum, corner -> sum + corner } / corners.size.toFloat()
+    val soft = key.angularRadius(null) * landed.rays.average().toFloat()
+
+    val mat = matSurface(layout)
+    val felt = Path().apply {
+        addRoundRect(
+            androidx.compose.ui.geometry.RoundRect(
+                left = mat.left,
+                top = mat.top,
+                right = mat.right,
+                bottom = mat.bottom,
+                cornerRadius = CornerRadius(layout.cardWidth * 0.16f),
+            ),
+        )
+    }
+
+    // Once on the wood and once on the felt, because the patch crosses the mat's
+    // edge and one surface's colour is not the other's.
+    listOf(look.table to null, look.mat to felt).forEach { (surface, clip) ->
+        val paint: DrawScope.() -> Unit = {
+            for (ring in PATCH_RINGS downTo 1) {
+                val share = ring / PATCH_RINGS.toFloat()
+                // The outermost ring is the ambient alone, which is the colour
+                // the surface already is — so there is nothing to see where the
+                // patch runs out.
+                val reached = key.ambient + (1f - key.ambient) * (1f - share) * key.intensity
+                drawPath(
+                    path = polygon(corners, middle, soft * (share - 0.5f) * 2f),
+                    color = surface.shaded(Lit(reached.coerceIn(0f, 1f), key.warmth)),
+                )
+            }
+        }
+        if (clip == null) paint() else clipPath(clip) { paint() }
     }
 }

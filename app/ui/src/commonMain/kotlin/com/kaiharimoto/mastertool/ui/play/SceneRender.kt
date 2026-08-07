@@ -12,10 +12,14 @@ import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.StageLighting
 import com.kaiharimoto.mastertool.core.render.StageRig
 import com.kaiharimoto.mastertool.core.render.Tone
+import com.kaiharimoto.mastertool.core.render.LightPool
 import com.kaiharimoto.mastertool.core.scene.Scene
-import com.kaiharimoto.mastertool.core.scene.SceneModel
+import com.kaiharimoto.mastertool.core.scene.ScenePainter
+import com.kaiharimoto.mastertool.core.scene.ScenePiece
 import com.kaiharimoto.mastertool.core.scene.Surface
 import com.kaiharimoto.mastertool.core.scene.TimeOfDay
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 
 /**
  * The room: the furniture the mat is lying on, and what is behind it.
@@ -72,6 +76,12 @@ internal data class StageLook(
     val table: Color,
     /** What is behind the desk. Dark, out of focus, present. */
     val wall: Color,
+    /** What the desk is standing on. */
+    val floor: Color,
+    /** The window pane, when the light behind it is not doing the talking. */
+    val glass: Color,
+    /** The lamp: its base, its mast, and the shade that is the light. */
+    val shade: Color,
     /** The playmat itself. Near enough to ink that the cards still own the screen. */
     val mat: Color,
     /**
@@ -82,13 +92,28 @@ internal data class StageLook(
      * shadow on lit felt is the felt, darker and a little cooler.
      */
     val shadow: Color,
-    /** How much light lands in the middle of the pool the key throws on the mat. */
-    val poolCore: Float,
-    /** And at the edge of it, before it gives out entirely. */
-    val poolEdge: Float,
-    /** How far the pool reaches, as a share of the mat's longest side. */
+    /**
+     * How bright the reflection of the lamp is on the felt, at its centre and
+     * at its edge.
+     *
+     * Renamed from `poolCore`/`poolEdge` and **not renumbered**: they are the
+     * strength of an additive highlight and always were. What changes is only
+     * where that highlight goes — it used to be placed from the key's
+     * *direction*, which cannot move, and it is now the mirror image of a lamp
+     * that has a place, so it slides down the felt as you sit down.
+     */
+    val sheenCore: Float,
+    val sheenEdge: Float,
+    /**
+     * How far the sheen spreads, and how hard the mat darkens toward its
+     * corners, for a room whose key has no place.
+     *
+     * Only the unplaced path reads these. Where there is a real lamp both are
+     * derived — the spread from the felt's roughness and the source's size, the
+     * darkening from the attenuation itself — which is twelve hand-tuned numbers
+     * across three rooms collapsing into the geometry.
+     */
     val poolReach: Float,
-    /** How hard the mat darkens toward its corners. */
     val falloff: Float,
 ) {
     /**
@@ -104,17 +129,29 @@ internal data class StageLook(
     fun colourOf(surface: Surface): Color = when (surface) {
         Surface.TABLE -> table
         Surface.WALL -> wall
+        Surface.FLOOR -> floor
+        Surface.GLASS -> glass
+        Surface.SHADE -> shade
     }
 
     companion object {
 
-        fun of(scene: Scene, time: TimeOfDay): StageLook = when (scene) {
+        /**
+         * The palette for a room, and the rig it is lit by.
+         *
+         * The rig is handed in rather than looked up, because a placed lamp's
+         * position is in mat pixels and this object has never been told how big
+         * the board is. `Scenery` solves the room and its lighting together and
+         * passes both here, so the two cannot end up describing different
+         * tables.
+         */
+        fun of(scene: Scene, time: TimeOfDay, lighting: StageLighting): StageLook = when (scene) {
             Scene.MINIMAL -> Minimal
             Scene.DESK -> when (time) {
                 TimeOfDay.DAY -> DeskDay
                 TimeOfDay.NIGHT -> DeskNight
             }
-        }
+        }.copy(lighting = lighting)
 
         /**
          * The stage as it has always been, to the hex value.
@@ -133,10 +170,13 @@ internal data class StageLook(
             lighting = StageLighting.Minimal,
             table = Color(0xFF141519),
             wall = Color(0xFF141519),
+            floor = Color(0xFF0D0B09),
+            glass = Color(0xFFDCE4EA),
+            shade = Color(0xFFE4DAC6),
             mat = Color(0xFF0A0A0E),
             shadow = Color(0xFF04060A),
-            poolCore = 0.062f,
-            poolEdge = 0.022f,
+            sheenCore = 0.062f,
+            sheenEdge = 0.022f,
             poolReach = 0.95f,
             falloff = 0.55f,
         )
@@ -162,10 +202,13 @@ internal data class StageLook(
             lighting = StageLighting.DeskDay,
             table = Color(0xFF2E2419),
             wall = Color(0xFF191B22),
+            floor = Color(0xFF0D0B09),
+            glass = Color(0xFFDCE4EA),
+            shade = Color(0xFFE4DAC6),
             mat = Color(0xFF0C0C11),
             shadow = Color(0xFF07080E),
-            poolCore = 0.058f,
-            poolEdge = 0.032f,
+            sheenCore = 0.058f,
+            sheenEdge = 0.032f,
             poolReach = 1.05f,
             falloff = 0.34f,
         )
@@ -192,10 +235,13 @@ internal data class StageLook(
             lighting = StageLighting.DeskNight,
             table = Color(0xFF2E2419),
             wall = Color(0xFF191B22),
+            floor = Color(0xFF0D0B09),
+            glass = Color(0xFFDCE4EA),
+            shade = Color(0xFFE4DAC6),
             mat = Color(0xFF0C0C11),
             shadow = Color(0xFF05060B),
-            poolCore = 0.115f,
-            poolEdge = 0.020f,
+            sheenCore = 0.115f,
+            sheenEdge = 0.020f,
             poolReach = 0.62f,
             falloff = 0.74f,
         )
@@ -283,27 +329,79 @@ internal fun List<Face>.facingTheCamera(stage: StagePlane, eye: Vec3): List<Face
  * everything standing on it.
  */
 internal fun DrawScope.drawScene(
-    model: SceneModel,
+    pieces: List<ScenePiece>,
     stage: StagePlane,
     eye: Vec3,
     look: StageLook,
+    pool: LightPool? = null,
 ) {
+    if (pieces.isEmpty()) return
     val eyeAt = stage.eyePoint(eye)
 
-    model.pieces
-        .sortedBy { piece -> piece.box.corners().maxOf { stage.project(it).depth } }
+    ScenePainter
+        .order(pieces, eyeAt) { box -> box.corners().maxOf { stage.project(it).depth } }
         .forEach { piece ->
             val colour = look.colourOf(piece.surface)
+            val emission = piece.emission
+
             CardSolid.visible(piece.box.faces(), eyeAt)
                 .sortedBy { stage.project(it.centre).depth }
                 .forEach { face ->
+                    // Past the lens, the projection stops being a projection: it
+                    // clamps rather than dividing by zero, so the quad flies a
+                    // few hundred thousand pixels away instead of vanishing, and
+                    // a stripe of desk crosses the picture. Nothing in the room
+                    // reaches it at any legal pose today; `StagePlane.reaches`
+                    // carries the argument and `SceneryTest` carries the
+                    // measurement.
+                    if (face.corners.any { !stage.reaches(it) }) return@forEach
+
                     val path = Path()
                     face.corners.forEachIndexed { index, corner ->
                         val flat = stage.flatten(corner)
                         if (index == 0) path.moveTo(flat.x, flat.y) else path.lineTo(flat.x, flat.y)
                     }
                     path.close()
-                    drawPath(path, colour.shaded(StageRig.face(face, eye, look.lighting)))
+
+                    if (emission != null) {
+                        // A fixture is not shaded, and that is the physics
+                        // rather than a shortcut: how bright a lit lampshade is
+                        // does not depend on what is lighting the room it is in.
+                        // It is also the only way to draw one at all — `Tone`
+                        // can darken a colour and can never brighten it, so
+                        // radiance has to arrive as the base colour itself.
+                        drawPath(path, colour.shaded(emission))
+                    } else {
+                        drawPath(path, colour.shaded(StageRig.face(face, eye, look.lighting)))
+                    }
+
+                    // And the light the lamp throws on it, for a surface facing
+                    // straight up that the lamp can actually reach.
+                    if (pool != null && emission == null && face.normal.z > 0.99f) {
+                        drawPath(path, poolBrush(pool, colour))
+                    }
                 }
         }
 }
+
+/**
+ * The lamp's light on a flat surface, as a gradient.
+ *
+ * Every stop is the surface's own colour under a real [Lit] rather than a wash
+ * of some other colour laid over it, so nothing here composites light over a
+ * backdrop it does not know: the arithmetic is exact at each stop and only the
+ * interpolation between two correct colours is an approximation.
+ *
+ * Drawn as a circle in the mat's own coordinates, which is right because
+ * `StagePlane.flatten` is the identity at z = 0 — so the ellipse it becomes on
+ * screen is the one the camera would have made. That is the same property the
+ * shuffle marks rely on, and it is why a pool costs one path rather than a
+ * subdivision.
+ */
+private fun poolBrush(pool: LightPool, surface: Color): Brush = Brush.radialGradient(
+    colorStops = pool.stops.mapIndexed { index, lit ->
+        (index / (pool.stops.size - 1f)) to surface.shaded(lit)
+    }.toTypedArray(),
+    center = Offset(pool.foot.x, pool.foot.y),
+    radius = pool.radius,
+)
