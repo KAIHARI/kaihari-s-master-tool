@@ -142,6 +142,16 @@ be corrected.
   saturates; a pile's side is ruled into its cards and leans, because those two
   survive the angles its height does not. The mat lies on a table drawn as a
   slab, because gradients on true black are a mat floating in a void.
+- **The stage has rooms, and one of them is an exception.** `Scene.MINIMAL` is
+  the handbook's stage and does not change. The **Desk** scenes — a desk lit by
+  a window in the day and a lamp at night — are a different contract, argued in
+  `docs/DESIGN.md` §11 rather than smuggled in: they may hold decoration, they
+  are chosen rather than arrived at, and *nothing idles* in either of them. Two
+  rules hold the whole thing up. Nothing in a scene may stand over the mat,
+  because cards are sorted in the composable tree and the room is painted
+  beneath all of them. And night never lowers the rig's ambient below 0.55 —
+  see `Tone.veil` for the numbers — so its darkness comes from the room falling
+  away rather than from the cards going dim.
 
 ## Roadmap State
 
@@ -224,6 +234,16 @@ which is correct by the rules. This was `docs/TABLE.md` §3's "hole", and the
 whole of it at the input end was that the hit test returned
 `DragOrigin.Pile(slot, 0)` — the domain had taken an arbitrary index since it
 was written.
+
+The room arrived in one release and is deliberately two objects: a desk and the
+wall it is pushed against. `docs/AAA.md` #62 is the whole brief — *"there is a
+room past it. Dark, out of focus, present. It does not need detail; it needs to
+exist."* Next for it: the window and the lamp become real light sources with
+distance falloff and a size (`AAA.md` #16 and #17), which is what makes day and
+night two rooms rather than two colour grades; then props on the desk, hit-
+tested against their flattened silhouettes before `claimForCamera` fires, and
+the Millennium Puzzle as an easter egg that answers a finger and never moves on
+its own.
 
 Next: attaching as material is reachable in the domain and not yet by gesture
 (`DropIntent.Attach` needs an idiom that is not already spoken for). After

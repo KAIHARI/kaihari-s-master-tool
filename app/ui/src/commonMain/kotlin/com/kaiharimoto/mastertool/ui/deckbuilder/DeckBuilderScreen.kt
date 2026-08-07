@@ -166,6 +166,7 @@ fun DeckBuilderScreen(
             ShortcutAction.PLAY_NEW_HAND,
             ShortcutAction.PLAY_NEXT_PHASE,
             ShortcutAction.PLAY_END_TURN,
+            ShortcutAction.PLAY_SCENE,
             ShortcutAction.PLAY_SEAT_OVERHEAD,
             ShortcutAction.PLAY_SEAT_TABLE,
             ShortcutAction.PLAY_SEAT_SEATED,

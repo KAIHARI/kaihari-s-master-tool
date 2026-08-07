@@ -48,6 +48,8 @@ A movable camera is one change in core and eleven consequences. Everything here 
 
 The renderer exists now. These are the twelve things it does not yet do that separate a lit room from a lit equation.
 
+The three rooms all run on one rig, made a value in `StageLighting`. Read the note on `NIGHT_FLOOR` before touching an ambient: a night scene cannot buy darkness by dimming the room, because card art is shaded by a single black overlay whose error grows sharply as the light falls (`Tone.veil`). Items 16 and 17 are what the desk lamp is actually waiting for.
+
 13. **Add a rim light.** Key and fill both come from in front, so on a true-black table a card's silhouette dissolves into the background. A back light is the thing that cuts it out.
 
 14. **Give the key a temperature.** Warm key, cool fill. Two hex values, and it is most of the difference between a room and an arithmetic result.
@@ -164,9 +166,9 @@ Motion explains a change and never announces one. That rule stays; these are the
 
 Nine things beyond the felt. A table floating in a void is the most common way a three-dimensional scene looks cheap.
 
-61. **The table has an edge.** Where the felt stops and the wood starts. Nothing in this app currently ends anywhere.
+61. ~~**The table has an edge.**~~ **Done.** The desk runs off both sides of the picture and past the bottom of the glass, and its near edge swings into view as the camera comes down. `Scenery.desk`.
 
-62. **There is a room past it.** Dark, out of focus, present. It does not need detail; it needs to exist.
+62. ~~**There is a room past it.**~~ **Done, at the size this asked for.** One wall behind the desk, dark, and nothing else. The sentence was the specification and it is worth keeping: *dark, out of focus, present; it does not need detail, it needs to exist.*
 
 63. **The opponent's half exists.** A duel mat has two sides and the geometry reads as wrong without the other one, even empty, even unplayable.
 
@@ -176,7 +178,7 @@ Nine things beyond the felt. A table floating in a void is the most common way a
 
 66. **Dust, and a crease or two.** One well-chosen imperfection is worth ten polish passes on everything else.
 
-67. **A choice of surface.** Rubber playmats are matte, a bare table is not, and which one you are playing on should be the user's decision rather than the renderer's.
+67. ~~**A choice of surface.**~~ **Done.** `Scene` is a preference — minimal or the desk — and `DeskLight` picks the hour or leaves it to the clock. What is *not* done is the material half of it: every surface is still one Blinn-Phong response, so a rubber mat and a bare table differ in colour rather than in finish.
 
 68. **Depth of field from the low seat.** Sharp from overhead, soft at the far edge from the player's chair. The per-card blur radius comes straight off `Projected.depth`, which is already computed.
 
@@ -246,7 +248,7 @@ Where the budget goes. Seven moments — and the discipline that keeps them mome
 
 The unglamorous nine. None of them are visible, and about seventy of the items above quietly assume all of them.
 
-92. **A retained scene in core.** **[foundation]** A list of renderables with transforms, sorted once. The composable tree *being* the scene is what will stop this scaling somewhere north of eighty objects, and the play stage already holds sixty.
+92. **A retained scene in core.** **[foundation]** A list of renderables with transforms, sorted once. The room is the first thing to run into this: nothing in a `SceneModel` may stand over the mat, because cards are sorted in the composable tree and the room is painted beneath all of them, and a prop that needed to be in front of a card could not be. That restriction lifts here and nowhere else. The composable tree *being* the scene is what will stop this scaling somewhere north of eighty objects, and the play stage already holds sixty.
 
 93. **A real depth sort.** The plane-then-air invariant works because resting cards are flat. Give everything a height and it stops working — quietly, and only on boards with a lot on them.
 
@@ -254,7 +256,7 @@ The unglamorous nine. None of them are visible, and about seventy of the items a
 
 95. **Golden-image tests.** Render to a bitmap in `commonTest` and compare. A hundred visual changes without this is a hundred silent regressions in each other's work.
 
-96. **A frame budget readout.** Milliseconds per frame, on the device, behind a debug gesture. Every item on this list is a claim about performance that nobody can currently check.
+96. ~~**A frame budget readout.**~~ **Done.** `FrameProbe` was written and wired to nothing; it is in the play stage's frame loop now, behind three taps on the life-point number. It reports the last frame, p95, the worst in the window, missed frames and how many objects were moving, against a budget derived from the panel's own refresh rate.
 
 97. **Level of detail.** A card at the far edge of the mat does not need a specular pool, a soft shadow or a foil sweep.
 
@@ -276,7 +278,9 @@ Four items gate most of the rest, in this order:
    written twice.
 4. **A retained scene in core** (#92) — the ceiling everything else runs into.
 
-And two that are not features at all, and should come before any of them:
-**golden-image tests** (#95) and **a frame budget readout** (#96). A hundred
-visual changes without those two is a hundred silent regressions in each
-other's work.
+And two that are not features at all, and should have come before any of them.
+Both now exist: **golden-image tests** (#95) as `GoldenStageTest`, and **a
+frame budget readout** (#96) in the play stage's loop. A hundred visual changes
+without those two would have been a hundred silent regressions in each other's
+work — the first of them, making the rig a value, was proved harmless by the
+golden going green without being re-recorded.

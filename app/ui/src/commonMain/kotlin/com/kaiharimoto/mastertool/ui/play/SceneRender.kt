@@ -147,7 +147,7 @@ internal data class StageLook(
          * The wood is dark, and that is the one place this scene argues with
          * itself. A real desk in a bright room is a large light surface, and a
          * large light surface beside a deck of cards is the anti-pattern
-         * `docs/DESIGN.md` §11 lists first — chrome that competes with the
+         * `docs/DESIGN.md` §12 lists first — chrome that competes with the
          * cards. So the stock is a dark walnut rather than a pine, the light
          * does the brightening, and the mat stays the darkest thing in frame.
          *

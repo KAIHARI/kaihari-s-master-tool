@@ -129,7 +129,7 @@ private const val HAND_LIFT = LIFT_Z * 1.6f
  * is doing real work rather than decorating — it is what gives every card in the
  * fan a cast shadow, and those shadows are the only thing separating the fan
  * from the board underneath. The alternative was dimming the board, and a
- * translucent wash over content is the second line of §11.
+ * translucent wash over content is the second line of §12.
  */
 private const val FAN_LIFT = LIFT_Z * 0.85f
 

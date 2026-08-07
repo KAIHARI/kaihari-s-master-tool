@@ -408,7 +408,61 @@ thing casting it is not.
 either the oval or the spiral — and it is a preference, not a constant. Nothing
 in the app draws a blank rectangle where a card back belongs.
 
-## 11. Anti-patterns
+## 11. Scenes, and the exception they are
+
+Everything above describes one stage: a mat on a slab, sharp white on true
+black, nothing on the felt that has not argued its way there. That stage is
+**Minimal**, it is what this app is, and it does not change.
+
+The **Desk** scenes are a different contract, and writing that down is the point
+of this section. A desk in a bedroom, lit by a window in the day and a lamp at
+night, is a room full of objects that are there because they are nice rather
+than because they are needed — which §11 below calls decoration and bans
+outright. Rather than quietly bend that rule until it means nothing, it is
+suspended in one named place, on terms:
+
+- **A scene is chosen, never arrived at.** `Scene.MINIMAL` is the default and
+  the preference survives a layout reset. Nobody gets a bedroom because they
+  updated.
+- **Nothing idles, in any scene.** No drifting dust, no flickering lamp, no
+  curtains, no breathing. `AAA.md` #60 survives whole, because the thing it is
+  actually protecting — *only what you touch is alive* — is the identity, and a
+  room that moves on its own is an engine with nothing to say. A prop may answer
+  a finger. It may not perform.
+- **No room tone.** `AAA.md` #77 survives too. Sound is for things a hand does,
+  in every scene.
+- **A prop is never a control.** The two shuffle marks earned their place on the
+  felt with a functional argument (§10), and a bedroom is not a precedent that
+  retires it. Nothing decorative may also be the way to do something.
+- **The cards still own the screen.** The desk is dark walnut rather than pine,
+  and the light does the brightening. A large bright surface beside a deck of
+  cards is the first anti-pattern in the list below, whichever room it is in.
+
+**Nothing in a scene may stand over the mat.** This one is architecture rather
+than taste. Cards are one composable each, sorted by projected depth in
+`PlayScreen`; the room is painted in a single canvas beneath all of them. Those
+are two orderings, and the only thing stopping them contradicting each other is
+that no object in the second can ever need to be in front of an object in the
+first. A mug on the felt would need exactly that the first time a card was
+carried past it. So the felt is the boundary, `SceneryTest` holds it, and the
+rule can be dropped when `AAA.md` #92 and #93 exist and not before.
+
+**One rig, chosen by the hour.** `StageRig`'s KDoc says two rigs would be one
+too many, and it is right: every surface has to agree about where the light is
+or the table stops reading as one room. That guarantee now lives one level down
+— `StageLighting` is a value, exactly one is in play at a time, and no call site
+holds a lamp of its own — which is the whole of what the singleton was buying.
+The wood does not change at dusk; the lamp does.
+
+**Night does not lower the ambient.** `Tone.veil` carries the numbers: card art
+is a picture the renderer cannot read, so it is shaded by one black overlay at
+one opacity, and that approximation goes wrong quickly as the light falls —
+1.19x too bright on dark channels at 0.72, 1.87x at 0.3. So `NIGHT_FLOOR` is
+0.55 and the darkness is bought outside the cards, in the mat's fall-off and in
+a room with nothing lighting it. That is also what §2 wants: a card is the
+brightest object in the frame.
+
+## 12. Anti-patterns
 
 - Colour that is neither meaning nor light.
 - A translucent wash over content.
