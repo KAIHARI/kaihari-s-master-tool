@@ -893,6 +893,33 @@ private fun StagedCard(
                     rotationZ = pose.rotZ
                     scaleX = flattened.scale * pose.scale
                     scaleY = flattened.scale * pose.scale
+                    // A second perspective divide, nested inside the mat's, and
+                    // it is worth writing down that this is **not** exact for a
+                    // card that is rotated.
+                    //
+                    // For a card lying flat the two agree to the pixel — the
+                    // layer is a translate and a uniform scale, and the mat
+                    // keystones it correctly. Lean one, though, and the mat's
+                    // projection wants *both* of its ends larger than its
+                    // centre: the top because it is further off the felt, the
+                    // bottom because it is further down the tilted plane, and
+                    // both are therefore nearer the lens. A perspective divide
+                    // about the card's own centre cannot produce that — it has
+                    // to shrink whichever end it does not magnify — so a
+                    // twenty-four degree hand card comes out about five per cent
+                    // short. No value of `cameraDistance` repairs it; matching
+                    // it to the mat's makes it worse. Compose composes two
+                    // projective *2-D* maps, and the card's own z is spent on
+                    // this divide before the mat's ever sees it.
+                    //
+                    // Five per cent on a leaned card is not visible. What was
+                    // visible is that the canvas draws that card's *geometry*
+                    // from the true 3-D corners, so its edges landed a few
+                    // pixels off its sprite — and an edge seen almost level is a
+                    // hundred-pixel bright hairline. That is culled by area now
+                    // (`CardSolid.MIN_DRAWN_AREA`), which is the right fix for
+                    // the artefact; the five per cent is left alone deliberately
+                    // rather than papered over.
                     cameraDistance = (seat.width * 6f) / this.density
                 },
         ) {

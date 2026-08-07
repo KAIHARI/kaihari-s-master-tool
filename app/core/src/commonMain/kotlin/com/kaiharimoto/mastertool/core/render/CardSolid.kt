@@ -1,7 +1,9 @@
 package com.kaiharimoto.mastertool.core.render
 
 import com.kaiharimoto.mastertool.core.motion.Pose3
+import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
+import kotlin.math.abs
 import kotlin.math.exp
 
 /**
@@ -128,16 +130,45 @@ object CardSolid {
      *
      * Clockwise on screen, where +y is down — so this is the order a path
      * wants, not the order a maths textbook would give.
+     *
+     * [atDepth] lowers those corners **straight down the stage's z**, and that
+     * word straight is the whole of a bug that shipped twice. It used to lower
+     * them along the card's own local −z and then rotate, which is a different
+     * axis the moment the card is not lying flat and face up — and a face-down
+     * card is turned a half circle about Y, which maps local −z to world *+z*.
+     * So every face-down pile built its body **upward into the air**: a
+     * forty-card deck drew a fifty-eight pixel slab standing on top of the card
+     * it was supposed to be underneath, with its near-white sides splayed out
+     * by [pileLean]. The graveyard and the banished pile are face-up and were
+     * always right, which is exactly why it read as "the deck is broken".
+     *
+     * It got worse before it got better. `Shadows.cast` was taught to cast from
+     * a solid's base by asking for this face at `atDepth = bodyDepth` — correct
+     * reasoning, applied to an axis that pointed the wrong way, so the deck's
+     * shadow moved from one pile height in the air to two.
+     *
+     * Which way a body hangs is a fact about **the surface the solid is resting
+     * on**, not about which way its printed side happens to point. Those are two
+     * questions and this function used to answer the second one when it was
+     * asked the first.
+     *
+     * For a single card the two axes differ by the card's own tilt, which over
+     * one card's thickness is a fraction of a pixel — so nothing about a card
+     * lying, leaning or held changes, and the only visible difference is the one
+     * that was wrong.
      */
     fun face(pose: Pose3, width: Float, height: Float, atDepth: Float = 0f): List<Vec3> {
         val halfWidth = width / 2f
         val halfHeight = height / 2f
-        return listOf(
-            Vec3(-halfWidth, -halfHeight, -atDepth),
-            Vec3(halfWidth, -halfHeight, -atDepth),
-            Vec3(halfWidth, halfHeight, -atDepth),
-            Vec3(-halfWidth, halfHeight, -atDepth),
+        val corners = listOf(
+            Vec3(-halfWidth, -halfHeight, 0f),
+            Vec3(halfWidth, -halfHeight, 0f),
+            Vec3(halfWidth, halfHeight, 0f),
+            Vec3(-halfWidth, halfHeight, 0f),
         ).map { Rot3.place(pose, it) }
+
+        // Straight down in the *stage's* z, not along the card's own. See below.
+        return if (atDepth == 0f) corners else corners.map { it - Vec3(0f, 0f, atDepth) }
     }
 
     /**
@@ -214,6 +245,46 @@ object CardSolid {
             side(0, 3, Vec3(-1f, 0f, 0f)),   // the left edge
             Face(front, Rot3.rotate(pose, Rot3.FaceNormal)),
         )
+    }
+
+    /**
+     * How much screen a face has to cover before it is worth drawing, in square
+     * pixels.
+     *
+     * [visible] culls a face the eye is *behind*. It cannot cull one the eye is
+     * very nearly level with, because that face is still, technically, facing
+     * you — and a quad seen from three degrees off its own plane is a hundred
+     * and thirty-five pixels long and less than one pixel tall. Filled with card
+     * stock at full brightness, that is not an edge. It is a bright white line
+     * lying across whatever is behind it, and on a fanned hand it is five of
+     * them, each running half a card past its own card onto its neighbour.
+     *
+     * The honest reading is that a surface you are level with presents no area
+     * and should therefore contribute nothing. Area is also the only test that
+     * catches this: the face's *normal* says it is comfortably visible, and the
+     * disagreement between what the normal promises and what the projection
+     * delivers is precisely the artefact.
+     *
+     * Two square pixels, which is a quad that could at best be a faint mark and
+     * at worst is an aliasing accident.
+     */
+    const val MIN_DRAWN_AREA = 2f
+
+    /**
+     * The area a flattened polygon covers, by the shoelace formula.
+     *
+     * Unsigned, because the caller wants to know whether there is anything there
+     * and not which way round it was wound.
+     */
+    fun flatArea(points: List<Vec2>): Float {
+        if (points.size < 3) return 0f
+        var twice = 0f
+        for (i in points.indices) {
+            val a = points[i]
+            val b = points[(i + 1) % points.size]
+            twice += a.x * b.y - b.x * a.y
+        }
+        return abs(twice) / 2f
     }
 
     /**

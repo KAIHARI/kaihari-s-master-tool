@@ -2,6 +2,7 @@ package com.kaiharimoto.mastertool.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -253,7 +254,29 @@ fun MasterToolTheme(
         ThemeMode.LIGHT -> false
     }
 
-    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+    // `LocalContentColor` is what a `Text` falls back to when neither the call
+    // nor the style names a colour, and Material 3 initialises it to
+    // **`Color.Black`**. Nothing provides it but `Surface`, and this app does not
+    // contain a single one — every sheet, dialog, menu and `Scaffold` brought
+    // its own, which is the only reason this was survivable.
+    //
+    // Anything outside one of those was therefore painting pure black on a
+    // near-black stage at about 1.04:1. That is the play stage's life-point
+    // total, the duel table's, and — worst of it — the title of the gesture
+    // guide and every line of its content, a screen whose entire purpose is to
+    // be read and which shipped as "the entire discoverability budget of every
+    // gesture on the stage".
+    //
+    // Provided once, here, rather than fixed at six call sites: the call sites
+    // were never wrong. Their default meant "the theme's foreground" and the
+    // theme had never said what that was.
+    CompositionLocalProvider(
+        LocalDarkTheme provides darkTheme,
+        // Read off the same scheme the rest of the tree will resolve against,
+        // rather than a second copy of the colour that could drift from it.
+        LocalContentColor provides
+            if (darkTheme) DarkColors.onBackground else LightColors.onBackground,
+    ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColors else LightColors,
             typography = appTypography(),

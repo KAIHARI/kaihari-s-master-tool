@@ -2,6 +2,7 @@ package com.kaiharimoto.mastertool.core.render
 
 import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.motion.Pose3
+import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import kotlin.math.PI
 import kotlin.math.abs
@@ -147,6 +148,99 @@ class CardSolidTest {
     fun anEdgeWithNoLengthIsRuledIntoNothing() {
         assertEquals(0, CardSolid.layerLines(40, 0f))
         assertEquals(0, CardSolid.layerLines(40, -1f))
+    }
+
+    // ---- which way a body hangs ----------------------------------------------------
+    //
+    // Every test in this file used an unrotated pose, so every one of them
+    // agreed with a body extruded along the card's own local axis and with one
+    // extruded toward the table — the two are identical when the card is lying
+    // flat and face up. A face-down card is turned half a circle about Y, which
+    // maps local -z to world +z, so the deck and the extra deck built their
+    // bodies upward into the air and shipped that way twice.
+
+    @Test
+    fun aFaceDownPileHangsDownwardLikeEveryOtherPile() {
+        val deck = CardSolid.pileDepth(40, width)
+        val faceUp = CardSolid.face(Pose3(position = Vec3(0f, 0f, deck)), width, height, deck)
+        val faceDown =
+            CardSolid.face(Pose3(position = Vec3(0f, 0f, deck), rotY = 180f), width, height, deck)
+
+        faceUp.forEach { assertClose(0f, it.z, note = "a face-up pile reaches the felt:") }
+        faceDown.forEach { assertClose(0f, it.z, note = "and so does a face-down one:") }
+    }
+
+    @Test
+    fun turningAPileOverDoesNotMoveTheCardOnTopOfIt() {
+        // The property the whole stage is pinned to: the printed face is where
+        // the composable draws, so nothing about the body may shift it.
+        val deck = CardSolid.pileDepth(40, width)
+        val upright = CardSolid.face(Pose3(position = Vec3(500f, 400f, deck)), width, height)
+        val turned = CardSolid
+            .face(Pose3(position = Vec3(500f, 400f, deck), rotY = 180f), width, height)
+
+        upright.forEach { assertClose(deck, it.z, note = "face-up top card:") }
+        turned.forEach { assertClose(deck, it.z, note = "face-down top card:") }
+    }
+
+    @Test
+    fun aFaceDownDeckShadowsFromTheFeltAndNotFromTwiceItsOwnHeight() {
+        // The regression this pair exists for. `Shadows.cast` asks for the base
+        // by depth, so an upward body put the deck's shadow at two pile heights
+        // — further from the truth than the bug it was written to fix.
+        val deck = CardSolid.pileDepth(40, width)
+        val pose = Pose3(position = Vec3(500f, 400f, deck), rotY = 180f)
+        val shadow = Shadows.cast(pose, width, height, StageRig.Key, height, bodyDepth = deck)!!
+
+        val centre = shadow.corners.fold(Vec3.Zero) { sum, c -> sum + c } / 4f
+        assertTrue(
+            abs(centre.x - 500f) < 1f && abs(centre.y - 400f) < 1f,
+            "a face-down deck's shadow belongs under the deck, was $centre",
+        )
+        assertTrue(shadow.contact > 0.98f, "and it is touching the felt: ${shadow.contact}")
+    }
+
+    @Test
+    fun aSetCardIsAsThickAsAnUnsetOne() {
+        val one = CardSolid.pileDepth(1, width)
+        val up = CardSolid.slab(Pose3(position = Vec3(0f, 0f, one)), width, height, one)
+        val down = CardSolid
+            .slab(Pose3(position = Vec3(0f, 0f, one), rotY = 180f), width, height, one)
+
+        fun span(faces: List<Face>) = faces.flatMap { it.corners }.let { it.maxOf { c -> c.z } - it.minOf { c -> c.z } }
+        assertClose(span(up), span(down), note = "turning a card over is not a change of thickness:")
+    }
+
+    // ---- faces too edge-on to be worth drawing --------------------------------------
+
+    @Test
+    fun aQuadSeenEdgeOnCoversNoArea() {
+        // 135 pixels long and under one tall is what a leaned hand card's far
+        // edge came out as — drawn in full-brightness card stock, which is a
+        // white line across whatever is behind it rather than an edge.
+        val hairline = listOf(
+            Vec2(0f, 0f), Vec2(135f, 0f), Vec2(135f, 0.88f), Vec2(0f, 0.88f),
+        )
+        assertTrue(
+            CardSolid.flatArea(hairline) > CardSolid.MIN_DRAWN_AREA,
+            "the sanity check: 119 square pixels is genuinely drawable",
+        )
+
+        val degenerate = listOf(
+            Vec2(0f, 0f), Vec2(135f, 0f), Vec2(135f, 0.01f), Vec2(0f, 0.01f),
+        )
+        assertTrue(
+            CardSolid.flatArea(degenerate) < CardSolid.MIN_DRAWN_AREA,
+            "and a quad with no thickness at all is not: ${CardSolid.flatArea(degenerate)}",
+        )
+    }
+
+    @Test
+    fun theAreaOfASquareIsItsArea() {
+        val square = listOf(Vec2(0f, 0f), Vec2(10f, 0f), Vec2(10f, 10f), Vec2(0f, 10f))
+        assertClose(100f, CardSolid.flatArea(square))
+        assertClose(100f, CardSolid.flatArea(square.reversed()), note = "winding does not matter:")
+        assertEquals(0f, CardSolid.flatArea(listOf(Vec2(0f, 0f), Vec2(1f, 1f))))
     }
 
     // ---- the slouch ----------------------------------------------------------------

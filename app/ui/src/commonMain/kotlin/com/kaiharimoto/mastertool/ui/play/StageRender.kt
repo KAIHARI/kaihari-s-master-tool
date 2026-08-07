@@ -15,6 +15,7 @@ import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.layout.Slot
 import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.motion.Pose3
+import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardMaterial
 import com.kaiharimoto.mastertool.core.render.CardSolid
@@ -61,6 +62,28 @@ private val TableColour = Color(0xFF141519)
 
 /** The playmat itself. Near enough to ink that the cards still own the screen. */
 private val MatColour = Color(0xFF0A0A0E)
+
+/**
+ * What a shadow takes the mat down to — not black.
+ *
+ * A shadow was `Color.Black` at up to 0.66, laid over a mat that measures about
+ * twelve levels of two hundred and fifty-five. It landed at **two**, which is
+ * *below the void behind the table*. A shadow darker than the background is not
+ * a shadow; it is a hole, and it is why nothing on this stage looks like it is
+ * resting on anything.
+ *
+ * `docs/AAA.md` #18 says what it should be instead, and says it better than
+ * this comment could: *"A shadow on lit felt is the felt, darker and a little
+ * cooler. Neutral black is what a shadow looks like when nobody chose a colour
+ * for it."* So this is the mat, most of its light removed and the little that
+ * is left pushed cool — the colour of a surface reached only by the sky.
+ *
+ * It is deliberately still very dark. The real cure is that the mat has to
+ * carry enough light to have some taken away, and that belongs to the daylight
+ * pass rather than to a bug fix; what this changes is only that the shadow now
+ * subtracts something instead of punching through to nothing.
+ */
+private val ShadowColour = Color(0xFF04060A)
 
 /**
  * How far the playmat runs past the cards, and the table past the mat, in card
@@ -329,7 +352,7 @@ internal fun DrawScope.drawCardShadow(
         val grow = shadow.spread * ring / rings
         drawPath(
             path = polygon(corners, middle, grow),
-            color = Color.Black.copy(alpha = step),
+            color = ShadowColour.copy(alpha = step),
         )
     }
 
@@ -343,7 +366,7 @@ internal fun DrawScope.drawCardShadow(
         val centre = footprint.fold(Offset.Zero) { sum, c -> sum + c } / footprint.size.toFloat()
         drawPath(
             path = polygon(footprint, centre, cardHeight * 0.012f),
-            color = Color.Black.copy(alpha = 0.5f * shadow.contact),
+            color = ShadowColour.copy(alpha = 0.5f * shadow.contact),
         )
     }
 }
@@ -405,6 +428,16 @@ internal fun DrawScope.drawSolidEdges(
         // the same two on the back. So 0→3 and 1→2 are the two edges that run
         // down through the body, which is the axis the cards are stacked along.
         val flat = face.corners.map { stage.flatten(it) }
+
+        // A face the eye is level with presents no area, and card stock at full
+        // brightness over no area is a bright white line lying across whatever
+        // is behind it. `visible` cannot catch this — the normal says the face
+        // is comfortably toward us — so it is caught here, where the projection
+        // has already had its say. See `CardSolid.MIN_DRAWN_AREA`.
+        if (CardSolid.flatArea(flat.map { Vec2(it.x, it.y) }) < CardSolid.MIN_DRAWN_AREA) {
+            return@forEach
+        }
+
         val path = Path()
         flat.forEachIndexed { index, at ->
             if (index == 0) path.moveTo(at.x, at.y) else path.lineTo(at.x, at.y)

@@ -63,20 +63,24 @@ class GoldenStageTest {
             expected = """
             rest face   362.1,569.4  484.3,569.4  469.8,745.6  342.0,745.6
             rest solid  near 0.779/-0.059 406.0,745.7  front 1.000/0.098 414.8,655.5
-            rest shadow 362.1,569.4  484.3,569.4  469.8,745.6  342.0,745.6  dark 0.660  soft 3.1
+            rest shadow 361.9,569.1  484.1,569.1  469.6,745.2  341.9,745.2  dark 0.660  soft 3.1
             rest shade  diff 0.955  spec 0.264  rim 0.001  hot 0.305,0.440
             held face   859.4,256.2  965.2,265.5  965.2,441.4  859.4,439.1
-            held solid  left 0.895/0.106 859.3,347.7  front 0.920/0.007 913.4,350.6
-            held shadow 906.7,398.4  990.9,357.5  974.8,472.6  887.7,516.1  dark 0.351  soft 34.4
+            held solid  left 0.895/0.106 859.4,347.8  front 0.920/0.007 913.4,350.6
+            held shadow 906.4,398.1  990.7,357.2  974.6,472.3  887.5,515.8  dark 0.352  soft 34.2
             held shade  diff 0.837  spec 0.000  rim 0.002  hot -0.382,-0.134
-            set  face   1133.7,625.4  1144.3,748.8  1329.7,748.8  1313.5,625.4
-            set  solid  back 1.000/0.098 1230.4,686.0  right 0.779/-0.059 1237.1,748.7
-            set  shadow 1133.7,625.4  1144.3,748.8  1329.7,748.8  1313.5,625.4  dark 0.660  soft 3.1
+            set  face   1134.8,625.4  1145.3,748.8  1330.8,748.8  1314.5,625.4
+            set  solid  back 1.000/0.098 1231.1,686.3  right 0.779/-0.059 1238.0,748.8
+            set  shadow 1134.5,625.1  1145.1,748.4  1330.5,748.4  1314.3,625.1  dark 0.660  soft 3.1
             set  shade  diff 0.955  spec 0.137  rim 0.000  hot 0.560,0.305
             pile face   297.7,176.7  411.4,176.7  394.9,323.5  276.3,323.5
             pile solid  near 0.779/-0.059 342.5,334.5  front 1.000/0.098 345.3,248.6
-            pile shadow 324.8,222.0  436.0,222.0  420.9,367.2  305.1,367.2  dark 0.453  soft 19.4
+            pile shadow 311.9,201.6  422.4,201.6  406.8,345.1  291.7,345.1  dark 0.660  soft 3.1
             pile shade  diff 0.955  spec 0.228  rim 0.001  hot 0.305,0.440
+            deck face   1340.7,222.3  1224.8,222.3  1243.2,374.0  1364.1,374.0
+            deck solid  back 1.000/0.098 1276.4,322.1  near 0.779/-0.059 1294.9,385.9
+            deck shadow 1322.9,249.8  1210.9,249.8  1228.0,397.4  1344.8,397.4  dark 0.660  soft 3.1
+            deck shade  diff 0.955  spec 0.137  rim 0.000  hot 0.305,0.440
             """.trimIndent(),
             actual = dump(Home),
         )
@@ -89,20 +93,24 @@ class GoldenStageTest {
             expected = """
             rest face   488.2,830.3  591.4,751.0  701.0,899.9  596.5,983.4
             rest solid  near 0.798/-0.071 649.2,941.3  left 0.804/0.078 541.7,905.8  front 1.000/0.099 593.9,864.9
-            rest shadow 488.2,830.3  591.4,751.0  701.0,899.9  596.5,983.4  dark 0.660  soft 3.1
+            rest shadow 487.8,830.1  591.0,750.9  700.6,899.7  596.1,983.2  dark 0.660  soft 3.1
             rest shade  diff 0.955  spec 0.089  rim 0.000  hot 0.207,0.343
             held face   721.5,266.8  798.9,211.9  898.8,356.9  828.0,418.1
-            held solid  far 0.927/0.159 761.0,238.8  left 0.895/0.106 775.1,343.3  front 0.923/0.004 813.2,313.4
-            held shadow 817.0,353.7  856.2,271.4  917.8,375.7  878.8,461.4  dark 0.351  soft 34.4
+            held solid  far 0.927/0.159 761.2,238.8  left 0.895/0.106 775.3,343.3  front 0.923/0.004 813.2,313.4
+            held shadow 816.7,353.6  855.8,271.3  917.4,375.6  878.5,461.3  dark 0.352  soft 34.2
             held shade  diff 0.837  spec 0.000  rim 0.009  hot -0.574,-0.330
-            set  face   1128.9,408.4  1208.3,498.2  1335.1,396.7  1255.1,310.3
-            set  solid  back 1.000/0.099 1232.3,402.4  far 0.804/0.078 1168.3,452.9  right 0.798/-0.071 1272.4,446.9
-            set  shadow 1128.9,408.4  1208.3,498.2  1335.1,396.7  1255.1,310.3  dark 0.660  soft 3.1
+            set  face   1129.6,407.9  1209.1,497.6  1335.9,396.2  1255.9,309.7
+            set  solid  back 1.000/0.099 1232.7,402.2  far 0.804/0.078 1168.9,452.5  right 0.798/-0.071 1273.0,446.5
+            set  shadow 1129.3,407.8  1208.7,497.5  1335.5,396.1  1255.5,309.6  dark 0.660  soft 3.1
             set  shade  diff 0.955  spec 0.107  rim 0.000  hot 0.657,0.207
             pile face   141.6,540.4  247.8,466.4  346.6,605.3  239.0,683.2
             pile solid  near 0.798/-0.071 301.6,648.0  left 0.804/0.078 199.7,615.4  front 1.000/0.099 243.5,572.7
-            pile shadow 191.1,561.1  293.5,489.0  390.4,624.2  286.7,699.9  dark 0.453  soft 19.4
+            pile shadow 162.7,551.5  265.3,479.8  361.3,614.5  257.4,689.9  dark 0.660  soft 3.1
             pile shade  diff 0.955  spec 0.120  rim 0.000  hot 0.207,0.343
+            deck face   1048.3,-30.9  961.6,30.3  1069.7,147.9  1157.1,83.8
+            deck solid  back 1.000/0.099 1050.1,84.9  right 0.804/0.078 1011.3,102.2  near 0.798/-0.071 1108.2,129.1
+            deck shadow 1040.1,-0.5  956.2,59.0  1060.4,173.3  1145.0,111.1  dark 0.660  soft 3.1
+            deck shade  diff 0.955  spec 0.107  rim 0.000  hot 0.207,0.343
             """.trimIndent(),
             actual = dump(Turned),
         )
@@ -115,20 +123,24 @@ class GoldenStageTest {
             expected = """
             rest face   464.1,535.1  557.8,535.1  543.4,625.9  444.0,625.9
             rest solid  near 0.749/-0.037 493.7,626.1  front 1.000/0.094 502.6,579.2
-            rest shadow 464.1,535.1  557.8,535.1  543.4,625.9  444.0,625.9  dark 0.660  soft 3.1
+            rest shadow 463.9,534.9  557.7,534.9  543.2,625.7  443.9,625.7  dark 0.660  soft 3.1
             rest shade  diff 0.955  spec 0.069  rim 0.069  hot 0.263,0.767
             held face   842.1,324.9  919.6,348.5  923.9,456.2  843.7,433.7
-            held solid  near 0.734/-0.011 884.1,445.2  left 0.895/0.106 842.8,378.4  front 0.925/0.003 882.7,390.0
-            held shadow 880.8,449.2  944.2,429.0  933.1,486.2  867.0,508.1  dark 0.351  soft 34.4
+            held solid  near 0.734/-0.011 884.2,445.2  left 0.895/0.106 842.9,378.5  front 0.925/0.003 882.7,390.0
+            held shadow 880.6,449.1  944.0,428.9  933.0,486.1  866.8,508.0  dark 0.352  soft 34.2
             held shade  diff 0.837  spec 0.000  rim 0.014  hot -0.414,0.299
-            set  face   1057.1,563.7  1067.7,627.6  1211.9,627.6  1195.6,563.7
-            set  solid  back 1.000/0.094 1133.0,594.6  right 0.749/-0.037 1139.8,627.4
-            set  shadow 1057.1,563.7  1067.7,627.6  1211.9,627.6  1195.6,563.7  dark 0.660  soft 3.1
+            set  face   1057.9,563.7  1068.5,627.6  1212.7,627.6  1196.4,563.7
+            set  solid  back 1.000/0.094 1133.7,595.4  right 0.749/-0.037 1140.6,627.7
+            set  shadow 1057.7,563.5  1068.3,627.4  1212.5,627.4  1196.1,563.5  dark 0.660  soft 3.1
             set  shade  diff 0.955  spec 0.101  rim 0.032  hot 0.233,0.263
             pile face   431.6,325.4  515.0,325.4  500.0,394.6  412.2,394.6
             pile solid  near 0.749/-0.037 458.0,408.8  front 1.000/0.094 464.9,359.1
-            pile shadow 444.7,362.9  527.8,362.9  513.5,433.8  426.0,433.8  dark 0.453  soft 19.4
+            pile shadow 435.6,353.1  518.1,353.1  503.3,422.9  416.5,422.9  dark 0.660  soft 3.1
             pile shade  diff 0.955  spec 0.103  rim 0.046  hot 0.263,0.767
+            deck face   1196.7,344.3  1111.7,344.3  1128.5,415.8  1218.1,415.8
+            deck solid  back 1.000/0.094 1158.9,411.6  near 0.749/-0.037 1170.8,432.4
+            deck shadow 1191.8,376.4  1107.8,376.4  1124.2,448.7  1212.6,448.7  dark 0.660  soft 3.1
+            deck shade  diff 0.955  spec 0.101  rim 0.032  hot 0.263,0.767
             """.trimIndent(),
             actual = dump(Steep),
         )
@@ -224,6 +236,19 @@ class GoldenStageTest {
         val GRAVEYARD_DEPTH = CardSolid.pileDepth(26, CARD_WIDTH)
 
         /**
+         * A forty-card deck, face down — the object this recording was missing.
+         *
+         * Its absence is not a gap in coverage so much as the reason a bug
+         * shipped twice. Every object in the scene was face up, so every one of
+         * them agreed with a body extruded along the card's own axis and one
+         * extruded toward the table; the two only differ once something is
+         * turned over. The deck and the extra deck are the *only* face-down
+         * piles on the stage, they built their bodies upward into the air, and
+         * nothing here or in `CardSolidTest` was looking.
+         */
+        val DECK_DEPTH = CardSolid.pileDepth(40, CARD_WIDTH)
+
+        /**
          * The scene, at fixed coordinates, hand-built.
          *
          * Deliberately *not* routed through
@@ -286,7 +311,13 @@ class GoldenStageTest {
             StageObject(
                 name = "set",
                 pose = Pose3(
-                    position = Vec3(1210f, 690f, 0f),
+                    // 1211 rather than 1210, and that is this file's third
+                    // nudge. Teaching the recording to pass `bodyDepth` moved
+                    // every shadow by the depth of its own body, and this one
+                    // landed at 1195.3498 in the steep dump — half a hair off a
+                    // rounding tie, where the last bit of a `sin` decides which
+                    // way it goes.
+                    position = Vec3(1211f, 690f, 0f),
                     rotY = 180f,
                     rotZ = 90f,
                 ),
@@ -302,6 +333,18 @@ class GoldenStageTest {
                 pose = Pose3(position = Vec3(330f, 240f, GRAVEYARD_DEPTH)),
                 material = CardMaterial.Gloss,
                 depth = GRAVEYARD_DEPTH,
+            ),
+            StageObject(
+                // The deck: the same arrangement as `pile`, turned over. Its z
+                // and its depth are one number twice for the same reason, and
+                // the pair of them is the whole point — a face-down pile has to
+                // reach the felt exactly as a face-up one does, and until it did
+                // this object's `solid` line would have shown a body standing in
+                // the air above its own card.
+                name = "deck",
+                pose = Pose3(position = Vec3(1300f, 300f, DECK_DEPTH), rotY = 180f),
+                material = CardMaterial.Sleeve,
+                depth = DECK_DEPTH,
             ),
         )
 
@@ -447,6 +490,12 @@ private class StageDump(private val plane: StagePlane) {
             CARD_HEIGHT,
             StageRig.Key,
             cardHeight = CARD_HEIGHT,
+            // The way the stage casts it. Left off, this recorded a pile
+            // shadowing from its own top card — the very thing `bodyDepth` was
+            // added to stop — so the recording went on agreeing with itself
+            // while the shipped build threw the deck's shadow twice as far as
+            // the bug it was meant to fix.
+            bodyDepth = subject.depth,
         )
         row(
             subject.name,
