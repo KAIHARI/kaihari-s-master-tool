@@ -541,7 +541,7 @@ private fun handle(
                     if (play.fanned == what.fanSource) {
                         takeFromFan(play, what, feedback)
                     } else if (play.field.pile(what.pile).isNotEmpty()) {
-                        play.fan(what.pile)
+                        play.fan(what)
                         feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
                     }
 

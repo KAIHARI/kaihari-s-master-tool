@@ -296,7 +296,7 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
                     if (play.fanned != null) {
                         if (play.closeFan()) feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
                     } else if (play.field.deck.isNotEmpty()) {
-                        play.fan(BoardSlot.Deck)
+                        play.fan(DragOrigin.Pile(BoardSlot.Deck, 0))
                         feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
                     }
                 ShortcutAction.PLAY_NEW_HAND -> play.restart()
@@ -471,8 +471,19 @@ fun PlayScreen(state: DeckBuilderState, onBack: () -> Unit) {
             // searched is forty cards the stage has never seen, and every one of
             // them should come *out of that pile* — which is the spread, and is
             // worth watching.
-            val dealFrom = remember(layout, play.fanned) {
-                val from = layout[play.fanned ?: BoardSlot.Deck]
+            val dealFrom = remember(layout, play.fanned, play.field) {
+                // Whatever is spread out is where its cards come from: a pile's
+                // square, or the card a stack is spread out from under. A card
+                // the stage has never seen before flies out of the thing it came
+                // out of, which for a search is the spread itself and is worth
+                // watching.
+                val from = when (val what = play.fanned) {
+                    is DragOrigin.Pile -> layout[what.pile]
+                    is DragOrigin.Mat -> play.field.placed(what.id)
+                        ?.let { layout.toPixels(it.at) }
+                        ?.let { (x, y) -> Slot(x, y, 0f, 0f) }
+                    else -> layout[BoardSlot.Deck]
+                }
                 Pose3(
                     position = Vec3(
                         from?.centerX ?: layout.field.centerX,
