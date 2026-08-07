@@ -166,7 +166,7 @@ Motion explains a change and never announces one. That rule stays; these are the
 
 Nine things beyond the felt. A table floating in a void is the most common way a three-dimensional scene looks cheap.
 
-61. ~~**The table has an edge.**~~ **Done.** The desk runs off both sides of the picture and past the bottom of the glass, and its near edge swings into view as the camera comes down. `Scenery.desk`.
+61. **The table has an edge** — *three of the four are there.* The desk runs off both sides of the picture, and because `BoardLayouter` centres a seven-column field, a third of the width down each side is bare wood, plus a strip above the mat before the wall. That is where the felt stops and the wood starts, at every seat. The **near** edge is not reachable: the board fills the stage vertically, so the desk's near edge projects below the glass at every seat and dollying out does not bring it back (the term that puts it there is `flat`, which distance does not scale). It would take a smaller board or a wider envelope. See `Scenery.DESK_NEAR`.
 
 62. ~~**There is a room past it.**~~ **Done, at the size this asked for.** One wall behind the desk, dark, and nothing else. The sentence was the specification and it is worth keeping: *dark, out of focus, present; it does not need detail, it needs to exist.*
 

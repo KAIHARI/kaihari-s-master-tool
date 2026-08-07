@@ -146,6 +146,25 @@ class SceneryTest {
     }
 
     @Test
+    fun thereIsBareDeskAroundTheMatOnEverySideTheCameraCanSee() {
+        // This is what actually answers docs/AAA.md #61 — "where the felt stops
+        // and the wood starts" — and it is worth a test because it is a
+        // consequence of `BoardLayouter` centring the field rather than of
+        // anything this file chose. A layout that grew to fill the surface would
+        // take it away silently, and the desk would go back to being a border.
+        //
+        // The near edge is deliberately not asserted: it is off the bottom of
+        // the glass at every seat in `CameraEnvelope` and cannot be brought back
+        // by dollying. See `DESK_NEAR`.
+        val mat = Scenery.mat(layout)
+        val desk = pieceNamed("desk")
+        assertTrue(mat.left - desk.box.min.x > layout.cardWidth, "no desk to the left of the mat")
+        assertTrue(desk.box.max.x - mat.right > layout.cardWidth, "no desk to the right of the mat")
+        assertTrue(mat.top > 0f, "the mat starts above the glass, so no desk shows past it")
+        assertTrue(mat.top - desk.box.min.y > 0f, "no desk between the mat and the wall")
+    }
+
+    @Test
     fun theWallStandsBehindTheDeskAndNotOnIt() {
         val desk = pieceNamed("desk")
         val wall = pieceNamed("wall")

@@ -174,12 +174,22 @@ object Scenery {
     /**
      * How far the desk reaches past the mat toward the player, in card widths.
      *
-     * The near edge is the whole point of the desk — `docs/AAA.md` #61, "where
-     * the felt stops and the wood starts. Nothing in this app currently ends
-     * anywhere." It is deliberately far enough out to be off the bottom of the
-     * screen at the reading seat and to swing into view as the camera comes
-     * down, because an edge you can see from every angle is a border and an edge
-     * you have to sit down to see is a table.
+     * What this buys is that there is never a void below the felt, at any seat.
+     * What it does **not** buy — and the first draft of this comment claimed it
+     * did — is a visible near edge. Measured on a 1600x856 stage, the desk's
+     * near edge projects to y = 1005 at the table seat and y = 1075 seated,
+     * against a screen 856 tall, and dollying all the way out only brings it to
+     * about 950: the term that puts it there is `flat`, which the camera's
+     * distance does not scale. The board fills the stage vertically, so there is
+     * simply no room below it for an edge to appear in.
+     *
+     * `docs/AAA.md` #61 is still answered, but by the *other* three sides.
+     * `BoardLayouter` centres a seven-column field in whatever it is given, and
+     * on a landscape tablet that leaves a third of the width as bare desk down
+     * each side, plus a strip above the mat before the wall starts. That is
+     * where the felt stops and the wood starts, and it is on screen at every
+     * seat. The near edge is geometry the camera cannot currently reach, and it
+     * would take a smaller board or a wider envelope to show it.
      */
     const val DESK_NEAR = 0.9f
 
