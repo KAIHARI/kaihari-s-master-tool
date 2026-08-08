@@ -339,6 +339,17 @@ subtasks, spawn 2-3 general-purpose teammates, coordinate, report back.
 ## Debugging
 
 - Core logic: write a failing commonTest first; `./gradlew :core:jvmTest`.
+- **Looking at the stage without a device:** `./gradlew :core:jvmTest --tests
+  '*StageFrameTest*'` writes PNGs of every scene and seat to
+  `core/build/stage-frames/`. `core/src/jvmTest/.../render/StageFrame.kt` drives
+  them from the same `Scenery`/`ScenePainter`/`StageRig`/`Puzzle` values the app
+  draws from, through Java2D, so no Compose and no Google Maven is involved. It
+  is a **preview, not a screenshot**: geometry, paint order and relative
+  lightness are exact; it draws no cards, no art, no text, and its palette is a
+  hand-copy of `StageLook`'s, so a colour changed there and not here makes the
+  preview wrong while the app stays right. Everything it *can* show, it shows
+  honestly — and it is the only way to catch the class of bug that is
+  arithmetically fine and visually wrong. Two were shipped before it existed.
 - UI on Android: the in-app crash reporter shows and shares the trace.
 - Desktop: `./gradlew :desktopApp:run` (needs Google Maven access).
 - Preferences are one JSON document in SQLite (`UiPreferences`); adding a
