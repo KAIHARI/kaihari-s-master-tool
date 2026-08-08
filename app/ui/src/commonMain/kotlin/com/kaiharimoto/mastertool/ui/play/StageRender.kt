@@ -32,6 +32,7 @@ import com.kaiharimoto.mastertool.core.render.Shading
 import com.kaiharimoto.mastertool.core.render.Shadows
 import com.kaiharimoto.mastertool.core.render.StageRig
 import com.kaiharimoto.mastertool.core.render.Tone
+import com.kaiharimoto.mastertool.core.scene.Scene
 import com.kaiharimoto.mastertool.core.scene.Scenery
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlin.math.abs
@@ -97,6 +98,25 @@ internal fun DrawScope.drawFelt(
     val mat = matSurface(layout)
     val span = max(mat.width, mat.height)
     val key = look.lighting.key
+
+    // ---- whether there is a playmat at all -----------------------------------
+    //
+    // In the desk room there is not, and that is kai's call rather than an
+    // optimisation: *the desk is the playing surface*. A black rubber mat laid
+    // over a wooden desk is a second surface hiding the first, and the room is
+    // the thing this stage is now trying to be.
+    //
+    // So everything a playmat brought with it goes with it — its fill, the pool
+    // of light drawn *on* it, and the vignette that kept that pool from reading
+    // as a grey rectangle. All three were describing a mat. What is left is the
+    // zones, which are now routed into wood rather than pressed into felt, and
+    // the desk's own shading, which `drawScene` already solved against the same
+    // rig.
+    //
+    // The minimal stage keeps its slab. It has no desk under it, and cards
+    // resting on nothing is not the same idea.
+    val onDesk = look.scene == Scene.DESK
+    if (!onDesk) {
 
     val corner = CornerRadius(layout.cardWidth * 0.16f)
     val matTopLeft = Offset(mat.left, mat.top)
@@ -212,6 +232,8 @@ internal fun DrawScope.drawFelt(
             size = matSize,
             cornerRadius = corner,
         )
+    }
+
     }
 
     layout.slots.forEach { (slot, rect) ->
