@@ -198,3 +198,36 @@ it is not quietly decided by the next iteration: a room whose back wall is a
 want, and giving it more means re-framing a stage he has tuned. Until that is
 answered, the room's ceiling is real and the fidelity work belongs on the felt,
 the cards and the light — which is where the backlog points anyway.
+
+### Iteration 2 — nothing ever lands square
+
+`AAA.md` #52, and #47 for the graveyard. The line written before the code: *the
+five cards in the hand stop reading as one printed strip.* They were dead level,
+evenly stepped, tops on a perfect horizontal — five copies of one card rather
+than five cards.
+
+`core/motion/Settle.kt` answers "where did instance N come to rest", as a turn
+in degrees and a slip in fractions of a card's width. Three things about it are
+the design rather than the implementation. It is a **hash of the instance id**,
+not a random number: there are two hundred levels of undo here and #38 is
+explicit that anything unreplayable breaks them, and a hash needs no storage, no
+undo entry and no migration — it is the same answer forever. It is **three
+independent channels**, because deriving the turn and both slips from one hash
+by shifting gives a hand where every card that leans left is also low and left,
+which is a pattern rather than an unevenness. And the amount is a **property of
+how the card got there** — `SQUARED` for a deck tapped against the table,
+`PLACED` for a card set down, `THROWN` for a graveyard swept into a heap —
+because a board where the discard pile is as tidy as the deck is a board nobody
+built by hand.
+
+Frame cost: nothing. It is three float operations per card, evaluated when the
+board changes rather than per frame.
+
+Two things learned. The first test written said *no dealt hand leans entirely
+one way*, which is false and was rightly red on the first run: five fair coins
+agree once in sixteen, so a hand that happens to lean is the feature working.
+The claim that actually matters is that **consecutive instance ids are
+uncorrelated** — a dealt hand is five consecutive ids, and that is precisely the
+input a cheap `id * prime` hash fails, fanning them out in an even ramp that
+reads as drawn. The second: `--budget` is noisy across runs when anything else
+is using the container, so measure it back-to-back or not at all.

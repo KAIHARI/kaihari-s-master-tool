@@ -74,6 +74,7 @@ import com.kaiharimoto.mastertool.core.layout.planeFor
 import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.motion.Pose3
+import com.kaiharimoto.mastertool.core.motion.Settle
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
@@ -935,14 +936,28 @@ private fun seatsFor(
     val cardWidth = layout.cardWidth
     val cardHeight = layout.cardHeight
 
-    fun poseAt(at: MatPoint, z: Float, turned: Boolean, faceUp: Boolean, lean: Float = 0f): Pose3 {
+    fun poseAt(
+        at: MatPoint,
+        z: Float,
+        turned: Boolean,
+        faceUp: Boolean,
+        lean: Float = 0f,
+        // How square it came to rest. `Square` for anything a finger is holding,
+        // because a finger is exact and a carried card that drifted a degree off
+        // the point it was grabbed at would read as lag.
+        landing: Settle.Landing = Settle.Landing.Square,
+    ): Pose3 {
         val (x, y) = layout.toPixels(at)
         return Pose3(
-            position = Vec3(x, y, z),
+            position = Vec3(
+                x + landing.slipX * cardWidth,
+                y + landing.slipY * cardWidth,
+                z,
+            ),
             rotX = lean,
             // One truth about which face shows: half a turn means the back.
             rotY = if (faceUp) 0f else 180f,
-            rotZ = if (turned) -90f else 0f,
+            rotZ = (if (turned) -90f else 0f) + landing.turnDegrees,
             scale = 1f,
         )
     }
@@ -967,6 +982,11 @@ private fun seatsFor(
                 },
                 turned = placed.turned || (carrying && carry.quarterTurns % 2 != 0),
                 faceUp = faceUp,
+                landing = if (carrying) {
+                    Settle.Landing.Square
+                } else {
+                    Settle.of(placed.id, Settle.Care.PLACED)
+                },
             ),
             faceUp = faceUp,
             carried = carrying,
@@ -1010,6 +1030,11 @@ private fun seatsFor(
                 turned = carrying && carry.quarterTurns % 2 != 0,
                 faceUp = faceUp,
                 lean = if (carrying) 0f else HAND_LEAN,
+                landing = if (carrying) {
+                    Settle.Landing.Square
+                } else {
+                    Settle.of(card.instanceId, Settle.Care.PLACED)
+                },
             ),
             faceUp = faceUp,
             carried = carrying,
@@ -1035,6 +1060,14 @@ private fun seatsFor(
         val top = pile.firstOrNull() ?: return@forEach
         val rect = layout[slot] ?: return@forEach
         val faceUp = slot == BoardSlot.Graveyard || slot == BoardSlot.Banished
+        // A deck is tapped square against the table and a graveyard is swept
+        // into a heap, and drawing both at the same tidiness is most of what
+        // makes a board look printed. Which pile it is *is* how much care was
+        // taken putting the card there.
+        val landing = Settle.of(
+            top.instanceId,
+            if (faceUp) Settle.Care.THROWN else Settle.Care.SQUARED,
+        )
         seats += Seat(
             id = top.instanceId,
             card = top,
@@ -1042,11 +1075,12 @@ private fun seatsFor(
                 // On top of its own pile, which is the whole reason a deck
                 // looks like a deck rather than like a card with a number.
                 position = Vec3(
-                    rect.centerX,
-                    rect.centerY,
+                    rect.centerX + landing.slipX * cardWidth,
+                    rect.centerY + landing.slipY * cardWidth,
                     CardSolid.pileDepth(pile.size, cardWidth),
                 ),
                 rotY = if (faceUp) 0f else 180f,
+                rotZ = landing.turnDegrees,
             ),
             faceUp = faceUp,
             carried = false,
