@@ -107,7 +107,7 @@ fun main(args: Array<String>) {
             density = Density(opts.density),
             coroutineContext = coroutineContext,
         ) {
-            Stage(deps, director)
+            Stage(deps, director, opts)
         }
 
         try {
@@ -196,7 +196,7 @@ private class Director {
  * theme would be photographing a slightly different app.
  */
 @Composable
-private fun Stage(deps: AppDependencies, director: Director) {
+private fun Stage(deps: AppDependencies, director: Director, opts: Options) {
     val scope = rememberCoroutineScope()
     val builderState = remember { DeckBuilderState(deps, scope) }
     val layoutState = remember { DeckLayoutState(deps.preferencesRepository, scope) }
@@ -223,7 +223,7 @@ private fun Stage(deps: AppDependencies, director: Director) {
             ),
         ) {
             SafeArea {
-                PlayScreen(state = builderState, prefs = layoutState, onBack = {})
+                PlayScreen(state = builderState, prefs = layoutState, onBack = {}, seed = opts.seed)
             }
         }
     }
@@ -312,6 +312,7 @@ private class Options(
     val shotFrames: Int,
     val pauseMillis: Long,
     val keys: String,
+    val seed: Long,
     val shots: List<Shot>,
 ) {
     companion object {
@@ -345,6 +346,10 @@ private class Options(
                 shotFrames = int("frames", 60),
                 pauseMillis = map["pause"]?.toLongOrNull() ?: 6L,
                 keys = str("keys", ""),
+                // One deal, every run, unless a shot is deliberately after a
+                // different one. Two pictures of two different hands are not a
+                // before and an after.
+                seed = map["seed"]?.toLongOrNull() ?: 20260808L,
                 shots = names.map(::shotOf),
             )
         }

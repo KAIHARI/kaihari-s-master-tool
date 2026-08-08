@@ -288,13 +288,25 @@ private const val ANNOUNCEMENT_MILLIS = 1_600L
  * see [StagedCard].
  */
 @Composable
-fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Unit) {
+fun PlayScreen(
+    state: DeckBuilderState,
+    prefs: DeckLayoutState,
+    onBack: () -> Unit,
+    /**
+     * The shuffle, when somebody needs to know it in advance.
+     *
+     * Null — the app's own answer — is a fresh shuffle every time the table is
+     * opened, because a demo that dealt the same five cards to everybody you
+     * showed it to would look broken. `:studio` passes a number instead, and
+     * that is the whole of why this parameter exists: two pictures of two
+     * different hands are not a before and an after, and a loop that judges a
+     * change to the light against a different deal is a loop measuring noise.
+     */
+    seed: Long? = null,
+) {
     val deck = state.deck
-    // A fresh shuffle each time the table is opened. The seed defaults to a
-    // constant so tests can ask for a known deal; a demo that dealt the same
-    // five cards to every person you showed it to would look broken.
-    val play = remember(deck.main, deck.extra) {
-        PlayState(deck.main, deck.extra, Random.nextLong())
+    val play = remember(deck.main, deck.extra, seed) {
+        PlayState(deck.main, deck.extra, seed ?: Random.nextLong())
     }
     val cards = remember(deck.main, deck.extra) { mutableMapOf<Int, StageCard>() }
     val machine = remember(deck.main, deck.extra) { MatGestureMachine() }
