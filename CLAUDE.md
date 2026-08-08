@@ -273,9 +273,35 @@ stain, not light. Fixing it means splitting the day key into sky and sun and
 shading the room with the sky alone, which changes the brightness of the entire
 day room. `docs/AAA.md` #61c has it.
 
-Next for the room: props on the desk, hit-tested against their flattened
-silhouettes before `claimForCamera` fires, and the Millennium Puzzle as an
-easter egg that answers a finger and never moves on its own.
+**The room has one thing in it that answers a finger.** The Millennium Puzzle
+stands on the bare left of the desk, opposite the lamp: a truncated pyramid
+apex-down (`CardSolid.slab` gained a trailing `backScale`, bit-identical at 1,
+which is why `GoldenStageTest` never moved). Tap it and it turns a third of a
+turn and rises. Four things about it are the pattern a second prop inherits:
+
+- **A prop is a pose, not a `ScenePiece`.** Furniture is solved twice a day and
+  remembered; a moving thing cannot live in a value that is deliberately
+  recomputed. `Puzzle.stirred(layout, turns, lifted)` is a pure function of two
+  numbers the screen owns, so what is drawn, what is touched and where it stands
+  cannot come apart.
+- **It may spin and rise, and may not tumble.** A body hangs along the *stage's*
+  z, so a turn about that axis is bit-exactly the turned solid, and a tilt would
+  leave the body hanging vertically while the face turned — a fraction of a pixel
+  on a card, the entire silhouette on a hand's width of pyramid.
+- **Hit-tested where it appears, not where it stands.** Against the flattened
+  silhouette: at the table seat the middle of its top face is 102px from its own
+  foot, against cards 104px wide.
+- **The camera claims the gesture last.** A prop is the third thing that is
+  neither a card nor the felt, after a shuffle mark and the inside of an open
+  fan, and like both it is taken out before `claimForCamera` — asked last of the
+  three, because the table's own affordances outrank an ornament beside it. It is
+  deliberately *not* in `MatGuide`: an easter egg's value is that nobody told you.
+
+Next for the room: a second prop is what will make `ScenePainter` need an opinion
+about a shape with no axes (this one clears everything, and `PuzzleTest` measures
+it), and `docs/AAA.md` #61d is the shadow question — nothing in the room casts
+one, on purpose, and that is a decision to revisit as a set rather than to bolt
+onto one object.
 
 Next: attaching as material is reachable in the domain and not yet by gesture
 (`DropIntent.Attach` needs an idiom that is not already spoken for). After

@@ -417,7 +417,7 @@ black, nothing on the felt that has not argued its way there. That stage is
 The **Desk** scenes are a different contract, and writing that down is the point
 of this section. A desk in a bedroom, lit by a window in the day and a lamp at
 night, is a room full of objects that are there because they are nice rather
-than because they are needed — which §11 below calls decoration and bans
+than because they are needed — which §12 below calls decoration and bans
 outright. Rather than quietly bend that rule until it means nothing, it is
 suspended in one named place, on terms:
 
@@ -488,6 +488,50 @@ one opacity, and that approximation goes wrong quickly as the light falls —
 0.55 and the darkness is bought outside the cards, in the mat's fall-off and in
 a room with nothing lighting it. That is also what §2 wants: a card is the
 brightest object in the frame.
+
+**A prop is a pose, not a piece of furniture.** Everything else in the room is a
+`ScenePiece`: an axis-aligned box, solved once for a board size and an hour and
+identical on every frame until one of those changes. The puzzle moves, so it is
+built the way a card is — `Puzzle.stirred(layout, turns, lifted)` is a pure
+function of two numbers the screen owns, and the thing being drawn, the thing
+being touched and the thing casting a shadow are all that one value. A moving
+object in a value that is deliberately recomputed twice a day is a prop that
+snaps back to where it started the first time the clock crosses dusk.
+
+**It may spin and rise; it may not tumble.** `CardSolid.slab` hangs a solid's
+body straight down the *stage's* z, which is a fact about the surface a thing is
+resting on rather than about the thing. A rotation about that same axis commutes
+with a translation along it, so a solid spun that way is bit-exactly the rotated
+solid. Tip it about x or y instead and the body goes on hanging vertically while
+the face turns — over a card's four thousandths of a millimetre that is a
+fraction of a pixel and nobody has ever seen it; over a hand's width of pyramid
+it is the entire silhouette. A tumble is worth having and is worth what it
+costs: a posed box in core with its own eight corners, which nothing has yet
+needed.
+
+**A prop is hit-tested where it appears, not where it stands.** A solid a hand
+tall does not draw on top of its own base, and the gap is the whole game: on a
+1600×856 board the middle of the puzzle's top face lands 102px from its foot at
+the table seat and 159px seated, against cards 104px wide. So the test is
+against the **flattened silhouette** — `StagePlane.flatten` answers in the mat's
+own coordinates, which is exactly the frame the finger has already been
+unprojected into, so both sides of the comparison are in the one frame the whole
+stage computes in and no screen coordinate is involved on either side.
+
+**The camera claims the gesture last.** §10's rule is that fingers on the felt
+move the camera, and it holds because the claim is made once, on the press, when
+the hit test finds nothing. A prop is the third thing that is neither a card nor
+the felt — after a shuffle mark and the space inside an open fan — and like both
+of those it has to be taken out *before* the claim, because a claimed gesture can
+never become a tap again. It is also asked **last** of the three, and that order
+is the priority: everything the table itself offers wins over an ornament beside
+it.
+
+**An easter egg is not in the guide.** `MatGuide` exists because the table has no
+affordances drawn on it and somebody has to say the house rules. An easter egg is
+the one thing on the stage whose value is that nobody told you, so it stays out —
+and it still ships with both idioms, because a tap and a click are the same
+gesture and the pointer never needed a second one.
 
 ## 12. Anti-patterns
 

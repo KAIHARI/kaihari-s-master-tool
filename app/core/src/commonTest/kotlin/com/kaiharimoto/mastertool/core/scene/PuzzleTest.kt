@@ -2,6 +2,8 @@ package com.kaiharimoto.mastertool.core.scene
 
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
+import com.kaiharimoto.mastertool.core.layout.CameraEnvelope
+import com.kaiharimoto.mastertool.core.layout.CameraPose
 import com.kaiharimoto.mastertool.core.layout.StageSeat
 import com.kaiharimoto.mastertool.core.layout.planeFor
 import com.kaiharimoto.mastertool.core.motion.Vec2
@@ -254,6 +256,36 @@ class PuzzleTest {
                     )
                 }
             }
+        }
+    }
+
+    @Test
+    fun itNeverCrossesTheLensAnywhereInTheEnvelope() {
+        // The room's own version of this is `SceneryTest`'s, and it exists
+        // because `StagePlane.project` clamps rather than dividing by zero: a
+        // point level with the camera does not crash, it flies a few hundred
+        // thousand pixels away and takes its quad with it, which is worse
+        // because it draws. Swept over the whole envelope rather than the three
+        // seats, because the hazard is a function of the pose and the seats are
+        // three points in it — and swept at full lift, which is the only pose
+        // that could reach it.
+        val envelope = CameraEnvelope()
+        val pose = Puzzle.stirred(layout, 0, 1f)
+        val corners = Puzzle.solid(layout, pose).flatMap { it.corners }
+        var pitch = envelope.minPitch
+        while (pitch <= envelope.maxPitch) {
+            val floor = envelope.minDistanceAt(pitch, surfaceWidth, surfaceHeight)
+            repeat(13) { step ->
+                val distance = floor + (envelope.maxDistance - floor) * step / 12f
+                val plane = CameraPose(0f, pitch, distance).planeFor(surfaceWidth, surfaceHeight)
+                corners.forEach { corner ->
+                    assertTrue(
+                        plane.reaches(corner),
+                        "it crosses the lens at pitch $pitch, distance $distance",
+                    )
+                }
+            }
+            pitch += 6f
         }
     }
 
