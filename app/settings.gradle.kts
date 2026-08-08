@@ -82,6 +82,24 @@ if (androidEnabled) {
     include(":androidApp")
 }
 
+// ---------------------------------------------------------------------------
+// The studio
+//
+// A headless renderer that draws the play stage to PNG files, so a change to
+// the light or the geometry can be *looked at* rather than only asserted. It is
+// a development instrument and ships in nothing, so it stays off by default:
+// CI builds exactly the three modules it built before this existed, and the
+// studio is opted into with -Pmastertool.studio=true.
+//
+// It needs :ui, so it is gated on the same Google Maven reachability.
+// ---------------------------------------------------------------------------
+val studioEnabled: Boolean =
+    providers.gradleProperty("mastertool.studio").orNull?.toBooleanStrictOrNull() ?: false
+
+if (androidEnabled && studioEnabled) {
+    include(":studio")
+}
+
 if (!androidEnabled) {
     logger.lifecycle(
         "[kai's master tool] Compose/Android modules skipped (no Android SDK and no Google Maven access). " +

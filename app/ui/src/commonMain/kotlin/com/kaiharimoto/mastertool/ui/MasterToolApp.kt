@@ -162,9 +162,14 @@ fun MasterToolApp(deps: AppDependencies) {
  * anybody types in the search field.
  *
  * On desktop every one of these is zero and this is an empty box.
+ *
+ * Public because [MasterToolApp] is no longer the only entry point that stands
+ * a screen up: `:studio` composes the play stage headlessly and has to provide
+ * the identical scaffolding, since a harness that assembles the app slightly
+ * differently is a harness whose pictures are of a slightly different app.
  */
 @Composable
-private fun SafeArea(content: @Composable () -> Unit) {
+fun SafeArea(content: @Composable () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
@@ -182,8 +187,12 @@ private fun SafeArea(content: @Composable () -> Unit) {
  * once and scrolling back and forth should never re-decode them. The disk
  * cache matters more: art must survive a cold start with no network, because
  * the venue with no signal is where this app earns its keep.
+ *
+ * Public for `:studio`, which needs this exact loader rather than Coil's
+ * default: the crossfade is what decides whether a shot taken twelve frames
+ * after a deal has card faces in it or empty rectangles.
  */
-private fun configureImageLoader(cacheDir: String?) {
+fun configureImageLoader(cacheDir: String?) {
     SingletonImageLoader.setSafe { context: PlatformContext ->
         ImageLoader.Builder(context)
             .components { add(KtorNetworkFetcherFactory(HttpClientFactory.create())) }

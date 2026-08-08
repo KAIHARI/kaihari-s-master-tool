@@ -1,0 +1,56 @@
+plugins {
+    id("org.jetbrains.kotlin.multiplatform")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
+}
+
+kotlin {
+    jvm()
+    jvmToolchain(libs.versions.jdk.get().toInt())
+
+    sourceSets {
+        // Synthesising a key event uses the constructor Compose reserves for its
+        // own modules. Opted into here and nowhere else: the studio is allowed to
+        // reach for an unstable API because it ships to nobody and a broken one
+        // fails at the next build, where :ui would fail on somebody's tablet.
+        all { languageSettings.optIn("androidx.compose.ui.InternalComposeUiApi") }
+
+        jvmMain.dependencies {
+            implementation(project(":ui"))
+            implementation(project(":core"))
+
+            implementation(compose.desktop.currentOs)
+            implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.coroutines.swing)
+            implementation(libs.sqldelight.driver.jvm)
+            implementation(libs.ktor.client.okhttp)
+        }
+    }
+}
+
+// A plain JVM entry point rather than `compose.desktop.application`: the studio
+// never opens a window, and the packaging DSL would drag installer tooling into
+// a module whose only output is PNG files.
+tasks.register<JavaExec>("shoot") {
+    group = "verification"
+    description = "Renders the play stage offscreen to PNG files."
+    dependsOn("jvmMainClasses")
+    mainClass.set("com.kaiharimoto.mastertool.studio.StudioKt")
+    // `app/`, so the sample deck at the repository root is one `..` away and
+    // the default needs no absolute path in it.
+    workingDir = rootProject.projectDir
+    classpath = kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles +
+        kotlin.jvm().compilations.getByName("main").output.allOutputs
+    // Skia has no GPU here and never needs one: every frame lands on a raster
+    // surface. Saying so up front stops Skiko probing for a GL context that a
+    // headless container does not have.
+    jvmArgs("-Djava.awt.headless=true", "-Dskiko.renderApi=SOFTWARE")
+    // Args come through as `-Pshot.args="..."` so the whole thing is one Gradle
+    // invocation from a script.
+    argumentProviders.add(
+        CommandLineArgumentProvider {
+            providers.gradleProperty("shot.args").orNull?.split(" ")?.filter { it.isNotBlank() }
+                ?: emptyList()
+        }
+    )
+}

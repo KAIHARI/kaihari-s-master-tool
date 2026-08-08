@@ -1,0 +1,374 @@
+package com.kaiharimoto.mastertool.studio
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.ImageComposeScene
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.unit.Density
+import com.kaiharimoto.mastertool.core.data.CardRepository
+import com.kaiharimoto.mastertool.core.data.DatabaseFactory
+import com.kaiharimoto.mastertool.core.data.DeckRepository
+import com.kaiharimoto.mastertool.core.data.PreferencesRepository
+import com.kaiharimoto.mastertool.core.remote.HttpClientFactory
+import com.kaiharimoto.mastertool.core.remote.YgoProDeckApi
+import com.kaiharimoto.mastertool.core.scene.DeskLight
+import com.kaiharimoto.mastertool.core.scene.Scene
+import com.kaiharimoto.mastertool.core.update.GitHubReleaseApi
+import com.kaiharimoto.mastertool.core.update.Release
+import com.kaiharimoto.mastertool.core.update.UpdateChecker
+import com.kaiharimoto.mastertool.ui.AppDependencies
+import com.kaiharimoto.mastertool.ui.DeckFileAccess
+import com.kaiharimoto.mastertool.ui.ImportedFile
+import com.kaiharimoto.mastertool.ui.SafeArea
+import com.kaiharimoto.mastertool.ui.components.CardBackChoice
+import com.kaiharimoto.mastertool.ui.components.LocalCardBack
+import com.kaiharimoto.mastertool.ui.configureImageLoader
+import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
+import com.kaiharimoto.mastertool.ui.deckbuilder.DeckLayoutState
+import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
+import com.kaiharimoto.mastertool.ui.fx.rememberFeedback
+import com.kaiharimoto.mastertool.ui.play.PlayScreen
+import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
+import com.kaiharimoto.mastertool.ui.update.AppUpdater
+import com.kaiharimoto.mastertool.ui.update.InstallOutcome
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.swing.Swing
+import org.jetbrains.skia.EncodedImageFormat
+import java.io.File
+import java.util.UUID
+
+/**
+ * The studio: the play stage, drawn to a PNG, with nobody watching.
+ *
+ * Every other check in this repository is an assertion. `GoldenStageTest` knows
+ * where a shadow's corners landed and `SceneryTest` knows how tall the lamp is,
+ * and between them they can prove a change did what it said — but neither can
+ * say whether the room *looks* like a room. That question has only ever been
+ * answerable on the tablet, which puts a whole release between an idea and the
+ * first look at it.
+ *
+ * This closes that loop. [ImageComposeScene] composes the real screen — the real
+ * theme, the real dependencies, real card art off the network — onto a raster
+ * surface whose frame clock the caller advances by hand, and hands back a Skia
+ * image. No window, no X server, no GPU.
+ *
+ * Four things about it are deliberate.
+ *
+ * **It composes `PlayScreen`, not a stand-in.** A harness that draws its own
+ * approximation of the stage is a harness that eventually disagrees with the
+ * stage, and the disagreement is always found on the device. [Stage] below is a
+ * copy of `MasterToolApp`'s scaffolding, in the same order, for that reason.
+ *
+ * **The frame clock is a parameter.** Compose's animations and the stage's own
+ * `withFrameNanos` loop both advance by exactly what `render` is handed, so a
+ * settled table and a card twelve frames into a flight are both reachable and
+ * both reproducible.
+ *
+ * **One composition, many shots.** Starting the app costs a card-pool sync and
+ * a few hundred frames of settling; a room change costs a preference write and
+ * a seat change costs a keystroke. So the shot list is walked inside a single
+ * composition, which is the difference between a contact sheet in thirty
+ * seconds and one in six minutes — and an instrument nobody waits for is an
+ * instrument nobody uses.
+ *
+ * **It drives the app the way a hand does.** The seat is chosen by sending the
+ * digit its own shortcut table binds, not by reaching into the camera. Anything
+ * the studio can photograph is therefore something a user can reach.
+ */
+fun main(args: Array<String>) {
+    val opts = Options.parse(args)
+    opts.out.mkdirs()
+
+    println("[studio] out=${opts.out.absolutePath}  ${opts.width}x${opts.height} @${opts.density}x")
+    println("[studio] shots: ${opts.shots.joinToString(" ") { it.name }}")
+
+    val deps = buildDependencies(opts)
+
+    // Warm the pool before composing. The screen would fetch it itself, but a
+    // sync landing halfway through a shot is a shot with half a deck in it.
+    runBlocking {
+        println("[studio] card pool: ${deps.cardRepository.sync(force = false)}")
+    }
+
+    val director = Director()
+
+    // Compose runs on the AWT event thread even with no window, because that is
+    // where the desktop effect dispatchers post. Headless AWT is happy with
+    // this; it simply never opens one.
+    runBlocking(Dispatchers.Swing) {
+        val scene = ImageComposeScene(
+            width = opts.width,
+            height = opts.height,
+            density = Density(opts.density),
+            coroutineContext = coroutineContext,
+        ) {
+            Stage(deps, director)
+        }
+
+        try {
+            val clock = FrameClock(scene, opts.pauseMillis)
+            // The deck arrives over an import and the art over the network, and
+            // the deal springs for about a second after both. Everything here is
+            // waiting for that, once.
+            clock.run(opts.settleFrames)
+
+            // A script, if one was asked for: `--keys=nd` deals and draws. Each
+            // press gets its own settle, because a stage mid-spring is a
+            // different picture from the one that press was meant to produce.
+            for (char in opts.keys) {
+                val key = Keys.of(char) ?: error("nothing on the play stage is bound to '$char'")
+                Keys.press(scene, key)
+                clock.run(opts.shotFrames)
+            }
+
+            for (shot in opts.shots) {
+                director.prefs?.update { it.copy(scene = shot.scene, deskLight = shot.light) }
+                Keys.press(scene, shot.seat.digit)
+                // A seat change is a spring, and the room's palette crosses a
+                // recomposition. Both are done well inside this.
+                clock.run(opts.shotFrames)
+
+                val png = clock.frame().encodeToData(EncodedImageFormat.PNG)
+                    ?: error("Skia declined to encode ${shot.name}")
+                val file = File(opts.out, "${shot.name}.png")
+                file.writeBytes(png.bytes)
+                println("[studio] ${file.name}  ${png.size / 1024} KiB")
+            }
+        } finally {
+            scene.close()
+        }
+    }
+
+    // Ktor's OkHttp engine and SQLDelight both hold non-daemon threads. Every
+    // shot is on disk by the time this runs.
+    kotlin.system.exitProcess(0)
+}
+
+// ---- driving it ---------------------------------------------------------------------
+
+private const val FRAME_NANOS = 16_666_667L
+
+/**
+ * A frame clock that advances in real time and in stage time at once.
+ *
+ * The stage's springs integrate the nanos it is handed; the network hands back
+ * card art on other threads and needs the wall clock to move for its callbacks
+ * to land. Advancing only one of the two is how a harness photographs either a
+ * frozen table or a table with no pictures on it.
+ */
+private class FrameClock(private val scene: ImageComposeScene, private val pauseMillis: Long) {
+    private var nanos = 0L
+
+    suspend fun run(frames: Int) {
+        repeat(frames) {
+            scene.render(nanos)
+            nanos += FRAME_NANOS
+            if (pauseMillis > 0) delay(pauseMillis)
+        }
+    }
+
+    fun frame() = scene.render(nanos)
+}
+
+/**
+ * A published handle on the screen's own state holders.
+ *
+ * The room is a *preference*, so changing it from outside the composition means
+ * reaching the same object the settings sheet reaches. Everything here happens
+ * on the AWT thread, which is where snapshot writes belong.
+ */
+private class Director {
+    var prefs: DeckLayoutState? = null
+}
+
+// ---- the screen under test ---------------------------------------------------------
+
+/**
+ * `MasterToolApp`'s scaffolding with the navigation removed.
+ *
+ * Kept beside the real one on purpose: every local this provides is one the play
+ * stage reads, and a studio that provided a different card back or a different
+ * theme would be photographing a slightly different app.
+ */
+@Composable
+private fun Stage(deps: AppDependencies, director: Director) {
+    val scope = rememberCoroutineScope()
+    val builderState = remember { DeckBuilderState(deps, scope) }
+    val layoutState = remember { DeckLayoutState(deps.preferencesRepository, scope) }
+
+    DisposableEffect(Unit) {
+        configureImageLoader(deps.imageCacheDir)
+        layoutState.start { preferences -> builderState.onFormatChange(preferences.format) }
+        builderState.start()
+        director.prefs = layoutState
+        // The deck arrives through the ordinary import path, so the studio is
+        // exercising the same codec the tablet does.
+        builderState.importFromFile()
+        onDispose { director.prefs = null }
+    }
+
+    val feedback = rememberFeedback(enabled = { false })
+
+    MasterToolTheme(mode = layoutState.preferences.themeMode) {
+        CompositionLocalProvider(
+            LocalFeedback provides feedback,
+            LocalCardBack provides CardBackChoice(
+                style = layoutState.preferences.cardBack,
+                imageUrl = layoutState.preferences.cardBackUrl,
+            ),
+        ) {
+            SafeArea {
+                PlayScreen(state = builderState, prefs = layoutState, onBack = {})
+            }
+        }
+    }
+}
+
+// ---- wiring ------------------------------------------------------------------------
+
+private fun buildDependencies(opts: Options): AppDependencies {
+    val data = opts.data.apply { mkdirs() }
+    val database = DatabaseFactory.create(
+        StudioDriverFactory(File(data, DatabaseFactory.DATABASE_NAME).absolutePath)
+    )
+    val api = YgoProDeckApi(HttpClientFactory.create())
+
+    return AppDependencies(
+        cardRepository = CardRepository(
+            database = database,
+            api = api,
+            clock = System::currentTimeMillis,
+            ioDispatcher = Dispatchers.IO,
+        ),
+        deckRepository = DeckRepository(
+            database = database,
+            clock = System::currentTimeMillis,
+            ioDispatcher = Dispatchers.IO,
+        ),
+        preferencesRepository = PreferencesRepository(
+            database = database,
+            ioDispatcher = Dispatchers.IO,
+        ),
+        fileAccess = FixedDeck(opts.deck),
+        updateChecker = UpdateChecker(
+            api = GitHubReleaseApi(HttpClientFactory.create()),
+            currentVersionName = STUDIO,
+        ),
+        updater = NoUpdates,
+        newDeckId = { UUID.randomUUID().toString() },
+        now = System::currentTimeMillis,
+        imageCacheDir = File(data, "card-art").absolutePath,
+    )
+}
+
+private const val STUDIO = "studio"
+
+/** The picker, answered before it is asked. */
+private class FixedDeck(private val file: File) : DeckFileAccess {
+    override suspend fun importDeck(): ImportedFile? =
+        if (file.isFile) {
+            ImportedFile(file.name, file.readText())
+        } else {
+            println("[studio] no deck at ${file.absolutePath} — the table will be empty")
+            null
+        }
+
+    override suspend fun exportDeck(suggestedName: String, content: String): Boolean = false
+
+    override suspend fun shareDeck(suggestedName: String, content: String) = Unit
+}
+
+private object NoUpdates : AppUpdater {
+    override val currentVersionName = STUDIO
+    override val canInstallInPlace = false
+    override suspend fun downloadAndInstall(
+        release: Release,
+        onProgress: (Float?) -> Unit,
+    ): InstallOutcome = InstallOutcome.Failed("the studio does not install anything")
+
+    override fun openReleasePage(url: String) = Unit
+}
+
+// ---- options -----------------------------------------------------------------------
+
+/** Which of the three seats a shot is taken from, and the digit that reaches it. */
+private enum class Seat(val digit: Key) { OVERHEAD(Key.One), TABLE(Key.Two), SEATED(Key.Three) }
+
+private class Shot(val name: String, val scene: Scene, val light: DeskLight, val seat: Seat)
+
+private class Options(
+    val out: File,
+    val data: File,
+    val deck: File,
+    val width: Int,
+    val height: Int,
+    val density: Float,
+    val settleFrames: Int,
+    val shotFrames: Int,
+    val pauseMillis: Long,
+    val keys: String,
+    val shots: List<Shot>,
+) {
+    companion object {
+        /** The default contact sheet: both rooms, both hours, and every seat once. */
+        private val CONTACT = listOf(
+            "desk-day-table", "desk-night-seated", "desk-day-overhead", "minimal-day-table",
+        )
+
+        fun parse(args: Array<String>): Options {
+            val map = args.mapNotNull { arg ->
+                arg.removePrefix("--").split("=", limit = 2).takeIf { it.size == 2 }
+                    ?.let { it[0] to it[1] }
+            }.toMap()
+
+            fun str(key: String, fallback: String) = map[key] ?: fallback
+            fun int(key: String, fallback: Int) = map[key]?.toIntOrNull() ?: fallback
+
+            val names = str("shots", CONTACT.joinToString(",")).split(",").filter { it.isNotBlank() }
+
+            return Options(
+                out = File(str("out", "build/shots")),
+                data = File(str("data", System.getProperty("user.home") + "/.cache/mastertool-studio")),
+                deck = File(str("deck", "../lab.ydkx")).absoluteFile,
+                // The desktop window's own size, so a shot is what a desktop
+                // user sees. `--density=2` re-solves every layout at tablet
+                // metrics without changing the framing.
+                width = int("width", 1600),
+                height = int("height", 1000),
+                density = map["density"]?.toFloatOrNull() ?: 1f,
+                settleFrames = int("settle", 150),
+                shotFrames = int("frames", 60),
+                pauseMillis = map["pause"]?.toLongOrNull() ?: 6L,
+                keys = str("keys", ""),
+                shots = names.map(::shotOf),
+            )
+        }
+
+        /**
+         * `desk-night-seated` and friends.
+         *
+         * A name rather than three flags because a shot's name is also its
+         * filename, and a contact sheet whose files are `a.png`, `b.png` is a
+         * contact sheet nobody can talk about.
+         */
+        private fun shotOf(name: String): Shot {
+            val parts = name.lowercase().split("-")
+            fun has(vararg words: String) = parts.any { it in words }
+            return Shot(
+                name = name,
+                scene = if (has("minimal")) Scene.MINIMAL else Scene.DESK,
+                light = if (has("night")) DeskLight.NIGHT else DeskLight.DAY,
+                seat = when {
+                    has("overhead") -> Seat.OVERHEAD
+                    has("seated") -> Seat.SEATED
+                    else -> Seat.TABLE
+                },
+            )
+        }
+    }
+}

@@ -630,7 +630,25 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
             }
 
             // ---- the one loop -------------------------------------------------
-            LaunchedEffect(Unit) {
+            //
+            // Keyed on the two things it drives, and that is a bug fix rather
+            // than a precaution. `cards` and `pilot` are both remembered
+            // *against the deck* — a different deck is a different table, with
+            // different instance ids — while this loop used to be keyed on
+            // `Unit`. So the deck changing under an open stage left the loop
+            // holding the previous map: every card in the new one stayed parked
+            // at the pose it was dealt from, the five in the opening hand
+            // included, stacked invisibly on the deck they came out of. The
+            // camera and the prop kept moving throughout, because those two are
+            // remembered against nothing and the loop still had the live ones —
+            // which is exactly why this read as "the hand is missing" rather
+            // than as "the stage is frozen".
+            //
+            // It never appeared in ordinary use: you pick a deck and *then* open
+            // the table, so the first composition already had the right map. It
+            // appears the moment anything hands this screen a deck while it is
+            // already up.
+            LaunchedEffect(cards, pilot) {
                 var previous = 0L
                 while (true) {
                     withFrameNanos { now ->
