@@ -1584,7 +1584,36 @@ private fun PlayTopBar(
 ) {
     val feedback = LocalFeedback.current
     Row(
-        Modifier.fillMaxWidth().height(TOP_BAR).padding(horizontal = 10.dp),
+        Modifier
+            .fillMaxWidth()
+            .height(TOP_BAR)
+            // Chrome stands on Ink, and until now this bar stood on whatever the
+            // room happened to be putting behind it.
+            //
+            // The stage's box is padded down by [TOP_BAR], so the room ought not
+            // to reach up here at all — but the mat's `graphicsLayer` is a
+            // rotation and a rotation does not clip, so everything at the back
+            // of the room projects up past the box it was drawn in and lands on
+            // this strip. Most of the time that is the wall, which is dark, and
+            // nobody noticed. The window is not dark. Its pane came out behind
+            // seven of these controls at about 1.5:1, and the life-point total
+            // sat half inside its left edge.
+            //
+            // Measured rather than guessed, and the measurement is the reason
+            // this is a ground rather than a re-framing: at 1600x1000 the pane
+            // occupies rows 0..36 and the bar is 44 tall, so **every row of the
+            // window is inside the chrome** and none of it was ever visible as a
+            // window. Behind it the wall itself gets 6px of open air at the
+            // table seat and 25 at the other two. What to do about a room whose
+            // back wall is a hairline is a question about the stage's framing
+            // and belongs to kai; what a bar does about a bright thing behind it
+            // is not, and is this.
+            //
+            // Opaque, not a scrim: a translucent wash over content is the second
+            // line of the handbook's anti-patterns, and a bar that is 82% opaque
+            // is a bar that fails on the one background it needed to survive.
+            .background(MasterToolPalette.Ink)
+            .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {

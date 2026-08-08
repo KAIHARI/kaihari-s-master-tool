@@ -149,3 +149,39 @@ The lesson worth keeping: **ordinary use never hit this**, because you pick a
 deck and *then* open the table. The studio hit it on its first run, before any
 fidelity work at all, because a harness starts the screen in states a person
 would have to work to reach. That is most of the argument for having built it.
+
+### Iteration 1 — the window nobody has ever seen
+
+Then made the eye trustworthy: `tools/compare.py` for before-and-after with the
+difference multiplied twelve times, and a **fixed shuffle** — `PlayScreen` takes
+an optional seed, null still meaning a fresh deal — because two pictures of two
+different hands are not a comparison. Two studio runs are now bit-identical, so
+every pixel that moves is a change in the code.
+
+The first thing the contact sheet showed was a pale wedge lying across the top
+bar with seven of its controls printed on it at about 1.2:1. It is the room's
+**window**, and the stage's box is padded down by `TOP_BAR` precisely so this
+cannot happen — but the mat's `graphicsLayer` is a rotation, and a rotation does
+not clip, so the back of the room projects up out of its own box and onto the
+chrome. Most of the time what lands there is the dark wall and nobody noticed.
+
+Measuring it is what made the iteration worth having. At 1600×1000 the pane
+occupies rows 0..36 against a 44-tall bar: **every row of the window is inside
+the chrome, and none of it has ever been visible as a window.** Behind it the
+wall itself gets 6px of open air at the table seat, 25 seated and 26 overhead.
+`AAA.md` #62 already argued the window down as low as it could go to be seen at
+all; the measurement says it did not go far enough, and could not have.
+
+Shipped the half that is not a matter of taste: the bar stands on Ink, opaque
+rather than a scrim, because a translucent wash over content is the second line
+of `DESIGN.md` §12 and an 82%-opaque bar is a bar that fails on the one
+background it needed to survive. The ground behind "Overhead" went from
+luminance 223 to 6. Exactly 4.4% of pixels moved — 44 rows of 1000, the bar and
+nothing else, which is what a deterministic studio buys you.
+
+The half that **is** a matter of taste is left for kai and written down here so
+it is not quietly decided by the next iteration: a room whose back wall is a
+6px hairline cannot hold a window, a lit patch, or anything else #61c and #62
+want, and giving it more means re-framing a stage he has tuned. Until that is
+answered, the room's ceiling is real and the fidelity work belongs on the felt,
+the cards and the light — which is where the backlog points anyway.
