@@ -376,13 +376,14 @@ internal fun DrawScope.drawScene(
     // `PuzzleTest.itStandsClearOfEverythingElseInTheRoom` is what makes that
     // last clause true, and it is the precondition, not a nicety.
     val standIn = prop?.let { ScenePiece(name = "prop", surface = it.surface, box = it.box) }
+    val propFaces = prop?.faces.orEmpty()
     val all = if (standIn == null) pieces else pieces + standIn
 
     ScenePainter
         .order(all, eyeAt) { box -> box.corners().maxOf { stage.project(it).depth } }
         .forEach { piece ->
             drawSolid(
-                faces = if (piece === standIn) prop.faces else piece.box.faces(),
+                faces = if (piece === standIn) propFaces else piece.box.faces(),
                 stage = stage,
                 eyeAt = eyeAt,
                 eye = eye,
