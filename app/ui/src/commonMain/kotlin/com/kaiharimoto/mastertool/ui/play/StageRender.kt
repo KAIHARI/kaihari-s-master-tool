@@ -2,12 +2,15 @@ package com.kaiharimoto.mastertool.ui.play
 
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
@@ -21,6 +24,7 @@ import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardMaterial
 import com.kaiharimoto.mastertool.core.render.CardSolid
+import com.kaiharimoto.mastertool.ui.gpu.StageShader
 import com.kaiharimoto.mastertool.core.render.Outset
 import com.kaiharimoto.mastertool.core.render.LightPool
 import com.kaiharimoto.mastertool.core.render.Rot3
@@ -82,6 +86,13 @@ internal fun DrawScope.drawFelt(
     eye: Vec3,
     look: StageLook,
     pool: LightPool?,
+    /**
+     * The cloth, if this platform can run one. Null is the mat that shipped.
+     *
+     * Compiled once by the screen and handed down, because compiling inside a
+     * draw would make the weave the most expensive thing on the stage.
+     */
+    weave: StageShader? = null,
 ) {
     val mat = matSurface(layout)
     val span = max(mat.width, mat.height)
@@ -107,6 +118,26 @@ internal fun DrawScope.drawFelt(
             size = matSize,
             cornerRadius = corner,
         )
+    }
+
+    // The cloth over the top, in overlay, whose identity is mid grey — so this
+    // adds thread-by-thread shading to whatever the mat already is and can
+    // never blank it. Clipped to the mat's own rounded rectangle, or the weave
+    // would run out over the desk.
+    if (weave != null) {
+        clipPath(Path().apply { addRoundRect(RoundRect(Rect(matTopLeft, matSize), corner)) }) {
+            drawRect(
+                brush = FeltWeave.brushFor(
+                    shader = weave,
+                    origin = mat.left to mat.top,
+                    cardWidth = layout.cardWidth,
+                    key = key.direction,
+                ),
+                topLeft = matTopLeft,
+                size = matSize,
+                blendMode = BlendMode.Overlay,
+            )
+        }
     }
 
     // Where the highlight goes.

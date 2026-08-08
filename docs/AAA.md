@@ -270,7 +270,7 @@ The unglamorous nine. None of them are visible, and about seventy of the items a
 
 98. **A quality setting.** The Tab S11 can take all of this. A five-year-old phone cannot, and the app should not discover that by dropping frames on somebody.
 
-99. **A shader seam behind expect/actual.** **[your call]** Android 13+ has `RuntimeShader`, desktop Skia has `RuntimeEffect`, and neither is common code — but a thin platform seam with a plain-draw fallback is reachable, and it is what unlocks real blur, bloom and foil. This is the one place the no-engine rule deserves re-reading rather than restating.
+99. ~~**A shader seam behind expect/actual.**~~ **Done, and it was kai's call to make.** Android 13+ has `RuntimeShader`, desktop Skia has `RuntimeEffect`, and neither is common code — but a thin platform seam with a plain-draw fallback is reachable, and it is what unlocks real blur, bloom and foil. This is the one place the no-engine rule deserved re-reading rather than restating, and the brief that settled it was "the fidelity of a truck driving simulator". `ui/gpu/StageShader.kt`, with a plain-draw fallback that is what a third of Android still sees. It rasters without a GPU, which is why `:studio` can look at it. The felt's weave (#65) is its first use.
 
 100. **Decide what this is.** **[your call]** A simulator you play *on* and a game you play *against* want different work. Roughly thirty of the items above only make sense for the second one, and that is a decision rather than a discovery.
 

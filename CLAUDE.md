@@ -152,6 +152,14 @@ be corrected.
   one-`withFrameNanos`-loop recipe (see `EasterEgg.kt` and `ui/play/StageCard.kt`
   for the sanctioned perf pattern: bulk state in plain lists, per-object state
   read inside `graphicsLayer`).
+- **A shader seam, since the target became photographic.** kai's brief is the
+  fidelity of a driving simulator, and a surface stops reading as a fill colour
+  only when its normal varies *per pixel*. `ui/gpu/StageShader.kt` is an
+  expect/actual over Android's `RuntimeShader` and desktop Skia's
+  `RuntimeEffect`. It compiles to null rather than throwing — Android below 33,
+  a refusing driver, a bad shader — so **every caller keeps a drawing that works
+  without one**. See `docs/DESIGN.md` §6 for the four rules, including the sign
+  convention that made the first one invisible.
 - **Real geometry, no engine.** `core/render/` is a small, tested renderer:
   `Rot3` (the same Euler angles `graphicsLayer` rasterises with), `CardSolid`
   (a card has a thickness and six faces), `Shading` (Lambert + Blinn-Phong,

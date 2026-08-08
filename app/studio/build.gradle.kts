@@ -28,6 +28,23 @@ kotlin {
     }
 }
 
+tasks.register<JavaExec>("spikeShader") {
+    group = "verification"
+    description = "Asks whether a runtime shader compiles and rasters with no GPU."
+    dependsOn("jvmMainClasses")
+    mainClass.set("com.kaiharimoto.mastertool.studio.ShaderSpikeKt")
+    classpath = kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles +
+        kotlin.jvm().compilations.getByName("main").output.allOutputs
+    workingDir = rootProject.projectDir
+    jvmArgs("-Djava.awt.headless=true", "-Dskiko.renderApi=SOFTWARE")
+    argumentProviders.add(
+        CommandLineArgumentProvider {
+            providers.gradleProperty("shot.args").orNull?.split(" ")?.filter { it.isNotBlank() }
+                ?: emptyList()
+        }
+    )
+}
+
 // A plain JVM entry point rather than `compose.desktop.application`: the studio
 // never opens a window, and the packaging DSL would drag installer tooling into
 // a module whose only output is PNG files.

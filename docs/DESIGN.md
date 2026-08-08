@@ -151,6 +151,42 @@ point *with a height* as the point on the mat that will look like it once the
 plane's own transform has run, so shadows, pile edges and card thickness can all
 be drawn by a canvas that only speaks two dimensions.
 
+**And, since the target became photographic, a third thing: a shader.** The rule
+that stood here said the stage draws with paths and gradients and nothing else,
+because a runtime shader is not common code. `AAA.md` #99 was that rule with a
+question mark on it and kai has now answered it: the fishbowl should reach the
+fidelity of a driving simulator, and no arrangement of paths and gradients does
+that. What separates a surface from a fill colour is that its **normal varies
+per pixel** and the light is asked about it there — felt with a weave, lacquer
+with a clear coat, foil as a diffraction grating. All of those are per-pixel or
+they are pretend.
+
+`ui/gpu/StageShader.kt` is the seam: `expect fun compileStageShader`, actual on
+Android over `RuntimeShader` and on desktop over Skia's `RuntimeEffect`. Four
+rules hold it up.
+
+**The no-*engine* rule is untouched and still right.** Nothing in a shader draws
+geometry, holds a scene or owns a transform. Every vertex on this stage is still
+solved by tested arithmetic in `:core`; a shader colours a rectangle that core
+decided the shape of.
+
+**`compile` returns null, never throws** — an Android below 33, a driver that
+refuses, a typo in the SkSL. So every caller ships a drawing that works without
+one, and that fallback is not a degraded mode to be tolerated: `minSdk` is 26,
+and it is what shipped before the seam existed.
+
+**Composite so a bug cannot blank the stage.** The felt's weave goes over the
+mat in `BlendMode.Overlay`, whose identity is mid grey, so the shader emits 0.5
+where the cloth is flat and the worst a mistake in it can do is push the felt
+around a little. A shader that *replaces* a surface has to earn that separately.
+
+**`Light.direction` is the way the light travels.** The key is
+`(0.30, 0.45, -0.84)`, heading *down* onto the table, and every dot product in a
+shader wants the vector pointing back at the lamp. Handed the travel direction,
+`max(dot(n, l), 0)` is zero on every thread of a surface facing up — so the
+first weave compiled, ran, cost a full pass and returned overlay's identity
+everywhere. It looked exactly like a shader that had failed to load.
+
 ## 7. Materials
 
 The physical feeling to reproduce is handling a single card.

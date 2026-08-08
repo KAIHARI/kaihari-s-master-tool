@@ -574,6 +574,13 @@ fun PlayScreen(
             // only way an object on a desk can behave.
             val puzzle = remember { StageProp() }
 
+            // The playmat's cloth. Compiled once for the life of the screen —
+            // it costs milliseconds and the result is immutable — and null on
+            // any platform that has no runtime shader, which is every Android
+            // below 33 and any driver that refuses. Null draws the mat that
+            // shipped, which is the whole contract of the seam.
+            val weave = remember { FeltWeave.compile() }
+
             // Both clocks report here, so a gesture the frame loop decides acts
             // on the same card the press landed on.
             val pilot = remember(play, machine, feedback) {
@@ -750,7 +757,7 @@ fun PlayScreen(
                     // no lamp in it, which is every room but one.
                     val pool = StageRig.pool(look.lighting, camera.eye)
                     drawScene(scenery.ground, camera.plane, camera.eye, look, pool)
-                    drawFelt(layout, camera.plane, camera.eye, look, pool)
+                    drawFelt(layout, camera.plane, camera.eye, look, pool, weave)
                     // The prop is sorted *among* the standing pieces rather than
                     // painted after them, because yaw is free: walk round past
                     // about a hundred and forty-five degrees and you are looking
