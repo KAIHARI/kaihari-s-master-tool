@@ -296,6 +296,45 @@ Learned: `--budget` measured while Gradle is running reports 117ms median and a
 424ms p95 against a true 53ms. The note in §4 about measuring back-to-back is
 not a nicety; the number is worthless otherwise.
 
+### Iteration 5 — the mat becomes cloth, and the stage gets a shader
+
+kai changed the target: the fishbowl should reach the fidelity of a driving
+simulator. That answers `AAA.md` #99, which had been marked *[your call]* since
+it was written, so the handbook was amended first and in its own commit — §6 of
+`DESIGN.md` now carries the seam and its four rules.
+
+**Proved it before building on it.** `:studio` runs on a raster surface with
+`skiko.renderApi=SOFTWARE` and no GL context at all, so the sharp question was
+not "does SkSL exist" but "does it raster without a GPU" — because a shader the
+loop's own eye cannot see would put every per-pixel change back behind a signed
+release. `:studio:spikeShader` compiled a weave and drew it: 47 levels of
+luminance modulation on a near-black base, no GPU. That answer is the reason
+everything below was worth writing.
+
+`ui/gpu/StageShader.kt` is the seam — `RuntimeShader` on Android 33+, Skia's
+`RuntimeEffect` on desktop, `null` everywhere else. `FeltWeave` is its first
+use: plain weave, warp over weft, normals from central differences because
+neither platform's runtime shaders have `dFdx`, composited in `BlendMode.Overlay`
+so the identity is mid grey and a bug in it cannot blank the mat.
+
+**The bug worth remembering.** The first version compiled, ran, cost a full pass
+and changed *nothing* — 0.0% of pixels, peak 1. `Light.direction` is the way the
+light **travels**; the key is `(0.30, 0.45, -0.84)`, heading down onto the table,
+and every dot product wants the vector pointing back at the lamp. Handed the
+travel direction, `max(dot(n, l), 0)` is zero on every thread of an upward-facing
+surface, so the shader returned overlay's identity everywhere. It is
+indistinguishable from a shader that failed to load, and the only thing that told
+them apart was a one-line probe on `compile() != null`.
+
+**The gate that could not be answered here.** Frame cost went 53.6ms → 165ms,
+and that number should not be believed. The studio has no GPU, so it runs every
+pixel of SkSL on the CPU, and `ImageComposeScene` redraws the whole scene every
+frame where a device skips the felt entirely while the camera is still. This is
+the one case so far where the studio's ratio is a bad proxy, because the change
+moves work *from* CPU paths *to* a GPU fragment program. `FrameProbe` on the
+tablet — three taps on the life-point total — is the only honest answer, and it
+is asked of kai rather than assumed.
+
 ---
 
 ## 6. Seen, not yet done
