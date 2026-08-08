@@ -132,6 +132,7 @@ internal fun DrawScope.drawFelt(
                     origin = mat.left to mat.top,
                     cardWidth = layout.cardWidth,
                     key = key.direction,
+                    density = stage.jacobian(mat.centerX, mat.centerY),
                 ),
                 topLeft = matTopLeft,
                 size = matSize,

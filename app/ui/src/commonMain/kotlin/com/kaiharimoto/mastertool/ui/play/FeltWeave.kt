@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Brush
 import com.kaiharimoto.mastertool.ui.gpu.StageShader
 import com.kaiharimoto.mastertool.ui.gpu.brush
 import com.kaiharimoto.mastertool.ui.gpu.compileStageShader
+import com.kaiharimoto.mastertool.core.layout.PlaneJacobian
 import com.kaiharimoto.mastertool.core.motion.Vec3
 
 /**
@@ -76,10 +77,27 @@ internal object FeltWeave {
      * @param key the rig's key direction, in the mat's own frame, so the threads
      *   are lit by the same lamp as the cards resting on them.
      */
-    fun brushFor(shader: StageShader, origin: Pair<Float, Float>, cardWidth: Float, key: Vec3): Brush =
+    fun brushFor(
+        shader: StageShader,
+        origin: Pair<Float, Float>,
+        cardWidth: Float,
+        key: Vec3,
+        density: PlaneJacobian,
+    ): Brush =
         shader.brush {
             float2("uOrigin", origin.first, origin.second)
             float("uPitch", cardWidth / THREADS_PER_CARD)
+            // How far a mat unit travels on the glass, per axis, so the cloth
+            // can refuse to draw threads finer than the screen can hold. Both
+            // axes, because a turned table compresses whichever one is running
+            // away from you and a single scale would be right at one yaw only.
+            //
+            // Taken at the mat's *centre*: one uniform for the whole draw, so
+            // the far edge fades a little late and the near edge a little
+            // early. Exact per-pixel would mean the projection's parameters
+            // inside the shader — a second place the projection could be wrong,
+            // which the felt's own KDoc already refuses for the pool.
+            float2("uDensity", density.alongX, density.alongY)
             // **Negated**, and this is the whole of a bug that shipped a
             // perfectly flat mat. `Light.direction` is the way the light
             // *travels* — the key is (0.30, 0.45, -0.84), heading down onto the
@@ -103,43 +121,64 @@ internal object FeltWeave {
     private val SOURCE = """
         uniform float2 uOrigin;
         uniform float  uPitch;
+        uniform float2 uDensity;   // screen px per mat unit, per axis
         uniform float3 uLight;
         uniform float  uDepth;
 
-        // The height of the cloth at p, in thread-widths.
-        float cloth(float2 p) {
-            float warp = sin(p.x * 6.2831853);
-            float weft = sin(p.y * 6.2831853);
-            // Whichever family is on top here owns the surface.
-            float over = step(0.0, warp * weft);
-            return mix(0.5 + 0.5 * weft, 0.5 + 0.5 * warp, over);
+        const float TAU = 6.2831853;
+
+        // A basket weave, and both its slopes, in closed form.
+        //
+        // One thread crossing per cell: on even cells the weft lies over the
+        // warp and owns the surface, on odd cells the warp does. Within a cell
+        // the thread is a raised cosine, which is zero *and* flat at every cell
+        // boundary — so the whole surface is smooth across the joins without
+        // anything having to blend them.
+        //
+        // Returned with its derivatives rather than sampled four times at an
+        // offset, which is what this replaced: six transcendentals for a slope
+        // that is two, and an epsilon nobody could defend.
+        float3 weave(float2 q) {
+            float2 c   = floor(q);
+            float2 f   = fract(q) - 0.5;
+            float  par = mod(c.x + c.y, 2.0);
+            float2 s   = cos(TAU * f) * 0.5 + 0.5;
+            float2 d   = -TAU * 0.5 * sin(TAU * f);
+            return float3(mix(s.y, s.x, par),
+                          mix(0.0, d.x, par),
+                          mix(d.y, 0.0, par));
         }
 
-        half4 main(float2 fragCoord) {
-            float2 uv = (fragCoord - uOrigin) / uPitch;
+        half4 main(float2 p) {
+            float2 uv = (p - uOrigin) / uPitch;
+            float3 hg = weave(uv);
 
-            float e = 0.30;
-            float hx = cloth(uv + float2(e, 0.0)) - cloth(uv - float2(e, 0.0));
-            float hy = cloth(uv + float2(0.0, e)) - cloth(uv - float2(0.0, e));
+            // Nyquist. A thread narrower than two pixels cannot be drawn, only
+            // aliased — and an aliased thread *crawls* as the camera turns,
+            // which breaks "nothing idles" by accident rather than by choice.
+            // So the relief is faded out as the cloth approaches half a cycle
+            // per pixel, per axis, and the far half of a low seat simply stops
+            // having threads instead of shimmering.
+            float2 pxPerThread = uDensity * uPitch;
+            float  cycles = max(1.0 / max(pxPerThread.x, 1e-4),
+                                1.0 / max(pxPerThread.y, 1e-4));
+            float  fade = 1.0 - smoothstep(0.30, 0.50, cycles);
 
-            float3 n = normalize(float3(-hx * 1.5, -hy * 1.5, 1.0));
+            float3 n = normalize(float3(-hg.y * fade, -hg.z * fade, 1.0));
             float3 l = normalize(uLight);
 
-            // How much more, or less, light this thread takes than a flat
-            // surface would. Centred on zero so a flat patch is untouched.
-            float flat_ = max(l.z, 0.0);
-            float lit = max(dot(n, l), 0.0);
-            float delta = (lit - flat_) * uDepth;
+            float delta = (max(dot(n, l), 0.0) - max(l.z, 0.0)) * uDepth;
 
-            // A short, tight glint where a thread's crown faces the light.
-            float3 v = float3(0.0, 0.0, 1.0);
-            float3 hv = normalize(l + v);
-            delta += pow(max(dot(n, hv), 0.0), 60.0) * 0.22;
+            // The glint the fade removes does not vanish, it broadens — which is
+            // what happens to a specular lobe when the geometry under it becomes
+            // too small to resolve. Losing it instead makes the far felt read as
+            // a different material from the near felt.
+            float3 hv = normalize(l + float3(0.0, 0.0, 1.0));
+            float  soft = 1.0 - fade * fade;
+            delta += pow(max(dot(n, hv), 0.0), mix(60.0, 8.0, soft)) * 0.22 * (1.0 - 0.5 * soft);
 
-            // Overlay's identity is 0.5, so this is a signed modulation and the
-            // flat case cannot move a single pixel of the mat.
             float g = clamp(0.5 + delta, 0.0, 1.0);
-            return half4(half3(g, g, g), 1.0);
+            return half4(half3(g), 1.0);
         }
     """.trimIndent()
 }

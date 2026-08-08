@@ -335,6 +335,47 @@ moves work *from* CPU paths *to* a GPU fragment program. `FrameProbe` on the
 tablet — three taps on the life-point total — is the only honest answer, and it
 is asked of kai rather than assumed.
 
+### Iteration 6 — the cloth stops being able to crawl
+
+`docs/PHOTOREAL.md` landed — nine stages from here to a photographic table — and
+the first thing its §1 says is that iteration 5 shipped a defect. It is right,
+and this is the loop working: **a survey of the code caught what looking at
+three seats could not.**
+
+The weave's threads are 3.06 mat px. Screen density falls as `cosTilt · scale²`
+with depth, so at the envelope's steepest legal angle the far half of the mat
+reaches 0.97 cycles per pixel — twice Nyquist. Past Nyquist a procedural texture
+does not soften, it *aliases*, and an aliased texture **crawls as the camera
+orbits**, which breaks "nothing idles" by accident rather than by choice.
+
+The measurable half was visible at the shipped seats: per-pixel contrast fell
+from 2.17 near to 1.34 far, the weave quietly losing energy as it compressed. The
+part that actually bites is at 58° and the studio can only reach the three seats,
+which is a real gap in the eye and is now in §6.
+
+`StagePlane.jacobian(x, y)` answers how far a mat unit travels on the glass — the
+projection's exact derivative, closed form, because `project` at z = 0 is closed
+form in four cached trig values. Four claims, and the load-bearing one is that it
+agrees with a finite difference of `project` itself across six poses and five
+points. Everything downstream — the band-limit here, level of detail (`AAA.md`
+#97) — stands on that agreement.
+
+The weave is rewritten around it: a basket weave in closed form returning height
+*and* both slopes, rather than four samples of a height at an epsilon nobody
+could defend. The relief fades out as the cloth approaches half a cycle per
+pixel, per axis, and the glint the fade removes is returned as a broadened lobe
+so the far felt does not read as a different material from the near felt.
+
+**Proved the fade rather than trusting it.** The three seats are all below
+Nyquist, so the path could not be photographed — so the threads were temporarily
+made twelve times too fine. Per-pixel contrast collapsed from 3.11 to **0.15**:
+the cloth dissolves into a flat surface instead of breaking into moiré. Restored
+afterwards.
+
+And it is *cheaper*: 165ms → 120ms in the studio, because two transcendentals
+beat six. A correctness fix that also pays for itself is worth noticing — the
+first version's expense was buying an epsilon, not an answer.
+
 ---
 
 ## 6. Seen, not yet done
@@ -357,3 +398,9 @@ what the eye has caught and the hand has not reached.
   before assuming it needs to be stronger — the handbook is explicit that the
   highlight *moves* rather than brightens (§7).
 - **The room is capped at 6px.** See iteration 1. Blocked on kai.
+- **The eye can only reach three seats.** `tools/shoot.sh` selects a seat by
+  pressing its digit, so every shot is one of 5°, 21° or 34° — and the camera's
+  envelope goes to 58°, which is where a procedural surface aliases and where
+  iteration 6's whole defect lived. Driving an orbit (a pointer drag on the
+  felt, which `MatInput` already understands) would close it, and it is the
+  cheapest remaining upgrade to the loop's own perception.

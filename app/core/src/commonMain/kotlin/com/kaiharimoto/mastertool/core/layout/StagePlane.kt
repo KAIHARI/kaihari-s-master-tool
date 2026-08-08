@@ -127,6 +127,65 @@ data class StagePlane(
     fun project(point: Vec3): Projected = project(point.x, point.y, point.z)
 
     /**
+     * How much the screen moves when a point on the mat moves — the projection's
+     * derivative, exactly, at [x], [y].
+     *
+     * ## What it is for
+     *
+     * Anything drawn *per pixel* on the mat needs to know how big a mat pixel is
+     * on the glass, and the answer is not one number: the plane is tilted, so a
+     * step across the table and a step away from you cover different distances
+     * on screen, and the ratio changes with depth because of the divide. A
+     * procedural surface that ignores that is a surface that aliases on its far
+     * half and crawls when the camera turns — which is `AAA.md` #60 broken by
+     * accident, and it is exactly what the felt's first weave did.
+     *
+     * Returned as the four partials of `(sx, sy)` against `(x, y)`, which is
+     * everything a caller can want: `hypot(dxdx, dydx)` is how far a step in mat
+     * x travels on the glass, the determinant is the area ratio (and so the
+     * level of detail, `AAA.md` #97), and the two together give the anisotropy.
+     *
+     * ## Why it is exact rather than fitted
+     *
+     * [project] at `z = 0` is closed form in the four trigonometric values this
+     * class already caches, so the derivative is closed form too. A finite
+     * difference would have been three lines shorter and would have needed a
+     * step size — one more number nobody could defend, wrong in a different
+     * direction at every zoom.
+     */
+    fun jacobian(x: Float, y: Float): PlaneJacobian {
+        val atX = (x - centreX) * zoom
+        val atY = (y - centreY) * zoom
+        val localX = spinX(atX, atY)
+        val localY = spinY(atX, atY)
+
+        // The spin's own derivative, which is constant: a rotation composed
+        // with a uniform scale.
+        val lxdx = zoom * cosYaw
+        val lxdy = zoom * sinYaw
+        val lydx = -zoom * sinYaw
+        val lydy = zoom * cosYaw
+
+        val depth = localY * sinTilt
+        val gap = cameraDistance - depth
+        val scale = cameraDistance / max(gap, MIN_GAP)
+
+        // Past the clamp the divide has stopped varying, so the perspective term
+        // contributes nothing and the map is locally affine. Saying so here is
+        // what stops a point behind the lens producing an infinite derivative.
+        val clamped = gap <= MIN_GAP
+        val dScaleDx = if (clamped) 0f else cameraDistance / (gap * gap) * sinTilt * lydx
+        val dScaleDy = if (clamped) 0f else cameraDistance / (gap * gap) * sinTilt * lydy
+
+        return PlaneJacobian(
+            dxdx = lxdx * scale + localX * dScaleDx,
+            dxdy = lxdy * scale + localX * dScaleDy,
+            dydx = cosTilt * (lydx * scale + localY * dScaleDx),
+            dydy = cosTilt * (lydy * scale + localY * dScaleDy),
+        )
+    }
+
+    /**
      * A screen point back onto the mat, at z = 0.
      *
      * Closed form rather than iterated. Projection gives
@@ -345,4 +404,29 @@ data class StagePlane(
             cameraDistance = 1.45f * max(height, width * 0.55f),
         )
     }
+}
+
+/**
+ * The projection's derivative at a point: how far the glass moves per unit of mat.
+ *
+ * Four partials rather than a matrix type, because `:core` has no matrix type and
+ * inventing one for a single caller is how a geometry library starts.
+ */
+data class PlaneJacobian(
+    val dxdx: Float,
+    val dxdy: Float,
+    val dydx: Float,
+    val dydy: Float,
+) {
+    /** How far a step of one mat unit along x travels on the glass. */
+    val alongX: Float get() = kotlin.math.sqrt(dxdx * dxdx + dydx * dydx)
+
+    /** The same along y. Different from [alongX] whenever the plane is tilted. */
+    val alongY: Float get() = kotlin.math.sqrt(dxdy * dxdy + dydy * dydy)
+
+    /**
+     * Screen area per unit of mat area. The level-of-detail number (`AAA.md` #97),
+     * and the honest thing to compare a texture's frequency against.
+     */
+    val areaScale: Float get() = kotlin.math.abs(dxdx * dydy - dxdy * dydx)
 }
