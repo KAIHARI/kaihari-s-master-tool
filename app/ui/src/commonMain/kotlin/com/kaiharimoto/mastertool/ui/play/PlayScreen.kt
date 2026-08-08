@@ -81,6 +81,7 @@ import com.kaiharimoto.mastertool.core.haptics.Haptic
 import com.kaiharimoto.mastertool.core.perf.FrameProbe
 import com.kaiharimoto.mastertool.core.scene.DeskClock
 import com.kaiharimoto.mastertool.core.scene.DeskLight
+import com.kaiharimoto.mastertool.core.scene.Puzzle
 import com.kaiharimoto.mastertool.core.scene.Scene
 import com.kaiharimoto.mastertool.core.scene.Scenery
 import com.kaiharimoto.mastertool.core.render.CardSolid
@@ -554,6 +555,12 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
                 }
             }
 
+            // The one thing in the room that answers a finger. Remembered across
+            // scenes rather than per scene, so switching to minimal and back does
+            // not quietly square it up — it is where you left it, which is the
+            // only way an object on a desk can behave.
+            val puzzle = remember { StageProp() }
+
             // Both clocks report here, so a gesture the frame loop decides acts
             // on the same card the press landed on.
             val pilot = remember(play, machine, feedback) {
@@ -561,6 +568,17 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
             }
             SideEffect {
                 pilot.layout = layout
+                puzzle.standOn(layout)
+                // Asked of the *live* pose and the *live* camera, because both
+                // move: the puzzle is at its most inviting halfway up, and where
+                // it appears on the glass changes every time the table turns.
+                // Guarded by the scene rather than by the prop, because the
+                // handbook's stage holds no decoration and `Puzzle.standsIn` is
+                // where that rule is written down.
+                pilot.onProp = { at ->
+                    Puzzle.standsIn(scene) && puzzle.holds(camera.plane, camera.eye, at)
+                }
+                pilot.onPropTapped = { puzzle.nudge() }
                 // Asked before it opens rather than discovered when it draws.
                 // A `DropdownMenu` with nothing in it is not nothing — it is a
                 // three-pixel box that appears, sits there, and has to be
@@ -628,6 +646,11 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
                         // that were parked.
                         var moving = 0
                         cards.values.forEach { if (it.step(SpringSpec.Bouncy, step)) moving++ }
+                        // Costs one boolean until somebody touches it, which is
+                        // the whole of "nothing idles" as an implementation:
+                        // there is no loop here that runs when the room is at
+                        // rest, so there is nothing to remember to switch off.
+                        if (puzzle.step(step)) moving++
                         // Snappy rather than Bouncy: a card overshooting reads as
                         // weight, and a whole table overshooting reads as a lurch.
                         if (camera.rig.step(SpringSpec.Snappy, step)) {
@@ -698,6 +721,12 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
                     drawScene(scenery.ground, camera.plane, camera.eye, look, pool)
                     drawFelt(layout, camera.plane, camera.eye, look, pool)
                     drawScene(scenery.standing, camera.plane, camera.eye, look)
+                    // Last of the room, and reading `puzzle.pose` here rather
+                    // than in the composable body is what keeps a moving prop
+                    // from recomposing a stage that is holding sixty cards.
+                    if (Puzzle.standsIn(scene)) {
+                        drawProp(puzzle.solid(), camera.plane, camera.eye, look)
+                    }
                     drawMatControls(layout, play.field)
                     drawIndicator(play.carry?.intent, play.field, layout)
                 }

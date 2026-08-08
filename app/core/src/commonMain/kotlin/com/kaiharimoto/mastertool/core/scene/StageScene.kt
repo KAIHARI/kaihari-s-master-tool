@@ -102,6 +102,19 @@ enum class Surface {
 
     /** The lamp — its base, its mast and the shade that is the light. */
     SHADE,
+
+    /**
+     * The one thing in the room that is not furniture.
+     *
+     * A finish rather than an object, which is why it is here beside the wood
+     * and the cloth even though no [ScenePiece] carries it: what a surface is
+     * made of is the room's business, and the alternative — a hex value living
+     * privately in whatever draws the prop — is exactly the split this enum
+     * exists to prevent. Gold is the material with the strongest opinion about
+     * the light on it, so the day room and the night room read as genuinely
+     * different rooms through it before anything else on the desk changes.
+     */
+    GOLD,
 }
 
 /**

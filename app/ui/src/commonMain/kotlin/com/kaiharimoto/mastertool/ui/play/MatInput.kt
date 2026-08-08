@@ -83,6 +83,24 @@ internal class MatPilot(
     var onMenu: (DragOrigin) -> Unit = {}
 
     /**
+     * Whether a point is on something in the room that answers a finger, and
+     * what to do when one is tapped.
+     *
+     * Two lambdas rather than a type, because a prop is the *only* thing at this
+     * table that is neither a card nor part of the mat, and inventing an
+     * interface for a population of one is how a layer that is meant to be thin
+     * stops being. They default to "there is nothing there", which is the truth
+     * on the minimal stage.
+     *
+     * The hit test cannot live here for the same reason the room's geometry does
+     * not: it needs the camera's plane, and where the puzzle *appears* is a
+     * question only something holding both the plane and the prop's live pose can
+     * answer. So the pilot asks, and the screen knows.
+     */
+    var onProp: (Vec2) -> Boolean = { false }
+    var onPropTapped: () -> Unit = {}
+
+    /**
      * The camera, and how the hand moved on the *glass* since the last frame.
      *
      * The felt is the camera's surface. A press that lands on nothing claims the
@@ -119,6 +137,17 @@ internal class MatPilot(
      * can remember something is how a domain stops meaning anything.
      */
     private var pressedControl: MatControl? = null
+
+    /**
+     * Whether the press landed on a prop.
+     *
+     * A boolean rather than a handle for the same reason [pressedControl] is not
+     * a [DragOrigin]: there is one prop, it cannot be dragged, and the only thing
+     * anybody ever needs to know afterwards is whether the finger went down on
+     * it. Remembered across the two clocks because the tap arrives from whichever
+     * of them notices the lift, and by then the finger is gone.
+     */
+    private var pressedProp = false
 
     /**
      * How far the hand has swept while the camera has had the gesture.
@@ -199,16 +228,25 @@ internal class MatPilot(
             // landed on a card. Nothing under it means the felt, and the felt
             // is the camera's.
             //
-            // Two things are neither a card nor the felt, and both of them have
+            // Three things are neither a card nor the felt, and all of them have
             // to be taken out before that claim is made, because a claimed
-            // gesture can never become a tap again: a shuffle mark, and the
-            // space *inside* an open fan. Miss either and pressing between two
-            // cards of a spread deck starts orbiting the table.
+            // gesture can never become a tap again: a shuffle mark, the space
+            // *inside* an open fan, and something standing on the desk. Miss any
+            // of them and pressing there starts orbiting the table instead.
+            //
+            // The prop is asked **last**, after the fan and after the marks, and
+            // the order is the priority: everything the table itself offers wins
+            // over an ornament beside it. It also costs nothing on the stage that
+            // has no room — `onProp` is `{ false }` until a desk hands it a real
+            // one — and nothing on the frames where a card or a mark was hit,
+            // because `&&` never gets that far.
             if (event is MatEvent.Pressed) {
                 cameraTravel = 0f
                 pressedControl =
                     if (grabbed == null) MatControls.at(layout, event.at.x, event.at.y) else null
-                if (grabbed == null && pressedControl == null && !onFan(event.at)) {
+                val free = grabbed == null && pressedControl == null && !onFan(event.at)
+                pressedProp = free && onProp(event.at)
+                if (free && !pressedProp) {
                     machine.claimForCamera()
                 }
             }
@@ -224,6 +262,16 @@ internal class MatPilot(
                         if (play.shuffle(control.pile)) {
                             feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
                         }
+                    // Lift for the sound and DETENT for the buzz, which is the
+                    // one pairing in the set that is not a card: something rises,
+                    // and something clicks a third of the way round. `Haptic`'s
+                    // own note on DETENT is that it reports a *boundary* rather
+                    // than a contact, and a nudge that turns by exactly a third
+                    // of a turn is nothing else.
+                    pressedProp -> {
+                        onPropTapped()
+                        feedback.play(SoundEffect.LIFT, Haptic.DETENT)
+                    }
                     grabbed == null && play.fanned != null ->
                         if (play.closeFan()) {
                             feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
@@ -232,6 +280,7 @@ internal class MatPilot(
                         }
                 }
                 pressedControl = null
+                pressedProp = false
             }
             if (event is MatEvent.CameraMoved) {
                 cameraTravel += screenDelta.length

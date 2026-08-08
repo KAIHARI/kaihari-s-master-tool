@@ -256,9 +256,29 @@ object CardSolid {
         height: Float,
         depth: Float,
         lean: Vec3 = Vec3.Zero,
+        /**
+         * How much smaller the back face is than the front — a taper.
+         *
+         * One at the end of the parameter list, so every existing caller means
+         * exactly what it always did, and `width * 1f` is `width` bit for bit on
+         * every finite float. That is not a detail: `GoldenStageTest` records
+         * what this function returns.
+         *
+         * Below one it is a frustum, and at zero it is a pyramid — the two back
+         * corners coincide, each side quad becomes a triangle, and [sheared]
+         * goes on being exact because it takes the cross product of the two
+         * *diagonals* rather than of two edges, and a triangle's diagonals are
+         * two of its own sides.
+         *
+         * A body hangs along the stage's z, so a large front face with a small
+         * back one is an **inverted** pyramid with no further arrangement. That
+         * is the one shape this was added for.
+         */
+        backScale: Float = 1f,
     ): List<Face> {
         val front = face(pose, width, height, atDepth = 0f)
-        val back = face(pose, width, height, atDepth = depth).map { it + lean }
+        val back = face(pose, width * backScale, height * backScale, atDepth = depth)
+            .map { it + lean }
 
         fun side(a: Int, b: Int, outward: Vec3): Face {
             // Round the loop: along the front edge, down the body, back along

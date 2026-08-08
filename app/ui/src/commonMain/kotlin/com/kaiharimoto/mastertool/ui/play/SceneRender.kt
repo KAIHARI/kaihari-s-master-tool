@@ -83,6 +83,18 @@ internal data class StageLook(
     val glass: Color,
     /** The lamp: its base, its mast, and the shade that is the light. */
     val shade: Color,
+    /**
+     * The puzzle: the one surface on this stage with a colour of its own.
+     *
+     * Deliberately a dark gold rather than a bright one. Everything the shading
+     * does to a surface is a *multiply* — [Tone] can darken a colour and can
+     * never brighten it — so a base colour is the brightest that surface will
+     * ever be, and a bright yellow here would be a bright yellow object beside
+     * the cards at every angle. Dark, it is nearly black in the corner of a day
+     * room and comes alight when the lamp is on it, which is the whole point of
+     * having it there.
+     */
+    val gold: Color,
     /** The playmat itself. Near enough to ink that the cards still own the screen. */
     val mat: Color,
     /**
@@ -133,6 +145,7 @@ internal data class StageLook(
         Surface.FLOOR -> floor
         Surface.GLASS -> glass
         Surface.SHADE -> shade
+        Surface.GOLD -> gold
     }
 
     companion object {
@@ -174,6 +187,10 @@ internal data class StageLook(
             floor = Color(0xFF0D0B09),
             glass = Color(0xFFDCE4EA),
             shade = Color(0xFFE4DAC6),
+            // Never drawn: nothing stands on the minimal stage. Present because
+            // a palette with a hole in it is a palette somebody fills in with a
+            // literal the first time a room needs one.
+            gold = Color(0xFF8C6B1F),
             mat = Color(0xFF0A0A0E),
             shadow = Color(0xFF04060A),
             sheenCore = 0.062f,
@@ -206,6 +223,11 @@ internal data class StageLook(
             floor = Color(0xFF0D0B09),
             glass = Color(0xFFDCE4EA),
             shade = Color(0xFFE4DAC6),
+            // The same gold as at night, and the difference is all light: a
+            // window is a broad, cool source with almost no highlight to give,
+            // so by day this reads as the shape of a thing in the corner rather
+            // than as metal.
+            gold = Color(0xFF8C6B1F),
             mat = Color(0xFF0C0C11),
             shadow = Color(0xFF07080E),
             sheenCore = 0.058f,
@@ -239,6 +261,11 @@ internal data class StageLook(
             floor = Color(0xFF0D0B09),
             glass = Color(0xFFDCE4EA),
             shade = Color(0xFFE4DAC6),
+            // The same gold. A room does not repaint its ornaments at dusk
+            // either, and the whole difference between the two is the lamp —
+            // which is a point source close by, so this is the one surface in
+            // the app that gets a real moving highlight rather than a wash.
+            gold = Color(0xFF8C6B1F),
             mat = Color(0xFF0C0C11),
             shadow = Color(0xFF05060B),
             sheenCore = 0.115f,
@@ -342,61 +369,124 @@ internal fun DrawScope.drawScene(
     ScenePainter
         .order(pieces, eyeAt) { box -> box.corners().maxOf { stage.project(it).depth } }
         .forEach { piece ->
-            val colour = look.colourOf(piece.surface)
-            val emission = piece.emission
+            drawSolid(
+                faces = piece.box.faces(),
+                stage = stage,
+                eyeAt = eyeAt,
+                eye = eye,
+                look = look,
+                colour = look.colourOf(piece.surface),
+                emission = piece.emission,
+                pool = pool,
+            )
+        }
+}
 
-            CardSolid.visible(piece.box.faces(), eyeAt)
-                .sortedBy { stage.project(it.centre).depth }
-                .forEach { face ->
-                    // Past the lens, the projection stops being a projection: it
-                    // clamps rather than dividing by zero, so the quad flies a
-                    // few hundred thousand pixels away instead of vanishing, and
-                    // a stripe of desk crosses the picture. Nothing in the room
-                    // reaches it at any legal pose today; `StagePlane.reaches`
-                    // carries the argument and `SceneryTest` carries the
-                    // measurement.
-                    if (face.corners.any { !stage.reaches(it) }) return@forEach
+/**
+ * The one thing in the room that is not a box, and not furniture.
+ *
+ * Drawn after everything standing on the desk rather than sorted among it,
+ * which is a claim about where it is rather than a shortcut: it stands out on
+ * the bare left of the desk with nothing between it and the camera at any legal
+ * pose, so there is no pair for `ScenePainter` to have an opinion about. That is
+ * also why [ScenePainter] never had to learn about a shape with no axes —
+ * `PuzzleTest.itStandsClearOfEverythingElseInTheRoom` is the measurement, and if
+ * a second prop ever arrives the two of them are what will need the sort, not
+ * this one and the wall.
+ *
+ * It casts no shadow, and that is deliberate rather than unfinished. Nothing
+ * else in this room casts one — the lamp does not, the desk does not — because
+ * shadows here belong to the cards, which are what the stage is about. One
+ * object throwing a shadow onto a desk where nothing else does would not read as
+ * better lighting; it would read as the one thing that had been given special
+ * treatment. `docs/AAA.md` #61d is where that gets revisited, with the lamp.
+ */
+internal fun DrawScope.drawProp(
+    faces: List<Face>,
+    stage: StagePlane,
+    eye: Vec3,
+    look: StageLook,
+) {
+    if (faces.isEmpty()) return
+    drawSolid(
+        faces = faces,
+        stage = stage,
+        eyeAt = stage.eyePoint(eye),
+        eye = eye,
+        look = look,
+        colour = look.colourOf(Surface.GOLD),
+        emission = null,
+        pool = null,
+    )
+}
 
-                    val path = Path()
-                    face.corners.forEachIndexed { index, corner ->
-                        val flat = stage.flatten(corner)
-                        if (index == 0) path.moveTo(flat.x, flat.y) else path.lineTo(flat.x, flat.y)
-                    }
-                    path.close()
+/**
+ * One solid, painted: back-face culled, depth-sorted among its own faces, and
+ * shaded a face at a time.
+ *
+ * Shared by the furniture and the prop deliberately. Every rule in here was
+ * learned the hard way once — which faces to skip near the lens, why an emissive
+ * surface is not shaded, why the light pool goes only on a face that is both
+ * level and at z = 0 — and a second copy of it is a second place for those to be
+ * re-learned.
+ */
+private fun DrawScope.drawSolid(
+    faces: List<Face>,
+    stage: StagePlane,
+    eyeAt: Vec3,
+    eye: Vec3,
+    look: StageLook,
+    colour: Color,
+    emission: Lit?,
+    pool: LightPool?,
+) {
+    CardSolid.visible(faces, eyeAt)
+        .sortedBy { stage.project(it.centre).depth }
+        .forEach { face ->
+            // Past the lens, the projection stops being a projection: it clamps
+            // rather than dividing by zero, so the quad flies a few hundred
+            // thousand pixels away instead of vanishing, and a stripe of desk
+            // crosses the picture. Nothing in the room reaches it at any legal
+            // pose today; `StagePlane.reaches` carries the argument and
+            // `SceneryTest` carries the measurement.
+            if (face.corners.any { !stage.reaches(it) }) return@forEach
 
-                    if (emission != null) {
-                        // A fixture is not shaded, and that is the physics
-                        // rather than a shortcut: how bright a lit lampshade is
-                        // does not depend on what is lighting the room it is in.
-                        // It is also the only way to draw one at all — `Tone`
-                        // can darken a colour and can never brighten it, so
-                        // radiance has to arrive as the base colour itself.
-                        drawPath(path, colour.shaded(emission))
-                    } else {
-                        drawPath(path, colour.shaded(StageRig.face(face, eye, look.lighting)))
-                    }
+            val path = Path()
+            face.corners.forEachIndexed { index, corner ->
+                val flat = stage.flatten(corner)
+                if (index == 0) path.moveTo(flat.x, flat.y) else path.lineTo(flat.x, flat.y)
+            }
+            path.close()
 
-                    // And the light the lamp throws on it — for a surface facing
-                    // straight up **and lying at z = 0**, which is the desk top
-                    // and nothing else.
-                    //
-                    // The plane matters as much as the normal. The pool is drawn
-                    // as a circle in the mat's own coordinates, which is the
-                    // right shape only because `StagePlane.flatten` is the
-                    // identity at z = 0; on the floor, thirteen hundred pixels
-                    // down, the path has been flattened and the gradient has not,
-                    // so the two would disagree about where the lamp is by more
-                    // than the pool is wide. The floor is also in the desk's
-                    // shadow, which is the physical version of the same answer.
-                    if (
-                        pool != null &&
-                        emission == null &&
-                        face.normal.z > 0.99f &&
-                        abs(face.centre.z) < 0.5f
-                    ) {
-                        drawPath(path, poolBrush(pool, colour))
-                    }
-                }
+            if (emission != null) {
+                // A fixture is not shaded, and that is the physics rather than a
+                // shortcut: how bright a lit lampshade is does not depend on what
+                // is lighting the room it is in. It is also the only way to draw
+                // one at all — `Tone` can darken a colour and can never brighten
+                // it, so radiance has to arrive as the base colour itself.
+                drawPath(path, colour.shaded(emission))
+            } else {
+                drawPath(path, colour.shaded(StageRig.face(face, eye, look.lighting)))
+            }
+
+            // And the light the lamp throws on it — for a surface facing straight
+            // up **and lying at z = 0**, which is the desk top and nothing else.
+            //
+            // The plane matters as much as the normal. The pool is drawn as a
+            // circle in the mat's own coordinates, which is the right shape only
+            // because `StagePlane.flatten` is the identity at z = 0; on the
+            // floor, thirteen hundred pixels down, the path has been flattened
+            // and the gradient has not, so the two would disagree about where the
+            // lamp is by more than the pool is wide. The floor is also in the
+            // desk's shadow, which is the physical version of the same answer.
+            if (
+                pool != null &&
+                emission == null &&
+                face.normal.z > 0.99f &&
+                abs(face.centre.z) < 0.5f
+            ) {
+                drawPath(path, poolBrush(pool, colour))
+            }
         }
 }
 
