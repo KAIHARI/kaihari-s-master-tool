@@ -116,12 +116,20 @@ Four gates. A change passes all four or it does not ship.
 |---|---|
 | It is visible | The before/after shots differ in the way step 3 predicted |
 | It is true | A `commonTest` names the claim; `:core:jvmTest` green |
-| It is affordable | `FrameProbe` (three taps on the life-point total) still inside budget; no new per-card per-frame allocation |
+| It is affordable | `tools/shoot.sh --budget=120` before and after — the **ratio**, not the milliseconds; and no new per-card per-frame allocation |
 | It is the house style | `docs/DESIGN.md` — and if the change argues with the handbook, the handbook gets the amendment *first*, in its own commit |
 
 The frame budget is the one that will bite. Sixty cards is the working number,
 and a per-card layer or a per-card blur is the class of change that has to be
 measured before it enters a signed build, not after.
+
+`--budget=N` deals a hand and times N rasters of the whole scene, twice, and
+reports the second — the first pass is JIT and layer allocation and showed up as
+a p95 nine times the median. It is **not** the tablet: it is software Skia on a
+container's CPU, and the absolute figure means little. The ratio means a great
+deal. The baseline at 1600×1000, six cards in the air, is *median 92ms, p95
+101ms*; a term that takes that to 180 will not be free on a tablet either.
+`FrameProbe` on the device is still the honest number and still the last word.
 
 ---
 

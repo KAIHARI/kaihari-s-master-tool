@@ -139,6 +139,8 @@ fun main(args: Array<String>) {
                 file.writeBytes(png.bytes)
                 println("[studio] ${file.name}  ${png.size / 1024} KiB")
             }
+
+            if (opts.budget > 0) measure(scene, clock, opts.budget)
         } finally {
             scene.close()
         }
@@ -147,6 +149,56 @@ fun main(args: Array<String>) {
     // Ktor's OkHttp engine and SQLDelight both hold non-daemon threads. Every
     // shot is on disk by the time this runs.
     kotlin.system.exitProcess(0)
+}
+
+// ---- what a frame costs -------------------------------------------------------------
+
+/**
+ * How long the stage takes to raster, with something moving on it.
+ *
+ * `FrameProbe` already answers this on the device, behind three taps on the
+ * life-point total, and it is the honest number because it is measured on the
+ * panel the app has to hit. But it needs a device and a person holding it,
+ * which puts the loop's affordability gate out of reach of the loop — so a
+ * change gets shipped and *then* found to be expensive.
+ *
+ * This is the cheap standing-in number. It is not the tablet: it is one
+ * software raster of the whole scene on a container's CPU, and the absolute
+ * milliseconds mean very little. What means a great deal is the **ratio** — a
+ * shading term that doubles this will not be free on a tablet either, and that
+ * is a fact worth having before the release rather than after it.
+ *
+ * Measured with a deal in flight rather than at rest, because a settled table
+ * steps nothing: `MatPilot`'s loop skips parked cards by design, so an idle
+ * stage measures the cost of drawing sixty things and none of the cost of
+ * moving them.
+ */
+private suspend fun measure(scene: ImageComposeScene, clock: FrameClock, frames: Int) {
+    // Twice, and the first one is thrown away. A cold JVM's first pass through
+    // the draw path is JIT and layer allocation, and it showed up as a p95 nine
+    // times the median — a number that says nothing about the renderer and
+    // would drown any change worth measuring.
+    repeat(2) { pass ->
+        Keys.press(scene, Key.N) // deal again, so there is something in the air
+        clock.run(WARM_FRAMES)
+        val samples = LongArray(frames) { clock.timed() }
+        if (pass == 0) return@repeat
+        report(samples, frames)
+    }
+}
+
+/** Long enough for the deal to be genuinely in flight when the stopwatch starts. */
+private const val WARM_FRAMES = 20
+
+private fun report(samples: LongArray, frames: Int) {
+    samples.sort()
+    fun ms(nanos: Long) = nanos / 1_000_000.0
+    println(
+        "[studio] frame cost over $frames frames: " +
+            "median ${"%.2f".format(ms(samples[frames / 2]))}ms  " +
+            "p95 ${"%.2f".format(ms(samples[(frames * 95 / 100).coerceAtMost(frames - 1)]))}ms  " +
+            "worst ${"%.2f".format(ms(samples.last()))}ms",
+    )
 }
 
 // ---- driving it ---------------------------------------------------------------------
@@ -173,6 +225,15 @@ private class FrameClock(private val scene: ImageComposeScene, private val pause
     }
 
     fun frame() = scene.render(nanos)
+
+    /** One frame, and how long it took to raster. No pause: this is a stopwatch. */
+    fun timed(): Long {
+        val started = System.nanoTime()
+        scene.render(nanos)
+        val took = System.nanoTime() - started
+        nanos += FRAME_NANOS
+        return took
+    }
 }
 
 /**
@@ -313,6 +374,7 @@ private class Options(
     val pauseMillis: Long,
     val keys: String,
     val seed: Long,
+    val budget: Int,
     val shots: List<Shot>,
 ) {
     companion object {
@@ -350,6 +412,7 @@ private class Options(
                 // different one. Two pictures of two different hands are not a
                 // before and an after.
                 seed = map["seed"]?.toLongOrNull() ?: 20260808L,
+                budget = int("budget", 0),
                 shots = names.map(::shotOf),
             )
         }
