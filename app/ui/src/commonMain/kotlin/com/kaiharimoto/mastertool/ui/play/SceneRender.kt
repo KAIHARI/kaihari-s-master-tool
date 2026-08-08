@@ -15,6 +15,7 @@ import com.kaiharimoto.mastertool.core.render.Tone
 import com.kaiharimoto.mastertool.core.render.LightPool
 import com.kaiharimoto.mastertool.core.scene.Scene
 import com.kaiharimoto.mastertool.core.scene.ScenePainter
+import com.kaiharimoto.mastertool.core.scene.SceneBox
 import com.kaiharimoto.mastertool.core.scene.ScenePiece
 import com.kaiharimoto.mastertool.core.scene.Surface
 import com.kaiharimoto.mastertool.core.scene.TimeOfDay
@@ -362,15 +363,26 @@ internal fun DrawScope.drawScene(
     eye: Vec3,
     look: StageLook,
     pool: LightPool? = null,
+    prop: Prop? = null,
 ) {
-    if (pieces.isEmpty()) return
+    if (pieces.isEmpty() && prop == null) return
     val eyeAt = stage.eyePoint(eye)
 
+    // The prop joins the sort as a *box* and is drawn from its own faces. That
+    // is the whole trick, and it is what lets `ScenePainter` stay ignorant of
+    // any shape that is not axis-aligned: what the painter's algorithm needs
+    // from an object is a separating axis, and a bounding box that shares no
+    // volume with anything supplies one exactly as well as the real solid would.
+    // `PuzzleTest.itStandsClearOfEverythingElseInTheRoom` is what makes that
+    // last clause true, and it is the precondition, not a nicety.
+    val standIn = prop?.let { ScenePiece(name = "prop", surface = it.surface, box = it.box) }
+    val all = if (standIn == null) pieces else pieces + standIn
+
     ScenePainter
-        .order(pieces, eyeAt) { box -> box.corners().maxOf { stage.project(it).depth } }
+        .order(all, eyeAt) { box -> box.corners().maxOf { stage.project(it).depth } }
         .forEach { piece ->
             drawSolid(
-                faces = piece.box.faces(),
+                faces = if (piece === standIn) prop.faces else piece.box.faces(),
                 stage = stage,
                 eyeAt = eyeAt,
                 eye = eye,
@@ -383,16 +395,21 @@ internal fun DrawScope.drawScene(
 }
 
 /**
- * The one thing in the room that is not a box, and not furniture.
+ * A solid in the room that is not furniture: ordered by a box, drawn from its
+ * own faces.
  *
- * Drawn after everything standing on the desk rather than sorted among it,
- * which is a claim about where it is rather than a shortcut: it stands out on
- * the bare left of the desk with nothing between it and the camera at any legal
- * pose, so there is no pair for `ScenePainter` to have an opinion about. That is
- * also why [ScenePainter] never had to learn about a shape with no axes —
- * `PuzzleTest.itStandsClearOfEverythingElseInTheRoom` is the measurement, and if
- * a second prop ever arrives the two of them are what will need the sort, not
- * this one and the wall.
+ * Two shapes for one object, and the split is the point. [box] is everything it
+ * could ever occupy — turned to its diagonal and lifted all the way — which is
+ * what the paint order needs and is the *only* thing it needs. [faces] is where
+ * it actually is this frame.
+ *
+ * Painting it last instead was the first version, on the reasoning that it
+ * stands alone on the bare left of the desk with nothing between it and the
+ * camera. That reasoning quietly assumed a camera in front of the table, and
+ * yaw on this stage is free: walk round past about a hundred and forty-five
+ * degrees and you are looking at the room from behind its own wall, where the
+ * header above the window is genuinely nearer to you than the desk is. Measured
+ * seated at 150°, the puzzle drew through it over a 269 by 280 pixel patch.
  *
  * It casts no shadow, and that is deliberate rather than unfinished. Nothing
  * else in this room casts one — the lamp does not, the desk does not — because
@@ -401,24 +418,11 @@ internal fun DrawScope.drawScene(
  * better lighting; it would read as the one thing that had been given special
  * treatment. `docs/AAA.md` #61d is where that gets revisited, with the lamp.
  */
-internal fun DrawScope.drawProp(
-    faces: List<Face>,
-    stage: StagePlane,
-    eye: Vec3,
-    look: StageLook,
-) {
-    if (faces.isEmpty()) return
-    drawSolid(
-        faces = faces,
-        stage = stage,
-        eyeAt = stage.eyePoint(eye),
-        eye = eye,
-        look = look,
-        colour = look.colourOf(Surface.GOLD),
-        emission = null,
-        pool = null,
-    )
-}
+internal class Prop(
+    val surface: Surface,
+    val box: SceneBox,
+    val faces: List<Face>,
+)
 
 /**
  * One solid, painted: back-face culled, depth-sorted among its own faces, and

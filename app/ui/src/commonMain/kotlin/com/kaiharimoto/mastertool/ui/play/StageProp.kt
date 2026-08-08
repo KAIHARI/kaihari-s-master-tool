@@ -11,8 +11,8 @@ import com.kaiharimoto.mastertool.core.motion.PosePhysics
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
-import com.kaiharimoto.mastertool.core.render.Face
 import com.kaiharimoto.mastertool.core.scene.Puzzle
+import com.kaiharimoto.mastertool.core.scene.Surface
 
 /**
  * The puzzle, and the only motion in this room.
@@ -140,9 +140,18 @@ internal class StageProp {
         return Puzzle.holds(layout, pose, plane, eye, at)
     }
 
-    /** Its faces, for the frame being drawn. */
-    fun solid(): List<Face> {
-        val layout = board ?: return emptyList()
-        return Puzzle.solid(layout, pose)
+    /**
+     * What to draw and how to order it, for the frame being drawn.
+     *
+     * Null when it is not standing on a board yet, which is the one frame
+     * between the first composition and the `SideEffect` that places it.
+     */
+    fun drawn(): Prop? {
+        val layout = board ?: return null
+        return Prop(
+            surface = Surface.GOLD,
+            box = Puzzle.reach(layout),
+            faces = Puzzle.solid(layout, pose),
+        )
     }
 }

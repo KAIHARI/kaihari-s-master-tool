@@ -509,6 +509,18 @@ it is the entire silhouette. A tumble is worth having and is worth what it
 costs: a posed box in core with its own eight corners, which nothing has yet
 needed.
 
+**A prop is two shapes: a box to sort it, and faces to draw it.** `ScenePainter`
+knows only about axis-aligned boxes, and it does not need to know more — what a
+painter's algorithm wants from an object is a separating axis, and a bounding box
+that shares no volume with anything supplies one exactly as well as the real
+solid would. So the puzzle joins the sort as `Puzzle.reach` — everything it could
+occupy, turned to its diagonal and lifted all the way — and is drawn from where
+it actually is this frame. Painting it last instead was the first version, and it
+assumed a camera in front of the table: yaw here is free, and walking round past
+about 145° puts you behind the room's own wall, where the header above the window
+really is nearer than the desk. Seated at 150° the puzzle drew straight through
+it over a 269×280 patch.
+
 **A prop is hit-tested where it appears, not where it stands.** A solid a hand
 tall does not draw on top of its own base, and the gap is the whole game: on a
 1600×856 board the middle of the puzzle's top face lands 102px from its foot at

@@ -720,13 +720,21 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
                     val pool = StageRig.pool(look.lighting, camera.eye)
                     drawScene(scenery.ground, camera.plane, camera.eye, look, pool)
                     drawFelt(layout, camera.plane, camera.eye, look, pool)
-                    drawScene(scenery.standing, camera.plane, camera.eye, look)
-                    // Last of the room, and reading `puzzle.pose` here rather
-                    // than in the composable body is what keeps a moving prop
-                    // from recomposing a stage that is holding sixty cards.
-                    if (Puzzle.standsIn(scene)) {
-                        drawProp(puzzle.solid(), camera.plane, camera.eye, look)
-                    }
+                    // The prop is sorted *among* the standing pieces rather than
+                    // painted after them, because yaw is free: walk round past
+                    // about a hundred and forty-five degrees and you are looking
+                    // at this room from behind its own wall, and the header above
+                    // the window is genuinely in front of the desk. Reading
+                    // `puzzle.pose` here rather than in the composable body is
+                    // what keeps a moving prop from recomposing a stage that is
+                    // holding sixty cards.
+                    drawScene(
+                        scenery.standing,
+                        camera.plane,
+                        camera.eye,
+                        look,
+                        prop = if (Puzzle.standsIn(scene)) puzzle.drawn() else null,
+                    )
                     drawMatControls(layout, play.field)
                     drawIndicator(play.carry?.intent, play.field, layout)
                 }

@@ -95,6 +95,58 @@ class PuzzleTest {
     }
 
     @Test
+    fun theRoomIsPaintedOverItFromEverySideItShouldBe() {
+        // The bug this replaced, and it is worth the length. The puzzle was
+        // painted *after* everything standing on the desk, on the reasoning that
+        // it stands alone on the bare left with nothing between it and the
+        // camera. That reasoning assumed a camera in front of the table, and yaw
+        // on this stage is free — walk round past about 145 degrees and you are
+        // looking at the room from behind its own wall, where the header above
+        // the window really is nearer to you than the desk is. Seated at 150 it
+        // drew through the header over a 269 by 280 pixel patch.
+        //
+        // So it goes into the sort, as its reach box. What this asserts is the
+        // consequence: for every piece the painter says is in front of it, the
+        // painter also puts that piece after it — which is `order`'s whole
+        // contract, and the only reason it holds for a shape with no axes is the
+        // box, and the only reason the box works is the test below.
+        val reach = Puzzle.reach(layout)
+        var checked = 0
+        listOf(TimeOfDay.DAY, TimeOfDay.NIGHT).forEach { time ->
+            val room = room(time)
+            val standIn = ScenePiece("prop", Surface.GOLD, reach)
+            StageSeat.entries.forEach { seat ->
+                var yaw = 0f
+                while (yaw < 360f) {
+                    val plane = CameraPose(yaw, seat.pose.pitchDegrees, seat.pose.distance)
+                        .planeFor(surfaceWidth, surfaceHeight)
+                    val eyeAt = plane.eyePoint(Vec3(0f, 0f, 1f))
+                    val order = ScenePainter.order(room.standing + standIn, eyeAt) { box ->
+                        box.corners().maxOf { plane.project(it).depth }
+                    }
+                    val mine = order.indexOfFirst { it === standIn }
+                    order.forEachIndexed { index, piece ->
+                        if (piece === standIn) return@forEachIndexed
+                        if (ScenePainter.behind(reach, piece.box, eyeAt)) {
+                            checked++
+                            assertTrue(
+                                index > mine,
+                                "${piece.name} is in front of the puzzle at " +
+                                    "${seat.label} yaw $yaw and is painted first",
+                            )
+                        }
+                    }
+                    yaw += 5f
+                }
+            }
+        }
+        // Against a test that passes because it compared nothing: at the yaws
+        // this is really about, the wall is in front and there is something to
+        // assert.
+        assertTrue(checked > 0, "nothing in the room was ever in front of it")
+    }
+
+    @Test
     fun itStandsClearOfEverythingElseInTheRoom() {
         // Including the lamp, which is the other thing out on the bare desk, and
         // the wall, which is what it would back into if it were pushed any
