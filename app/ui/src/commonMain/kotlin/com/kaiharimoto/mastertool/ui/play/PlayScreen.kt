@@ -580,6 +580,7 @@ fun PlayScreen(
             // below 33 and any driver that refuses. Null draws the mat that
             // shipped, which is the whole contract of the seam.
             val weave = remember { FeltWeave.compile() }
+            val wood = remember { WoodGrain.compile() }
 
             // Both clocks report here, so a gesture the frame loop decides acts
             // on the same card the press landed on.
@@ -756,7 +757,12 @@ fun PlayScreen(
                     // thousand microseconds — and it is null for every room with
                     // no lamp in it, which is every room but one.
                     val pool = StageRig.pool(look.lighting, camera.eye)
-                    drawScene(scenery.ground, camera.plane, camera.eye, look, pool)
+                    drawScene(
+                        scenery.ground, camera.plane, camera.eye, look, pool,
+                        wood = wood,
+                        grainOrigin = layout.field.left to layout.field.top,
+                        grainPitch = layout.cardWidth,
+                    )
                     drawFelt(layout, camera.plane, camera.eye, look, pool, weave)
                     // The prop is sorted *among* the standing pieces rather than
                     // painted after them, because yaw is free: walk round past

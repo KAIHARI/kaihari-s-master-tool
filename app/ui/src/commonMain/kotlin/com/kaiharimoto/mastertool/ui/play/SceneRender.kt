@@ -19,8 +19,10 @@ import com.kaiharimoto.mastertool.core.scene.SceneBox
 import com.kaiharimoto.mastertool.core.scene.ScenePiece
 import com.kaiharimoto.mastertool.core.scene.Surface
 import com.kaiharimoto.mastertool.core.scene.TimeOfDay
+import com.kaiharimoto.mastertool.ui.gpu.StageShader
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
 import kotlin.math.abs
 
 /**
@@ -364,6 +366,10 @@ internal fun DrawScope.drawScene(
     look: StageLook,
     pool: LightPool? = null,
     prop: Prop? = null,
+    /** The desk's timber, if this platform has a runtime shader. */
+    wood: StageShader? = null,
+    grainOrigin: Pair<Float, Float> = 0f to 0f,
+    grainPitch: Float = 1f,
 ) {
     if (pieces.isEmpty() && prop == null) return
     val eyeAt = stage.eyePoint(eye)
@@ -391,6 +397,9 @@ internal fun DrawScope.drawScene(
                 colour = look.colourOf(piece.surface),
                 emission = piece.emission,
                 pool = pool,
+                wood = wood,
+                grainOrigin = grainOrigin,
+                grainPitch = grainPitch,
             )
         }
 }
@@ -444,6 +453,9 @@ private fun DrawScope.drawSolid(
     colour: Color,
     emission: Lit?,
     pool: LightPool?,
+    wood: StageShader? = null,
+    grainOrigin: Pair<Float, Float> = 0f to 0f,
+    grainPitch: Float = 1f,
 ) {
     CardSolid.visible(faces, eyeAt)
         .sortedBy { stage.project(it.centre).depth }
@@ -491,6 +503,36 @@ private fun DrawScope.drawSolid(
                 abs(face.centre.z) < 0.5f
             ) {
                 drawPath(path, poolBrush(pool, colour))
+            }
+
+            // And the timber itself. Same test as the pool — facing straight up
+            // and lying at z = 0 is the desk top and nothing else — because the
+            // grain is drawn in the mat's own coordinates and `flatten` is the
+            // identity only there.
+            //
+            // After the pool rather than before it: the pool decides how much
+            // light this patch of desk is under, and the grain modulates
+            // whatever that came to. The other order would have the figure
+            // fixed and the light sliding over it, which is a photograph of a
+            // desk rather than a desk.
+            if (
+                wood != null &&
+                emission == null &&
+                face.normal.z > 0.99f &&
+                abs(face.centre.z) < 0.5f
+            ) {
+                drawPath(
+                    path,
+                    WoodGrain.brushFor(
+                        shader = wood,
+                        origin = grainOrigin,
+                        cardWidth = grainPitch,
+                        key = look.lighting.key.direction,
+                        eye = eye,
+                        density = stage.jacobian(face.centre.x, face.centre.y),
+                    ),
+                    blendMode = BlendMode.Overlay,
+                )
             }
         }
 }
