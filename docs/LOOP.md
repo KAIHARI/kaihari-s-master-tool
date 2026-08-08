@@ -231,3 +231,35 @@ uncorrelated** — a dealt hand is five consecutive ids, and that is precisely t
 input a cheap `id * prime` hash fails, fanning them out in an even ramp that
 reads as drawn. The second: `--budget` is noisy across runs when anything else
 is using the container, so measure it back-to-back or not at all.
+
+Shipped in v1.2.30.
+
+### Iteration 3 — the deck has been printing its own count backwards
+
+Not from the backlog. From zooming in on the deck pile — the most prominent
+physical object on the table — while looking for something else.
+
+`▤34` on the deck was drawn as its own mirror image, and so was `▤14` on the
+extra deck, and so is the count of any face-down stack on the mat. The one
+number a player checks most, reversed, in every shipped build.
+
+The cause was already solved five lines away. A card's map takes its rectangle
+to its four real flattened corners, and for a back those corners are wound the
+other way, so everything inside the card's box comes out mirrored —
+which is *correct* for the printed side and is why `CardFace` carries
+`if (!faceUp) scaleX = -1f` with a comment explaining it. The badge is a
+Compose child of the same box and never got the same line.
+
+Read live from `motion.pose.rotY` rather than from `seat.faceUp`, because a card
+*turning over* is the case that matters: the glyphs have to flip on the same
+frame the printed side does, which is the frame the card is edge-on and neither
+is visible.
+
+The compare said `0.0% of pixels moved, peak 215` — a few hundred pixels changed
+completely and nothing else changed at all, which for a 50×24 badge in a
+1600×1000 frame is exactly right. That number is worth remembering as the
+signature of a surgical fix: a high peak against a near-zero area.
+
+The lesson: **zoom in.** Three iterations found three defects and two of them
+were invisible at 1:1. A contact sheet says whether the room reads; a 4x crop of
+one object is what says whether the object does.

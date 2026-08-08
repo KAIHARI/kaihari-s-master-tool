@@ -1446,7 +1446,27 @@ private fun StagedCard(
             )
 
             seat.tally?.let { tally ->
-                Badge(text = tally, modifier = Modifier.align(Alignment.BottomEnd))
+                Badge(
+                    text = tally,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .graphicsLayer {
+                            // The same correction the back of the card makes for
+                            // itself in [CardFace], which the badge never got —
+                            // so the deck has been printing its own count
+                            // backwards, and the count of a face-down stack with
+                            // it. `▤34` came out as its own mirror image on the
+                            // one number a player checks most.
+                            //
+                            // Read live rather than from `seat.faceUp`, because a
+                            // card *turning over* is the case that matters: the
+                            // glyphs have to flip on the same frame the printed
+                            // side does, which is the frame the card passes
+                            // through edge-on and neither side is visible.
+                            val turn = motion.pose.rotY * (PI.toFloat() / 180f)
+                            if (cos(turn) <= 0f) scaleX = -1f
+                        },
+                )
             }
         }
     }
