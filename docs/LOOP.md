@@ -263,3 +263,26 @@ signature of a surgical fix: a high peak against a near-zero area.
 The lesson: **zoom in.** Three iterations found three defects and two of them
 were invisible at 1:1. A contact sheet says whether the room reads; a 4x crop of
 one object is what says whether the object does.
+
+---
+
+## 6. Seen, not yet done
+
+Things a look has already found, so the next iteration does not have to find
+them again. Not a backlog — `AAA.md` and `FIDELITY.md` are that — just a list of
+what the eye has caught and the hand has not reached.
+
+- **A 35-card deck is drawn as about seven thick slabs.** The pile's ruled side
+  is evenly banded at a spacing that does not follow the count, so a deck reads
+  as corrugated card rather than as a stack of thin ones. `CardSolid.pileDepth`
+  and whatever draws the side. This is the biggest object on the table and the
+  most obviously wrong thing left in the frame.
+- **A shadow on true black has nowhere to go.** The hand's cast shadows are
+  drawn and correct and invisible, because the felt they land on is `#0E0E12`.
+  `AAA.md` #18 (shadows are not black) and #65 (the felt has a weave) are one
+  item, not two: neither is worth doing without the other.
+- **Nothing on a card catches the light.** `Shading.of` puts a specular pool on
+  the stock and at these sizes it is not reaching the picture. Worth measuring
+  before assuming it needs to be stronger — the handbook is explicit that the
+  highlight *moves* rather than brightens (§7).
+- **The room is capped at 6px.** See iteration 1. Blocked on kai.
