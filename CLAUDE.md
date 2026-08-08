@@ -264,6 +264,15 @@ Four things about it are load-bearing, and three of them were bugs first:
   the one surface that could disagree with the shadows on it. Its highlight is
   the lamp's mirror image, so it slides toward you as you sit down.
 
+One thing was built and cut in the same release, and the reason is worth
+knowing before rebuilding it: a **patch of daylight on the desk**. It was drawn
+as a multiply, which is correct — but the rig already lights the whole desk from
+the window's direction, so the surface was at full brightness before the patch
+went on and every ring of it came out *darker* than the wood it landed on. A
+stain, not light. Fixing it means splitting the day key into sky and sun and
+shading the room with the sky alone, which changes the brightness of the entire
+day room. `docs/AAA.md` #61c has it.
+
 Next for the room: props on the desk, hit-tested against their flattened
 silhouettes before `claimForCamera` fires, and the Millennium Puzzle as an
 easter egg that answers a finger and never moves on its own.

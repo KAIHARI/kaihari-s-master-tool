@@ -697,7 +697,6 @@ fun PlayScreen(state: DeckBuilderState, prefs: DeckLayoutState, onBack: () -> Un
                     val pool = StageRig.pool(look.lighting, camera.eye)
                     drawScene(scenery.ground, camera.plane, camera.eye, look, pool)
                     drawFelt(layout, camera.plane, camera.eye, look, pool)
-                    drawDaylight(scenery, layout, look)
                     drawScene(scenery.standing, camera.plane, camera.eye, look)
                     drawMatControls(layout, play.field)
                     drawIndicator(play.carry?.intent, play.field, layout)

@@ -311,8 +311,8 @@ object StageRig {
     const val POOL_STOPS = 9
 
     /**
-     * The key's light on a flat plane: one shape, and every horizontal surface
-     * in the room is a consumer of it.
+     * The key's light on the table top: one shape, and both the wood and the
+     * felt lying on it are consumers of it.
      *
      * **Nothing here is a second lighting model**, and that is the whole point of
      * it living in this object. [LightPool.stops] is [lit] itself, evaluated on a
@@ -333,25 +333,29 @@ object StageRig {
     fun pool(
         lighting: StageLighting,
         eye: Vec3,
-        surfaceZ: Float = 0f,
         steps: Int = POOL_STOPS,
         floor: Float = POOL_FLOOR,
     ): LightPool? {
         val key = lighting.key
         val lamp = key.position ?: return null
-        val height = lamp.z - surfaceZ
+        val height = lamp.z
         if (height <= 0f) return null
 
-        val foot = Vec2(lamp.x, lamp.y)
         val reach = reachOf(key, height, floor)
-        val count = max(2, steps)
+        // A lamp too dim to reach [floor] anywhere, including directly beneath
+        // itself. There is no pool to draw, and the honest answer is the one
+        // that sends the caller back to the drawing it had before a lamp
+        // existed — rather than a gradient of radius zero, which paints its
+        // last stop over everything.
+        if (reach <= 0f) return null
 
+        val count = max(2, steps)
         return LightPool(
-            foot = foot,
+            foot = Vec2(lamp.x, lamp.y),
             radius = reach,
             stops = (0 until count).map { step ->
                 val radius = reach * step / (count - 1f)
-                lit(Rot3.FaceNormal, eye, lighting, at = Vec3(lamp.x + radius, lamp.y, surfaceZ))
+                lit(Rot3.FaceNormal, eye, lighting, at = Vec3(lamp.x + radius, lamp.y, 0f))
             },
         )
     }
@@ -366,6 +370,11 @@ object StageRig {
      * millionth of a pixel, which is a great deal more than a gradient needs.
      */
     private fun reachOf(key: Light, height: Float, floor: Float): Float {
+        // Everything below assumes the bracket straddles the answer. It cannot
+        // when the lamp is already under the floor at its own foot, which is
+        // where it is brightest.
+        if (key.intensity <= floor) return 0f
+
         val size = key.radius * key.radius
         // The key's own share at radius r: lambert times attenuation. Both fall,
         // so the product is monotonic and a bracket cannot miss.

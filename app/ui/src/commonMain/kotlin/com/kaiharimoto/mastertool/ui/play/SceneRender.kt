@@ -20,6 +20,7 @@ import com.kaiharimoto.mastertool.core.scene.Surface
 import com.kaiharimoto.mastertool.core.scene.TimeOfDay
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import kotlin.math.abs
 
 /**
  * The room: the furniture the mat is lying on, and what is behind it.
@@ -375,9 +376,24 @@ internal fun DrawScope.drawScene(
                         drawPath(path, colour.shaded(StageRig.face(face, eye, look.lighting)))
                     }
 
-                    // And the light the lamp throws on it, for a surface facing
-                    // straight up that the lamp can actually reach.
-                    if (pool != null && emission == null && face.normal.z > 0.99f) {
+                    // And the light the lamp throws on it — for a surface facing
+                    // straight up **and lying at z = 0**, which is the desk top
+                    // and nothing else.
+                    //
+                    // The plane matters as much as the normal. The pool is drawn
+                    // as a circle in the mat's own coordinates, which is the
+                    // right shape only because `StagePlane.flatten` is the
+                    // identity at z = 0; on the floor, thirteen hundred pixels
+                    // down, the path has been flattened and the gradient has not,
+                    // so the two would disagree about where the lamp is by more
+                    // than the pool is wide. The floor is also in the desk's
+                    // shadow, which is the physical version of the same answer.
+                    if (
+                        pool != null &&
+                        emission == null &&
+                        face.normal.z > 0.99f &&
+                        abs(face.centre.z) < 0.5f
+                    ) {
                         drawPath(path, poolBrush(pool, colour))
                     }
                 }

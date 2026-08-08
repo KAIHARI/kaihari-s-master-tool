@@ -252,7 +252,11 @@ data class StagePlane(
      * budget.
      */
     fun reaches(point: Vec3, clearance: Float = SAFE_DEPTH): Boolean =
-        project(point).depth < cameraDistance * clearance
+        // A plane with no surface behind it yet has a camera distance of zero,
+        // which would make this refuse every point on the stage. There is no
+        // lens to cross before there is a camera, and the first composition of
+        // the play screen builds exactly such a plane.
+        cameraDistance <= 0f || project(point).depth < cameraDistance * clearance
 
     /**
      * What the nearest corner grows to, which is what [BoardLayouter.solve] wants.

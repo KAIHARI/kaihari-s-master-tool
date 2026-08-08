@@ -318,10 +318,13 @@ class SceneryTest {
 
     @Test
     fun theLampIsAsHighAsTodaysShadowsSayItIs() {
-        // The solved height, and the guarantee that goes with it: the ray from
-        // the lamp to the middle of the table has exactly the shipped preset's
-        // horizontal-to-vertical ratio, so every night shadow keeps the length
-        // it ships with and only gains divergence.
+        // The solved height, and the guarantee that goes with it — which is
+        // about one point and not about every shadow on the board. The ray from
+        // the lamp to the *middle of the table* has exactly the shipped preset's
+        // horizontal-to-vertical ratio, so a card played in the centre throws
+        // the shadow it throws today. Away from the centre both the length and
+        // the direction change, which is the whole point of a lamp having a
+        // place; see `Scenery.lampHeight`.
         val shipped = StageLighting.DeskNight.key.direction.normalised()
         val wanted = kotlin.math.sqrt(shipped.x * shipped.x + shipped.y * shipped.y) / abs(shipped.z)
 

@@ -115,14 +115,27 @@ data class Light(
      * term — on the mat, the wood and the cards — and never on the floor under
      * everything, which is what keeps [StageLighting.NIGHT_FLOOR] a guarantee
      * rather than a hope.
+     *
+     * The height is measured from z = 0, which is the felt, the desk top and
+     * every horizontal surface this stage pools light on. It took a `surfaceZ`
+     * parameter for one draft and no caller could ever pass one — [StageRig.lit]
+     * has no such argument to forward — so a pool asked about a different plane
+     * would have normalised at one height and sampled at another. A parameter
+     * nothing can reach is worse than an absent one, because it promises.
      */
-    fun attenuation(at: Vec3?, surfaceZ: Float = 0f): Float {
+    fun attenuation(at: Vec3?): Float {
         val lamp = position ?: return 1f
         if (at == null) return 1f
-        val height = lamp.z - surfaceZ
+        val height = lamp.z
         val size = radius * radius
         val away = at - lamp
-        return ((size + height * height) / (size + (away dot away))).coerceAtMost(1f)
+        val span = size + (away dot away)
+        // A sizeless source and a surface point standing exactly on it: the
+        // ratio is 0/0, and a NaN is not light — it passes every clamp on the
+        // way to the screen and draws nothing. Anything that reaches the bulb
+        // saturates, so this does too.
+        if (span <= 0f) return 1f
+        return ((size + height * height) / span).coerceAtMost(1f)
     }
 
     /**
@@ -134,8 +147,13 @@ data class Light(
      */
     fun angularRadius(at: Vec3?): Float = when {
         radius <= 0f -> 0f
-        position != null && at != null -> radius / max(1f, (position - at).length)
-        distance > 0f -> radius / distance
+        // Clamped at one rather than merely guarded against a zero divisor. The
+        // small-angle approximation is only an angle while it is small, and a
+        // surface nearer the source than the source is wide would otherwise
+        // hand a penumbra term a number with no meaning behind it.
+        position != null && at != null ->
+            (radius / max(EPSILON, (position - at).length)).coerceAtMost(1f)
+        distance > 0f -> (radius / distance).coerceAtMost(1f)
         else -> 0f
     }
 
@@ -151,7 +169,10 @@ data class Light(
             aimedAt: Vec3,
             intensity: Float = 1f,
             warmth: Float = 0f,
-            ambient: Float = 0.72f,
+            // No default. The primary constructor has one, and two copies of a
+            // number are two numbers that can disagree; the one caller is
+            // carrying a rig's own ambient across and has it to hand anyway.
+            ambient: Float,
             radius: Float = 0f,
         ) = Light(
             direction = (aimedAt - position).normalised(),
@@ -161,6 +182,9 @@ data class Light(
             position = position,
             radius = radius,
         )
+
+        /** Small enough to be nothing, large enough to divide by. */
+        private const val EPSILON = 1e-4f
     }
 }
 

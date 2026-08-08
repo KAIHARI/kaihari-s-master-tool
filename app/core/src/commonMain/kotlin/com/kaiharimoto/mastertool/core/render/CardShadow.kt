@@ -139,7 +139,13 @@ object Shadows {
             corners = landed.corners,
             alpha = DARKEST / (1f + lift / FADE_OVER),
             spread = soft,
-            umbra = if (angle <= 0f) 0f else soft,
+            // The *unfloored* angle, deliberately. `soft` carries a hairline
+            // floor so that even a point source's edge has a pixel to be
+            // antialiased across — and that argument is about the outer feather
+            // only. Letting it set the inward half too would give a hard shadow
+            // a two-and-a-half pixel umbra it has not earned, and eat that much
+            // off the solid core of every card lying on the felt.
+            umbra = if (angle <= 0f) 0f else angle * landed.rays.average().toFloat(),
             // Squared, so it is gone rather than merely faint by the time a
             // card is properly in the air. A linear tail leaves a smudge under
             // a held card, which is precisely the reading the separation
@@ -171,6 +177,11 @@ object Shadows {
      * it would return null for every card on the board at once.
      */
     fun landOn(corners: List<Vec3>, light: Light, surfaceZ: Float = 0f): Landed? {
+        // Nothing to cast is not a shadow. Without this the loop below never
+        // runs, the parallel-light bail inside it never fires, and an empty
+        // `Landed` comes back for a caller to average into a NaN.
+        if (corners.isEmpty()) return null
+
         val landedAt = ArrayList<Vec3>(corners.size)
         val rays = ArrayList<Float>(corners.size)
 

@@ -9,7 +9,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
@@ -22,17 +21,13 @@ import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardMaterial
 import com.kaiharimoto.mastertool.core.render.CardSolid
-import com.kaiharimoto.mastertool.core.render.Light
-import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.LightPool
 import com.kaiharimoto.mastertool.core.render.Rot3
 import com.kaiharimoto.mastertool.core.render.Shading
 import com.kaiharimoto.mastertool.core.render.Shadows
 import com.kaiharimoto.mastertool.core.render.StageRig
 import com.kaiharimoto.mastertool.core.render.Tone
-import com.kaiharimoto.mastertool.core.scene.SceneModel
 import com.kaiharimoto.mastertool.core.scene.Scenery
-import com.kaiharimoto.mastertool.core.scene.Surface
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlin.math.abs
 import kotlin.math.max
@@ -623,9 +618,6 @@ private fun DrawScope.drawShuffleMark(slot: Slot, colour: Color) {
  */
 private const val FELT_ROUGHNESS = 0.36f
 
-/** Rings in the daylight patch. Five, for the same reason a shadow has five. */
-private const val PATCH_RINGS = 5
-
 /**
  * The felt, under a lamp that has a place.
  *
@@ -640,83 +632,3 @@ private fun feltPool(pool: LightPool, surface: Color): Brush = Brush.radialGradi
     center = Offset(pool.foot.x, pool.foot.y),
     radius = pool.radius,
 )
-
-/**
- * The patch of daylight the window throws on the desk.
- *
- * The aperture's own corners, slid along the key onto the plane at z = 0 by the
- * identical function that casts a card's shadow — a window's opening thrown onto
- * a desk *is* a card's outline thrown onto the felt, with different numbers, and
- * two copies of that arithmetic would be two places the light could be.
- *
- * ## Why it is a multiply and not an additive pass
- *
- * A patch of extra illumination on a diffuse surface is more light landing on an
- * albedo, which is precisely what [Tone.shade] computes. Composited additively
- * instead, one alpha would have to be right for both the wood and the felt at
- * once, and they are thirty levels apart — so it would be wrong on at least one
- * of them, and the seam would land exactly where the patch crosses the mat's
- * edge. Drawn twice with each surface's own colour, there is no seam and no
- * constant to be wrong.
- *
- * The outermost ring is the surface's *unpatched* colour exactly, so the patch
- * fades into the room rather than ending at a line.
- *
- * ## Why the edge is a gradient and not a blur
- *
- * The window is a wide source, so the further the patch is thrown the softer its
- * edge — hard at the sill, a hundred and sixty-eight pixels soft at the head.
- * That falls out of [Light.angularRadius] for free and it is the truest single
- * thing daylight does.
- */
-internal fun DrawScope.drawDaylight(
-    scenery: SceneModel,
-    layout: BoardLayout,
-    look: StageLook,
-) {
-    val pane = scenery.pieces.firstOrNull { it.surface == Surface.GLASS } ?: return
-    val sky = pane.emission ?: return
-    if (sky.amount < 0.5f) return
-
-    val key = look.lighting.key
-    // The face of the pane that is toward the room, which is the aperture the
-    // light comes through.
-    val aperture = pane.box.faces().firstOrNull { it.normal.y > 0.99f } ?: return
-    val landed = Shadows.landOn(aperture.corners, key) ?: return
-
-    val corners = landed.corners.map { Offset(it.x, it.y) }
-    val middle = corners.fold(Offset.Zero) { sum, corner -> sum + corner } / corners.size.toFloat()
-    val soft = key.angularRadius(null) * landed.rays.average().toFloat()
-
-    val mat = matSurface(layout)
-    val felt = Path().apply {
-        addRoundRect(
-            androidx.compose.ui.geometry.RoundRect(
-                left = mat.left,
-                top = mat.top,
-                right = mat.right,
-                bottom = mat.bottom,
-                cornerRadius = CornerRadius(layout.cardWidth * 0.16f),
-            ),
-        )
-    }
-
-    // Once on the wood and once on the felt, because the patch crosses the mat's
-    // edge and one surface's colour is not the other's.
-    listOf(look.table to null, look.mat to felt).forEach { (surface, clip) ->
-        val paint: DrawScope.() -> Unit = {
-            for (ring in PATCH_RINGS downTo 1) {
-                val share = ring / PATCH_RINGS.toFloat()
-                // The outermost ring is the ambient alone, which is the colour
-                // the surface already is — so there is nothing to see where the
-                // patch runs out.
-                val reached = key.ambient + (1f - key.ambient) * (1f - share) * key.intensity
-                drawPath(
-                    path = polygon(corners, middle, soft * (share - 0.5f) * 2f),
-                    color = surface.shaded(Lit(reached.coerceIn(0f, 1f), key.warmth)),
-                )
-            }
-        }
-        if (clip == null) paint() else clipPath(clip) { paint() }
-    }
-}

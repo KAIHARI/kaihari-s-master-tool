@@ -389,10 +389,20 @@ object Scenery {
      * already ships. The ratio of horizontal to vertical in
      * `StageLighting.DeskNight.key.direction` is 0.854, and that ratio *is* how
      * long a night shadow is per unit of height. So the lamp stands at whatever
-     * height makes the ray from it to the middle of the table have exactly that
-     * ratio: every shadow on the board keeps the length it ships with, to the
-     * last digit, and all that is new is that they now diverge from a point
-     * instead of running parallel.
+     * height makes the ray from it **to the middle of the table** have exactly
+     * that ratio.
+     *
+     * What that guarantees is one point, and the claim is worth stating no
+     * larger than it is: a card at the centre of the mat throws the shadow it
+     * throws today, in length and in direction. Everywhere else both change —
+     * the azimuth swings about fifteen degrees, and a card near the lamp throws
+     * a markedly shorter shadow than one across the table from it. That is not
+     * a cost of the anchoring, it *is* the feature: a lamp with a place throws
+     * shadows that point away from it, and a direction cannot. What the
+     * anchoring buys is that the middle of the board — where most of a game
+     * happens — is not suddenly lit from a different height than it shipped
+     * with, so the change reads as the room gaining a lamp rather than as
+     * somebody having moved the light.
      *
      * It comes out at 704 pixels — about 38cm above the desk, which is a desk
      * lamp. That the honest number and the shipped preset agree this well is the
