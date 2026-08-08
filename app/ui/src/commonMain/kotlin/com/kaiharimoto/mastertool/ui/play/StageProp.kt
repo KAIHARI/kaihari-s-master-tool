@@ -112,7 +112,8 @@ internal class StageProp {
         // Bouncy on the way up because a thing that is answering you should
         // overshoot; Calm on the way down because it is settling under its own
         // weight and nothing lands twice.
-        motion = PosePhysics.step(motion, target, if (rising) SpringSpec.Bouncy else SpringSpec.Calm, dt)
+        val spec = if (rising) SpringSpec.Bouncy else SpringSpec.Calm
+        motion = PosePhysics.step(motion, target, spec, dt)
         pose = motion.pose
 
         if (PosePhysics.settled(motion, target)) {
