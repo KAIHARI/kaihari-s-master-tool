@@ -48,15 +48,17 @@ Six steps. Every one of them, every time.
    the pictures. Name what is wrong in a sentence a person would say out loud —
    *"the cards look like stickers"*, not *"shadow term is under-weighted"*.
 
-2. **Pick one thing.** From `docs/FIDELITY.md` if it exists, then `docs/AAA.md`,
-   then whatever the look just showed — in that order, because the first two are
-   already argued for. One thing. An iteration that lands two changes cannot
-   tell you which one worked.
+2. **Pick one thing.** From `docs/PHOTOREAL.md`, then `docs/FIDELITY.md`, then
+   `docs/AAA.md`, then whatever the look just showed — in that order, because
+   each is argued for and the earlier ones supersede the later. One thing. An
+   iteration that lands two changes cannot tell you which one worked.
 
-   (`docs/FIDELITY.md` is the ranked technique backlog: a literature survey of
-   what a canvas-only renderer can do about light, shadow, material, optics and
-   surface, mapped onto the functions that already exist. Until it lands,
-   `AAA.md` is the list and it is a good one.)
+   `PHOTOREAL.md` is the staged plan to a photographic table, written after kai
+   moved the target to driving-simulator fidelity and after the shader seam
+   opened; it says which parts of `FIDELITY.md` it supersedes, and it is honest
+   about where the ceiling is. `FIDELITY.md` is the canvas-only backlog and is
+   still right about everything a shader does not touch. `AAA.md` is the
+   hundred-item menu and outranks neither on scope.
 
 3. **Say what will change.** Before writing code, write the line that will be
    true of the *picture* afterwards. If that line cannot be written, the item
@@ -86,11 +88,14 @@ Four of these come from `docs/DESIGN.md` and are restated because a long
 autonomous run will drift into all of them.
 
 - **No engine.** Ever. No 3D engine reaches KMP common code and every one of
-  them costs the desktop target. The renderer is arithmetic in `:core` reaching
-  the screen through one `graphicsLayer` and a canvas. A runtime shader is not
-  common code either: it is an `expect`/`actual` seam with a plain-draw
-  fallback, and it is a proposal with a cost, not a free assumption
-  (`AAA.md` #99).
+  them costs the desktop target. Geometry is arithmetic in `:core`, reaching the
+  screen through one `graphicsLayer` and a canvas.
+- **A shader colours; it never draws.** The seam is open (`AAA.md` #99 is done,
+  `DESIGN.md` §6 has the rules) and it does not relax the line above: nothing in
+  SkSL holds a scene, owns a transform or decides where anything is. And
+  `compileStageShader` returns null — Android below 33, a refusing driver — so
+  **every caller ships a drawing that works without one**. That fallback is not
+  a degraded mode to tolerate; `minSdk` is 26.
 - **Nothing idles.** No breathing cards, no drifting light, no ambience. Motion
   explains a change; it never announces one. This is the single rule a fidelity
   loop is most likely to break, because idle motion is the cheapest way to look
@@ -135,6 +140,14 @@ container's CPU, and the absolute figure means little. The ratio means a great
 deal. The baseline at 1600×1000, six cards in the air, is *median 92ms, p95
 101ms*; a term that takes that to 180 will not be free on a tablet either.
 `FrameProbe` on the device is still the honest number and still the last word.
+
+**And for shader work there is no honest local answer at all.** The studio has
+no GPU, so it runs every SkSL pixel on the CPU, and `ImageComposeScene` redraws
+the whole scene every frame where a device skips a surface entirely when nothing
+about it moved. Iteration 5's weave read +111ms for ~40 ALU over ~0.7Mpx; treat
+that as the studio's calibration constant, use the ratio only to catch
+order-of-magnitude mistakes, and get `FrameProbe` off the tablet before any
+per-pixel change enters a signed build.
 
 ---
 
