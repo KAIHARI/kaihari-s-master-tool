@@ -48,10 +48,15 @@ Six steps. Every one of them, every time.
    the pictures. Name what is wrong in a sentence a person would say out loud —
    *"the cards look like stickers"*, not *"shadow term is under-weighted"*.
 
-2. **Pick one thing.** From the ranked backlog in `docs/FIDELITY.md`, from
-   `docs/AAA.md`, or from what the look just showed — in that order of
-   preference, because the first two are already argued for. One thing. An
-   iteration that lands two changes cannot tell you which one worked.
+2. **Pick one thing.** From `docs/FIDELITY.md` if it exists, then `docs/AAA.md`,
+   then whatever the look just showed — in that order, because the first two are
+   already argued for. One thing. An iteration that lands two changes cannot
+   tell you which one worked.
+
+   (`docs/FIDELITY.md` is the ranked technique backlog: a literature survey of
+   what a canvas-only renderer can do about light, shadow, material, optics and
+   surface, mapped onto the functions that already exist. Until it lands,
+   `AAA.md` is the list and it is a good one.)
 
 3. **Say what will change.** Before writing code, write the line that will be
    true of the *picture* afterwards. If that line cannot be written, the item

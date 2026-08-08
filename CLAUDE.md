@@ -31,6 +31,30 @@ Do not develop it further; maintenance only if something in it is truly broken.
 
 ---
 
+## Seeing the play stage without a tablet
+
+`:studio` draws the real `PlayScreen` to a PNG headlessly — real theme, real
+dependencies, real card art, a frame clock advanced by hand, no window and no
+GPU. It is off by default and ships in nothing (`-Pmastertool.studio=true`), so
+CI builds exactly the three modules it always did.
+
+```
+tools/shoot.sh                                    # the default contact sheet
+tools/shoot.sh --shots=desk-night-seated --keys=n # one shot, after a fresh deal
+tools/shoot.sh --budget=120                       # what a frame costs
+tools/compare.py shots/before shots/after         # what actually moved
+```
+
+A shot's name is its parameters: `desk`/`minimal`, `day`/`night`,
+`overhead`/`table`/`seated`. Two runs are bit-identical — the deal is seeded —
+so every pixel that moves is a change in the code. It needs the Android SDK
+(`:ui` has an `androidTarget`); point `ANDROID_HOME` at one and the script
+writes `local.properties` itself.
+
+**`docs/LOOP.md` is the autonomous loop that uses it**: six steps an iteration
+takes, four gates a change passes, and a ledger of what has been tried. Read it
+before doing fidelity work on the play stage.
+
 ## Development Workflow — read this before changing anything
 
 1. **All logic goes in `:core` with commonTest tests.** Run locally:
