@@ -1,7 +1,64 @@
 # The fishbowl loop
 
-An autonomous loop pointed at one thing: making the play stage — the fishbowl —
-as convincingly physical as a canvas and some arithmetic can make it.
+An autonomous loop pointed at one thing: **making the room real.**
+
+Not the cards — the room. kai's brief, in his words: the fidelity of a driving
+simulator, and *"until the entire environment (desk, window with sun outside,
+millennium puzzle, floor, bed, bookshelf, etc) is completely photorealistic and
+done"*. The play stage is a place now, and the cards happen to be lying on the
+desk in it.
+
+## The mandate, and what it suspends
+
+kai has lifted the constraints that were holding the room back. Written down
+here rather than left implicit, because half of `DESIGN.md` was built around the
+opposite goal and a future iteration reading it cold would put them back.
+
+**Suspended, for the DESK scenes only:**
+- *True black, sharp white.* The room is lit by a window and a lamp and it is
+  allowed to look like it. Black was a stage; this is an interior.
+- *Colour is meaning or light, never decoration.* Wood is brown because wood is
+  brown.
+- *Nothing in a `SceneModel` may hold decoration.* A bookshelf is decoration.
+  That is now the point.
+- *No shaders.* Already lifted (`AAA.md` #99); see `DESIGN.md` §6.
+
+**Still standing, and not up for revision by an iteration:**
+- **`Scene.MINIMAL` does not change.** It is the handbook's stage, it is what
+  kai falls back to, and it is the control against which the room is judged.
+- **Nothing idles.** A room that breathes is a screensaver. Light moves when the
+  hour moves; nothing moves because time passed.
+- **The release contract.** versionCode only rises, migrations are never
+  renumbered, the APK is signed with the committed key. None of that is
+  ambition; it is what stops a device being bricked by an update.
+- **Every shader has a plain-draw fallback.** `minSdk` is 26.
+
+## The list, and what "done" would mean
+
+Named objects, because "photorealistic" is not a state anything can be tested
+against but *"the bookshelf exists and has books in it"* is.
+
+| | state |
+|---|---|
+| Desk top | **wood**, per-pixel: ring bands, fine grain, pores, latewood gloss |
+| Playmat | **gone.** The desk is the surface; zones are routed into it |
+| Zones | outlines. Should be inlay or engraving, and lit as such |
+| Window | exists, and **has never been visible** — see iteration 1 |
+| Sun outside | nothing. No sky, no ground, no light shaft |
+| Floor | a flat plane, barely in frame |
+| Wall | 6px of it visible at the table seat |
+| Millennium Puzzle | flat gold facets, no material |
+| Lamp | flat cream, no material, casts no shadow |
+| Bed | does not exist |
+| Bookshelf | does not exist |
+| Room shadows | nothing in the room casts one (`AAA.md` #61d) |
+
+Two of those — the window and the wall — are blocked on the same thing, and it
+is the first real obstacle: **the board fills the stage vertically**, so there
+are six pixels of wall at the table seat and no room for anything behind the
+desk. Every item in the second half of that table needs the camera to be able to
+*see the room*, which means re-framing. That is the next foundation and it is
+bigger than any single object on the list.
 
 This document is the loop. It says what one iteration is, what it may not do,
 and what it has already done. An agent picking this up cold should be able to

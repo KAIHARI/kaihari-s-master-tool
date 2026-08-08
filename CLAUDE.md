@@ -126,6 +126,20 @@ in-app updater installs from. Two hard-learned rules:
   (`MainActivity`): the trace persists and is shown, shareable, on next
   launch. Keep that screen theme-free — it must render when the theme cannot.
 
+## The play stage is now a room — kai's brief, and what it suspends
+
+The DESK scenes are pursuing **photorealism**: *"the entire environment (desk,
+window with sun outside, millennium puzzle, floor, bed, bookshelf, etc)
+completely photorealistic"*, at the fidelity of a driving simulator. The
+constraints below that argue with that goal are suspended **for those scenes**
+— true black, colour-only-as-meaning, and no decoration in the room. `docs/LOOP.md`
+§"The mandate" is the authority and carries the full list, including what is
+*not* suspended (`Scene.MINIMAL`, "nothing idles", the release contract, and a
+plain-draw fallback behind every shader).
+
+The playmat is gone: the desk is the playing surface and the zones are routed
+into the wood.
+
 ## Design Identity (locked in with the user)
 
 **`docs/DESIGN.md` is the handbook — read it before drawing anything.** It holds
