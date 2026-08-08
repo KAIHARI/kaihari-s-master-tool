@@ -264,6 +264,38 @@ The lesson: **zoom in.** Three iterations found three defects and two of them
 were invisible at 1:1. A contact sheet says whether the room reads; a 4x crop of
 one object is what says whether the object does.
 
+### Iteration 4 — a penumbra the same width on all four sides
+
+`docs/FIDELITY.md` landed between iterations, and F3 is the first thing on it.
+The line: *a card's shadow stops being fatter above and below than it is at the
+sides.*
+
+`StageRender.polygon` grew a shape by pushing every corner **away from the
+shape's centre**, which is not an offset. On a 59:86 card the corners sit 52.1
+half-units out while the long edges sit at 43 and the short at 29.5, so a growth
+of `w` moved the long edges by `0.825w` and the short ones by `0.566w` — every
+shadow on the table 1.46 times wider top and bottom than at its sides, for no
+physical reason at all. A disc light throws the same penumbra on every edge of a
+rectangle. The same line took the half-*diagonal* as its inset guard, so the
+umbra was allowed to eat one and a half times the half-width it was protecting.
+
+`core/render/Outset.kt` does it the textbook way: push each *edge* out along its
+own normal and intersect the neighbours. No angle formula to get the wrong way
+round — and the bisector form is `w / sin(θ/2)`, which the survey wrote with
+`cos`, which is exactly the kind of thing this avoids by not needing it. The
+guard now measures the distance to the nearest **edge**.
+
+Four gates. Visible: 0.7% of pixels moved and the amplified difference is
+concentric penumbra rings and the two pile shadows, with nothing on any card
+face. True: the test asserts each of a card's four edges moves out by exactly
+`w`, that no inset up to 80px ever folds the shape, and that a quad seen almost
+edge-on — which every card passes through twice per flip — cannot grow a
+whisker. Affordable: 53.6ms against 52.8ms back-to-back, which is noise.
+
+Learned: `--budget` measured while Gradle is running reports 117ms median and a
+424ms p95 against a true 53ms. The note in §4 about measuring back-to-back is
+not a nicety; the number is worthless otherwise.
+
 ---
 
 ## 6. Seen, not yet done

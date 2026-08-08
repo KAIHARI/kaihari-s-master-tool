@@ -21,6 +21,7 @@ import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardMaterial
 import com.kaiharimoto.mastertool.core.render.CardSolid
+import com.kaiharimoto.mastertool.core.render.Outset
 import com.kaiharimoto.mastertool.core.render.LightPool
 import com.kaiharimoto.mastertool.core.render.Rot3
 import com.kaiharimoto.mastertool.core.render.Shading
@@ -254,8 +255,7 @@ internal fun DrawScope.drawCardShadow(
         ?: return
     if (shadow.alpha <= 0.01f) return
 
-    val corners = shadow.corners.map { Offset(it.x, it.y) }
-    val middle = corners.fold(Offset.Zero) { sum, c -> sum + c } / corners.size.toFloat()
+    val flat = shadow.corners.map { Vec2(it.x, it.y) }
 
     // A hard shadow does not need five copies to look hard, and most of the
     // shadows on this table are hard — everything resting on the felt. The
@@ -277,14 +277,17 @@ internal fun DrawScope.drawCardShadow(
     // One sign buys the right shape. `umbra` is zero for a light with no stated
     // size, which is every light the minimal stage has, so those shadows come
     // out as the pixels they always were.
-    val half = corners.minOf { (it - middle).getDistance() }
-    val inset = min(shadow.umbra, half * 0.9f)
+    // Measured against the nearest *edge*, which is what an inset has to clear.
+    // It used to be measured against the nearest corner — on a card that is the
+    // half-diagonal, 52.1 where the short half-axis is 29.5, so the guard was
+    // letting the umbra eat one and a half times the width it was protecting.
+    val inset = min(shadow.umbra, Outset.inradius(flat) * 0.9f)
 
     // Outermost first, so the overlaps build toward the core.
     for (ring in rings downTo 1) {
         val grow = -inset + (inset + shadow.spread) * ring / rings
         drawPath(
-            path = polygon(corners, middle, grow),
+            path = pathOf(Outset.of(flat, grow)),
             color = look.shadow.copy(alpha = step),
         )
     }
@@ -295,23 +298,26 @@ internal fun DrawScope.drawCardShadow(
     if (shadow.contact > 0.02f) {
         val footprint = CardSolid
             .face(pose.copy(position = Vec3(pose.position.x, pose.position.y, 0f)), width, height)
-            .map { Offset(it.x, it.y) }
-        val centre = footprint.fold(Offset.Zero) { sum, c -> sum + c } / footprint.size.toFloat()
+            .map { Vec2(it.x, it.y) }
         drawPath(
-            path = polygon(footprint, centre, cardHeight * 0.012f),
+            path = pathOf(Outset.of(footprint, cardHeight * 0.012f)),
             color = look.shadow.copy(alpha = 0.5f * shadow.contact),
         )
     }
 }
 
-/** The same shape, pushed out from its own centre by [grow] pixels. */
-private fun polygon(corners: List<Offset>, centre: Offset, grow: Float): Path {
+/**
+ * A closed path through [corners].
+ *
+ * All this does now is walk the points. Growing a shape used to happen here, by
+ * pushing every corner away from the shape's centre — which is not an offset,
+ * and gave every card a penumbra half again as wide above and below as at its
+ * sides. That arithmetic is `Outset` in core now, where it is tested.
+ */
+private fun pathOf(corners: List<Vec2>): Path {
     val path = Path()
     corners.forEachIndexed { index, corner ->
-        val out = corner - centre
-        val distance = out.getDistance()
-        val point = if (distance < 0.01f) corner else corner + out / distance * grow
-        if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
+        if (index == 0) path.moveTo(corner.x, corner.y) else path.lineTo(corner.x, corner.y)
     }
     path.close()
     return path
