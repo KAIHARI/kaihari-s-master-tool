@@ -70,7 +70,32 @@ not fine for anything that stacks.
 Two shots is usually enough — the narrowest and the widest — because almost
 every layout failure is monotonic in width.
 
-## 4. Known, not yet fixed
+## 4. The bars, swept
+
+Three had the same defect — a `Row`, a `weight(1f)` spacer, and more content
+than a phone is wide — and all three rendered perfectly while hiding controls:
+
+| | controls lost below its threshold | fits at |
+|---|---|---|
+| Deck builder header | Save, Undo, Redo, search, stats, odds, Table, Play, Library, menu | 1400dp |
+| Play stage bar | phase, turn, Draw, Shuffle, Undo, Redo, New hand | 1180dp |
+| Duel table bar | Draw, Shuffle, Undo, Redo, New hand | 1150dp |
+
+`components/OverflowBar.kt` is the fix as a component, so a fourth bar inherits
+it. Its `Gap()` is the important part: calling `Modifier.weight` by hand throws
+the moment the bar is narrow enough to scroll, which is the only case anyone was
+trying to fix.
+
+**Still hand-rolled:** the builder header and the play bar predate the component
+and carry their own copies of it. They work and are shipped; converting them is
+tidy-up, and worth doing before a fourth bar copies the wrong one.
+
+Four other files hold a weighted spacer — `CardInspector`, `DeckLibraryScreen`,
+`SearchPane`, `DeckPanes`. Each has three to six controls rather than fifteen,
+so none is likely to overflow, and **none has been shot at phone metrics.** They
+are the next sweep, not a clean bill of health.
+
+## 5. Known, not yet fixed
 
 Written down rather than fixed because each is a judgement call kai should have
 a say in, and two of them trade against each other.
