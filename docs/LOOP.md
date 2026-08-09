@@ -52,6 +52,7 @@ against but *"the bookshelf exists and has books in it"* is.
 | Bed | does not exist |
 | Bookshelf | does not exist |
 | Room shadows | nothing in the room casts one (`AAA.md` #61d) |
+| Night | **the room falls away from the lamp**; the table does not |
 
 That obstacle is gone. It was the first real one — **the board filled the stage
 vertically**, so there were six pixels of wall at the table seat and no room for
@@ -510,6 +511,48 @@ asked.
 
 Frame cost 346ms to 356ms back to back. Both shipped in v1.2.36.
 
+### Iteration 9 — night stops being day with the lights down
+
+The line: *at night the wall goes dark away from the lamp, so the only reason
+anything above the desk is lit is the lamp standing on it.*
+
+The two desk rooms differed by an ambient of 0.76 against 0.55 and sRGB flattens
+that to nine levels — the wall came back **67 by day and 68 at night**. Every
+cue that says night lived in the one term nothing was allowed to touch, because
+`NIGHT_FLOOR` protects `Tone.veil`'s approximation on card art.
+
+`StageRig.room` is the seam that lets both be true. The table keeps `face` and
+keeps the floor; the room gets `Light.roomReach` — the ambient as what it
+physically is, which is bounce, off a lamp, from over there. Three things about
+it were each a wrong first attempt:
+
+- **Dimming the ambient alone left the far wall at half its daylight
+  brightness.** The rim was supplying a quarter of the light on a vertical
+  surface, undimmed, from a lamp that does not exist after dark. Ambient, fill
+  and rim are all *the room*; only the key's beam is the lamp.
+- **A square root, not the attenuation.** Scattered light falls off far more
+  gently than the beam it came from. Falling like the beam gives a wall that is
+  black a card's width from the lamp.
+- **And a face needs more than one answer.** `room` shades a face at its centre
+  and the wall is fifteen hundred pixels wide, so the whole correct calculation
+  came out as one flat grey stepping to another at a seam — the same defect one
+  level up, and the shot after the first two fixes was almost unchanged.
+  `StageRig.wash` samples along whichever of a quad's two axes the light runs
+  along; the renderer draws it as a gradient, exactly as it already draws
+  `LightPool` on the mat. Null under two levels of 255, so daylight allocates no
+  brush.
+
+The wall now runs 52 beside the lamp to 34 at the far end, against 67 by day.
+Day and minimal shots are bit-identical, which is the mandate. 371ms against
+379ms back to back.
+
+Two tests were wrong before the code was. *"Night is dimmer than day
+everywhere"* is false — a bulb a hand's width from a wall is the brightest thing
+that ever happens to that wall, and the claim that holds is about the far end.
+And *"a glazing bar is too small for a gradient"* is false twice over: a bar is
+eight pixels thick and a hundred and seventy long, and a patch forty pixels tall
+varies by more than the threshold on its other axis.
+
 ---
 
 ## 6. Seen, not yet done
@@ -531,12 +574,6 @@ what the eye has caught and the hand has not reached.
   the stock and at these sizes it is not reaching the picture. Worth measuring
   before assuming it needs to be stronger — the handbook is explicit that the
   highlight *moves* rather than brightens (§7).
-- **Night is as bright as day above the desk.** The two rooms differ by an
-  ambient of 0.76 against 0.55, and sRGB flattens that to nine levels of 255 —
-  the wall renders 67 by day and 68 at night. `NIGHT_FLOOR` cannot fall, because
-  `Tone.veil` needs it for card art, but a wall is not card art and the room has
-  no equivalent of the mat's `falloff`. This is the single biggest thing wrong
-  with the night room now that there is a room to be wrong about.
 - **The lamp and the puzzle are flat fills.** They are the only two objects in
   the frame with no material at all, and the frame around the window now makes
   that obvious by contrast.
