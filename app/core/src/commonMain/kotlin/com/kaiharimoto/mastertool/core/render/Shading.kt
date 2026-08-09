@@ -6,6 +6,7 @@ import com.kaiharimoto.mastertool.core.motion.Vec3
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
  * A light on the stage.
@@ -139,6 +140,45 @@ data class Light(
     }
 
     /**
+     * How much of the *room's own* light reaches [at]: the share of the ambient
+     * a surface this far from the lamp still gets.
+     *
+     * The one place anything is allowed to touch [ambient], and it is allowed
+     * because of what ambient physically is. Ambient is bounce — light that has
+     * come off the walls and the ceiling and arrived from every direction at
+     * once — and in a room with one lamp on a desk, every photon of that bounce
+     * started at the lamp. So it cannot be the same everywhere; the far corner
+     * of the room is dim for exactly the reason the far corner of the desk is.
+     *
+     * A **square root** of the attenuation, not the attenuation. Bounce has been
+     * scattered before it arrives, so it falls off far more gently than the
+     * direct beam — halving it with distance the way the beam halves would give
+     * a wall that is black a card's width from the lamp, which is a cave rather
+     * than a bedroom.
+     *
+     * It runs between [ROOM_NEAR] and [ROOM_FAR] rather than between one and
+     * zero, and both ends carry an argument. The near end is below one because
+     * a room lit by a desk lamp has *less* bounce in it than the same room lit
+     * by a window, everywhere, including right beside the lamp — a window is
+     * most of a wall and a lamp is a fist. Without that the wall behind the
+     * desk came back 68 at night against 67 by day and only the far corner
+     * moved. The far end is above zero because a real room is never lightless,
+     * and because losing the wall entirely puts back the void that
+     * `Scenery.ROOM_ABOVE` was spent on removing.
+     *
+     * Both are safe next to [StageLighting.NIGHT_FLOOR] rather than a way
+     * around it: [StageRig.room] is the only caller and is deliberately not the
+     * one that shades cards.
+     *
+     * One for a lamp with no place, to the bit, which is what keeps every
+     * daylit and minimal surface in the app exactly as it was.
+     */
+    fun roomReach(at: Vec3?): Float {
+        if (position == null || at == null) return 1f
+        return ROOM_FAR + (ROOM_NEAR - ROOM_FAR) * sqrt(attenuation(at))
+    }
+
+    /**
      * How wide the source looks from [at], in radians.
      *
      * The one number a penumbra depends on. A placed lamp measures it against
@@ -158,6 +198,19 @@ data class Light(
     }
 
     companion object {
+        /**
+         * How much of the rig's ambient a room lit by a placed lamp has: beside
+         * the lamp, and at the far wall.
+         *
+         * Measured on the wall behind the desk, whose stock renders 67 under
+         * daylight. [ROOM_NEAR] takes the end of it above the lamp to 34 and
+         * [ROOM_FAR] takes the far end to 18, against a stage of 6 — dark
+         * enough to be night, light enough that the window frame at 27 still
+         * stands out of the wall it is set in.
+         */
+        const val ROOM_NEAR = 0.38f
+        const val ROOM_FAR = 0.14f
+
         /**
          * A lamp that is an object: the direction follows from where it stands.
          *

@@ -247,6 +247,140 @@ object StageRig {
         lighting: StageLighting = StageLighting.Minimal,
     ): Lit = lit(face.normal, eye, lighting, at = face.centre)
 
+    /**
+     * One face of the **room**: the same three lamps, with the ambient falling
+     * off from a lamp that has a place.
+     *
+     * ## Why the room gets its own answer
+     *
+     * Because night was not dark. The two desk presets differ by an ambient of
+     * 0.76 against 0.55, and sRGB flattens that to nine levels of 255: the wall
+     * behind the desk rendered 67 by day and 68 at night, so a room lit by one
+     * lamp came out the same grey as a room lit by a window. Everything that
+     * ought to say *night* — the corner falling away, the lamp being the reason
+     * anything is lit — was in a term nothing was allowed to touch.
+     *
+     * ## And why it is not simply a lower ambient
+     *
+     * `StageLighting.NIGHT_FLOOR` is a floor for a reason that has not changed:
+     * a card's own art is a picture this renderer cannot read, so it is shaded
+     * by one black overlay at one opacity, and [Tone.veil]'s error grows sharply
+     * as the light falls. Lowering the rig's ambient would darken the room *and*
+     * make every card face wrong.
+     *
+     * So the two part company here, and this is the seam. The **table** —
+     * cards, piles, the desk top under the pool — keeps [face] and keeps the
+     * floor. The **room** gets [Light.roomReach], which is what the ambient
+     * would be if it were what it physically is: bounce, off a lamp, from over
+     * there. `DeskNight`'s KDoc has said for two releases that the darkness is
+     * bought outside the cards; this is where it is bought.
+     *
+     * Identical to [face] to the bit for any rig whose key has no place, which
+     * is daylight, the minimal stage and `GoldenStageTest`.
+     */
+    fun room(
+        face: Face,
+        eye: Vec3 = Vec3.Toward,
+        lighting: StageLighting = StageLighting.Minimal,
+    ): Lit = roomAt(face.normal, eye, lighting, face.centre)
+
+    /**
+     * [room], asked about one point rather than about a whole face.
+     *
+     * **Everything that is the room falls away; only the lamp stays.** The
+     * ambient is bounce, the fill is the room throwing light back off itself,
+     * and the rim is the light off whoever is sitting at the table — in a room
+     * with one lamp on a desk, all three of those come from the lamp and all
+     * three are dim in the far corner. The key's own beam is the exception,
+     * because it *is* the lamp; it already carries `Light.attenuation` and is
+     * left alone here.
+     *
+     * Dimming only the ambient was the first version and it left the far wall
+     * at half its daylight brightness — the rim alone was supplying a quarter of
+     * the light on a vertical surface, undimmed, from a lamp that does not exist
+     * after dark.
+     */
+    fun roomAt(normal: Vec3, eye: Vec3, lighting: StageLighting, at: Vec3): Lit {
+        val reach = lighting.key.roomReach(at)
+        if (reach >= 1f) return lit(normal, eye, lighting, at)
+        val dimmed = lighting.copy(
+            key = lighting.key.copy(ambient = lighting.key.ambient * reach),
+            bounce = lighting.bounce.copy(intensity = lighting.bounce.intensity * reach),
+            rim = lighting.rim.copy(intensity = lighting.rim.intensity * reach),
+        )
+        return lit(normal, eye, dimmed, at)
+    }
+
+    /**
+     * How the light varies **across** one face of the room, as a run of samples
+     * along the axis it varies most along.
+     *
+     * ## Why a face needs more than one answer
+     *
+     * Because the room is four big boxes and [room] shades each of them once,
+     * at its centre. The wall behind the desk is fifteen hundred pixels wide;
+     * giving all of it the brightness of its own middle is a wall that steps
+     * from one flat grey to another at a seam, which is not a room falling away
+     * — it is the same defect [room] was written to fix, moved one level up.
+     * The arithmetic was right and invisible.
+     *
+     * ## The axis is measured, not assumed
+     *
+     * A quad has two of them, and which one the light runs along depends on
+     * where the lamp is standing: across the wall for a lamp beside it, up the
+     * wall for a lamp below it. So both are tried — the light at the middle of
+     * each of the four edges — and the pair that disagree more wins. Sampling a
+     * grid instead would be more general and would need a mesh; every surface
+     * in this room is flat and lit by one lamp, so the variation across it is
+     * monotone and a line through it is the whole story.
+     *
+     * ## Null is the common case and is the point
+     *
+     * Daylight has no placed lamp, so every sample comes back identical and
+     * this returns null — the caller keeps its solid fill, allocates no brush,
+     * and every daylit and minimal surface in the app stays exactly as it was.
+     * The same happens for a small face at night. What is left is the handful
+     * of large surfaces where a gradient is the difference between a room and a
+     * backdrop.
+     *
+     * @param samples how many stops to return, at least two.
+     */
+    fun wash(
+        face: Face,
+        eye: Vec3,
+        lighting: StageLighting,
+        samples: Int = 4,
+    ): FaceWash? {
+        if (face.corners.size < 4 || lighting.key.position == null) return null
+        val stops = samples.coerceAtLeast(2)
+
+        fun midpoint(a: Int, b: Int) = (face.corners[a] + face.corners[b]) * 0.5f
+        fun amountAt(at: Vec3) = roomAt(face.normal, eye, lighting, at).amount
+
+        val across = midpoint(0, 1) to midpoint(2, 3)
+        val along = midpoint(1, 2) to midpoint(3, 0)
+        val acrossSpread = abs(amountAt(across.first) - amountAt(across.second))
+        val alongSpread = abs(amountAt(along.first) - amountAt(along.second))
+        val (from, to) = if (acrossSpread >= alongSpread) across else along
+        if (max(acrossSpread, alongSpread) < WASH_FLOOR) return null
+
+        return FaceWash(
+            from = from,
+            to = to,
+            stops = (0 until stops).map { step ->
+                roomAt(face.normal, eye, lighting, from + (to - from) * (step / (stops - 1f)))
+            },
+        )
+    }
+
+    /**
+     * The smallest difference across a face worth drawing as a gradient.
+     *
+     * Two levels of 255 in the diffuse, which is under the banding threshold of
+     * any surface in this room and well under the cost of a brush.
+     */
+    const val WASH_FLOOR = 0.008f
+
     // ---- what a placed lamp does to a flat surface --------------------------------
 
     /**
@@ -406,3 +540,19 @@ object StageRig {
  * a wash over something it does not know the colour of.
  */
 data class LightPool(val foot: Vec2, val radius: Float, val stops: List<Lit>)
+
+/**
+ * How the light runs across one face of the room, as a gradient can draw it.
+ *
+ * [from] and [to] are points on the face itself, in the mat's own coordinates,
+ * so the renderer flattens them exactly as it flattens the corners it is filling
+ * between — the gradient turns with the room and needs no screen-space
+ * assumption of its own. [stops] are real [Lit] values in equal steps between
+ * them, so a caller multiplies its own surface colour by each and never
+ * composites a wash over a colour it does not know.
+ *
+ * The same shape as [LightPool] and for the same reason: the arithmetic is exact
+ * at every stop and only the interpolation between two correct colours is an
+ * approximation.
+ */
+data class FaceWash(val from: Vec3, val to: Vec3, val stops: List<Lit>)

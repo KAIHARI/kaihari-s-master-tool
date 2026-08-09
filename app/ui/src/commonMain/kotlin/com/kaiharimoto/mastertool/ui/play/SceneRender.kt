@@ -8,6 +8,7 @@ import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.Face
+import com.kaiharimoto.mastertool.core.render.FaceWash
 import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.StageLighting
 import com.kaiharimoto.mastertool.core.render.StageRig
@@ -533,8 +534,20 @@ private fun DrawScope.drawSolid(
                 // one at all — `Tone` can darken a colour and can never brighten
                 // it, so radiance has to arrive as the base colour itself.
                 drawPath(path, colour.shaded(emission))
-            } else {
+            } else if (surface == Surface.TABLE) {
+                // The desk keeps the ordinary rig, because the pool below is
+                // already the lamp's answer for this surface. Handing it the
+                // room's falloff as well would darken the wood twice for the
+                // same lamp, and the seam between the two would land exactly
+                // where the pool's edge is.
                 drawPath(path, colour.shaded(StageRig.face(face, eye, look.lighting)))
+            } else {
+                val wash = StageRig.wash(face, eye, look.lighting)
+                if (wash == null) {
+                    drawPath(path, colour.shaded(StageRig.room(face, eye, look.lighting)))
+                } else {
+                    drawPath(path, washBrush(wash, stage, colour))
+                }
             }
 
             // And the light the lamp throws on it — for a surface facing straight
@@ -586,6 +599,31 @@ private fun DrawScope.drawSolid(
                 )
             }
         }
+}
+
+/**
+ * The room's own light across one face, as a gradient.
+ *
+ * The counterpart of [poolBrush] for a surface that is not the table, and the
+ * same bargain: every stop is the surface's own colour under a real `Lit`, so
+ * nothing composites a wash over a colour it does not know, and only the
+ * interpolation between two correct colours is an approximation.
+ *
+ * Both ends are flattened rather than projected, because `flatten` is what the
+ * path being filled was built with — a gradient aimed at the projected point
+ * and a polygon drawn at the flattened one would slide apart the moment the
+ * face left z = 0, which for the wall is always.
+ */
+private fun washBrush(wash: FaceWash, stage: StagePlane, surface: Color): Brush {
+    val from = stage.flatten(wash.from)
+    val to = stage.flatten(wash.to)
+    return Brush.linearGradient(
+        colorStops = wash.stops.mapIndexed { index, lit ->
+            (index / (wash.stops.size - 1f)) to surface.shaded(lit)
+        }.toTypedArray(),
+        start = Offset(from.x, from.y),
+        end = Offset(to.x, to.y),
+    )
 }
 
 /**
