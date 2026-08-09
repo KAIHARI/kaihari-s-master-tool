@@ -30,10 +30,63 @@ data class CameraPose(
     val yawDegrees: Float = 0f,
     val pitchDegrees: Float = StagePlane.TILT,
     val distance: Float = HOME_DISTANCE,
+    /**
+     * The focal length, as a multiple of the one this stage has always used.
+     *
+     * ## What it is, and why it could not have been a fifth of [distance]
+     *
+     * [planeFor] turns a pose into the projection's two numbers, and it welds
+     * them together on purpose: stepping back both weakens the perspective and
+     * makes the table smaller, which is what walking backwards does. That is
+     * right for a *position* and it is exactly what a lens is not. A long lens
+     * from across the room and a wide lens from arm's length frame the same
+     * subject at the same size and look nothing like each other, and the whole
+     * of that difference is the one thing [distance] cannot express alone.
+     *
+     * This is the other half. It multiplies `cameraDistance` and leaves `zoom`
+     * untouched, so the middle of the table stays exactly where it was — a
+     * point at zero depth projects at scale one whatever the camera distance —
+     * and only the *strength of the perspective* moves. A dolly zoom, in other
+     * words, with the subject pinned.
+     *
+     * At 1600x1000 the horizontal field of view it buys, as `2·atan(w / 2·cd)`:
+     *
+     * | lens | field of view | 35mm equivalent |
+     * |---|---|---|
+     * | 0.70 | 76 degrees | about 23mm |
+     * | 1.00 | 58 degrees | about 33mm |
+     * | 1.50 | 40 degrees | about 49mm |
+     * | 2.00 | 31 degrees | about 65mm |
+     *
+     * ## Last, and defaulted to one, and that is load-bearing twice
+     *
+     * At `1f` every byte of every projection is what it was, so this lands in a
+     * release ahead of anything that moves it and `GoldenStageTest` never
+     * notices — the same move `CardSolid.slab`'s trailing `backScale` made.
+     *
+     * And it is last because [CameraRig.step] and [CameraRig.nudge] used to
+     * build a pose *positionally*. A field inserted before [distance] would have
+     * been a silent re-binding rather than a compile error. Both now use `copy`
+     * for the same reason, and that is not tidiness: without it the lens reset
+     * to one on every frame the camera sprang or was dragged, so a tuned lens
+     * would have survived until the moment anybody touched the table.
+     *
+     * ## A short lens makes the camera stand further back, not closer
+     *
+     * [CameraEnvelope.minDistanceAt] carries it. Widening the lens deepens the
+     * table toward the viewer in exactly the way laying it back does, so the
+     * clearance floor rises with it. Miss that and the mat's far corner crosses
+     * the camera plane, `project` clamps, and a clamp cannot be inverted — see
+     * that function for what silently stops agreeing with what.
+     */
+    val lens: Float = HOME_LENS,
 ) {
     companion object {
         /** The lens the stage has always used. See [StagePlane.forStage]. */
         const val HOME_DISTANCE = 1.45f
+
+        /** The focal length everything in this app was tuned at. */
+        const val HOME_LENS = 1f
 
         val Home = CameraPose()
     }
@@ -60,6 +113,16 @@ data class CameraEnvelope(
     val maxPitch: Float = 58f,
     val minDistance: Float = 0.8f,
     val maxDistance: Float = 2.6f,
+    /**
+     * And how far the focal length may travel, in multiples of the shipped one.
+     *
+     * Wider than 0.7 is a fisheye on a table and the card at the far edge stops
+     * being a card; longer than 2 is an orthographic diagram, which is a fine
+     * thing to look at and not a thing to sit at. Both ends are also where
+     * [CameraPose.lens]'s own note says the picture stops being a room.
+     */
+    val minLens: Float = 0.7f,
+    val maxLens: Float = 2f,
 ) {
     /**
      * The nearest pose inside the envelope. Yaw is free — a table turns all the way.
@@ -69,10 +132,15 @@ data class CameraEnvelope(
      */
     fun clamp(pose: CameraPose, width: Float = 0f, height: Float = 0f): CameraPose {
         val pitch = pose.pitchDegrees.coerceIn(minPitch, maxPitch)
-        val floor = minDistanceAt(pitch, width, height)
+        // The lens is clamped *before* the floor is asked for, because the floor
+        // is a function of it. Asking in the other order lets a pose one step
+        // outside the lens range set a distance floor no legal pose has.
+        val lens = pose.lens.coerceIn(minLens, max(minLens, maxLens))
+        val floor = minDistanceAt(pitch, width, height, lens)
         return pose.copy(
             pitchDegrees = pitch,
             distance = pose.distance.coerceIn(floor, max(floor, maxDistance)),
+            lens = lens,
         )
     }
 
@@ -96,14 +164,30 @@ data class CameraEnvelope(
      * close while you are looking down at the table, and you must step back as
      * you get low. That is also true of a real table.
      */
-    fun minDistanceAt(pitchDegrees: Float, width: Float, height: Float): Float {
+    fun minDistanceAt(
+        pitchDegrees: Float,
+        width: Float,
+        height: Float,
+        /**
+         * A wide lens brings the far corner toward the camera exactly as laying
+         * the table back does, so the floor rises as it shortens. The derivation
+         * substitutes `cameraDistance = distance * lens * governing` alongside
+         * `zoom = HOME / distance`, and the lens comes out beside [CLEARANCE].
+         *
+         * Defaulted so that every caller and every test written before there was
+         * a lens still asks the question it used to ask, and gets the same answer
+         * to the bit.
+         */
+        lens: Float = CameraPose.HOME_LENS,
+    ): Float {
         val governing = max(height, width * 0.55f)
         if (governing <= 0f) return minDistance
 
         val halfDiagonal = sqrt((width * width + height * height) / 4f)
         val reach = halfDiagonal * CameraPose.HOME_DISTANCE *
             sin(pitchDegrees.coerceIn(0f, 90f) * (PI.toFloat() / 180f))
-        return max(minDistance, sqrt(reach / (CLEARANCE * governing)))
+        val glass = CLEARANCE * max(lens, MIN_LENS) * governing
+        return max(minDistance, sqrt(reach / glass))
     }
 
     private companion object {
@@ -115,6 +199,12 @@ data class CameraEnvelope(
          * card at the far edge is still a card rather than a sliver.
          */
         const val CLEARANCE = 0.5f
+
+        /**
+         * A lens of nothing is a division by nothing, and a floor of infinity is
+         * not a camera. Below anything the envelope will ever allow.
+         */
+        const val MIN_LENS = 1e-3f
     }
 }
 
@@ -294,6 +384,12 @@ object Turns {
             abs(signed(pose.yawDegrees - it.pose.yawDegrees)) <= tolerance &&
                 abs(pose.pitchDegrees - it.pose.pitchDegrees) <= tolerance &&
                 abs(pose.distance - it.pose.distance) <= 0.04f
+            // [CameraPose.lens] is deliberately **not** compared. A seat is a
+            // chair, not a chair and a lens: you do not change focal length by
+            // sitting somewhere else, and a readout that refused to name the
+            // table seat because the lens had been tuned would be reporting on
+            // the wrong thing. [CameraRig.aimAt] carries the lens across for the
+            // same reason.
         }
 
     /** How far round the table you are, for a readout: 0, 45, 90 … */
@@ -366,7 +462,20 @@ class CameraRig(
         parked = false
     }
 
-    fun aimAt(seat: StageSeat) = aimAt(seat.pose)
+    /**
+     * And to a named seat, **keeping whatever lens is on the camera**.
+     *
+     * A seat is where you sit. The lens is what you are looking through, and
+     * nothing about moving to the other side of a table changes it. Taking the
+     * seat's own lens instead would mean that tuning a focal length and then
+     * tapping "Seated" silently threw the tuning away — which is exactly the
+     * failure a person would read as the tool being broken.
+     *
+     * Every seat declares [CameraPose.HOME_LENS] today, so this is a no-op until
+     * something moves one; `CameraLensTest.everySeatIsStillAtTheShippedLens` is
+     * the tripwire for that day.
+     */
+    fun aimAt(seat: StageSeat) = aimAt(seat.pose.copy(lens = pose.lens))
 
     /**
      * Moves the camera *by* an amount, for a gesture in progress.
@@ -378,8 +487,11 @@ class CameraRig(
      * dragged.
      */
     fun nudge(deltaYaw: Float, deltaPitch: Float, dollyBy: Float = 0f) {
+        // `copy`, not a fresh pose: a gesture moves three of the four things a
+        // camera is, and building a new one from three arguments quietly reset
+        // the fourth on every frame of every drag.
         val next = envelope.clamp(
-            CameraPose(
+            pose.copy(
                 yawDegrees = pose.yawDegrees + deltaYaw,
                 pitchDegrees = pose.pitchDegrees + deltaPitch,
                 distance = pose.distance * (1f + dollyBy),
@@ -421,7 +533,13 @@ class CameraRig(
         vYaw = yaw.velocity
         vPitch = pitch.velocity
         vDistance = distance.velocity
-        pose = CameraPose(yaw.value, pitch.value, distance.value)
+        // Three springs, four fields. The lens is not sprung — it is not
+        // somewhere you travel to — so it has to be carried rather than rebuilt.
+        pose = pose.copy(
+            yawDegrees = yaw.value,
+            pitchDegrees = pitch.value,
+            distance = distance.value,
+        )
 
         val settled = Springs.settled(
             SpringValue(yaw.value, yaw.velocity),
@@ -482,7 +600,10 @@ fun CameraPose.planeFor(width: Float, height: Float) = StagePlane(
     width = width,
     height = height,
     tiltDegrees = pitchDegrees,
-    cameraDistance = distance * max(height, width * 0.55f),
+    // The lens lands here and nowhere else. `zoom` is deliberately left out of
+    // it: that is what pins the middle of the table while the perspective moves,
+    // and it is the whole difference between a focal length and a dolly.
+    cameraDistance = distance * max(lens, 1e-3f) * max(height, width * 0.55f),
     yawDegrees = yawDegrees,
     zoom = CameraPose.HOME_DISTANCE / max(distance, 1e-3f),
 )
