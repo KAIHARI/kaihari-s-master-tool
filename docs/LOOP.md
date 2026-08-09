@@ -177,7 +177,7 @@ And one that is this loop's own:
 
 ## 4. What "better" means, so the loop can tell
 
-Four gates. A change passes all four or it does not ship.
+Five gates. A change passes all five or it does not ship.
 
 | Gate | How it is checked |
 |---|---|
@@ -185,6 +185,7 @@ Four gates. A change passes all four or it does not ship.
 | It is true | A `commonTest` names the claim; `:core:jvmTest` green |
 | It is affordable | `tools/shoot.sh --budget=120` before and after — the **ratio**, not the milliseconds; and no new per-card per-frame allocation |
 | It is the house style | `docs/DESIGN.md` — and if the change argues with the handbook, the handbook gets the amendment *first*, in its own commit |
+| It survives the matrix | `tools/devices.sh` — `phone-small` and `tab-s11` at minimum. See `docs/DEVICES.md` |
 
 The frame budget is the one that will bite. Sixty cards is the working number,
 and a per-card layer or a per-card blur is the class of change that has to be
