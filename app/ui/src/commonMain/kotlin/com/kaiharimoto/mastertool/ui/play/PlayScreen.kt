@@ -535,6 +535,13 @@ fun PlayScreen(
                 derivedStateOf(structuralEqualityPolicy()) {
                     val plane = camera.plane
                     val quantum = layout.field.height * DEPTH_QUANTUM
+                    // One depth for the whole hand, taken at the band it is
+                    // fanned along. Every card in it then ties, and the tie is
+                    // broken by the position in the fan.
+                    val handDepth = quantised(
+                        plane.project(layout.hand.centerX, layout.hand.centerY, 0f).depth,
+                        quantum,
+                    )
                     seats.sortedWith(
                         compareBy(
                             // Three bands, and the order between them is not up
@@ -548,9 +555,20 @@ fun PlayScreen(
                             // one the spread was laid out in. Asking the
                             // projection instead is what made the overlap
                             // reshuffle itself every time the table turned.
+                            // Depth within a band, except inside a fan or a
+                            // hand — where every card is at one height and the
+                            // order is the one they are held in. Asking the
+                            // projection instead is what made a spread reshuffle
+                            // itself every time the table turned, and the hand
+                            // was left doing exactly that: its cards differ in
+                            // x, so the moment the table yaws their depths
+                            // separate and the fan reorders under your hands.
                             {
-                                if (it.fanned) 0
-                                else quantised(plane.project(it.pose.position).depth, quantum)
+                                when {
+                                    it.fanned -> 0
+                                    it.inHand -> handDepth
+                                    else -> quantised(plane.project(it.pose.position).depth, quantum)
+                                }
                             },
                             // Then the spread's own order, or — for two cards in
                             // the same place on the mat — recency, which is the
@@ -877,6 +895,15 @@ private data class Seat(
     /** Held up to be read rather than played, which changes the art it loads. */
     val magnified: Boolean = false,
     /**
+     * One of the five in your hand.
+     *
+     * A hand is a fan, and a fan's overlap is decided by the order the cards
+     * are held in — not by which of them happens to be a millimetre nearer the
+     * camera. Sorting it by projected depth like a card lying on the table gets
+     * both halves wrong: see the comparator.
+     */
+    val inHand: Boolean = false,
+    /**
      * The tiebreak when two seats are the same distance away.
      *
      * The instance id for a card on the mat, which is the order it was played
@@ -1060,6 +1087,12 @@ private fun seatsFor(
             counters = 0,
             width = cardWidth,
             height = cardHeight,
+            inHand = true,
+            // The position in the fan, so the overlap reads left to right. The
+            // default is the *instance* id, which for a freshly dealt hand is
+            // the shuffle — which is why the third card was sitting on top of
+            // the fourth for no reason anybody could see.
+            order = index,
         )
     }
 
