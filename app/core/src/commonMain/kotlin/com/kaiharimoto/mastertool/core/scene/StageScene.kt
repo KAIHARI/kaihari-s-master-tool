@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.core.scene
 
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
+import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.layout.Slot
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
@@ -265,6 +266,36 @@ object Scenery {
 
     /** And how far it reaches the other way, to where the wall starts. */
     const val DESK_FAR = 0.5f
+
+    /**
+     * How much of the stage's height the board declines to use, so that there
+     * is somewhere for the room to be.
+     *
+     * Pass to `BoardLayouter.solve`'s `roomAbove` for [Scene.DESK] and nothing
+     * for [Scene.MINIMAL], which has no room to see.
+     *
+     * This is the number that makes the second half of the list in
+     * `docs/LOOP.md` reachable at all. Everything in this room is placed
+     * relative to the mat and scaled by a card, so the wall's base landed
+     * wherever the board's far edge landed — which was the top of the screen —
+     * and the wall, the window and the sky behind it were geometry nobody could
+     * ever see. There is no way to show them that does not start with the board
+     * being smaller than the stage.
+     *
+     * A fifth, and it is a fifth for a reason rather than by taste. The board is
+     * height-constrained on every device this ships to, so the reserve comes
+     * straight off the card: a fifth is exactly a fifth, 107dp of card down to
+     * 85dp on the tablet. What it buys on that tablet is 176dp of screen above
+     * the desk's far edge, which is the first framing in which the window is a
+     * window rather than a hole nobody can see. Below about a tenth the wall is
+     * a lip again; above about a quarter the cards are smaller than the deck
+     * builder draws them, which is where a bigger room has started costing the
+     * game.
+     *
+     * The narrowest phone pays the same fifth and can afford it — 115px of card
+     * down to 92px, against a [BoardLayouter.MIN_CARD_WIDTH] of 28.
+     */
+    const val ROOM_ABOVE = 0.20f
 
     /**
      * How wide the desk is, as a share of the stage it is drawn on.

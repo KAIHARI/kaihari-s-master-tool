@@ -442,11 +442,19 @@ fun PlayScreen(
 
             SideEffect { camera.sync(widthPx, heightPx) }
 
-            val layout = remember(widthPx, heightPx) {
+            val layout = remember(widthPx, heightPx, scene) {
                 BoardLayouter.solve(
                     width = widthPx,
                     height = heightPx,
                     aspectRatio = CARD_ASPECT_RATIO,
+                    // The desk is in a room and the room has to go somewhere.
+                    // Minimal has no room, so it gets the whole stage and is
+                    // bit-identical to every build before this one — which is
+                    // the control the desk is judged against.
+                    roomAbove = when (scene) {
+                        Scene.DESK -> Scenery.ROOM_ABOVE
+                        Scene.MINIMAL -> 0f
+                    },
                     // The seat the stage opens at, and deliberately not the live
                     // camera. Handing the fitter a growth that changes every
                     // frame re-solves the whole board every frame: every card

@@ -224,6 +224,76 @@ class BoardLayoutTest {
         assertTrue(table().fits)
     }
 
+    // ---- leaving somewhere for the room to be -------------------------------
+
+    @Test
+    fun roomAboveIsKeptClearAboveTheBoard() {
+        // The whole point: the band at the top of the stage belongs to the wall
+        // and the window, and the board is what declines to use it.
+        val layout = BoardLayouter.solve(1600f, 1000f, aspect, roomAbove = 0.2f)
+
+        assertTrue(
+            layout.bounds.top >= 200f,
+            "the board starts at ${layout.bounds.top}, inside the reserved 200px",
+        )
+        // And what is reserved is reserved at the *top*: the board is still
+        // wholly on the stage, hand and all.
+        assertTrue(layout.bounds.bottom <= 1000f + 0.01f)
+    }
+
+    @Test
+    fun roomAboveIsPaidForInCardSizeAndNothingElse() {
+        // Stated in the KDoc and worth a claim, because the alternative anybody
+        // reaches for first is cropping: the board does not lose a row, it does
+        // not stop being centred, and the cards do not change shape.
+        val full = table()
+        val roomy = BoardLayouter.solve(1600f, 1000f, aspect, roomAbove = 0.2f)
+
+        assertTrue(roomy.cardWidth < full.cardWidth)
+        assertClose(full.cardWidth * 0.8f, roomy.cardWidth)
+        assertEquals(full.slots.size, roomy.slots.size)
+        assertClose(aspect, roomy.cardWidth / roomy.cardHeight)
+        assertClose(roomy.field.left, 1600f - roomy.field.right)
+    }
+
+    @Test
+    fun zeroRoomAboveIsTheLayoutEveryCallerAlreadyHad() {
+        // Minimal mode and the duel table pass nothing, and "nothing" has to
+        // mean bit-identical rather than nearly — it is the control the desk is
+        // judged against.
+        val before = table()
+        val after = BoardLayouter.solve(1600f, 1000f, aspect, roomAbove = 0f)
+
+        assertEquals(before, after)
+    }
+
+    @Test
+    fun aRoomThatWantedTheWholeStageIsRefusedRatherThanObeyed() {
+        // A caller asking for most of the screen would otherwise solve a board
+        // of nothing and cheerfully report that it fits.
+        val capped = BoardLayouter.solve(1600f, 1000f, aspect, roomAbove = 0.4f)
+
+        assertEquals(capped, BoardLayouter.solve(1600f, 1000f, aspect, roomAbove = 0.95f))
+        assertEquals(capped, BoardLayouter.solve(1600f, 1000f, aspect, roomAbove = 40f))
+        assertEquals(table(), BoardLayouter.solve(1600f, 1000f, aspect, roomAbove = -1f))
+        assertTrue(capped.fits)
+    }
+
+    @Test
+    fun aWideStageDoesNotPayForRoomItDoesNotNeed() {
+        // The reserve comes off the *height* budget, and on a surface where
+        // width is the binding constraint it costs nothing at all. That is not
+        // a special case in the solver, it is what taking the min of the two
+        // already means — but it is the difference between "the room costs 17%
+        // of a card" and "the room costs 17% of a card everywhere", and only
+        // one of those is true.
+        val narrow = BoardLayouter.solve(700f, 1400f, aspect)
+        val roomy = BoardLayouter.solve(700f, 1400f, aspect, roomAbove = 0.2f)
+
+        assertClose(narrow.cardWidth, roomy.cardWidth)
+        assertTrue(roomy.bounds.top >= 280f)
+    }
+
     @Test
     fun anEmptySurfaceDoesNotFallOver() {
         val layout = BoardLayouter.solve(0f, 0f, aspect)

@@ -171,15 +171,36 @@ object BoardLayouter {
         height: Float,
         aspectRatio: Float,
         perspectiveGrowth: Float = 1f,
+        /**
+         * The fraction of the stage's height kept clear above the board, for
+         * the room to be seen in.
+         *
+         * Zero — every caller before the desk became a place — means the board
+         * fills the stage vertically, and that is why there were six pixels of
+         * wall at the table seat and no window anybody has ever seen. Nothing
+         * behind the desk can be looked at until something declines to use the
+         * space, and the board is the only thing big enough to be asked.
+         *
+         * It costs card size, and there is no arrangement where it does not:
+         * the board is height-constrained on every device this ships to, so a
+         * band reserved at the top comes straight off the cards. That is the
+         * trade, stated rather than hidden — a room you can see, for cards a
+         * few per cent smaller.
+         */
+        roomAbove: Float = 0f,
     ): BoardLayout {
         val ratio = if (aspectRatio > 0f) aspectRatio else 1f
         val growth = perspectiveGrowth.coerceAtLeast(1f)
+        // Clamped rather than trusted: a caller asking for most of the screen
+        // would solve a board of nothing and report that it fits.
+        val reserved = roomAbove.coerceIn(0f, 0.4f)
+        val usable = height * (1f - reserved)
 
         // Width:  7 cards + 6 lanes.
         // Height: 3 rows of card + 2 lanes, then the hand's own lane and a
         //         fourth card's worth of band for the fan to sit in.
         val byWidth = (width / growth) / (COLUMNS + (COLUMNS - 1) * GAP_FRACTION)
-        val byHeight = (height / growth) / (
+        val byHeight = (usable / growth) / (
             (ROWS + 1 + READOUT_FRACTION) / ratio +
                 ((ROWS - 1) + HAND_GAP_FRACTION + 1) * GAP_FRACTION
             )
@@ -201,7 +222,9 @@ object BoardLayouter {
         val handGap = gap * HAND_GAP_FRACTION
         val stackHeight = fieldHeight + handGap + readoutHeight + gap + handHeight
         val originX = (width - fieldWidth) / 2f
-        val originY = ((height - stackHeight) / 2f).coerceAtLeast(0f)
+        // Centred in what is left, then pushed down past the reserved band —
+        // so the room is above the desk, which is where a room is.
+        val originY = height * reserved + ((usable - stackHeight) / 2f).coerceAtLeast(0f)
         val readoutTop = originY + fieldHeight + handGap
 
         fun slot(column: Int, row: Int) = Slot(
