@@ -9,6 +9,7 @@ import com.kaiharimoto.mastertool.core.layout.planeFor
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardSolid
+import com.kaiharimoto.mastertool.core.render.StageRig
 import kotlin.math.hypot
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -120,13 +121,22 @@ class PuzzleTest {
                 while (yaw < 360f) {
                     val plane = CameraPose(yaw, seat.pose.pitchDegrees, seat.pose.distance)
                         .planeFor(surfaceWidth, surfaceHeight)
-                    val eyeAt = plane.eyePoint(Vec3(0f, 0f, 1f))
-                    val order = ScenePainter.order(room.standing + standIn, eyeAt) { box ->
-                        box.corners().maxOf { plane.project(it).depth }
-                    }
+                    // The rig's own heading, not straight up. Handed (0, 0, 1)
+                    // this loop turned the *projection* through 360 degrees and
+                    // left the camera parked over the middle of the table for
+                    // every one of them, so seventy-two yaws asked one question.
+                    val eyeAt = plane.eyePoint(
+                        StageRig.eye(plane.tiltDegrees, plane.yawDegrees),
+                    )
+                    val order = ScenePainter.order(room.standing + standIn, eyeAt) { box -> plane.reachOf(box) }
                     val mine = order.indexOfFirst { it === standIn }
+                    val onGlass = plane.reachOf(reach)
                     order.forEachIndexed { index, piece ->
                         if (piece === standIn) return@forEachIndexed
+                        // Only pieces it shares pixels with: `ScenePainter`'s
+                        // own filter, and asking without it is asking about
+                        // pairs the painter is right to have no opinion on.
+                        if (!onGlass.overlaps(plane.reachOf(piece.box))) return@forEachIndexed
                         if (ScenePainter.behind(reach, piece.box, eyeAt)) {
                             checked++
                             assertTrue(

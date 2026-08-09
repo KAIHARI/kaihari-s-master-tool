@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.core.scene
 
+import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.Face
 
@@ -135,4 +136,37 @@ data class SceneBox(val min: Vec3, val max: Vec3) {
             max = Vec3(right, bottom, ceiling),
         )
     }
+}
+
+
+/**
+ * Everything [ScenePainter] needs to know about where a box is, in one pass over
+ * its eight corners.
+ *
+ * Here rather than at each call site because there are three of them — the
+ * renderer and two tests — and a paint order tested against a different
+ * silhouette than the one drawn is a test that agrees with itself and with
+ * nothing else. `ScenePainter` still has no idea a projection exists; this is
+ * the seam between the two, and it is deliberately one function long.
+ *
+ * The silhouette comes off `flatten` rather than `project`, because `flatten` is
+ * what the renderer actually draws with — a point's true screen position, run
+ * through a canvas that has no z.
+ */
+fun StagePlane.reachOf(box: SceneBox): ScenePainter.Reach {
+    var depth = Float.NEGATIVE_INFINITY
+    var left = Float.POSITIVE_INFINITY
+    var top = Float.POSITIVE_INFINITY
+    var right = Float.NEGATIVE_INFINITY
+    var bottom = Float.NEGATIVE_INFINITY
+    box.corners().forEach { corner ->
+        val here = project(corner).depth
+        if (here > depth) depth = here
+        val flat = flatten(corner)
+        if (flat.x < left) left = flat.x
+        if (flat.x > right) right = flat.x
+        if (flat.y < top) top = flat.y
+        if (flat.y > bottom) bottom = flat.y
+    }
+    return ScenePainter.Reach(depth, left, top, right, bottom)
 }

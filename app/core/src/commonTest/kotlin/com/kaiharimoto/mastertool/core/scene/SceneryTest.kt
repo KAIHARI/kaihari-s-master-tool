@@ -542,9 +542,7 @@ class SceneryTest {
         val plane = seat.pose.planeFor(surfaceWidth, surfaceHeight)
         val model = room()
         return ScenePainter
-            .order(model.pieces, plane.eyePoint(rigEye(plane))) { box ->
-                box.corners().maxOf { plane.project(it).depth }
-            }
+            .order(model.pieces, plane.eyePoint(rigEye(plane))) { box -> plane.reachOf(box) }
             .map { it.name }
     }
 

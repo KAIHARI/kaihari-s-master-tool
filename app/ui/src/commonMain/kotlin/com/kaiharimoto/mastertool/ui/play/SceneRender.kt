@@ -17,6 +17,7 @@ import com.kaiharimoto.mastertool.core.scene.Scene
 import com.kaiharimoto.mastertool.core.scene.ScenePainter
 import com.kaiharimoto.mastertool.core.scene.SceneBox
 import com.kaiharimoto.mastertool.core.scene.ScenePiece
+import com.kaiharimoto.mastertool.core.scene.reachOf
 import com.kaiharimoto.mastertool.core.scene.Surface
 import com.kaiharimoto.mastertool.core.scene.TimeOfDay
 import com.kaiharimoto.mastertool.ui.gpu.StageShader
@@ -386,7 +387,7 @@ internal fun DrawScope.drawScene(
     val all = if (standIn == null) pieces else pieces + standIn
 
     ScenePainter
-        .order(all, eyeAt) { box -> box.corners().maxOf { stage.project(it).depth } }
+        .order(all, eyeAt) { box -> stage.reachOf(box) }
         .forEach { piece ->
             drawSolid(
                 faces = if (piece === standIn) propFaces else piece.box.faces(),
