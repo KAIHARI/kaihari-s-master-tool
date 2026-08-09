@@ -24,6 +24,7 @@ import com.kaiharimoto.mastertool.ui.gpu.StageShader
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.lerp
 import kotlin.math.abs
 
 /**
@@ -85,6 +86,18 @@ internal data class StageLook(
     val floor: Color,
     /** The window pane, when the light behind it is not doing the talking. */
     val glass: Color,
+    /**
+     * The top of the sky, where the bottom of it is [glass].
+     *
+     * Two colours rather than one because a flat fill is not a view of
+     * anything: a sky is deep overhead and pale where it meets the distance,
+     * and that single gradient is most of what stops an opening in a wall from
+     * reading as a lightbox. Painted between the head and the sill of the pane
+     * itself, so it turns with the room.
+     */
+    val sky: Color,
+    /** The painted joinery around the pane. */
+    val frame: Color,
     /** The lamp: its base, its mast, and the shade that is the light. */
     val shade: Color,
     /**
@@ -148,6 +161,7 @@ internal data class StageLook(
         Surface.WALL -> wall
         Surface.FLOOR -> floor
         Surface.GLASS -> glass
+        Surface.FRAME -> frame
         Surface.SHADE -> shade
         Surface.GOLD -> gold
     }
@@ -190,6 +204,8 @@ internal data class StageLook(
             wall = Color(0xFF141519),
             floor = Color(0xFF0D0B09),
             glass = Color(0xFFDCE4EA),
+            sky = Color(0xFFDCE4EA),
+            frame = Color(0xFF141519),
             shade = Color(0xFFE4DAC6),
             // Never drawn: nothing stands on the minimal stage. Present because
             // a palette with a hole in it is a palette somebody fills in with a
@@ -223,9 +239,22 @@ internal data class StageLook(
             time = TimeOfDay.DAY,
             lighting = StageLighting.DeskDay,
             table = Color(0xFF2E2419),
-            wall = Color(0xFF191B22),
+            // Paint, not void. This was `#191B22` — the colour of the space
+            // behind the desk — chosen when the wall was a six-pixel hairline
+            // and nobody could see it. `Scenery.ROOM_ABOVE` made it a fifth of
+            // the screen, and at that size a near-black wall is not a dim room,
+            // it is a hole in one. Rendered it lands near luminance 65 against a
+            // window at 223 and a lit card at 141: darker than either, which is
+            // the handbook's rule, and clearly a surface, which is the point.
+            wall = Color(0xFF4B463D),
             floor = Color(0xFF0D0B09),
             glass = Color(0xFFDCE4EA),
+            sky = Color(0xFF8CB0D4),
+            // Gloss paint on softwood, and the brightest thing in the room after
+            // the sky it surrounds. A window frame is nearly always the lightest
+            // object in a photograph of a window, because it is the one surface
+            // angled to catch what is coming through.
+            frame = Color(0xFF6E675B),
             shade = Color(0xFFE4DAC6),
             // The same gold as at night, and the difference is all light: a
             // window is a broad, cool source with almost no highlight to give,
@@ -261,9 +290,18 @@ internal data class StageLook(
             time = TimeOfDay.NIGHT,
             lighting = StageLighting.DeskNight,
             table = Color(0xFF2E2419),
-            wall = Color(0xFF191B22),
+            // The same paint as by day. A room does not repaint itself at dusk
+            // and the whole difference between the two presets is light — which
+            // for this wall means the lamp standing a card away from it, and the
+            // fall-off from there into the far corner.
+            wall = Color(0xFF4B463D),
             floor = Color(0xFF0D0B09),
             glass = Color(0xFFDCE4EA),
+            // Both ends of the night sky come back at two per cent, so the
+            // gradient is a formality; what it buys is that the pane is never
+            // *flat*, which is the one thing a dark window must not be.
+            sky = Color(0xFFB6C6DC),
+            frame = Color(0xFF6E675B),
             shade = Color(0xFFE4DAC6),
             // The same gold. A room does not repaint its ornaments at dusk
             // either, and the whole difference between the two is the lamp —
@@ -396,6 +434,7 @@ internal fun DrawScope.drawScene(
                 eye = eye,
                 look = look,
                 colour = look.colourOf(piece.surface),
+                surface = piece.surface,
                 emission = piece.emission,
                 pool = pool,
                 wood = wood,
@@ -452,6 +491,7 @@ private fun DrawScope.drawSolid(
     eye: Vec3,
     look: StageLook,
     colour: Color,
+    surface: Surface,
     emission: Lit?,
     pool: LightPool?,
     wood: StageShader? = null,
@@ -476,7 +516,17 @@ private fun DrawScope.drawSolid(
             }
             path.close()
 
-            if (emission != null) {
+            if (emission != null && surface == Surface.GLASS && face.normal.z < 0.99f) {
+                // The one emissive face in the room that is a *view* rather than
+                // a fixture. Its two ends are the same arithmetic as the one
+                // above, evaluated at the head and at the sill; only the
+                // interpolation between two correct colours is an approximation,
+                // which is the same bargain `poolBrush` strikes.
+                //
+                // The upward-facing top of the pane's own box is excluded, since
+                // a sky drawn across a sliver seen edge-on is a bright line.
+                drawPath(path, skyBrush(face, stage, look, emission))
+            } else if (emission != null) {
                 // A fixture is not shaded, and that is the physics rather than a
                 // shortcut: how bright a lit lampshade is does not depend on what
                 // is lighting the room it is in. It is also the only way to draw
@@ -536,6 +586,45 @@ private fun DrawScope.drawSolid(
                 )
             }
         }
+}
+
+/**
+ * What is on the other side of the glass, as a gradient up the pane.
+ *
+ * Not a view of anything in particular, and deliberately not: the sun cannot
+ * appear in this window and that was measured rather than assumed. The room's
+ * vertical axis is drawn compressed — a wall four and a half card widths tall
+ * standing under an eye eleven and a half card widths up — so a ray traced back
+ * along the day key crosses this wall's plane about 2 700 pixels above a head
+ * that is at 232, at every seat the camera can reach. Bringing the sun's disc
+ * into the opening would need light arriving from *below* the eye. So what the
+ * window shows is sky, graded, and the sun stays outside the frame where the
+ * arithmetic puts it. `docs/LOOP.md` iteration 8 carries the numbers.
+ *
+ * The axis is the pane's own: the midpoint of its bottom edge to the midpoint of
+ * its top, both flattened, so the gradient turns with the room and needs no
+ * screen-space assumption at all. Which corners those are is read off the face's
+ * z rather than off its winding, because the winding is a property of which face
+ * of a box this is and this has to be right for whichever one the camera sees.
+ */
+private fun skyBrush(face: Face, stage: StagePlane, look: StageLook, lit: Lit): Brush {
+    val byHeight = face.corners.sortedBy { it.z }
+    val foot = stage.flatten((byHeight[0] + byHeight[1]) * 0.5f)
+    val crown = stage.flatten((byHeight[2] + byHeight[3]) * 0.5f)
+    val low = look.glass.shaded(lit)
+    val high = look.sky.shaded(lit)
+    return Brush.linearGradient(
+        // Three stops, weighted low. A sky's brightness falls off fastest just
+        // above the haze and then hardly at all, so an even ramp reads as a
+        // painted backdrop and a biased one reads as air.
+        colorStops = arrayOf(
+            0f to low,
+            0.38f to lerp(low, high, 0.62f),
+            1f to high,
+        ),
+        start = Offset(foot.x, foot.y),
+        end = Offset(crown.x, crown.y),
+    )
 }
 
 /**

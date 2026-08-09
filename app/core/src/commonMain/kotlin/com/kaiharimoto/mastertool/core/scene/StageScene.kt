@@ -101,6 +101,16 @@ enum class Surface {
     /** The window pane: sky by day, near enough to nothing at night. */
     GLASS,
 
+    /**
+     * The joinery around that pane: two stiles, two rails and a pair of bars.
+     *
+     * Its own surface rather than [WALL] because painted timber and painted
+     * plaster are the one pair of materials in this room a person can tell
+     * apart at a glance, and because it is the whole reason the opening reads
+     * as a window rather than as a bright rectangle somebody cut in a wall.
+     */
+    FRAME,
+
     /** The lamp — its base, its mast and the shade that is the light. */
     SHADE,
 
@@ -366,7 +376,7 @@ object Scenery {
      * be a piece of geometry nobody could ever see, lighting a room through a
      * hole above the frame.
      */
-    const val WINDOW_SILL = 0.10f
+    const val WINDOW_SILL = 0.24f
     const val WINDOW_HEAD = 2.05f
 
     /**
@@ -384,6 +394,47 @@ object Scenery {
      */
     const val SKY_RADIUS = 12.9f
     const val SKY_DISTANCE = 34.0f
+
+    // ---- the joinery around the opening ----------------------------------------------
+
+    /**
+     * How wide the two stiles are, in card widths, and how deep the two rails
+     * are, in card heights.
+     *
+     * They stand **outside** the opening rather than overlapping it, which is
+     * both how a window is actually built and the only arrangement that costs
+     * the glass nothing: this window is 264 mat pixels wide and every pixel of
+     * it was hard won.
+     */
+    const val FRAME_STILE = 0.18f
+    const val FRAME_RAIL = 0.10f
+
+    /**
+     * How far the frame and the bars stand proud of the wall, in card widths.
+     *
+     * Proud rather than set back in a reveal, for the reason the pane's own
+     * comment gives: anything pushed back in y projects straight off the top of
+     * the picture, and a reveal shows twelve pixels at the table seat and
+     * nothing from overhead. Standing it forward puts the same edge where the
+     * camera can always see it.
+     *
+     * The frame may not interpenetrate the wall, and this is what keeps it from
+     * doing so — it starts at the wall's front face and goes out. `ScenePainter`
+     * sorts boxes by the nearest point each reaches, which is the painter's rule
+     * for solids that **do not share volume**; two boxes that do have no correct
+     * order and will swap as the camera turns.
+     */
+    const val FRAME_PROUD = 0.12f
+
+    /**
+     * The glazing bars: how thick, and how far forward of the wall.
+     *
+     * Set back from the frame's own face, because that is where a bar sits and
+     * because the small step between the two is most of what says this is
+     * joinery rather than a grid drawn on the glass.
+     */
+    const val FRAME_BAR = 0.075f
+    const val FRAME_BAR_PROUD = 0.055f
 
     // ---- the lamp --------------------------------------------------------------------
 
@@ -583,6 +634,24 @@ object Scenery {
             box = SceneBox.standing(l, back, r, face, bottom, top),
         )
 
+        // Everything from here to the bars stands in front of the wall's face
+        // and never inside it. See FRAME_PROUD: the paint order is a separating
+        // axis, and two boxes that share volume have no correct order at all.
+        val stile = card * FRAME_STILE
+        val rail = tall * FRAME_RAIL
+        val proud = card * FRAME_PROUD
+        val barHalf = card * FRAME_BAR / 2f
+        val barOut = card * FRAME_BAR_PROUD
+        val midX = (openingLeft + openingRight) / 2f
+        val midZ = (sill + head) / 2f
+
+        fun frame(name: String, l: Float, r: Float, bottom: Float, top: Float, out: Float) =
+            ScenePiece(
+                name = name,
+                surface = Surface.FRAME,
+                box = SceneBox.standing(l, face, r, face + out, bottom, top),
+            )
+
         return SceneModel(
             pieces = listOf(
                 ScenePiece(
@@ -625,6 +694,17 @@ object Scenery {
                     box = SceneBox.standing(openingLeft, back, openingRight, face, sill, head),
                     emission = paneLight(time),
                 ),
+                // The stiles run the full height and the rails span between
+                // them, which is how a sash is put together and — not by
+                // coincidence — the only division of a rectangular frame into
+                // four boxes where no two of them share a corner.
+                frame("stile left", openingLeft - stile, openingLeft, sill - rail, head + rail, proud),
+                frame("stile right", openingRight, openingRight + stile, sill - rail, head + rail, proud),
+                frame("head rail", openingLeft, openingRight, head, head + rail, proud),
+                frame("bottom rail", openingLeft, openingRight, sill - rail, sill, proud),
+                frame("bar upright", midX - barHalf, midX + barHalf, sill, head, barOut),
+                frame("bar left", openingLeft, midX - barHalf, midZ - barHalf, midZ + barHalf, barOut),
+                frame("bar right", midX + barHalf, openingRight, midZ - barHalf, midZ + barHalf, barOut),
                 ScenePiece(
                     name = "lamp base",
                     surface = Surface.SHADE,
