@@ -138,7 +138,10 @@ constraints below that argue with that goal are suspended **for those scenes**
 plain-draw fallback behind every shader).
 
 The playmat is gone: the desk is the playing surface and the zones are routed
-into the wood.
+into the wood. The board also declines a fifth of the stage's height
+(`Scenery.ROOM_ABOVE`) so that there is somewhere for the room to be — it costs
+a fifth of the card, on every device, and that trade is the reason a window,
+a wall and anything behind them can be seen at all.
 
 ## Design Identity (locked in with the user)
 
@@ -281,8 +284,8 @@ whole of it at the input end was that the hit test returned
 `DragOrigin.Pile(slot, 0)` — the domain had taken an arbitrary index since it
 was written.
 
-The room is ten pieces: a floor, the desk, four wall pieces around a window
-opening, the pane, and three for the lamp. `docs/AAA.md` #62 was the brief —
+The room is seventeen pieces: a floor, the desk, four wall pieces around a
+window opening, the pane, seven of joinery around it, and three for the lamp. `docs/AAA.md` #62 was the brief —
 *"there is a room past it. Dark, out of focus, present."* — and #16 and #17 are
 what made day and night two rooms rather than two colour grades: a `Light` may
 now have a **position**, a **radius** and a **distance**, so shadows diverge
@@ -301,11 +304,14 @@ Four things about it are load-bearing, and three of them were bugs first:
   exactly that ratio. Its mast is then foreshortened five to one, because an
   honest desk lamp is off the top of the picture — the foot and the light are
   exact and `SceneryTest` pins the compression.
-- **Paint order is a separating axis, not a depth sort.** Sorting boxes by
-  nearest-corner depth puts a 511px wall after a 241px lamp and paints it over
-  the top. `ScenePainter` picks the separating axis the camera is most nearly
-  looking along; pairs that are diagonal are separated on several axes and those
-  disagree, which is not a contradiction because no ray hits both.
+- **Paint order is a topological sort over a separating axis.** Sorting boxes
+  by nearest-corner depth puts a 511px wall after a 241px lamp and paints it
+  over the top. `ScenePainter` finds an axis that separates each pair — and
+  never asserts an order for a pair no ray connects: axes that disagree mean no
+  answer, an eye inside the gap means no answer, and pieces that do not overlap
+  on screen are not compared. All three matter, and each was a cycle. The order
+  itself is a topological walk, because adjacent swaps cannot sort a partial
+  order at all.
 - **The felt is lit by the rig now.** It was a gradient aimed by a *direction* —
   the one surface that could disagree with the shadows on it. Its highlight is
   the lamp's mirror image, so it slides toward you as you sit down.

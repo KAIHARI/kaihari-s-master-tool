@@ -43,22 +43,21 @@ against but *"the bookshelf exists and has books in it"* is.
 | Desk top | **wood**, per-pixel: ring bands, fine grain, pores, latewood gloss |
 | Playmat | **gone.** The desk is the surface; zones are routed into it |
 | Zones | outlines. Should be inlay or engraving, and lit as such |
-| Window | exists, and **has never been visible** — see iteration 1 |
-| Sun outside | nothing. No sky, no ground, no light shaft |
+| Window | **a window**: four panes, a frame, a graded sky |
+| Sun outside | not possible through this window — iteration 8 has the numbers |
 | Floor | a flat plane, barely in frame |
-| Wall | 6px of it visible at the table seat |
+| Wall | **a fifth of the screen**, and painted rather than void |
 | Millennium Puzzle | flat gold facets, no material |
 | Lamp | flat cream, no material, casts no shadow |
 | Bed | does not exist |
 | Bookshelf | does not exist |
 | Room shadows | nothing in the room casts one (`AAA.md` #61d) |
 
-Two of those — the window and the wall — are blocked on the same thing, and it
-is the first real obstacle: **the board fills the stage vertically**, so there
-are six pixels of wall at the table seat and no room for anything behind the
-desk. Every item in the second half of that table needs the camera to be able to
-*see the room*, which means re-framing. That is the next foundation and it is
-bigger than any single object on the list.
+That obstacle is gone. It was the first real one — **the board filled the stage
+vertically**, so there were six pixels of wall at the table seat and no room for
+anything behind the desk — and iterations 7 and 8 cleared it. `roomAbove` keeps
+a fifth of the stage's height for the room, at a cost of a fifth of the card,
+and everything left on the list is now somewhere a camera can look.
 
 This document is the loop. It says what one iteration is, what it may not do,
 and what it has already done. An agent picking this up cold should be able to
@@ -447,6 +446,70 @@ And it is *cheaper*: 165ms → 120ms in the studio, because two transcendentals
 beat six. A correctness fix that also pays for itself is worth noticing — the
 first version's expense was buying an epsilon, not an answer.
 
+### Iteration 7 — the board stops using the whole stage
+
+The foundation the table above had been waiting on, and the smallest change in
+this ledger by line count. `BoardLayouter.solve` gains `roomAbove`: a fraction
+of the stage's height it declines to use. `Scenery.ROOM_ABOVE` is a fifth and
+only the desk pays it; minimal passes zero and comes out bit-identical, which is
+the mandate's requirement and is checked rather than assumed.
+
+It costs card size and there is no arrangement where it does not — the board is
+height-constrained on every device this ships to, so the reserve comes straight
+off the card: 107dp down to 85dp on the tablet, 115px down to 92px on the
+narrowest phone against a floor of 28. That is the trade, and it is written into
+the KDoc rather than left for somebody to discover.
+
+The picture: 80% of pixels moved, and above the desk's far edge there is a wall
+with a window in it instead of wood to every corner. Which immediately showed
+that the wall was `#191B22` — the colour of the void behind the desk, chosen
+when it was a six-pixel hairline.
+
+### Iteration 8 — the window, and two bugs in the floor under it
+
+The line written first: *the window stops being a bright rectangle cut in a
+black band.* It is now a four-pane sash — two stiles, two rails, a cross of
+glazing bars, on their own `Surface.FRAME` — with a graded sky in it and a
+painted wall behind it.
+
+**There is no sun in it, and that is measured rather than conceded.** The room's
+vertical axis is drawn compressed: a wall four and a half card widths tall
+standing under an eye eleven and a half card widths up. Trace the day key back
+from the eye and it crosses this wall's plane about 2 700 pixels above a head
+that is at 232, at every seat the camera can reach. Bringing the disc into the
+opening would need light arriving from *below* the eye — so a `Sky` that placed
+the sun honestly was built, found to compute something invisible, and deleted.
+kai's *"window with sun outside"* is answered by the light in the room and by
+which side of the sky is brighter, not by a disc. Lowering the day key to a
+golden-hour elevation would change every shadow in the room and is his call.
+
+**And the room's paint order was never an order.** The joinery took the room
+from ten pieces to seventeen and a glazing bar drew straight through the
+Millennium Puzzle. Two separate defects, both already shipped:
+
+`behind` was cyclic. It finds an axis that separates two boxes, a pair can be
+separated on several, and both earlier versions *picked between* disagreeing
+axes — the first that separated, then the one the camera was most nearly looking
+along. Either choice loops: A above B, B left of C, C nearer than A, one axis
+each. Fourteen of sixteen pieces in a single cycle at the overhead seat, and the
+ten-piece room had them too. The fix is to stop asserting an order for any pair
+no ray connects: disagreeing axes mean *no answer* (disagreement is the proof
+that no ray hits both), an eye inside the gap between two boxes means no answer,
+and pairs that do not overlap on screen are never compared.
+
+And `order` bubbled, which cannot topologically sort a partial order at all — an
+adjacent swap cannot move a piece past a *third* piece that has no opinion, and
+no-opinion is the common case. It is a topological walk now. `ScenePainterTest`
+holds both claims at 432 cameras.
+
+The lesson: **the room's own tests could not see the camera.** `PuzzleTest` swept
+360 degrees of yaw while handing the eye a fixed `(0, 0, 1)`, which turns the
+*projection* and leaves the camera parked over the middle of the table — so
+seventy-two poses asked one question, and every cycle lived in the ones it never
+asked.
+
+Frame cost 346ms to 356ms back to back. Both shipped in v1.2.36.
+
 ---
 
 ## 6. Seen, not yet done
@@ -468,7 +531,21 @@ what the eye has caught and the hand has not reached.
   the stock and at these sizes it is not reaching the picture. Worth measuring
   before assuming it needs to be stronger — the handbook is explicit that the
   highlight *moves* rather than brightens (§7).
-- **The room is capped at 6px.** See iteration 1. Blocked on kai.
+- **Night is as bright as day above the desk.** The two rooms differ by an
+  ambient of 0.76 against 0.55, and sRGB flattens that to nine levels of 255 —
+  the wall renders 67 by day and 68 at night. `NIGHT_FLOOR` cannot fall, because
+  `Tone.veil` needs it for card art, but a wall is not card art and the room has
+  no equivalent of the mat's `falloff`. This is the single biggest thing wrong
+  with the night room now that there is a room to be wrong about.
+- **The lamp and the puzzle are flat fills.** They are the only two objects in
+  the frame with no material at all, and the frame around the window now makes
+  that obvious by contrast.
+- **The first run against a cold art cache is not comparable.** Iteration 8's
+  before-shot showed 4.3% of the *minimal* stage moving, which no change in the
+  tree could have caused; re-shooting the previous commit gave a bit-identical
+  picture. Coil serves a lower-resolution decode until the art lands, and the
+  shot that comes first in a cold run gets it. Warm the cache with a throwaway
+  shot before recording a before.
 - **The eye can only reach three seats.** `tools/shoot.sh` selects a seat by
   pressing its digit, so every shot is one of 5°, 21° or 34° — and the camera's
   envelope goes to 58°, which is where a procedural surface aliases and where
