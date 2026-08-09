@@ -348,6 +348,12 @@ fun DeckBuilderTopBar(
                                 cardBackUrl = it.cardBackUrl,
                                 scene = it.scene,
                                 deskLight = it.deskLight,
+                                // Tuning is a taste too, and one that took a
+                                // person an evening with a slider. A menu item
+                                // on a *different screen* with no undo is the
+                                // last place it should be destroyed from; the
+                                // panel has its own reset.
+                                stageTuning = it.stageTuning,
                             )
                         }
                     },

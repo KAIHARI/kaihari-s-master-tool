@@ -4,6 +4,8 @@ import com.kaiharimoto.mastertool.core.deck.SortMode
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.scene.DeskLight
 import com.kaiharimoto.mastertool.core.scene.Scene
+import com.kaiharimoto.mastertool.core.tune.StageTuning
+import com.kaiharimoto.mastertool.core.layout.CameraEnvelope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -150,5 +152,35 @@ class UiPreferencesTest {
         assertEquals(once, once.migrated())
         val mine = UiPreferences.DEFAULT.copy(fitAll = false, themeMode = ThemeMode.LIGHT)
         assertEquals(mine, mine.migrated())
+    }
+
+    // ---- the tuning rides along -----------------------------------------------------
+
+    @Test
+    fun aDocumentWrittenBeforeThereWasTuningReadsBackAsTheUntouchedStage() {
+        // The whole of the plumbing is a field with a default, so this is the
+        // claim that makes that true: nothing stored by an older build changes
+        // what the play stage looks like.
+        val stored = """{"searchWeight":0.4,"searchColumns":4}"""
+        val read = Json { ignoreUnknownKeys = true }
+            .decodeFromString<UiPreferences>(stored)
+            .sanitised()
+
+        assertEquals(StageTuning.DEFAULT, read.stageTuning)
+    }
+
+    @Test
+    fun aTuningThatArrivedFromDiskIsClampedBeforeItReachesTheStage() {
+        // `sanitised` runs on load and on save, and this field is the only one
+        // whose values come from a finger. A NaN here is a stage that draws
+        // nothing after a restart.
+        val hostile = UiPreferences.DEFAULT.copy(
+            stageTuning = StageTuning.DEFAULT.copy(
+                camera = StageTuning.DEFAULT.camera.copy(pitchDegrees = Float.NaN, lens = 99f),
+            ),
+        ).sanitised()
+
+        assertTrue(hostile.stageTuning.camera.pitchDegrees.isFinite())
+        assertEquals(CameraEnvelope().maxLens, hostile.stageTuning.camera.lens)
     }
 }

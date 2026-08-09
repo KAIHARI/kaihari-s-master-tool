@@ -5,6 +5,7 @@ import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.scene.DeskLight
 import com.kaiharimoto.mastertool.core.scene.Scene
+import com.kaiharimoto.mastertool.core.tune.StageTuning
 import kotlinx.serialization.Serializable
 
 /** Which colour scheme the app renders in. */
@@ -162,6 +163,19 @@ data class UiPreferences(
      */
     val easterEggPool: List<Int> = emptyList(),
     /**
+     * The numbers the play stage is tuned by.
+     *
+     * A field with a default, the same as everything else here, and that is the
+     * whole of the plumbing — `StageTuning.DEFAULT` is what shipped, so a
+     * document written before this existed reads back as the untouched stage.
+     *
+     * It is on the preferences rather than in a file of its own because it is a
+     * preference: it is a person's opinion about how their table should look,
+     * and it should survive a relaunch the way the room and the card back do.
+     * Exporting it is a separate act — see `TuningCodec`.
+     */
+    val stageTuning: StageTuning = StageTuning.DEFAULT,
+    /**
      * Which generation of the layout this document was written by.
      *
      * The one thing a defaulted field cannot do on its own: a preference that
@@ -200,6 +214,11 @@ data class UiPreferences(
         main = main.sanitised(fallbackWeight = 2f),
         extra = extra.sanitised(fallbackWeight = 1f),
         side = side.sanitised(fallbackWeight = 1f),
+        // The only field here whose values arrive from a finger dragging a
+        // slider, so the only one that can produce a NaN. One reaching
+        // `StagePlane`'s trigonometry is a stage that is broken after a restart,
+        // with nothing on screen and nothing in a log.
+        stageTuning = stageTuning.sanitised(),
     )
 
     /**
