@@ -32,6 +32,7 @@ import com.kaiharimoto.mastertool.ui.deckbuilder.DeckLayoutState
 import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.rememberFeedback
 import com.kaiharimoto.mastertool.ui.play.PlayScreen
+import com.kaiharimoto.mastertool.ui.table.DuelTableScreen
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
 import com.kaiharimoto.mastertool.ui.update.AppUpdater
 import com.kaiharimoto.mastertool.ui.update.InstallOutcome
@@ -292,10 +293,15 @@ private fun Stage(deps: AppDependencies, director: Director, opts: Options) {
                 // existed the studio could not see it at all. That is not a gap
                 // in coverage, it is the reason a broken builder shipped: the
                 // harness was pointed at the one screen that was fine.
-                if (opts.whole) {
-                    MasterToolApp(deps)
-                } else {
-                    PlayScreen(state = builderState, prefs = layoutState, onBack = {}, seed = opts.seed)
+                when (opts.screen) {
+                    "builder" -> MasterToolApp(deps)
+                    "table" -> DuelTableScreen(state = builderState, onBack = {})
+                    else -> PlayScreen(
+                        state = builderState,
+                        prefs = layoutState,
+                        onBack = {},
+                        seed = opts.seed,
+                    )
                 }
             }
         }
@@ -386,8 +392,8 @@ private class Options(
     val pauseMillis: Long,
     val keys: String,
     val seed: Long,
-    /** Shoot the whole app — which opens on the deck builder — not just the stage. */
-    val whole: Boolean,
+    /** `play`, `builder` (the whole app, which opens on it) or `table`. */
+    val screen: String,
     val budget: Int,
     val shots: List<Shot>,
 ) {
@@ -422,7 +428,7 @@ private class Options(
                 shotFrames = int("frames", 60),
                 pauseMillis = map["pause"]?.toLongOrNull() ?: 6L,
                 keys = str("keys", ""),
-                whole = str("screen", "play").equals("builder", ignoreCase = true),
+                screen = str("screen", "play").lowercase(),
                 // One deal, every run, unless a shot is deliberately after a
                 // different one. Two pictures of two different hands are not a
                 // before and an after.

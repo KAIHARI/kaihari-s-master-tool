@@ -72,6 +72,7 @@ import com.kaiharimoto.mastertool.ui.components.CardTile
 import com.kaiharimoto.mastertool.ui.components.LocalCardBack
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
 import com.kaiharimoto.mastertool.ui.deckbuilder.color
+import com.kaiharimoto.mastertool.ui.components.OverflowBar
 import com.kaiharimoto.mastertool.ui.fx.Feedback
 import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
@@ -266,10 +267,16 @@ private fun TableTopBar(
 ) {
     val board = table.board
 
-    Row(
-        Modifier.fillMaxWidth().height(TOP_BAR).padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    // Fifteen controls behind a weighted spacer, designed against a 1480dp
+    // tablet. Below about that the last five — Draw, Shuffle, Undo, Redo, New
+    // hand — go off the end of the screen and the board looks perfectly fine
+    // without them. Same defect the deck builder and the play stage had; see
+    // `OverflowBar`, which is where the fix lives now rather than being written
+    // out a third time.
+    OverflowBar(
+        fitsAt = TABLE_BAR_FITS_AT,
+        modifier = Modifier.fillMaxWidth().height(TOP_BAR),
+        contentPadding = Modifier.padding(horizontal = 10.dp),
     ) {
         TextButton(onClick = onBack, contentPadding = PaddingValues(horizontal = 8.dp)) {
             Text("← Deck", style = MaterialTheme.typography.labelMedium)
@@ -306,7 +313,7 @@ private fun TableTopBar(
             BarButton(label, selected = placement == position) { onPlacement(position) }
         }
 
-        Box(Modifier.weight(1f))
+        Gap()
 
         BarButton("Draw") {
             if (table.move { it.draw() }) feedback.play(SoundEffect.DEAL)
@@ -321,6 +328,15 @@ private fun TableTopBar(
         BarButton("New hand") { table.restart(); feedback.play(SoundEffect.SHUFFLE) }
     }
 }
+
+/**
+ * The width the duel table's bar needs to show every control at once.
+ *
+ * Back, the life total, four adjustments, the phase, the turn, three placement
+ * modes, then Draw, Shuffle, Undo, Redo and New hand. Measured the same way the
+ * other two were and rounded up.
+ */
+private val TABLE_BAR_FITS_AT = 1150.dp
 
 @Composable
 private fun Divider() {
