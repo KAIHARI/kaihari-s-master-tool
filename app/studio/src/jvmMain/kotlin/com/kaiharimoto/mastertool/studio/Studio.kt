@@ -42,6 +42,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.swing.Swing
 import org.jetbrains.skia.EncodedImageFormat
+import com.kaiharimoto.mastertool.core.tune.StageTuning
+import com.kaiharimoto.mastertool.core.tune.TuningCodec
 import java.io.File
 import java.util.UUID
 
@@ -115,6 +117,17 @@ fun main(args: Array<String>) {
 
         try {
             val clock = FrameClock(scene, opts.pauseMillis)
+            // The tuning goes in **before** the settle and never again.
+            //
+            // Writing it per shot alongside the room raced the seat press: a
+            // preferences write is a coroutine, the tuned camera is placed by a
+            // `SideEffect` on the composition that write causes, and the seat
+            // key press is sent from here — so which of the two landed first
+            // depended on the dispatcher. Two runs of the same tuning then came
+            // back with the camera in two different places. Once, up front, and
+            // the settle absorbs it.
+            director.prefs?.update { it.copy(stageTuning = opts.tuning) }
+
             // The deck arrives over an import and the art over the network, and
             // the deal springs for about a second after both. Everything here is
             // waiting for that, once.
@@ -397,6 +410,13 @@ private class Options(
     /** `play`, `builder` (the whole app, which opens on it) or `table`. */
     val screen: String,
     val budget: Int,
+    /**
+     * The tuning to shoot with, from `--tune=file.json`.
+     *
+     * `StageTuning.DEFAULT` — what ships — unless a file says otherwise, so
+     * every existing shot and every golden contact sheet is unchanged.
+     */
+    val tuning: StageTuning,
     val shots: List<Shot>,
 ) {
     companion object {
@@ -436,6 +456,15 @@ private class Options(
                 // before and an after.
                 seed = map["seed"]?.toLongOrNull() ?: 20260808L,
                 budget = int("budget", 0),
+                // A tuning exported off the tablet, replayed here. The whole
+                // point of the round trip: a number kai moved with his thumb
+                // becomes a picture the loop can diff, without a release.
+                tuning = map["tune"]?.let { path ->
+                    val file = File(path).absoluteFile
+                    require(file.isFile) { "no tuning at $file" }
+                    TuningCodec.parse(file.readText())
+                        ?: error("$file is not a tuning export")
+                } ?: StageTuning.DEFAULT,
                 shots = names.map(::shotOf),
             )
         }

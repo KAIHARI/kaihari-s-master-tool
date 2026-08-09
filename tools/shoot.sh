@@ -7,6 +7,7 @@
 #
 # Shots land in shots/ at the repository root unless --out says otherwise.
 # See app/studio/src/jvmMain/.../Studio.kt for the whole flag list.
+# --tune=x.json replays a tuning exported from the in-app panel.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

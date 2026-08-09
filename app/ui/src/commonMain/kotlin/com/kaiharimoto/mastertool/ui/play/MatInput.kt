@@ -18,6 +18,7 @@ import com.kaiharimoto.mastertool.core.board.fanCardAt
 import com.kaiharimoto.mastertool.core.board.fanSource
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlayField
+import com.kaiharimoto.mastertool.core.tune.StageTuning
 import com.kaiharimoto.mastertool.core.haptics.Haptic
 import com.kaiharimoto.mastertool.core.haptics.HapticScore
 import com.kaiharimoto.mastertool.core.board.toMat
@@ -79,6 +80,16 @@ internal class MatPilot(
     private val play: PlayState,
     private val feedback: Feedback,
     var layout: BoardLayout,
+    /**
+     * The live tuning, refreshed by the screen rather than captured — exactly
+     * the arrangement [layout] uses, and for a sharper version of the same
+     * reason. The gesture loop is `pointerInput(layout)` and must stay that way:
+     * putting the tuning in that key would tear down the single arbiter's event
+     * stream on every frame a slider moved, while the machine went on believing
+     * the gesture was live. Captured instead of read, it would go stale and the
+     * hit boxes would drift away from the cards they belong to.
+     */
+    var tune: StageTuning = StageTuning.DEFAULT,
 ) {
     var onMenu: (DragOrigin) -> Unit = {}
 
@@ -207,7 +218,7 @@ internal class MatPilot(
         if (!down) return
 
         machine.cancel()
-        whatIsUnder(play.field, layout, at, play.fanned)?.let(onMenu)
+        whatIsUnder(play.field, layout, at, play.fanned, tune.hand.stepFraction)?.let(onMenu)
     }
 
     private fun carryOut(events: List<MatEvent>) {
@@ -221,7 +232,8 @@ internal class MatPilot(
                 else -> Unit
             }
 
-            grabbed = handle(event, grabbed, play, layout, feedback, onMenu, attaching)
+            grabbed =
+                handle(event, grabbed, play, layout, feedback, onMenu, attaching, tune.hand.stepFraction)
 
             // The press has been hit-tested by now — `handle` is what does it —
             // so this is the first moment anything knows whether the finger
@@ -571,11 +583,20 @@ private fun handle(
     feedback: Feedback,
     onMenu: (DragOrigin) -> Unit,
     attaching: Boolean,
+    /**
+     * How far apart the hand's cards are, so the hit boxes land where they are
+     * drawn. `handPointFor` has two readers on purpose — the pose and this —
+     * because two readings of one pure function cannot drift and a value passed
+     * between them can. A tuning that reached one and not the other would be a
+     * card you can see and cannot pick up.
+     */
+    handStep: Float,
 ): DragOrigin? {
     fun mat(at: Vec2): MatPoint = layout.toMat(at.x to at.y)
 
     when (event) {
-        is MatEvent.Pressed -> return whatIsUnder(play.field, layout, event.at, play.fanned)
+        is MatEvent.Pressed ->
+            return whatIsUnder(play.field, layout, event.at, play.fanned, handStep)
 
         is MatEvent.Tapped -> {
             when (val what = grabbed) {
@@ -740,6 +761,7 @@ private fun whatIsUnder(
     layout: BoardLayout,
     at: Vec2,
     fanned: DragOrigin? = null,
+    handStep: Float = StageTuning.DEFAULT.hand.stepFraction,
 ): DragOrigin? {
     val halfWidth = layout.cardWidth / 2f
     val halfHeight = layout.cardHeight / 2f
@@ -769,7 +791,7 @@ private fun whatIsUnder(
     }
 
     field.hand.indices.reversed().forEach { index ->
-        val point = handPointFor(layout, index, field.hand.size)
+        val point = handPointFor(layout, index, field.hand.size, handStep)
         if (covers(layout.toPixels(point))) return DragOrigin.Hand(index)
     }
 

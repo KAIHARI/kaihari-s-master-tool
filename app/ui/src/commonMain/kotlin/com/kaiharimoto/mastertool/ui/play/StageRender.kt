@@ -491,6 +491,16 @@ internal fun DrawScope.drawCardSurface(
     eye: Vec3,
     look: StageLook,
     radiusPx: Float,
+    /**
+     * How much bite this card gives up for being away from the focus plane.
+     *
+     * Zero everywhere until somebody turns the dial, and zero on
+     * `Scene.MINIMAL` whatever the dial says — the caller decides both, because
+     * the depth is a fact about where the camera is and this function is about
+     * what the lamp is doing. See `Defocus`, and `docs/DESIGN.md` §7 for why
+     * this is allowed to argue with "the brightness does not".
+     */
+    haze: Float = 0f,
 ) {
     val shade = Shading.of(pose, material, look.lighting.key, eye)
     val radius = CornerRadius(radiusPx)
@@ -507,6 +517,25 @@ internal fun DrawScope.drawCardSurface(
     val veil = Tone.veil(shade.diffuse)
     if (veil > 0.004f) {
         drawRoundRect(color = Color.Black.copy(alpha = veil), cornerRadius = radius)
+    }
+
+    // Distance, as the only thing it is allowed to take: contrast.
+    //
+    // Mid grey rather than black or white, and that is the whole of what makes
+    // it atmosphere rather than a dimmer. A wash of grey pulls the whites down
+    // and the blacks *up* by the same alpha, so nothing gets darker on average
+    // and the card simply stops having as much to say — which is what looking
+    // at something through air does. Black here would be a card fading out,
+    // which is the animation `docs/DESIGN.md` §7 refuses.
+    //
+    // Over the veil, because the veil is the light on the card and this is the
+    // air in front of it, and under the specular, because a highlight seen
+    // through haze is still a highlight.
+    if (haze > 0.004f) {
+        drawRoundRect(
+            color = HAZE.copy(alpha = haze.coerceIn(0f, 1f)),
+            cornerRadius = radius,
+        )
     }
 
     if (shade.specular > 0.004f) {
@@ -692,3 +721,14 @@ private fun feltPool(pool: LightPool, surface: Color): Brush = Brush.radialGradi
     center = Offset(pool.foot.x, pool.foot.y),
     radius = pool.radius,
 )
+
+/**
+ * The colour distance is seen through.
+ *
+ * Exactly mid grey — `Tone.MID_TONE` in a colour — so that laying it over a
+ * card at any alpha moves the whites and the blacks the same distance toward
+ * each other and the mean not at all. A warmer or cooler haze would be a colour
+ * grade on the far half of the board, which is the handbook's "colour is
+ * meaning or light" being spent on neither.
+ */
+private val HAZE = Color(0xFF808080)

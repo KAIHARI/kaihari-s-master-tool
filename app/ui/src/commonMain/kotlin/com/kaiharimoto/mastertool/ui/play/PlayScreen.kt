@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -87,6 +89,13 @@ import com.kaiharimoto.mastertool.core.scene.DeskClock
 import com.kaiharimoto.mastertool.core.scene.DeskLight
 import com.kaiharimoto.mastertool.core.scene.Puzzle
 import com.kaiharimoto.mastertool.core.scene.Scene
+import com.kaiharimoto.mastertool.core.tune.StageTuning
+import com.kaiharimoto.mastertool.core.tune.HandTune
+import androidx.compose.ui.platform.LocalWindowInfo
+import com.kaiharimoto.mastertool.core.tune.TuningSurface
+import com.kaiharimoto.mastertool.core.layout.Turns
+import com.kaiharimoto.mastertool.core.render.Defocus
+import com.kaiharimoto.mastertool.core.tune.FocusTune
 import com.kaiharimoto.mastertool.core.scene.Scenery
 import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.CardStock
@@ -122,10 +131,10 @@ import kotlin.random.Random
  * camera distance — it is how far its shadow has walked out from under it, and
  * that is linear in this number.
  */
-private const val LIFT_Z = 0.55f
+// val now lives in `StageTuning.DEFAULT` — see `core/tune/StageTuning.kt`.
 
 /** A card raised to be *read* comes closer than one being slid. */
-private const val HAND_LIFT = LIFT_Z * 1.6f
+// val now lives in `StageTuning.DEFAULT` — see `core/tune/StageTuning.kt`.
 
 /**
  * How far a spread-out pile floats over the board it is covering.
@@ -137,7 +146,7 @@ private const val HAND_LIFT = LIFT_Z * 1.6f
  * from the board underneath. The alternative was dimming the board, and a
  * translucent wash over content is the second line of §12.
  */
-private const val FAN_LIFT = LIFT_Z * 0.85f
+// val now lives in `StageTuning.DEFAULT` — see `core/tune/StageTuning.kt`.
 
 /**
  * How far a hand card leans back, so hand and table read as two objects.
@@ -163,12 +172,12 @@ private const val FAN_LIFT = LIFT_Z * 0.85f
  * nothing about it has moved relative to the surface it is on. Pivot it on the
  * bottom edge instead and the bottom stays welded to the felt while the top
  * lifts a third of a card height into the air, its shadow lies down behind it,
- * and it reads as a card standing in a hand. See [HAND_LIFT_OF].
+ * and it reads as a card standing in a hand. See [handLiftOf].
  */
-private const val HAND_LEAN = -24f
+// val now lives in `StageTuning.DEFAULT` — see `core/tune/StageTuning.kt`.
 
 /**
- * The lift that turns [HAND_LEAN] from a rotation about the centre into a
+ * The lift that turns the hand's lean from a rotation about the centre into a
  * rotation about the bottom edge.
  *
  * Pure trigonometry rather than a number somebody liked: raising the centre by
@@ -182,14 +191,22 @@ private const val HAND_LEAN = -24f
  * card that still lies well inside its own footprint. It would not be safe on
  * the mat, where cards are anywhere.
  */
-private fun handLiftOf(cardHeight: Float, bodyDepth: Float): Float {
-    val lean = abs(HAND_LEAN) * (PI.toFloat() / 180f)
+private fun handLiftOf(
+    cardHeight: Float,
+    bodyDepth: Float,
+    hand: HandTune = StageTuning.DEFAULT.hand,
+): Float {
+    val lean = abs(hand.leanDegrees) * (PI.toFloat() / 180f)
     // The face's own half-height, plus the body hanging behind it — a card is a
     // slab and it is the *lowest point of the slab* that has to clear the felt,
     // not the lowest point of the printed side. Leaving the second term out
     // leaves one corner of the body a few pixels under the table, which is the
     // whole bug again in miniature and would fold one corner of the shadow.
-    return cardHeight / 2f * sin(lean) + bodyDepth * cos(lean)
+    // And a multiplier over the top, floored at one by `StageKnobs` rather than
+    // here, because a tuning that could go *below* the solved value is the same
+    // shipped bug again: the near corner goes under the felt and `Shadows.cast`
+    // folds half the quad back through itself.
+    return (cardHeight / 2f * sin(lean) + bodyDepth * cos(lean)) * hand.liftFactor
 }
 
 /**
@@ -200,8 +217,8 @@ private fun handLiftOf(cardHeight: Float, bodyDepth: Float): Float {
  * question a held finger is asking. Nothing about the field changes, so it
  * goes back down exactly as it was.
  */
-private const val PEEK_Z = 1.35f
-private const val PEEK_SCALE = 1.9f
+// val now lives in `StageTuning.DEFAULT` — see `core/tune/StageTuning.kt`.
+// val now lives in `StageTuning.DEFAULT` — see `core/tune/StageTuning.kt`.
 
 private val TOP_BAR = 44.dp
 
@@ -322,6 +339,43 @@ fun PlayScreen(
     var menuFor by remember { mutableStateOf<DragOrigin?>(null) }
     var guide by remember { mutableStateOf(false) }
 
+    // ---- the numbers a person has moved -------------------------------------
+    //
+    // Read as a plain value rather than watched: it is a preference, it changes
+    // when a slider moves, and everything downstream of it is either a
+    // `remember` key or something read inside a draw.
+    val tune = prefs.preferences.stageTuning
+    var tuner by remember { mutableStateOf(false) }
+
+
+    // The camera opens where the tuning says, which is what "make it the
+    // default" means for a camera — and moves under a slider, which is what
+    // makes the slider worth dragging. `placeAt` rather than `aimAt`: the stage
+    // should be *at* the pose, not springing toward it.
+    //
+    // A `SideEffect` and not a `LaunchedEffect`, and that distinction cost a
+    // debugging round. A `LaunchedEffect` body is dispatched on a coroutine, so
+    // *which frame* it lands on depends on the scheduler — and `:studio` pumps
+    // frames by hand, so two runs of the identical tuning came back 77.7% of
+    // pixels apart, the camera having been placed before the shot in one and
+    // after it in the other. Determinism is the whole reason the studio can be
+    // trusted to say what a change did. `SideEffect` runs synchronously after a
+    // successful composition, so it cannot straddle a frame.
+    //
+    // The holder is a plain array rather than snapshot state on purpose: it is
+    // written from inside the effect, and a `mutableStateOf` written there
+    // schedules another recomposition for a value nothing reads.
+    val placed = remember { arrayOf(StageTuning.DEFAULT.camera) }
+    SideEffect {
+        // Only when the *tuning* moves. Comparing against the live rig instead
+        // would re-place the camera on every frame of an orbit and the table
+        // would fight the finger.
+        if (placed[0] != tune.camera) {
+            placed[0] = tune.camera
+            camera.placeAt(tune.camera.pose())
+        }
+    }
+
     // ---- which room the table is in -----------------------------------------
     //
     // Two preferences and a clock, resolved to an hour. The room and its palette
@@ -347,6 +401,19 @@ fun PlayScreen(
         }
     }
     val time = remember(deskLight, hour) { DeskClock.resolve(deskLight, hour) }
+
+    // What the tuning was done on, so an exported number can be sanity-checked
+    // against the screen that produced it. Metadata only — nothing derives from
+    // it — which is why it is allowed to be a composable read rather than
+    // something threaded through the geometry.
+    val tuningSurface = TuningSurface(
+        widthPx = LocalWindowInfo.current.containerSize.width,
+        heightPx = LocalWindowInfo.current.containerSize.height,
+        density = LocalDensity.current.density,
+        scene = scene.name,
+        light = time.name,
+        seat = Turns.seatAt(camera.pose)?.label ?: "free",
+    )
 
     /** Minimal, then the desk on the clock, then the two the clock cannot argue with. */
     val cycleScene: () -> Unit = {
@@ -422,6 +489,9 @@ fun PlayScreen(
                 // walk out of the stage and lose the board.
                 ShortcutAction.DISMISS -> when {
                     guide -> guide = false
+                    // Below the guide and above everything on the mat: the panel
+                    // is over the table but the guide is over both.
+                    tuner -> tuner = false
                     menuFor != null -> menuFor = null
                     // A spread pile is a layer over the table too, and Esc with
                     // one open should square it up rather than walk out of the
@@ -497,7 +567,10 @@ fun PlayScreen(
                 return@BoxWithConstraints
             }
 
-            val seats = remember(play.field, layout, play.carry, play.peeking, play.fanned) {
+            // `tune` is in the key deliberately. A card knob that is not here does
+            // nothing until the user next touches the board, which reads as the
+            // slider being broken rather than as a missing key.
+            val seats = remember(play.field, layout, play.carry, play.peeking, play.fanned, tune) {
                 // The camera is read as a plain field, not as observable state:
                 // this must not re-run sixty times a second while the table is
                 // turning. The cost is that a card already held up does not
@@ -513,6 +586,7 @@ fun PlayScreen(
                         camera.pose.pitchDegrees,
                         camera.pose.yawDegrees,
                     ),
+                    tune = tune,
                 )
             }
 
@@ -614,10 +688,14 @@ fun PlayScreen(
             // Both clocks report here, so a gesture the frame loop decides acts
             // on the same card the press landed on.
             val pilot = remember(play, machine, feedback) {
-                MatPilot(machine, play, feedback, layout)
+                MatPilot(machine, play, feedback, layout, tune)
             }
             SideEffect {
                 pilot.layout = layout
+                // Refreshed, never captured and never in the gesture loop's key:
+                // the hand's hit boxes have to move with the hand, and re-keying
+                // `pointerInput` is what tears the arbiter's event stream.
+                pilot.tune = tune
                 puzzle.standOn(layout)
                 // Asked of the *live* pose and the *live* camera, because both
                 // move: the puzzle is at its most inviting halfway up, and where
@@ -834,7 +912,7 @@ fun PlayScreen(
                     // different card — which throws away exactly the image
                     // caches and layer state the reorder was cheap because of.
                     key(seat.id) {
-                        StagedCard(seat, cards, state, back, density, camera, look)
+                        StagedCard(seat, cards, state, back, density, camera, look, tune.focus)
                     }
                 }
             }
@@ -852,12 +930,29 @@ fun PlayScreen(
             onBack = onBack,
             onGuide = { guide = true },
             onReadout = { readout = !readout },
+            onTuner = { tuner = !tuner },
             room = roomLabel(scene, deskLight),
             onRoom = cycleScene,
         )
 
         if (readout) {
             FrameReadout(probe, { probeTick }, Modifier.align(Alignment.TopStart))
+        }
+
+        // After the bar and before the guide, in the *outer* box. Compose
+        // hit-tests siblings in reverse order, so this receives pointers before
+        // `MatInput` — which is what stops a slider drag from orbiting the table
+        // underneath it. Inside `BoxWithConstraints` it would be under the mat's
+        // own `pointerInput` and every drag would fight the arbiter.
+        if (tuner) {
+            StageTuner(
+                tuning = tune,
+                onTune = { next -> prefs.update(debounce = true) { it.copy(stageTuning = next) } },
+                camera = camera,
+                surface = tuningSurface,
+                onClose = { tuner = false },
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = TOP_BAR),
+            )
         }
 
         // Over the bar as well as the table, because it is answering a question
@@ -982,10 +1077,18 @@ private fun seatsFor(
      * where the camera is, and this function is about where the cards are.
      */
     facingReader: Triple<Float, Float, Float> = Triple(0f, 0f, 0f),
+    /**
+     * The numbers a person has moved. Defaulted to what shipped, so every
+     * caller that has no opinion gets the stage it always had.
+     */
+    tune: StageTuning = StageTuning.DEFAULT,
 ): List<Seat> {
     val seats = mutableListOf<Seat>()
     val cardWidth = layout.cardWidth
     val cardHeight = layout.cardHeight
+    val carryLift = tune.cards.carryLift
+    val handLift = carryLift * tune.hand.liftRatio
+    val fanLift = carryLift * tune.cards.fanLiftRatio
 
     fun poseAt(
         at: MatPoint,
@@ -1027,7 +1130,7 @@ private fun seatsFor(
                 // rest of the stack: a card on a pile of four is four cards
                 // off the felt, and its shadow is cast from up there.
                 z = if (carrying) {
-                    cardHeight * LIFT_Z
+                    cardHeight * carryLift
                 } else {
                     CardSolid.pileDepth(placed.depth, cardWidth)
                 },
@@ -1062,7 +1165,7 @@ private fun seatsFor(
     field.hand.forEachIndexed { index, card ->
         val carrying = carry?.from is DragOrigin.Hand &&
             (carry.from as DragOrigin.Hand).index == index
-        val at = handPointFor(layout, index, field.hand.size)
+        val at = handPointFor(layout, index, field.hand.size, tune.hand.stepFraction)
         // A card in hand is always face-up to its owner; one turned over on the
         // way out of it is being set.
         val faceUp = !(carrying && carry.faceDown)
@@ -1074,13 +1177,13 @@ private fun seatsFor(
                 // Not zero. A leaned card pivots on its bottom edge, and this
                 // is what buys that — see [handLiftOf].
                 z = if (carrying) {
-                    cardHeight * HAND_LIFT
+                    cardHeight * handLift
                 } else {
-                    handLiftOf(cardHeight, CardSolid.pileDepth(1, cardWidth))
+                    handLiftOf(cardHeight, CardSolid.pileDepth(1, cardWidth), tune.hand)
                 },
                 turned = carrying && carry.quarterTurns % 2 != 0,
                 faceUp = faceUp,
-                lean = if (carrying) 0f else HAND_LEAN,
+                lean = if (carrying) 0f else tune.hand.leanDegrees,
                 landing = if (carrying) {
                     Settle.Landing.Square
                 } else {
@@ -1164,7 +1267,7 @@ private fun seatsFor(
             seats += Seat(
                 id = card.instanceId,
                 card = card,
-                pose = poseAt(carry.at, cardHeight * LIFT_Z, carry.quarterTurns % 2 != 0, faceUp),
+                pose = poseAt(carry.at, cardHeight * carryLift, carry.quarterTurns % 2 != 0, faceUp),
                 faceUp = faceUp,
                 carried = true,
                 pinned = true,
@@ -1199,7 +1302,7 @@ private fun seatsFor(
             seats += Seat(
                 id = card.instanceId,
                 card = card,
-                pose = Pose3(position = Vec3(fan.x, fan.y, cardHeight * FAN_LIFT)),
+                pose = Pose3(position = Vec3(fan.x, fan.y, cardHeight * fanLift)),
                 faceUp = true,
                 carried = false,
                 pinned = false,
@@ -1227,7 +1330,7 @@ private fun seatsFor(
                     position = Vec3(
                         seat.pose.position.x,
                         seat.pose.position.y,
-                        cardHeight * PEEK_Z,
+                        cardHeight * tune.cards.peekLift,
                     ),
                     // Square to the reader and face up, whichever way it was
                     // lying. Being unable to check your own set card is the
@@ -1237,7 +1340,7 @@ private fun seatsFor(
                     rotX = facingReader.first,
                     rotY = facingReader.second,
                     rotZ = facingReader.third,
-                    scale = PEEK_SCALE,
+                    scale = tune.cards.peekScale,
                 ),
                 faceUp = true,
                 carried = true,
@@ -1291,12 +1394,26 @@ private fun quantised(depth: Float, quantum: Float): Int =
  * and unreadable at fourteen, and a combo line routinely holds fourteen. The
  * cards overlap only as far as they must, so the common case still bows.
  */
-internal fun handPointFor(layout: BoardLayout, index: Int, count: Int): MatPoint {
+internal fun handPointFor(
+    layout: BoardLayout,
+    index: Int,
+    count: Int,
+    /**
+     * How far apart they sit at their most spread out, in card widths.
+     *
+     * A parameter rather than a constant because it is one of the things a
+     * person tunes, and defaulted because this function has two independent
+     * readers — the pose in `seatsFor` and the hit box in `MatInput` — and a
+     * default is what makes adding the third reader a compile error rather than
+     * a card that is drawn in one place and grabbed in another.
+     */
+    stepFraction: Float = StageTuning.DEFAULT.hand.stepFraction,
+): MatPoint {
     val band = layout.hand
     val step = if (count <= 1) {
         0f
     } else {
-        min(layout.cardWidth * 0.62f, (band.width - layout.cardWidth) / (count - 1))
+        min(layout.cardWidth * stepFraction, (band.width - layout.cardWidth) / (count - 1))
     }
     val spread = layout.cardWidth + step * (count - 1)
     val x = band.left + (band.width - spread) / 2f + layout.cardWidth / 2f + index * step
@@ -1410,6 +1527,8 @@ private fun StagedCard(
     density: androidx.compose.ui.unit.Density,
     camera: StageCameraState,
     look: StageLook,
+    /** How far this card is from the focus plane, once it is drawn. See `Defocus`. */
+    focus: FocusTune,
 ) {
     val motion = cards[seat.id] ?: return
     val art = state.index.byId(seat.card.cardId)
@@ -1492,6 +1611,7 @@ private fun StagedCard(
                 camera = camera,
                 look = look,
                 magnified = seat.magnified,
+                focus = focus,
             )
             CardFace(
                 art = art,
@@ -1500,6 +1620,7 @@ private fun StagedCard(
                 motion = motion,
                 camera = camera,
                 look = look,
+                focus = focus,
             )
 
             seat.tally?.let { tally ->
@@ -1546,6 +1667,8 @@ private fun CardFace(
     look: StageLook,
     /** Held up to be read, so it is worth fetching the art at full size. */
     magnified: Boolean = false,
+    /** How far the focus plane is, for the haze. See `Defocus`. */
+    focus: FocusTune = FocusTune(),
 ) {
     // Two surfaces, two materials. The printed side is card stock — foiled if
     // this is an extra-deck frame — and the other side is the back of a sleeve,
@@ -1619,6 +1742,25 @@ private fun CardFace(
                         eye = camera.eye,
                         look = look,
                         radiusPx = CardCornerRadius.toPx(),
+                        // Read *here*, in the draw lambda, so it subscribes to
+                        // the plane's snapshot state and re-draws when the
+                        // camera moves. Taken from the sorted seat list instead
+                        // it would freeze mid-orbit: that list is a
+                        // `derivedStateOf` with a structural policy, so it
+                        // re-runs only when the resulting *order* changes —
+                        // which is the exact bug `StageCameraState` records
+                        // about the specular pool.
+                        haze = if (look.scene == Scene.MINIMAL) {
+                            0f
+                        } else {
+                            Defocus.hazeAt(
+                                depth = camera.plane.project(motion.pose.position).depth,
+                                cameraDistance = camera.plane.cameraDistance,
+                                focus = focus.depth,
+                                fNumber = focus.fNumber,
+                                strength = focus.strength,
+                            )
+                        },
                     )
                 },
             )
@@ -1690,6 +1832,19 @@ private fun PlayTopBar(
     onBack: () -> Unit,
     onGuide: () -> Unit,
     onReadout: () -> Unit,
+    /**
+     * The tuning panel, on a **long press** of the same number.
+     *
+     * Not a fourth and fifth tap: a five-tap passes through the three-tap on the
+     * way up, so it would open the frame readout every time on its way to the
+     * panel. A long press does not collide with a count at all, and the number
+     * is still the only element in this bar that is pure output.
+     *
+     * And not a button. This row is a hand-rolled `Row` whose `BAR_FITS_AT` was
+     * measured against the buttons it already has; a sixteenth one either moves
+     * that number or clips "New hand" on a phone.
+     */
+    onTuner: () -> Unit,
     room: String,
     onRoom: () -> Unit,
 ) {
@@ -1785,10 +1940,17 @@ private fun PlayTopBar(
             play.field.lifePoints.toString(),
             style = MaterialTheme.typography.titleMedium,
             color = if (play.field.lifePoints <= 0) MasterToolPalette.Danger else Color.Unspecified,
-            modifier = Modifier.clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-            ) { taps++ },
+            // A raw tap detector rather than `combinedClickable`, and that is
+            // not a style preference. `combinedClickable` makes its node
+            // focusable, and adding a newly-focusable node to this bar ate the
+            // **first** key event the stage received afterwards — which in
+            // `:studio` meant the first shot of every run silently came back at
+            // the table seat whatever seat it had asked for. Two identical runs
+            // then differ, and the loop's whole claim is that they do not.
+            // `detectTapGestures` touches no focus and gives both idioms.
+            modifier = Modifier.pointerInput(Unit) {
+                detectTapGestures(onLongPress = { onTuner() }) { taps++ }
+            },
         )
         listOf(-1000, -500, -100, 100).forEach { delta ->
             BarButton(if (delta > 0) "+$delta" else "$delta") {
@@ -1861,7 +2023,7 @@ private fun Divider() {
 }
 
 @Composable
-private fun BarButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun BarButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         Modifier
             .height(26.dp)

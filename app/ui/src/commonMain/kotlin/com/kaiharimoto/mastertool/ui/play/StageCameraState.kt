@@ -89,5 +89,23 @@ internal class StageCameraState(val rig: CameraRig) {
      */
     fun refresh() = sync(rig.width, rig.height)
 
+    /**
+     * Put the camera somewhere with no travel, and catch the plane up at once.
+     *
+     * The door a slider goes through. [CameraRig.pose] is `private set`, so a
+     * panel cannot write the camera even if it wanted to — and it should not
+     * want to: `placeAt` clamps through the envelope, which is the only thing
+     * standing between a dragged number and a table that has crossed the lens.
+     *
+     * No spring, because a slider *is* the direct manipulation. A camera that
+     * eased toward every value on the way past would make the slider feel like
+     * a remote control, which is the same argument `CameraRig.nudge` makes about
+     * a finger on the felt.
+     */
+    fun placeAt(pose: CameraPose) {
+        rig.placeAt(pose)
+        refresh()
+    }
+
     val pose: CameraPose get() = rig.pose
 }

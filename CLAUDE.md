@@ -51,6 +51,13 @@ so every pixel that moves is a change in the code. It needs the Android SDK
 (`:ui` has an `androidTarget`); point `ANDROID_HOME` at one and the script
 writes `local.properties` itself.
 
+**`docs/TUNING.md` is the in-app tuning panel.** Long-press the life-point
+number on the play stage: fifteen numbers — camera angle, focal length, the
+defocus falloff, the hand, the card lifts — live, persisted, and exported as
+JSON that maps one-to-one onto named constants. `tools/shoot.sh --tune=x.json`
+replays one headlessly. Read it before changing any of those constants by hand,
+and before adding a knob: nothing that re-solves the board may go on the panel.
+
 **`docs/LOOP.md` is the autonomous loop that uses it**: six steps an iteration
 takes, four gates a change passes, and a ledger of what has been tried. Read it
 before doing fidelity work on the play stage.
