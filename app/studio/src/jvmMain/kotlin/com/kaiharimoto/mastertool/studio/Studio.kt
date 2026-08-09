@@ -31,6 +31,7 @@ import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckLayoutState
 import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.rememberFeedback
+import com.kaiharimoto.mastertool.ui.library.DeckLibraryScreen
 import com.kaiharimoto.mastertool.ui.play.PlayScreen
 import com.kaiharimoto.mastertool.ui.table.DuelTableScreen
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
@@ -296,6 +297,7 @@ private fun Stage(deps: AppDependencies, director: Director, opts: Options) {
                 when (opts.screen) {
                     "builder" -> MasterToolApp(deps)
                     "table" -> DuelTableScreen(state = builderState, onBack = {})
+                    "library" -> DeckLibraryScreen(deps = deps, onOpenDeck = {}, onBack = {})
                     else -> PlayScreen(
                         state = builderState,
                         prefs = layoutState,

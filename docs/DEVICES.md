@@ -90,10 +90,20 @@ trying to fix.
 and carry their own copies of it. They work and are shipped; converting them is
 tidy-up, and worth doing before a fourth bar copies the wrong one.
 
-Four other files hold a weighted spacer — `CardInspector`, `DeckLibraryScreen`,
-`SearchPane`, `DeckPanes`. Each has three to six controls rather than fifteen,
-so none is likely to overflow, and **none has been shot at phone metrics.** They
-are the next sweep, not a clean bill of health.
+The other four weighted spacers are clear, and each was checked rather than
+assumed:
+
+- `CardInspector` — two chevrons around "N of M". Bounded by construction; it
+  cannot overflow at any width. Cleared by reading it.
+- `DeckLibraryScreen` — shot at 640dp. Back arrow, title and the saved count,
+  with room to spare.
+- `SearchPane` — the Filters button and the match count, intact in the builder
+  shot at 780dp.
+- `DeckPanes` section headers — the count, the stepper and the menu, intact in
+  the same shot.
+
+`--screen=` reaches `play`, `builder`, `table` and `library` directly, which is
+what made checking three of those four cost one shot each.
 
 ## 5. Known, not yet fixed
 
