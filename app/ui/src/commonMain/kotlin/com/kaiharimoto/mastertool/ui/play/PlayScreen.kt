@@ -2,12 +2,15 @@ package com.kaiharimoto.mastertool.ui.play
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -1650,10 +1653,31 @@ private fun PlayTopBar(
     onRoom: () -> Unit,
 ) {
     val feedback = LocalFeedback.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(TOP_BAR)
+
+    // ---- narrow screens ------------------------------------------------------
+    //
+    // This bar was a fixed `Row` with a `weight(1f)` spacer in the middle of it,
+    // which on the tablet it was designed against looks exactly right and on a
+    // phone silently throws half the controls off the end of the screen. At
+    // 640dp — an ordinary phone in landscape — everything after "Seated" is
+    // gone: the phase, the turn, Draw, Shuffle, Undo, Redo and New hand. The
+    // stage renders perfectly and cannot be played.
+    //
+    // A `Row` cannot both hug the right edge and scroll: a weighted child needs
+    // a finite width and a scroll container hands it infinity. So there are two
+    // arrangements and the width picks one. Wide enough, and it is the bar that
+    // shipped, to the pixel — the weighted spacer and all. Too narrow, and the
+    // spacer goes and the row scrolls, so nothing is ever unreachable.
+    //
+    // [BAR_FITS_AT] is measured rather than guessed; see its KDoc.
+    BoxWithConstraints(Modifier.fillMaxWidth().height(TOP_BAR).background(MasterToolPalette.Ink)) {
+        val roomy = maxWidth >= BAR_FITS_AT
+        val scroll = rememberScrollState()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(TOP_BAR)
+                .then(if (roomy) Modifier else Modifier.horizontalScroll(scroll))
             // Chrome stands on Ink, and until now this bar stood on whatever the
             // room happened to be putting behind it.
             //
@@ -1679,7 +1703,8 @@ private fun PlayTopBar(
             // Opaque, not a scrim: a translucent wash over content is the second
             // line of the handbook's anti-patterns, and a bar that is 82% opaque
             // is a bar that fails on the one background it needed to survive.
-            .background(MasterToolPalette.Ink)
+            // It lives on the box now, so it covers the width even when the row
+            // inside it is scrolled.
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1746,7 +1771,10 @@ private fun PlayTopBar(
         BarButton(play.field.phase.label) { play.move { it.nextPhase() } }
         BarButton("Turn ${play.field.turn} ⟳") { play.move { it.endTurn() } }
 
-        Box(Modifier.weight(1f))
+        // Pushes the right-hand group to the far edge when there is an edge to
+        // push it to. Under a scroll container there is not — a weighted child
+        // needs a finite width — so a narrow bar gets an ordinary gap instead.
+        if (roomy) Box(Modifier.weight(1f)) else Spacer(Modifier.width(20.dp))
 
         play.announcement?.let {
             Text(
@@ -1764,8 +1792,22 @@ private fun PlayTopBar(
         BarButton("Undo", enabled = play.canUndo) { play.undo() }
         BarButton("Redo", enabled = play.canRedo) { play.redo() }
         BarButton("New hand") { play.restart() }
+        }
     }
 }
+
+/**
+ * The width the play stage's bar needs to show every control at once.
+ *
+ * Measured, not chosen: at 914dp the row clips inside "Shuffle" and at 640dp it
+ * clips after "Seated". Rounded up from where the last button's right edge
+ * lands so there is a little air, and deliberately generous — being wrong on the
+ * roomy side costs a scrollbar nobody needs, and being wrong on the narrow side
+ * costs somebody the New hand button.
+ *
+ * A tablet in landscape is far past it and takes the arrangement that shipped.
+ */
+private val BAR_FITS_AT = 1180.dp
 
 @Composable
 private fun Divider() {
