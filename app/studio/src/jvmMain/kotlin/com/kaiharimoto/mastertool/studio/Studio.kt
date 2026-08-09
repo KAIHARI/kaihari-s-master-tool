@@ -22,6 +22,7 @@ import com.kaiharimoto.mastertool.core.update.UpdateChecker
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import com.kaiharimoto.mastertool.ui.DeckFileAccess
 import com.kaiharimoto.mastertool.ui.ImportedFile
+import com.kaiharimoto.mastertool.ui.MasterToolApp
 import com.kaiharimoto.mastertool.ui.SafeArea
 import com.kaiharimoto.mastertool.ui.components.CardBackChoice
 import com.kaiharimoto.mastertool.ui.components.LocalCardBack
@@ -284,7 +285,18 @@ private fun Stage(deps: AppDependencies, director: Director, opts: Options) {
             ),
         ) {
             SafeArea {
-                PlayScreen(state = builderState, prefs = layoutState, onBack = {}, seed = opts.seed)
+                // The whole app, or the play stage on its own.
+                //
+                // `MasterToolApp` opens on the deck builder, which is the screen
+                // a person actually spends their time in — and until this flag
+                // existed the studio could not see it at all. That is not a gap
+                // in coverage, it is the reason a broken builder shipped: the
+                // harness was pointed at the one screen that was fine.
+                if (opts.whole) {
+                    MasterToolApp(deps)
+                } else {
+                    PlayScreen(state = builderState, prefs = layoutState, onBack = {}, seed = opts.seed)
+                }
             }
         }
     }
@@ -374,6 +386,8 @@ private class Options(
     val pauseMillis: Long,
     val keys: String,
     val seed: Long,
+    /** Shoot the whole app — which opens on the deck builder — not just the stage. */
+    val whole: Boolean,
     val budget: Int,
     val shots: List<Shot>,
 ) {
@@ -408,6 +422,7 @@ private class Options(
                 shotFrames = int("frames", 60),
                 pauseMillis = map["pause"]?.toLongOrNull() ?: 6L,
                 keys = str("keys", ""),
+                whole = str("screen", "play").equals("builder", ignoreCase = true),
                 // One deal, every run, unless a shot is deliberately after a
                 // different one. Two pictures of two different hands are not a
                 // before and an after.

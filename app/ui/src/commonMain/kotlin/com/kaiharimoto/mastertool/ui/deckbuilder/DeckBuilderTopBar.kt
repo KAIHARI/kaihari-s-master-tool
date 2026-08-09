@@ -1,8 +1,12 @@
 package com.kaiharimoto.mastertool.ui.deckbuilder
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -66,10 +70,31 @@ fun DeckBuilderTopBar(
     val validation = state.validation
     var menuOpen by remember { mutableStateOf(false) }
 
+    // ---- narrow windows ------------------------------------------------------
+    //
+    // This bar holds about 1400dp of content: the wordmark, the deck name, the
+    // counts, the legality chip, two format chips, six icon buttons, Table,
+    // Play, Library and the overflow menu. The tablet it was designed against
+    // is 1480dp wide, so it fits there by about eighty pixels — and nowhere
+    // else. On a 780dp phone everything from the format chips rightward is
+    // simply gone: no Save, no Undo, no Table, no Play, no menu. The builder
+    // renders perfectly and cannot be used, which is what kai reported.
+    //
+    // Same shape of fix as the play stage's bar. A `Row` cannot both hug the
+    // right edge and scroll — a weighted child needs a finite width and a
+    // scroll container hands it infinity — so the width picks an arrangement.
+    // Wide enough and it is the bar that shipped, to the pixel. Narrower and
+    // the spacer becomes a fixed gap and the row scrolls, so every control is
+    // reachable at any size.
+    BoxWithConstraints(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface),
+    ) {
+    val roomy = maxWidth >= HEADER_FITS_AT
+    val barScroll = rememberScrollState()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
+            .then(if (roomy) Modifier else Modifier.horizontalScroll(barScroll))
             .padding(horizontal = 14.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -132,7 +157,9 @@ fun DeckBuilderTopBar(
             },
         )
 
-        Box(Modifier.weight(1f))
+        // Pushes the right-hand group to the far edge when there is an edge to
+        // push it to; under a scroll container there is not.
+        if (roomy) Box(Modifier.weight(1f)) else Spacer(Modifier.width(16.dp))
 
         // Switching format re-badges the whole pool and re-validates the deck,
         // because the banlist is read through it everywhere.
@@ -349,4 +376,19 @@ fun DeckBuilderTopBar(
             }
         }
     }
+    }
 }
+
+/**
+ * The width the deck builder's header needs to show every control at once.
+ *
+ * About 1400dp of content, and the tablet it was designed against is 1480dp —
+ * so it has always fitted by roughly eighty pixels and by nothing else. Even an
+ * ordinary 1280dp tablet loses the end of it.
+ *
+ * Measured from the content rather than chosen, and rounded up: being wrong on
+ * the roomy side costs a scroll nobody uses, being wrong on the narrow side
+ * costs somebody the Save button.
+ */
+private val HEADER_FITS_AT = 1400.dp
+
