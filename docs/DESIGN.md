@@ -202,6 +202,32 @@ The physical feeling to reproduce is handling a single card.
   mirror at that angle would send the lamp, and lets it slide off the edge when
   it should — clamping it to the border pins a bright smear to a card that has
   simply stopped catching the light.
+- **Distance may take contrast, and only contrast** (`core/render/Defocus.kt`).
+  The rule above forbids a card changing brightness because the camera moved,
+  and this is the one amendment to it. The two are not in conflict once the
+  question is *whose* brightness: the highlight rule is about **shading** — what
+  the lamp is doing to a surface — and this is about **atmosphere**, which is
+  the air between the eye and the card. A far card losing its bite is not the
+  light on it changing; it is you not being able to see it as well, which is
+  true of every far thing anybody has ever looked at.
+
+  Three limits keep it honest. It is a *contrast* falloff and never a
+  brightness one, so nothing gets darker on average — the whites come toward the
+  ground and the blacks come up with them. It is **off unless somebody turns it
+  on**, because it is a look rather than a correction. And it is **zero on
+  `Scene.MINIMAL`**: a haze over `#060608` is a grey rectangle where the room
+  ends, and the mandate that suspends things for the desk scenes suspends
+  nothing for the handbook's own stage.
+
+  It is also honestly not depth of field, and calling it that in the UI would
+  be a lie. There is no blur available — `BlurEffect` is API 31 against a
+  `minSdk` of 26, and a `renderEffect` per card is the shape of change
+  `docs/PHOTOREAL.md` measured and called fatal. Nor is one worth much here:
+  the whole depth span of the board is 55 mat pixels at the reading seat and
+  425 at the seated one, so a physically-tuned circle of confusion is **zero
+  pixels overhead and under three seated**, on a card 102 wide. What defocus
+  destroys first is micro-contrast, and at three pixels that is the entire
+  visible effect — so the cheap thing and the correct thing are the same thing.
 - **Three stocks, chosen by what the card is** (`CardStock`): gloss for card
   stock in a sleeve, foil for extra-deck frames, matte for the back of a sleeve.
   Foil is brighter *and tighter*, which is what makes it read as metal rather
