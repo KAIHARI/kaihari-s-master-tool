@@ -588,15 +588,31 @@ data class StagePlane(
         /**
          * How much of the way to the lens a point may be and still be drawn.
          *
-         * Nine tenths: past it the projection is magnifying tenfold and heading
-         * for the clamp, which is where a quad stops being large and starts
-         * being nonsense. It was a half, and a half turned out to be a *style*
-         * judgement — "nobody is reading a surface at double size" — sitting in
-         * the one place that is supposed to hold nothing but arithmetic. Once
-         * the camera was allowed closer than the coincidence that number shared
-         * with [CameraEnvelope.clearance], it culled the desk. See [reaches].
+         * **It must stay above [CameraEnvelope.MAX_CLEARANCE], and that coupling
+         * has now failed twice.** The clearance is how far toward the lens the
+         * envelope lets the *mat's* corner come; the desk reaches further toward
+         * you than the mat does by construction, so if this is not comfortably
+         * past the clearance, the one caller — `SceneRender`, culling room faces
+         * — stops painting the table you are sitting at, at exactly the seats the
+         * envelope has just been widened to reach.
+         *
+         * It was a half, which was a *style* judgement — "nobody is reading a
+         * surface at double size" — sitting in the one place that is supposed to
+         * hold nothing but arithmetic, and it happened to equal the clearance,
+         * which read as a design. Raising the clearance to 0.68 broke that and it
+         * went to nine tenths. Raising the clearance again — to 0.9 by default and
+         * 0.99 at the knob's stop, because kai asked for the close limit to stop
+         * being a limit — broke it a second time, in precisely the same way and
+         * against precisely the same comment.
+         *
+         * So it is 0.995 now, and `StagePlaneTest.theCullIsAlwaysPastWhereTheEnvelopeCanPutTheTable`
+         * is the tripwire rather than this paragraph. What it is really guarding
+         * is `MIN_GAP`: at the closest pose the envelope allows, the gap is still
+         * several pixels, so the divide has not clamped and a quad drawn here is
+         * merely very large rather than nonsense. A camera walked inside the desk
+         * is allowed to look like it.
          */
-        const val SAFE_DEPTH = 0.9f
+        const val SAFE_DEPTH = 0.995f
 
         private const val MIN_GAP = 1f
 

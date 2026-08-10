@@ -289,4 +289,33 @@ class StagePlaneTest {
         assertTrue(projected.x.isFinite() && projected.y.isFinite())
         assertEquals(0f, nothing.centreX)
     }
+
+    /**
+     * The cull is always past where the envelope can put the table.
+     *
+     * `StagePlane.SAFE_DEPTH` culls a face too close to the lens; `CameraEnvelope`'s
+     * clearance says how close the envelope lets the *mat's* corner come. The desk
+     * reaches further toward you than the mat does by construction, so if the first
+     * is not past the second, `SceneRender` stops painting the table you are
+     * sitting at — at exactly the seats a widened envelope has just unlocked.
+     *
+     * That coupling has broken twice, both times in the same direction and both
+     * times against a comment that described it correctly. So it is a test now.
+     */
+    @Test
+    fun theCullIsAlwaysPastWhereTheEnvelopeCanPutTheTable() {
+        assertTrue(
+            StagePlane.SAFE_DEPTH > CameraEnvelope.MAX_CLEARANCE,
+            "the cull at ${StagePlane.SAFE_DEPTH} is inside the envelope's own " +
+                "${CameraEnvelope.MAX_CLEARANCE}, so the desk goes when you sit close",
+        )
+        // And still short of the clamp, or it would be guarding nothing: at the
+        // closest pose the envelope allows, the gap the projection divides by has
+        // to be more than the pixel it is floored at.
+        val closest = CameraEnvelope(clearance = CameraEnvelope.MAX_CLEARANCE)
+        val floor = closest.minDistanceAt(58f, 1600f, 1000f)
+        val plane = CameraPose(pitchDegrees = 58f, distance = floor).planeFor(1600f, 1000f)
+        val gap = plane.cameraDistance * (1f - StagePlane.SAFE_DEPTH)
+        assertTrue(gap > 2f, "the cull sits ${gap}px from the lens, which is inside the clamp")
+    }
 }
