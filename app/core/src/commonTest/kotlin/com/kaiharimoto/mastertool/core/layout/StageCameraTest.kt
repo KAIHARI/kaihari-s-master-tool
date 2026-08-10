@@ -241,12 +241,14 @@ class StageCameraTest {
 
     // ---- keeping the board on the glass ----------------------------------------------
 
-    private val board = BoardLayouter.solve(
+    private val layout = BoardLayouter.solve(
         width = width,
         height = height,
         aspectRatio = 59f / 86f,
         perspectiveGrowth = StagePlane.forStage(width, height).perspectiveGrowth,
-    ).bounds
+    )
+
+    private val board = layout.bounds
 
     @Test
     fun theSeatTheStageOpensAtNeedsNoCorrectionAtAll() {
@@ -289,6 +291,61 @@ class StageCameraTest {
         assertTrue(
             !CameraFit.holds(plane(nearer), board),
             "it stopped ${fitted.distance} short of the boundary",
+        )
+    }
+
+    /**
+     * The measurement behind `MatInput.settle` fitting the field rather than the
+     * board, and the reason it is a test rather than a sentence: it is the
+     * *difference* between two floors, and either of them could move.
+     *
+     * kai's report was that the camera stopped getting closer at about 1.42.
+     * Fitting `bounds` — which adds the hand band along the bottom edge of the
+     * stage — the nearest reachable distance at the table seat is 1.47, against
+     * an envelope floor of 1.05. The hand is what a push-in costs first, and the
+     * fitter was treating that as a reason to refuse.
+     */
+    @Test
+    fun fittingTheFieldRatherThanTheHandIsWhatLetsTheCameraComeClose() {
+        val seat = StageSeat.TABLE.pose
+        val floor = envelope.minDistanceAt(seat.pitchDegrees, width, height)
+
+        fun closest(bounds: Slot): Float {
+            var distance = floor
+            while (distance < envelope.maxDistance) {
+                if (CameraFit.holds(plane(seat.copy(distance = distance)), bounds)) return distance
+                distance += 0.005f
+            }
+            return envelope.maxDistance
+        }
+
+        val withHand = closest(layout.bounds)
+        val fieldOnly = closest(layout.field)
+
+        assertTrue(
+            withHand > floor + 0.3f,
+            "the hand band used to cost a third of the range; now it costs $withHand vs $floor",
+        )
+        assertTrue(
+            fieldOnly <= floor + 0.01f,
+            "the field alone should reach the envelope's own floor, stopped at $fieldOnly",
+        )
+    }
+
+    @Test
+    fun turningStillDolliesBackEvenWithTheHandLetGoOf() {
+        // The property `CameraFit` exists for, restated against the bounds it is
+        // now actually given: a diagonal really does need more room, and it is
+        // not the fitter's refusal to lose the hand that was providing that.
+        val square = CameraPose(0f, 24f, envelope.minDistance)
+        val turned = CameraPose(45f, 24f, envelope.minDistance)
+
+        val straightOn = CameraFit.fit(square, layout.field, envelope, width, height, ::plane)
+        val diagonal = CameraFit.fit(turned, layout.field, envelope, width, height, ::plane)
+
+        assertTrue(
+            diagonal.distance > straightOn.distance + 0.2f,
+            "turning bought no correction: ${straightOn.distance} against ${diagonal.distance}",
         )
     }
 

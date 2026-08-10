@@ -33,6 +33,70 @@ class StagePlaneTest {
         }
     }
 
+    // ---- and the other seam, which did exist -----------------------------------
+
+    @Test
+    fun raisingAPointAndFlatteningItAgainLandsBackOnIt() {
+        // `flatten` is how everything with a height reaches the screen and
+        // nothing inverted it, which is why a fanned card could not be pointed
+        // at: the finger was unprojected onto the felt and compared against the
+        // mat coordinates of something floating half a card above it.
+        //
+        // Over every seat and both signs of yaw, because the error this replaces
+        // grows with the tilt and swings round with the table.
+        listOf(5f to 1.62f, StagePlane.TILT to 1.45f, 34f to 1.34f).forEach { (pitch, distance) ->
+            listOf(-90f, 0f, 37f, 150f).forEach { yaw ->
+                val plane = CameraPose(yaw, pitch, distance).planeFor(1600f, 1000f)
+                listOf(0f, 40f, 90f, 180f).forEach { z ->
+                    listOf(400f to 300f, 800f to 500f, 1300f to 820f).forEach { (x, y) ->
+                        val raised = plane.raise(x, y, z)
+                        val flat = plane.flatten(raised.x, raised.y, z)
+                        assertClose(x, flat.x, 0.35f, "x at ($x,$y) z=$z pitch=$pitch yaw=$yaw:")
+                        assertClose(y, flat.y, 0.35f, "y at ($x,$y) z=$z pitch=$pitch yaw=$yaw:")
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun raisingByNothingIsTheIdentityAndUnprojectIsItsOwnSpecialCase() {
+        // Two claims, one line each, and both are what keeps the new algebra
+        // from becoming a second opinion about the old.
+        listOf(200f to 150f, 800f to 500f, 1500f to 950f).forEach { (x, y) ->
+            val flat = stage.raise(x, y, 0f)
+            assertEquals(x, flat.x)
+            assertEquals(y, flat.y)
+
+            val screen = stage.project(x, y)
+            val old = stage.unproject(screen.x, screen.y)
+            val new = stage.unprojectAt(screen.x, screen.y, 0f)
+            assertEquals(old.x, new.x, "unprojectAt(·, 0) drifted from unproject at ($x, $y)")
+            assertEquals(old.y, new.y, "unprojectAt(·, 0) drifted from unproject at ($x, $y)")
+        }
+    }
+
+    @Test
+    fun aRaisedPointStandsNearerTheViewerThanTheFeltItAppearsToBeOn() {
+        // The direction, said out loud, because a sign error here would still
+        // round-trip perfectly — and getting it backwards is a hit test that is
+        // twice as wrong as no hit test at all.
+        //
+        // The camera is above and in front, so a thing in the air appears
+        // *further up the screen* than the felt beneath it, which reads as
+        // further away. Run backwards: the point at height z that appears to be
+        // at a given place on the felt is standing nearer to you than that place
+        // is. This is exactly the offset a fanned card had and the finger did
+        // not.
+        val z = 120f
+        val raised = stage.raise(stage.centreX, 700f, z)
+        assertTrue(
+            raised.y > 700f,
+            "a point in the air should stand nearer the near edge, was ${raised.y}",
+        )
+        assertClose(700f, stage.flatten(raised.x, raised.y, z).y, 0.35f, "and it flattens back:")
+    }
+
     @Test
     fun theCentreOfTheMatIsTheOnePointThatDoesNotMove() {
         val middle = stage.project(stage.centreX, stage.centreY)

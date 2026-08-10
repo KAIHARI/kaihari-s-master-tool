@@ -63,10 +63,10 @@ class PileFanTest {
 
     @Test
     fun aSmallPileIsOneRowOfSlightlyOverlappingCards() {
-        // A graveyard of six, an extra deck of fifteen: both are one row, and
-        // both overlap, because a pile that has just been spread out by a hand
-        // does not become a row of separate cards with gaps between them.
-        listOf(6, 15).forEach { count ->
+        // A graveyard of six, a hand-sized pile of ten: one row each, and both
+        // overlap, because a pile that has just been spread out by a hand does
+        // not become a row of separate cards with gaps between them.
+        listOf(1, 6, 10).forEach { count ->
             val fan = spread(count)
             assertEquals(1, fan.rows, "$count cards should need one row")
             assertTrue(
@@ -77,17 +77,32 @@ class PileFanTest {
     }
 
     @Test
-    fun aDeckBreaksIntoRowsRatherThanShrinkingToASliver() {
-        // Forty cards will not go across a board at a legible step, so the fan
-        // wraps. The alternative — one row of forty — leaves eight pixels of
-        // each card showing, which is a colour, not a card.
-        val fan = spread(40)
+    fun aDeckIsFourRowsWhicheverSizeItIs() {
+        // kai's number, and the reason a row is capped at ten: at three rows the
+        // step is already at its ceiling, so no amount of "is this comfortable"
+        // would ever have asked for a fourth. Forty and sixty spread the same
+        // way, which is what makes a search of one deck look like a search of
+        // any other.
+        listOf(40, 45, 60).forEach { count ->
+            assertEquals(4, spread(count).rows, "$count cards should spread as four rows")
+        }
+        // And an extra deck, which is two rows of eight and seven rather than
+        // one row of fifteen — ten to a row is the rule that decides it.
+        assertEquals(2, spread(15).rows)
+    }
 
-        assertTrue(fan.rows > 1, "forty cards do not fit in one row")
-        assertTrue(
-            fan.step > cardWidth * 0.3f,
-            "and having wrapped, each card shows enough to be recognised: ${fan.step}",
-        )
+    @Test
+    fun aFannedCardShowsMoreOfItselfThanItHides() {
+        // "Fan out more", measured. Half a card is enough to *recognise* one and
+        // not enough to read one: the name band survives and the art, the type
+        // line and the numbers are all under the next card along.
+        listOf(15, 40, 60).forEach { count ->
+            val fan = spread(count)
+            assertTrue(
+                fan.step > cardWidth * 0.5f,
+                "$count cards: each shows only ${fan.step} of $cardWidth",
+            )
+        }
     }
 
     @Test
@@ -198,6 +213,32 @@ class PileFanTest {
         }
         assertTrue(fan.bounds.width <= field.width + 0.5f)
         assertTrue(fan.bounds.height <= field.height + 0.5f)
+    }
+
+    @Test
+    fun aDeckIsStillFourRowsOnTheBoardsThisActuallyShipsTo() {
+        // The rest of this file works on a board of my own invention, which is
+        // the right way to test the arithmetic and the wrong way to claim
+        // anything about the app: four rows only happen if the field is tall
+        // enough to hold them, and `ceilingRows` will quietly return three if it
+        // is not. So this asks the real solver, in both rooms — the desk gives a
+        // fifth of the height away to the room, which is exactly the case where
+        // the fourth row is at risk.
+        listOf(
+            "tablet, minimal" to BoardLayouter.solve(1600f, 1000f, 59f / 86f),
+            "tablet, desk" to BoardLayouter.solve(1600f, 1000f, 59f / 86f, roomAbove = 0.20f),
+            "phone, desk" to BoardLayouter.solve(960f, 540f, 59f / 86f, roomAbove = 0.20f),
+        ).forEach { (where, layout) ->
+            val fan = PileFan.spread(40, layout.field, layout.cardWidth, layout.cardHeight)
+            assertEquals(4, fan.rows, "$where: forty cards came out as ${fan.rows} rows")
+            fan.cards.forEach {
+                assertTrue(
+                    it.y - layout.cardHeight / 2f >= layout.field.top - 0.5f &&
+                        it.y + layout.cardHeight / 2f <= layout.field.bottom + 0.5f,
+                    "$where: a card at ${it.y} is off the field",
+                )
+            }
+        }
     }
 
     @Test

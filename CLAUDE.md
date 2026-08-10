@@ -300,7 +300,27 @@ send it to your hand. The deck fans in its own order and closing it shuffles,
 which is correct by the rules. This was `docs/TABLE.md` §3's "hole", and the
 whole of it at the input end was that the hit test returned
 `DragOrigin.Pile(slot, 0)` — the domain had taken an arbitrary index since it
-was written.
+was written. **Ten to a row, four rows at most**, so a deck spreads the same way
+whether it holds forty cards or sixty.
+
+**And `StagePlane.raise` is why you get the card you pointed at.** `flatten` is
+how everything with a height reaches the screen, and nothing inverted it — so a
+spread pile, which floats about half a card above the felt, was *drawn* tens of
+mat pixels from the coordinates it was *hit-tested* at. The finger arrived on
+the felt; the cards were not on the felt. `raise` is that inverse in closed
+form, exact for anything flat at one height, and it is the identity at z = 0, so
+everything lying on the mat is pointed at exactly where it was computed. The
+hand carries the same offset and is deliberately left alone: its cards lean, so
+their footprint is a quad at two heights rather than a rectangle at one.
+
+**The camera fits the field, not the board.** `CameraFit` runs when a camera
+gesture ends and dollies back until the board is on the glass — which is what
+stops a turned table walking its own corners off the screen. Handed
+`layout.bounds` it also refused to let the *hand* leave, and since the hand sits
+along the bottom edge of the stage that capped the nearest reachable distance at
+1.47 against an envelope floor of 1.05: a third of the range, spent on the one
+thing a push-in is supposed to cost. It is handed `layout.field` instead. Every
+zone and every pile is inside it; turning still steps you back.
 
 The room is eighteen pieces: a floor, the desk, four wall pieces around a
 window opening, the pane, seven of joinery around it, and four for the lamp.

@@ -31,6 +31,7 @@ import com.kaiharimoto.mastertool.core.layout.MatControls
 import com.kaiharimoto.mastertool.core.layout.PileFan
 import com.kaiharimoto.mastertool.core.layout.CameraFit
 import com.kaiharimoto.mastertool.core.layout.planeFor
+import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.mat.MatEvent
 import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
 import com.kaiharimoto.mastertool.core.mat.Touch
@@ -189,7 +190,10 @@ internal class MatPilot(
         if (!down) return
 
         machine.cancel()
-        whatIsUnder(play.field, layout, at, play.fanned, tune.hand.stepFraction)?.let(onMenu)
+        whatIsUnder(
+            play.field, layout, at, play.fanned, tune.hand.stepFraction,
+            camera?.plane, fanLift,
+        )?.let(onMenu)
     }
 
     private fun carryOut(events: List<MatEvent>) {
@@ -203,8 +207,10 @@ internal class MatPilot(
                 else -> Unit
             }
 
-            grabbed =
-                handle(event, grabbed, play, layout, feedback, onMenu, attaching, tune.hand.stepFraction)
+            grabbed = handle(
+                event, grabbed, play, layout, feedback, onMenu, attaching,
+                tune.hand.stepFraction, camera?.plane, fanLift,
+            )
 
             // The press has been hit-tested by now — `handle` is what does it —
             // so this is the first moment anything knows whether the finger
@@ -300,8 +306,20 @@ internal class MatPilot(
      */
     private fun onFan(at: Vec2): Boolean {
         val slot = play.fanned ?: return false
-        return fanOf(play.field, layout, slot).bounds.contains(at.x, at.y)
+        val onFan = fanPointFor(at, camera?.plane, fanLift)
+        return fanOf(play.field, layout, slot).bounds.contains(onFan.x, onFan.y)
     }
+
+    /**
+     * How far a spread pile floats, in mat pixels, at the tuning in force.
+     *
+     * Read from the same two knobs `seatsFor` multiplies together, and by the
+     * same card height, so a person moving "Spread height" on the tuning panel
+     * moves the cards and the hit boxes as one thing. A copy of that arithmetic
+     * would be a fan you can see and cannot touch, one slider later.
+     */
+    private val fanLift: Float
+        get() = layout.cardHeight * tune.cards.carryLift * tune.cards.fanLiftRatio
 
     private fun fly(fingers: Int) {
         val state = camera ?: return
@@ -321,19 +339,35 @@ internal class MatPilot(
     /**
      * Let go, and the table comes back onto the glass.
      *
-     * [CameraFit] has existed, tested, since the camera was written, and has
-     * never once been called: the comment in `PlayScreen` promising "CameraFit
-     * dollies back instead" was describing an intention. What actually kept the
-     * board on screen was [com.kaiharimoto.mastertool.core.layout.CameraEnvelope]'s
-     * distance floor, which is a guard against the *mat crossing the lens* and
-     * not a guarantee about anything staying visible — so a turned table could
-     * simply walk its own corners off the screen, and the pinch that now ships
-     * is the shortest route to doing it.
+     * [CameraFit] exists because a turned table can walk its own corners off the
+     * screen: [com.kaiharimoto.mastertool.core.layout.CameraEnvelope]'s distance
+     * floor is a guard against the *mat crossing the lens*, not a promise that
+     * anything stays visible.
      *
-     * On release rather than per frame, which is what the fitter was written
-     * for: sixteen projections of four points is nothing once, and a correction
-     * applied *during* a drag is a camera fighting the finger holding it.
-     * Sprung rather than assigned, so it reads as the table settling.
+     * **It fits the field, not the board, and that is what lets the camera come
+     * close.** Fitting `layout.bounds` — the zones *and* the hand band — meant
+     * the closest distance anybody could actually reach at the table seat was
+     * 1.47: the hand sits along the bottom edge of the stage, so the first thing
+     * a push-in costs is the hand, and the fitter treated that as a reason to
+     * refuse. kai's report was that the camera stopped getting closer at about
+     * 1.42, and this was the whole of it. Against the field alone the floor is
+     * the envelope's own 1.05, which is a third of the distance back and the
+     * "dynamic effect" that was being asked for.
+     *
+     * The hand is allowed to run off the bottom, in other words, exactly as
+     * `CameraFit.OVERHANG`'s note already says the *felt* is. What must not
+     * leave the glass is a zone or a pile, and every one of those is inside the
+     * field — `BoardLayouter` puts the deck, the graveyard, the banish pile and
+     * the extra deck in the same seven columns as the monster zones.
+     *
+     * Turning still dollies back, which is what the fitter was written for: at
+     * forty-five degrees the floor is 1.42 rather than 1.05, because a diagonal
+     * really does need more room.
+     *
+     * On release rather than per frame: sixteen projections of four points is
+     * nothing once, and a correction applied *during* a drag is a camera
+     * fighting the finger holding it. Sprung rather than assigned, so it reads
+     * as the table settling.
      */
     private fun settle() {
         val state = camera ?: return
@@ -342,7 +376,7 @@ internal class MatPilot(
 
         val fitted = CameraFit.fit(
             wanted = rig.pose,
-            bounds = layout.bounds,
+            bounds = layout.field,
             envelope = rig.envelope,
             surfaceWidth = rig.width,
             surfaceHeight = rig.height,
@@ -548,12 +582,17 @@ private fun handle(
      * card you can see and cannot pick up.
      */
     handStep: Float,
+    /** Where an open fan floats, and through what — see [whatIsUnder]. */
+    fanPlane: StagePlane?,
+    fanLift: Float,
 ): DragOrigin? {
     fun mat(at: Vec2): MatPoint = layout.toMat(at.x to at.y)
 
     when (event) {
         is MatEvent.Pressed ->
-            return whatIsUnder(play.field, layout, event.at, play.fanned, handStep)
+            return whatIsUnder(
+                play.field, layout, event.at, play.fanned, handStep, fanPlane, fanLift,
+            )
 
         is MatEvent.Tapped -> {
             when (val what = grabbed) {
@@ -719,6 +758,23 @@ private fun whatIsUnder(
     at: Vec2,
     fanned: DragOrigin? = null,
     handStep: Float = StageTuning.DEFAULT.hand.stepFraction,
+    /**
+     * The camera's plane, and how far a spread pile floats above the felt.
+     *
+     * A fanned card is *drawn* through `StagePlane.flatten`, so it appears some
+     * way from the mat coordinates `PileFan` gave it — tens of pixels at the
+     * table seat, against a fan whose cards may sit a third of a card apart. The
+     * finger arrives on the felt. Comparing the two is comparing two different
+     * places, and the card you got was reliably not the card you pointed at.
+     *
+     * So the finger is lifted onto the fan's own plane first, with
+     * `StagePlane.raise` — [flatten]'s exact inverse, and exact here because a
+     * fanned card is flat and at one height. Null plane means "no camera yet",
+     * which is the frame between the first composition and the `SideEffect` that
+     * hands one over; the old behaviour is what it falls back to.
+     */
+    fanPlane: StagePlane? = null,
+    fanLift: Float = 0f,
 ): DragOrigin? {
     val halfWidth = layout.cardWidth / 2f
     val halfHeight = layout.cardHeight / 2f
@@ -735,9 +791,10 @@ private fun whatIsUnder(
     // of a pile is that this function returned a hard-coded zero.
     if (fanned != null) {
         val spread = fanOf(field, layout, fanned)
-        val index = PileFan.cardAt(spread, at.x, at.y, layout.cardWidth, layout.cardHeight)
+        val onFan = fanPointFor(at, fanPlane, fanLift)
+        val index = PileFan.cardAt(spread, onFan.x, onFan.y, layout.cardWidth, layout.cardHeight)
         if (index != null) return fanned.fanCardAt(index)
-        if (spread.bounds.contains(at.x, at.y)) return null
+        if (spread.bounds.contains(onFan.x, onFan.y)) return null
     }
 
     fun covers(centre: Pair<Float, Float>): Boolean =
@@ -780,6 +837,19 @@ private fun whatIsUnder(
  */
 private fun fanOf(field: PlayField, layout: BoardLayout, what: DragOrigin): FanSpread =
     PileFan.spread(field.fanOf(what).size, layout.field, layout.cardWidth, layout.cardHeight)
+
+/**
+ * The finger, on the plane an open fan floats on.
+ *
+ * One place, so that the hit test and [MatPilot.onFan] — which decides whether
+ * the camera gets the gesture at all — cannot disagree about where the fan is.
+ * They did not disagree before only because both were wrong in the same way.
+ */
+private fun fanPointFor(at: Vec2, plane: StagePlane?, lift: Float): Vec2 {
+    if (plane == null || lift == 0f) return at
+    val raised = plane.raise(at.x, at.y, lift)
+    return Vec2(raised.x, raised.y)
+}
 
 /**
  * A card tapped in a spread pile goes to the hand, and the pile squares up.

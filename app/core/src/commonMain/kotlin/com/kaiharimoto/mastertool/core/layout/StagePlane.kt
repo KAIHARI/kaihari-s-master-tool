@@ -202,19 +202,96 @@ data class StagePlane(
      * turning back the other way. A rigid rotation is the one kind of transform
      * whose inverse is free.
      */
-    fun unproject(screenX: Float, screenY: Float): Vec3 {
+    fun unproject(screenX: Float, screenY: Float): Vec3 = unprojectAt(screenX, screenY, 0f)
+
+    /**
+     * A screen point back onto the plane at height [z] — [project]'s full inverse.
+     *
+     * ## What it answers
+     *
+     * [unproject] asks where on the *felt* a finger is. This asks where on the
+     * plane a hand's height above the felt it is, which is a different point and
+     * is the one that matters whenever the thing being pointed at is not lying
+     * down: a card in a spread pile, a card in the hand, anything at all with a
+     * z. The two agree only at `z = 0`, where this reduces to [unproject] term
+     * for term — `StagePlaneTest` pins that, because a second copy of this
+     * algebra is a second thing to keep true.
+     *
+     * ## The algebra
+     *
+     * With `u = z·zoom` and `A = d − u·cosθ`, [project] gives
+     * `flat′ = (y·cosθ − u·sinθ)·d / (A − y·sinθ)`, which rearranges to
+     *
+     * ```
+     * y = (flat′·A + d·u·sinθ) / (d·cosθ + flat′·sinθ)
+     * ```
+     *
+     * — the same shape [unproject] has always had, with the two terms the height
+     * contributes kept rather than dropped. Everything after it is unchanged: the
+     * scale follows from the depth, x divides by it, and the spin and the zoom
+     * come off exactly as before.
+     *
+     * The denominator vanishes at exactly one screen row — the horizon of this
+     * plane, where a ray parallel to it never lands. Guarded rather than solved:
+     * a finger there is pointing at infinity and the honest answer is "the middle
+     * of the mat", not a number with six digits in it.
+     */
+    fun unprojectAt(screenX: Float, screenY: Float, z: Float): Vec3 {
         val localX = screenX - centreX
         val localY = screenY - centreY
-        val onPlane = localY * cameraDistance / (cameraDistance * cosTilt + localY * sinTilt)
-        val scale = cameraDistance / max(cameraDistance - onPlane * sinTilt, MIN_GAP)
+        val up = z * zoom
+        val near = cameraDistance - up * cosTilt
+
+        val divisor = cameraDistance * cosTilt + localY * sinTilt
+        if (abs(divisor) < MIN_GAP) return Vec3(centreX, centreY, z)
+
+        val onPlane = (localY * near + cameraDistance * up * sinTilt) / divisor
+        val scale = cameraDistance / max(near - onPlane * sinTilt, MIN_GAP)
         val spunX = localX / scale
         val safeZoom = if (abs(zoom) < 1e-4f) 1e-4f else zoom
 
         return Vec3(
             x = centreX + (spunX * cosYaw - onPlane * sinYaw) / safeZoom,
             y = centreY + (spunX * sinYaw + onPlane * cosYaw) / safeZoom,
-            z = 0f,
+            z = z,
         )
+    }
+
+    /**
+     * The point at height [z] that *appears* where ([x], [y]) on the felt does —
+     * the exact inverse of [flatten].
+     *
+     * ## Why anything needs it
+     *
+     * [flatten] is how everything with a height reaches the screen: a card in the
+     * air is drawn at the felt point its own corners project to, so the mat's one
+     * transform puts it where the height says. That is a one-way street, and the
+     * hit test is what falls off the end of it. A finger arrives as a screen
+     * point, [unproject] turns it into a felt point, and a felt point compared
+     * against a *raised* card's mat coordinates is comparing two different places.
+     *
+     * It is not a small error. A spread pile floats at about half a card height;
+     * at the table seat that is tens of mat pixels, against a fan whose cards may
+     * sit a third of a card width apart. The card you got was reliably not the
+     * card you pointed at, and `docs/TABLE.md` §4's whole feature was the worse
+     * for it.
+     *
+     * ## What it does and does not promise
+     *
+     * Exact for anything **flat and at one height** — which is what a fanned card
+     * is, and what a card lying on a pile is. A *leaned* card is not: the hand's
+     * cards pivot on their bottom edge, so their footprint is a quad at two
+     * heights rather than a rectangle at one, and this answers about the height
+     * you name. Close, and not the same claim; the hand is deliberately still hit
+     * tested on the felt.
+     *
+     * At `z = 0` it is the identity, which is the property worth having: geometry
+     * that touches the mat is pointed at exactly where it was computed.
+     */
+    fun raise(x: Float, y: Float, z: Float): Vec3 {
+        if (z == 0f) return Vec3(x, y, 0f)
+        val screen = project(x, y, 0f)
+        return unprojectAt(screen.x, screen.y, z)
     }
 
     /** How much bigger something gets by rising [z] off the mat at the centre. */

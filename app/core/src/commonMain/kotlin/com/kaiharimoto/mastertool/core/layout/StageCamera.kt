@@ -258,11 +258,17 @@ object CameraFit {
     /**
      * How far outside the surface a corner may stray before it counts as off.
      *
-     * A hair of tolerance, and it is not slop: the projected corner of the board
-     * is the corner of the *felt*, and the felt is allowed to run under the edge
-     * of the screen the way a real mat runs off the edge of a real table. What
-     * must not happen is a zone or a pile leaving the glass, and those sit
-     * inside the bounds by a card's width already.
+     * A hair of tolerance, and it is not slop: the felt is allowed to run under
+     * the edge of the screen the way a real mat runs off the edge of a real
+     * table. What must not happen is a zone or a pile leaving the glass.
+     *
+     * **Which is a statement about what you hand in as [bounds], not about this
+     * number.** The play stage passes `layout.field` — the three rows of zones,
+     * every pile among them — and deliberately not `layout.bounds`, which adds
+     * the hand band along the bottom edge of the stage. The hand is the first
+     * thing a push-in costs, and treating that as a reason to refuse capped the
+     * camera at 1.47 when the envelope would have allowed 1.05. See
+     * `MatInput.settle`.
      */
     private const val OVERHANG = 0.02f
 

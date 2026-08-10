@@ -56,11 +56,40 @@ object PileFan {
     /**
      * The most of a card's width between one card and the next, as a share of it.
      *
-     * Just over half, so a fanned pile reads as *cards overlapping* rather than
-     * as a row of separate cards with gaps: enough of each one shows to know
-     * what it is, and the overlap is what says these were one pile a moment ago.
+     * Just under three quarters. It was just over a half, and a half is enough to
+     * *recognise* a card and not enough to read one: the name band and the
+     * attribute survive, and everything below them — the art, the type line, the
+     * numbers — is under the next card along. kai asked for a wider fan and this
+     * is the number that answers it.
+     *
+     * Still short of one, because the overlap is what says these were a pile a
+     * moment ago; a row of separate cards with gaps between them is a display,
+     * not a search.
      */
-    private const val MAX_STEP = 0.52f
+    private const val MAX_STEP = 0.72f
+
+    /**
+     * The most cards in a row of a fan.
+     *
+     * Ten, which is a decklist row — the same ten the main deck pane is drawn at,
+     * and for the same reason: it is how the list is read. It is also what makes
+     * a forty-card deck spread as four rows rather than as two, which is what kai
+     * asked for and which the comfort rule below could never have reached on its
+     * own: at three rows the step is already at [MAX_STEP] and nothing is
+     * uncomfortable enough to trigger a fourth.
+     */
+    private const val PER_ROW = 10
+
+    /**
+     * And the most rows, so a sixty-card deck spreads the same way a forty does.
+     *
+     * Four. Above it the rows are more overlapped than the cards — [ROW_STEP] is
+     * the tighter of the two — so a fifth row costs more legibility than the
+     * shorter rows buy. A pile that will not fit in four still gets more, but
+     * only because the board made it: the escalation below is about the board
+     * running out of width, and it is allowed to overrule this.
+     */
+    private const val MAX_ROWS = 4
 
     /**
      * How little of a card may show before another row is worth having instead.
@@ -89,11 +118,15 @@ object PileFan {
     /**
      * [count] cards, laid out to fill [over] without leaving it.
      *
-     * Rows are added one at a time and only when the row before them has been
-     * squeezed past [COMFORT_STEP] — so a graveyard of six is one row, a
-     * fifteen-card extra deck is one row, and a forty-card deck is two. The
-     * cards stay in the order they were given, which for the deck is the order
-     * it is actually in.
+     * Two rules, in this order. **Ten to a row, four rows at most** — so a
+     * graveyard of six is one row, a fifteen-card extra deck is two, and a deck
+     * is four whether it holds forty cards or sixty. Then, underneath that, rows
+     * are still *added* one at a time while the row before them is squeezed past
+     * [COMFORT_STEP], which is what happens when the board is too narrow to hold
+     * the shape the first rule asked for.
+     *
+     * The cards stay in the order they were given, which for the deck is the
+     * order it is actually in.
      */
     fun spread(count: Int, over: Slot, cardWidth: Float, cardHeight: Float): FanSpread {
         if (count <= 0 || cardWidth <= 0f || cardHeight <= 0f) {
@@ -111,7 +144,11 @@ object PileFan {
 
         fun perRowFor(rows: Int): Int = ceil(count.toFloat() / rows).toInt().coerceAtLeast(1)
 
-        var rows = 1
+        // The shape asked for, then the shape the board will take. Escalation
+        // still runs from there, because a board narrower than this expects is
+        // the one case a row count chosen by taste has to give way.
+        val wanted = min(MAX_ROWS, ceil(count.toFloat() / PER_ROW).toInt())
+        var rows = wanted.coerceIn(1, ceilingRows)
         while (rows < ceilingRows && stepFor(perRowFor(rows)) < cardWidth * COMFORT_STEP) rows++
 
         val perRow = perRowFor(rows)
