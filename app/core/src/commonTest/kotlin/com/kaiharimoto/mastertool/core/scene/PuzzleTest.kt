@@ -317,9 +317,17 @@ class PuzzleTest {
                 Puzzle.holds(layout, pose, plane, eye, at),
                 "${seat.label} cannot touch the middle of its own top face",
             )
-            val foot = Puzzle.foot(layout)
+            // And the guard that stops this being vacuous: the point touched has
+            // to be a long way from where the object actually *stands*, or a hit
+            // test against the footprint would have passed too. Measured against
+            // the contact point rather than `foot`, because a propped pyramid
+            // rests on an edge some distance from the axis it was turned about.
+            val ground = Puzzle.solid(layout, pose)
+                .flatMap { it.corners }
+                .minByOrNull { it.z }!!
+                .let { plane.flatten(it) }
             assertTrue(
-                hypot(at.x - foot.x, at.y - foot.y) > Puzzle.width(layout) / 2f,
+                hypot(at.x - ground.x, at.y - ground.y) > Puzzle.width(layout) / 2f,
                 "${seat.label} draws it close enough to its base that this proves nothing",
             )
         }

@@ -5,10 +5,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import com.kaiharimoto.mastertool.core.layout.StagePlane
+import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.Face
+import com.kaiharimoto.mastertool.core.render.Homography
 import com.kaiharimoto.mastertool.core.render.FaceWash
 import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.StageLighting
@@ -19,9 +22,11 @@ import com.kaiharimoto.mastertool.core.scene.Scene
 import com.kaiharimoto.mastertool.core.scene.ScenePainter
 import com.kaiharimoto.mastertool.core.scene.SceneBox
 import com.kaiharimoto.mastertool.core.scene.ScenePiece
+import com.kaiharimoto.mastertool.core.scene.Puzzle
 import com.kaiharimoto.mastertool.core.scene.reachOf
 import com.kaiharimoto.mastertool.core.scene.Surface
 import com.kaiharimoto.mastertool.core.scene.TimeOfDay
+import com.kaiharimoto.mastertool.core.scene.Wdjat
 import com.kaiharimoto.mastertool.ui.gpu.StageShader
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -484,6 +489,7 @@ internal fun DrawScope.drawScene(
                             surface = part.surface,
                             emission = part.emission,
                             pool = pool,
+                            marked = part.marked,
                         )
                     }
                 return@forEach
@@ -570,6 +576,14 @@ internal class Prop(
         val box: SceneBox,
         val faces: List<Face>,
         val emission: Lit? = null,
+        /**
+         * The one face of this part that carries a cast mark, by identity.
+         *
+         * By identity rather than by index because the renderer culls and sorts
+         * before it draws, so an index into the list handed in stops meaning
+         * anything two lines later.
+         */
+        val marked: Face? = null,
     )
 }
 
@@ -642,6 +656,7 @@ private fun DrawScope.drawSolid(
     wood: StageShader? = null,
     grainOrigin: Pair<Float, Float> = 0f to 0f,
     grainPitch: Float = 1f,
+    marked: Face? = null,
 ) {
     CardSolid.visible(faces, eyeAt)
         .sortedBy { stage.project(it.centre).depth }
@@ -704,6 +719,28 @@ private fun DrawScope.drawSolid(
                 } else {
                     facet(path, washBrush(wash, stage, colour), look)
                 }
+            }
+
+            // And the mark cast into it, if this is the face carrying one.
+            //
+            // Through `Homography.squareToQuad` from the face's **own flattened
+            // corners** — the same four points the path above was built from,
+            // and the same machinery a card's art already goes through. That
+            // sharing is the whole trick: the eye and the facet it is on are one
+            // calculation rather than two that have to be kept in agreement, so
+            // it cannot slide off the pyramid as the camera turns and it cannot
+            // stay behind when the puzzle is nudged.
+            if (face === marked) {
+                drawMark(
+                    quad = Puzzle.eyeQuad(face).map {
+                        val flat = stage.flatten(it)
+                        Vec2(flat.x, flat.y)
+                    },
+                    colour = colour,
+                    look = look,
+                    face = face,
+                    eye = eye,
+                )
             }
 
             // And the lamp mirrored *in* it, which is the one term the room's
@@ -785,6 +822,71 @@ private fun DrawScope.drawSolid(
                 )
             }
         }
+}
+
+/**
+ * How much darker the groove is than the metal it is cut into.
+ *
+ * A cast relief is not ink. What an eye actually sees at the bottom of a groove
+ * is the same gold with less of the room reaching it, so this is a multiply on
+ * the surface's own shaded colour rather than a colour of its own — which is the
+ * same argument `washBrush` and `poolBrush` make about never compositing over a
+ * colour you do not know.
+ */
+private const val GROOVE = 0.54f
+
+/** And the lit edge on the far side of it, where the groove wall catches the key. */
+private const val LIP = 1.34f
+private const val LIP_OFFSET = 1.2f
+
+/**
+ * A mark cast into a facet, through the map that facet is drawn with.
+ *
+ * Two passes and no shader, so it reaches every Android this app ships to. The
+ * groove first, then the same outline offset a pixel *toward the light* and
+ * drawn brighter — which is what a bevelled edge is, and is enough at this size
+ * to stop the eye reading as a decal printed on the gold.
+ *
+ * The offset is in the **flattened** frame rather than the facet's own, and that
+ * is right rather than lazy: it stands for the lit wall of the groove, which is
+ * a fact about where the lamp is on screen and not about the drawing's own
+ * coordinates.
+ */
+private fun DrawScope.drawMark(
+    quad: List<Vec2>,
+    colour: Color,
+    look: StageLook,
+    face: Face,
+    eye: Vec3,
+) {
+    if (quad.size < 4) return
+    val map = Homography.squareToQuad(quad) ?: return
+
+    val lit = StageRig.room(face, eye, look.lighting)
+    val ground = colour.shaded(lit)
+    val groove = Color(ground.red * GROOVE, ground.green * GROOVE, ground.blue * GROOVE, 1f)
+    val lip = Color(
+        (ground.red * LIP).coerceAtMost(1f),
+        (ground.green * LIP).coerceAtMost(1f),
+        (ground.blue * LIP).coerceAtMost(1f),
+        1f,
+    )
+    // Toward the lamp, on screen: the shorter of the two flattened axes of the
+    // facet tells us how big a pixel is here, so the lip does not become a
+    // stripe when the puzzle is close and vanish when it is far.
+    val toward = look.lighting.key.toLight
+    val nudge = Offset(toward.x, -toward.y) * LIP_OFFSET
+
+    Wdjat.parts().forEach { part ->
+        val path = Path()
+        part.forEachIndexed { index, at ->
+            val on = map.map(at.x, at.y)
+            if (index == 0) path.moveTo(on.x, on.y) else path.lineTo(on.x, on.y)
+        }
+        path.close()
+        translate(nudge.x, nudge.y) { drawPath(path, lip) }
+        drawPath(path, groove)
+    }
 }
 
 /**

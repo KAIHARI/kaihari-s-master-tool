@@ -118,6 +118,27 @@ object Puzzle {
     const val BAIL = 0.115f
     const val BAIL_WIRE = 0.032f
 
+    /**
+     * How far back it is propped, in degrees.
+     *
+     * Balanced on its point, an inverted pyramid **hides its own sides**: from
+     * anywhere above, each flank slopes inward and away and is occluded by the
+     * top face's own edge. At the seat this stage opens at, the four faces that
+     * carry everything worth carving are a twelve-pixel strip and the Eye of
+     * Wdjat drawn on one of them is six pixels of scratch. That was measured
+     * rather than feared — it was drawn there first.
+     *
+     * So it is propped back, which turns the near flank up toward the room and
+     * lays the top face away from it. It is no more balanced than it was — the
+     * point it used to stand on is seven per cent of a card wide — and it is the
+     * way a person actually leaves a pendant on a desk.
+     *
+     * A `rotX` and not a `rotZ`, applied **after** the spin in `Rot3`'s
+     * Z-then-Y-then-X order, so a nudge turns it about its own leaned axis and
+     * the eye swings out of the room and back rather than the object rocking.
+     */
+    const val LEAN = 34f
+
     /** How far it rises when it is nudged, in card widths. */
     const val LIFT = 0.42f
 
@@ -151,9 +172,22 @@ object Puzzle {
      * builds from and the body hangs down off it. So the point rests on the desk
      * exactly when the pose stands a whole height above it.
      */
-    fun rest(layout: BoardLayout): Pose3 {
-        val foot = foot(layout)
-        return Pose3(position = Vec3(foot.x, foot.y, tall(layout)))
+    fun rest(layout: BoardLayout): Pose3 = stirred(layout, turns = 0, lifted = 0f)
+
+    /**
+     * The same pose, standing on the desk.
+     *
+     * However it is leaned and however far it has been turned, the lowest corner
+     * of the solid touches z = 0 — solved by building it, measuring it and
+     * dropping it, rather than by a height somebody worked out once. It has to
+     * be per *pose* and not per object: `Rot3` spins about the object's own axis
+     * before tipping it, so which corner is lowest changes with the turn, and
+     * dropping by one number sank the puzzle three quarters of a pixel into the
+     * wood on every nudge — which a test caught and a picture would not have.
+     */
+    private fun standing(layout: BoardLayout, pose: Pose3): Pose3 {
+        val under = solid(layout, pose).minOf { face -> face.corners.minOf { it.z } }
+        return pose.copy(position = pose.position + Vec3(0f, 0f, -under))
     }
 
     /**
@@ -165,10 +199,15 @@ object Puzzle {
      * hit-tested and the thing casting a shadow cannot come apart.
      */
     fun stirred(layout: BoardLayout, turns: Int, lifted: Float): Pose3 {
-        val at = rest(layout)
-        return at.copy(
-            position = at.position + Vec3(0f, 0f, layout.cardWidth * LIFT * lifted),
+        val foot = foot(layout)
+        val turned = Pose3(
+            position = Vec3(foot.x, foot.y, 0f),
+            rotX = LEAN,
             rotZ = turns * TURN,
+        )
+        val down = standing(layout, turned)
+        return down.copy(
+            position = down.position + Vec3(0f, 0f, layout.cardWidth * LIFT * lifted),
         )
     }
 
@@ -253,19 +292,41 @@ object Puzzle {
      * prop that stands over a card the first time somebody touches it.
      */
     fun reach(layout: BoardLayout): SceneBox {
-        val foot = foot(layout)
-        // The diagonal, because a square turned forty-five degrees is that much
-        // wider than its side.
-        val half = width(layout) * 0.7072f
-        val top = tall(layout) + layout.cardWidth * (LIFT + 2f * (BAIL + BAIL_WIRE))
-        return SceneBox.standing(
-            left = foot.x - half,
-            top = foot.y - half,
-            right = foot.x + half,
-            bottom = foot.y + half,
-            floor = 0f,
-            ceiling = top,
-        )
+        // Solved rather than derived, now that the object leans: the extent of a
+        // square pyramid propped thirty-four degrees back and spun to an
+        // arbitrary angle is not a closed form anybody should be writing by
+        // hand, and the version that *was* written by hand — the square's own
+        // diagonal — is exactly the kind of thing that stays true until the day
+        // a shape changes underneath it.
+        //
+        // Every turn at both ends of the lift, which is the worst case in one
+        // pass, because the pose is linear in the lift and periodic in the turn.
+        // It costs a dozen small solids once per board size.
+        var box: SceneBox? = null
+        (0 until 12).forEach { turns ->
+            listOf(0f, 1f).forEach { lifted ->
+                val pose = stirred(layout, turns, lifted)
+                val here = SceneBox.around(solid(layout, pose) + bail(layout, pose))
+                box = box?.let {
+                    SceneBox(
+                        min = Vec3(
+                            minOf(it.min.x, here.min.x),
+                            minOf(it.min.y, here.min.y),
+                            minOf(it.min.z, here.min.z),
+                        ),
+                        max = Vec3(
+                            maxOf(it.max.x, here.max.x),
+                            maxOf(it.max.y, here.max.y),
+                            maxOf(it.max.z, here.max.z),
+                        ),
+                    )
+                } ?: here
+            }
+        }
+        val solved = box ?: return SceneBox(Vec3.Zero, Vec3.Zero)
+        // Down to the desk, because it stands on it and a box that floats a
+        // thousandth above the wood is a box the floor can sort in front of.
+        return SceneBox(min = Vec3(solved.min.x, solved.min.y, 0f), max = solved.max)
     }
 
     /**
@@ -286,13 +347,82 @@ object Puzzle {
         val body = solid(layout, pose)
         val ring = bail(layout, pose)
         return listOf(
-            Part(SceneBox.around(body), body),
+            Part(SceneBox.around(body), body, marked = body.getOrNull(EYE_FACE)),
             Part(SceneBox.around(ring), ring),
         )
     }
 
-    /** One convex piece of it: what to sort it by, and what to draw. */
-    data class Part(val box: SceneBox, val faces: List<Face>)
+    /**
+     * Which facet the Eye of Wdjat is cast into.
+     *
+     * [Turned.solid] emits its bands first, in profile order, `sides` at a time
+     * — so face zero is the first flank of the first band, which is the long one
+     * running from the point up to the chamfer. And with `sides = 4` and a
+     * forty-five degree phase, that facet's normal points along **+y**, which on
+     * this stage is straight at the player. So the eye faces the room when the
+     * puzzle has not been touched, and a nudge takes it away and brings it back
+     * — which is the best thing a third of a turn could do.
+     */
+    const val EYE_FACE = 0
+
+    /** One convex piece of it: what to sort it by, what to draw, and what is on it. */
+    data class Part(
+        val box: SceneBox,
+        val faces: List<Face>,
+        /** The face carrying the eye, by identity, or null on a part with none. */
+        val marked: Face? = null,
+    )
+
+    /**
+     * Where on the eye's facet the eye actually goes.
+     *
+     * How far down the flank the mark starts and ends, and how far in from each
+     * sloping side, as fractions of the facet.
+     */
+    const val EYE_FROM = 0.03f
+    const val EYE_TO = 0.72f
+    const val EYE_INSET = 0.04f
+
+    /**
+     * The quad the unit square is mapped onto, clockwise from its own top left.
+     *
+     * **Not the facet's own four corners**, and that was the first version. A
+     * flank of this pyramid runs from a full-width top edge down to the seven
+     * per cent flat at the point, and a homography onto a trapezoid that nearly
+     * degenerates does what a homography is supposed to do: it crushes the
+     * square toward the narrow end, so the eye came out as a six-pixel smudge
+     * sitting on the tip. A projective map's midline is where the *projective*
+     * midpoint is, which on a 1:0.07 taper is nowhere near the middle.
+     *
+     * So the eye gets its own patch, cut out of the flank by walking down the
+     * two sloping edges. It still tapers, because the face does and an engraving
+     * on a pyramid does too — just not to nothing.
+     *
+     * The corner order is the other half of this and it is not guessable.
+     * `Turned` winds a band's face as low@side, low@next, high@next, high@side,
+     * so 0 and 1 are at the point and 2 and 3 at the top — and *which of each
+     * pair is on the left* comes from the phase: at forty-five degrees `side`
+     * sits at 45° and `next` at 135°, which in this frame puts `side` on the
+     * right. Off by one and the eye is upside down; the pair the wrong way round
+     * and it is mirrored, which is the failure `docs/LOOP.md` iteration 3 found
+     * on the deck's own count.
+     */
+    fun eyeQuad(face: Face): List<Vec3> {
+        if (face.corners.size < 4) return emptyList()
+        // Down the left edge (top-left to bottom-left) and the right edge.
+        fun down(top: Vec3, point: Vec3, t: Float) = top + (point - top) * t
+        fun across(left: Vec3, right: Vec3, t: Float) = left + (right - left) * t
+        val topLeft = down(face.corners[2], face.corners[1], EYE_FROM)
+        val topRight = down(face.corners[3], face.corners[0], EYE_FROM)
+        val lowLeft = down(face.corners[2], face.corners[1], EYE_TO)
+        val lowRight = down(face.corners[3], face.corners[0], EYE_TO)
+        return listOf(
+            across(topLeft, topRight, EYE_INSET),
+            across(topRight, topLeft, EYE_INSET),
+            across(lowRight, lowLeft, EYE_INSET),
+            across(lowLeft, lowRight, EYE_INSET),
+        )
+    }
 
     /**
      * Whether a finger landed on it.
