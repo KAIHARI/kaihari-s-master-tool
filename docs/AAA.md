@@ -50,7 +50,7 @@ The renderer exists now. These are the twelve things it does not yet do that sep
 
 The three rooms all run on one rig, made a value in `StageLighting`. Read the note on `NIGHT_FLOOR` before touching an ambient: a night scene cannot buy darkness by dimming the room, because card art is shaded by a single black overlay whose error grows sharply as the light falls (`Tone.veil`). Items 16 and 17 are what the desk lamp is actually waiting for.
 
-13. **Add a rim light.** Key and fill both come from in front, so on a true-black table a card's silhouette dissolves into the background. A back light is the thing that cuts it out.
+13. ~~**Add a rim light.**~~ **Done, and not where this said to put it.** A light *behind* the table is culled before it is ever shaded — the stage draws solids back-face culled and looks at them from above, and the first version of this lamp pointed that way and changed exactly one face on a whole board, which a test proved. `StageRig.Rim` sits on the **player's** side instead, low and cool: the light a room throws back off whoever is sitting at the table. And it is gated on the **graze** rather than on the lambert alone, so it lands only along a silhouette and is exactly zero square on — a rim that is on everything is not a rim, it is the ambient again.
 
 14. **Give the key a temperature.** Warm key, cool fill. Two hex values, and it is most of the difference between a room and an arithmetic result.
 

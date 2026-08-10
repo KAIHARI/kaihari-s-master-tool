@@ -557,9 +557,12 @@ one opacity, and that approximation goes wrong quickly as the light falls —
 a room with nothing lighting it. That is also what §2 wants: a card is the
 brightest object in the frame.
 
-**A prop is a pose, not a piece of furniture.** Everything else in the room is a
-`ScenePiece`: an axis-aligned box, solved once for a board size and an hour and
-identical on every frame until one of those changes. The puzzle moves, so it is
+**A prop is a pose, not a piece of furniture** — and the line between them is
+the recomputation, not the shape. Everything else in the room is a `ScenePiece`,
+solved once for a board size and an hour and identical on every frame until one
+of those changes. It stopped being *a box* when the lathe arrived: a piece
+carries a `mesh` when a box is not its shape, and the box goes on being only what
+it is sorted by and measured against. The puzzle moves, so it is
 built the way a card is — `Puzzle.stirred(layout, turns, lifted)` is a pure
 function of two numbers the screen owns, and the thing being drawn, the thing
 being touched and the thing casting a shadow are all that one value. A moving
