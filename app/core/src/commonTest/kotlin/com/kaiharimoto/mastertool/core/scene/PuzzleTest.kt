@@ -387,11 +387,11 @@ class PuzzleTest {
     fun aFingerWhereItLooksLikeItIsHitsIt() {
         // The whole reason [Puzzle.holds] exists. A solid a hand tall does not
         // appear on screen where its base is, so the pixels the user is aiming
-        // at are nowhere near the footprint. Measured on this board, whose cards
-        // are 104px wide, the middle of the top face lands 56px from the foot
-        // overhead, 102px at the table and 159px seated — so a hit test against
-        // the base would miss it outright from the seat the room was built for,
-        // and would be a coin toss from the one directly above it.
+        // at are nowhere near where it touches the desk. Measured on this board,
+        // whose cards are 104px wide, the middle of the top face lands 98px from
+        // the contact point overhead, 140px at the table and 188px seated — so a
+        // hit test against the footprint would miss it outright from every seat,
+        // including the one directly above it.
         StageSeat.entries.forEach { seat ->
             val plane = seat.pose.planeFor(surfaceWidth, surfaceHeight)
             val eye = Vec3(0f, 0f, 1f)
