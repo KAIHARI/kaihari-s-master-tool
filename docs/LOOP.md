@@ -795,6 +795,17 @@ treatments rather than room work, and both move `minimal-day-table` — which is
 the one shot this document otherwise insists must never move. It is still the
 control for *the room*; it is no longer the control for a card.
 
+**The foil is free, measured.** Two `drawRoundRect` calls per card, sixty cards,
+which is the class of change §3's affordability gate exists for. Three
+`--budget=120` runs of `minimal-day-table` on each side, from a worktree at the
+parent commit so it is the same machine and the same Gradle state: before
+*398 / 407 / 404ms*, after *429 / 394 / 404ms*. The medians are 404 against 404
+and the spread inside one condition is ±4%, so the honest reading is **no
+measurable cost** rather than a small one. Which is what a stroke and a fill next
+to sixty homographies and sixty decoded thumbnails should be. Do not read the
+absolute figure as anything: it is software Skia on a container CPU and §3 says
+what that is worth.
+
 ---
 
 ### Iteration 14 — the room goes on the panel
