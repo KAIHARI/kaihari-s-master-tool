@@ -45,6 +45,22 @@ Colour appears for exactly two reasons. If a colour is doing neither, delete it.
   amber, because those two already mean *illegal* and *warning* everywhere else
   and a group wearing them reads as a problem.
 
+**And one thing that is neither, which is the user's.** The **foil** edge —
+`drawPrismaticInset`, white → hot pink → cyan → white in a ring four per cent
+inside the card, at an angle that follows the hand — is on every card in the app.
+It is not a fringe: two hues rather than six, its own two hex values rather than
+the aberration pair, inside the card rather than glowing outside it, and it means
+nothing at all. It is what a sleeved card does under a light, it is what the
+original tool drew on every card in its deck grid, and kai asked for it back by
+name after it had failed to make the crossing into this one.
+
+The rule it appears to break is the one directly above, and the resolution is
+that this is a **preference** (`UiPreferences.prismaticCards`), on by default and
+one menu item from off. "Colour as meaning or as light" is how *the app* is
+allowed to spend colour, on its own initiative, everywhere the user has not said
+otherwise. Somebody asking for their cards to be foiled is not the app spending
+anything.
+
 **Solid, not translucent.** A tint over a card is a colour you cannot name and a
 card you cannot read. When something must be coloured, colour the space around
 it — the frame, the gutter, the edge — at full strength. Translucency is for
@@ -261,7 +277,12 @@ Idle things cost nothing: springs run only while touched.
   the card sits inside a drawn region, because the region's edge is the card's
   edge and two lines a millimetre apart read as a printing error. A solid ring
   means *chosen*; the turning prismatic ring means *this is the one you asked
-  for* and is reserved for reveals.
+  for* and is reserved for reveals. Beneath both, every card wears the **foil**
+  edge (`drawPrismaticInset`) — see §5.
+- **Copy count** — bottom right, white on a soft dark scrim, no chip. The top
+  right belongs to the card: a Yu-Gi-Oh! card prints its attribute there, and an
+  accent rectangle parked on it hid information the card was already showing
+  behind a number the app had added.
 - **Pane header** — 28dp, one line: colour bar, name, count against its legal
   bounds, then controls, then collapse. Icon buttons are 26dp, not Material's
   48dp.
@@ -562,12 +583,19 @@ the recomputation, not the shape. Everything else in the room is a `ScenePiece`,
 solved once for a board size and an hour and identical on every frame until one
 of those changes. It stopped being *a box* when the lathe arrived: a piece
 carries a `mesh` when a box is not its shape, and the box goes on being only what
-it is sorted by and measured against. The puzzle moves, so it is
-built the way a card is — `Puzzle.stirred(layout, turns, lifted)` is a pure
-function of two numbers the screen owns, and the thing being drawn, the thing
-being touched and the thing casting a shadow are all that one value. A moving
-object in a value that is deliberately recomputed twice a day is a prop that
-snaps back to where it started the first time the clock crosses dusk.
+it is sorted by and measured against.
+
+**Nothing on this stage is a prop today**, and this section is the record of the
+one that was. A Millennium Puzzle stood on the left of the desk for two releases
+and kai cut it (`docs/LOOP.md` iterations 12 and 13). Everything below is what it
+established, kept because it is the specification for the next one and because
+every clause of it was a shipped bug first.
+
+**A prop is built the way a card is.** `stirred(layout, turns, lifted)` was a
+pure function of two numbers the screen owned, so the thing being drawn, the
+thing being touched and the thing casting a shadow were all that one value. A
+moving object stored in a value that is deliberately recomputed twice a day is a
+prop that snaps back to where it started the first time the clock crosses dusk.
 
 **It may spin and rise; it may not tumble — and that is now taste rather than
 arithmetic.** It used to be arithmetic. `CardSolid.slab` hangs a solid's body
@@ -578,9 +606,10 @@ while a tip about x or y left the body hanging vertically as the face turned —
 a fraction of a pixel over a card, the entire silhouette over a hand's width of
 pyramid. The price of a tumble was named here as *a posed box in core with its
 own eight corners*, and `core/render/Turned.kt` is that box: a solid of
-revolution whose every vertex goes through `Rot3.place`. The puzzle is built from
-it and is **statically propped thirty-four degrees back** for exactly that
-reason — balanced on its point an inverted pyramid shows nothing but its base.
+revolution whose every vertex goes through `Rot3.place`. That is what let the
+puzzle be **statically propped thirty-four degrees back**, which is what made it
+read at all — balanced on its point an inverted pyramid shows nothing but its
+base.
 
 What is left of the rule is the part that was always taste: a nudge spins and
 lifts, and does not roll. A prop may answer a finger; a prop that tumbled would
@@ -593,37 +622,36 @@ separating axis, and a bounding box that shares no volume with anything supplies
 one exactly as well as the real solid would. `ScenePiece.mesh` is that same split
 applied to furniture, and four of the room's eighteen pieces use it.
 
-Inside one object the split stops helping, and the puzzle is where that shows.
-Its body and its ring share every axis — the ring sits in the middle of the top
-face, wholly inside the leaned pyramid's own box — so the painter declines the
-pair and something else has to decide. What decides it is a **plane**: the body's
-own top face, which the ring stands on and the body lies entirely under. For two
-convex bodies either side of a plane the order is which side the eye is on, and
-nothing else. It is not always the ring — at the envelope's steepest pitch the
-propped top face turns away and the body is in front. So the puzzle joins the sort as `Puzzle.reach` — everything it could
-occupy, solved over every turn at both ends of the lift, since the shape stopped
-being a square whose diagonal anybody could write down — and is drawn from where
-it actually is this frame. Its own two parts, the body and the bail, are ordered
-*among themselves* by the same painter and for the same reason: one list of faces
-depth-sorted across two solids puts the far side of the ring in front of the top
-it is standing on. Painting it last instead was the first version, and it
-assumed a camera in front of the table: yaw here is free, and walking round past
-about 145° puts you behind the room's own wall, where the header above the window
-really is nearer than the desk. Seated at 150° the puzzle drew straight through
-it over a 269×280 patch.
+Inside one object the split stops helping, and the puzzle is where that showed.
+Its body and its ring shared every axis — the ring sat in the middle of the top
+face, wholly inside the leaned pyramid's own box — so the painter declined the
+pair and something else had to decide. What decided it was a **plane**: the
+body's own top face, which the ring stands on and the body lies entirely under.
+For two convex bodies either side of a plane the order is which side the eye is
+on, and nothing else. It was not always the ring, either — at the envelope's
+steepest pitch the propped top face turns away and the body is in front. So a
+prop joins the room's sort as its **reach**, everything it could occupy over
+every pose it can hold, and is drawn from where it actually is this frame; and
+its own parts are ordered *among themselves* by the same painter, because one
+list of faces depth-sorted across two solids puts the far side of a ring in front
+of the top it is standing on. Painting a prop last instead was the first version,
+and it assumed a camera in front of the table: yaw here is free, and walking
+round past about 145° puts you behind the room's own wall, where the header above
+the window really is nearer than the desk. Seated at 150° the puzzle drew
+straight through it over a 269×280 patch.
 
 **A prop is hit-tested where it appears, not where it stands.** A solid a hand
 tall does not draw on top of its own base, and the gap is the whole game: on a
-1600×856 board the middle of the puzzle's top face lands 140px from the point it
-touches the desk at the table seat and 188px seated, against cards 104px wide. So the test is
-against the **flattened silhouette** — `StagePlane.flatten` answers in the mat's
-own coordinates, which is exactly the frame the finger has already been
-unprojected into, so both sides of the comparison are in the one frame the whole
-stage computes in and no screen coordinate is involved on either side.
+1600×856 board the middle of the puzzle's top face landed 140px from the point it
+touched the desk at the table seat and 188px seated, against cards 104px wide. So
+the test is against the **flattened silhouette** — `StagePlane.flatten` answers
+in the mat's own coordinates, which is exactly the frame the finger has already
+been unprojected into, so both sides of the comparison are in the one frame the
+whole stage computes in and no screen coordinate is involved on either side.
 
 **The camera claims the gesture last.** §10's rule is that fingers on the felt
 move the camera, and it holds because the claim is made once, on the press, when
-the hit test finds nothing. A prop is the third thing that is neither a card nor
+the hit test finds nothing. A prop is a third thing that is neither a card nor
 the felt — after a shuffle mark and the space inside an open fan — and like both
 of those it has to be taken out *before* the claim, because a claimed gesture can
 never become a tap again. It is also asked **last** of the three, and that order

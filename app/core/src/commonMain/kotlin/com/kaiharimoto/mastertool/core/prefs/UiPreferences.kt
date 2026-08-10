@@ -129,6 +129,23 @@ data class UiPreferences(
      * device and it is cached like any other card image.
      */
     val cardBackUrl: String = "",
+    /**
+     * The foil edge every card wears, in the builder and on the play stage.
+     *
+     * **On by default**, which is a deliberate exception to the handbook. The
+     * prismatic ramp is spent sparingly everywhere else — `docs/DESIGN.md` says
+     * fringing everything reads as decoration and fringing the thing under your
+     * finger reads as light, and that rule stands for the *fringe*. This is the
+     * other effect: the original tool put it on every card in the deck grid, it
+     * is what a sleeved card in a binder actually does, and kai asked for it
+     * back by name. Default off would have meant restoring something nobody
+     * could see without first finding a switch.
+     *
+     * A preference rather than a constant because it is a matter of taste that a
+     * person can hold an opinion about, and because the honest answer to "this
+     * is too much" is a way to turn it off rather than an argument.
+     */
+    val prismaticCards: Boolean = true,
     val format: Format = Format.TCG,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /**

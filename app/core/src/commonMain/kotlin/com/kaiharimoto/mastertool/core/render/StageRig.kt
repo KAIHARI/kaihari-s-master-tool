@@ -602,9 +602,9 @@ object StageRig {
      * The room did not have this. [lit] is ambient plus lambert plus a
      * graze-gated rim and contains **no specular term at all**, and until
      * [gleam] the only Blinn-Phong in this app was `Shading.of`, which takes a
-     * card's pose and a `CardMaterial` and is asked about nothing else. So gold and cloth and
-     * painted timber differ in *colour* and in nothing else, which is exactly
-     * why `docs/LOOP.md` §6 records the lamp and the puzzle as "flat fills" and
+     * card's pose and a `CardMaterial` and is asked about nothing else. So brass
+     * and cloth and painted timber differ in *colour* and in nothing else, which
+     * is exactly why `docs/LOOP.md` §6 recorded the lamp as a "flat fill" and
      * `docs/AAA.md` #67 records the material half of a surface as unfinished.
      *
      * This is deliberately **not** a fifth term inside [lit]. `GoldenStageTest`
@@ -623,13 +623,11 @@ object StageRig {
     ) {
         companion object {
             /**
-             * Hammered gold. The tightest and strongest thing in the room by a
-             * long way, because a metal *is* a mirror with a rough surface and
-             * everything else here is a dielectric with a bit of sheen.
+             * Lacquered brass. The tightest and strongest thing in the room, and
+             * the only metal in it, because a metal *is* a mirror with a rough
+             * surface and everything else here is a dielectric with a bit of
+             * sheen.
              */
-            val Gold = Gloss(sharpness = 36f, strength = 0.62f)
-
-            /** Lacquered brass: a shade darker and a shade broader than the gold. */
             val Brass = Gloss(sharpness = 28f, strength = 0.46f)
 
             /** Painted timber, which has a sheen and nothing more. */

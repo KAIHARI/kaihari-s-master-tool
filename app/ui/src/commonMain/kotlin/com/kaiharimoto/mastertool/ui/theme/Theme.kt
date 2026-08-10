@@ -89,6 +89,20 @@ object MasterToolPalette {
     val FringeCool = Color(0xFF2BD9FF)
 
     /**
+     * The original tool's card border, kept at its own two hues.
+     *
+     * Deliberately **not** [FringeWarm] and [FringeCool]. Those two are an
+     * aberration pair — a red and a blue that sum back to white where they
+     * overlap, which is what makes a fringe read as light. This is a different
+     * effect and always was: a *foil*, the rainbow a sleeve throws when you tilt
+     * it, and the legacy tool drew it in hot pink and pure cyan. Retuning it to
+     * the house pair on the way in would have made it a duller version of the
+     * thing kai asked to have back rather than the thing itself.
+     */
+    val FoilPink = Color(0xFFFF69B4)
+    val FoilCyan = Color(0xFF00FFFF)
+
+    /**
      * Card types, as the original coloured them.
      *
      * Used for the type split in the statistics panel, where the segments are

@@ -64,7 +64,6 @@ fun DeckBuilderTopBar(
     layout: DeckLayoutState,
     updateState: UpdateState,
     onOpenLibrary: () -> Unit,
-    onOpenTable: () -> Unit = {},
     onOpenPlay: () -> Unit = {},
 ) {
     val validation = state.validation
@@ -208,9 +207,6 @@ fun DeckBuilderTopBar(
         IconButton(onClick = { state.save() }) {
             Icon(Icons.Filled.Save, contentDescription = "Save deck")
         }
-        TextButton(onClick = onOpenTable, enabled = state.deck.main.size >= 1) {
-            Text("Table")
-        }
         TextButton(onClick = onOpenPlay, enabled = state.deck.main.size >= 5) {
             Text("Play")
         }
@@ -289,6 +285,20 @@ fun DeckBuilderTopBar(
                 DropdownMenuItem(
                     text = {
                         Text(
+                            if (layout.preferences.prismaticCards) {
+                                "Prismatic borders: on"
+                            } else {
+                                "Prismatic borders: off"
+                            },
+                        )
+                    },
+                    onClick = {
+                        layout.update { it.copy(prismaticCards = !it.prismaticCards) }
+                    },
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
                             when (layout.preferences.themeMode) {
                                 ThemeMode.SYSTEM -> "Theme: match system"
                                 ThemeMode.DARK -> "Theme: dark"
@@ -346,6 +356,7 @@ fun DeckBuilderTopBar(
                                 feedbackEnabled = it.feedbackEnabled,
                                 cardBack = it.cardBack,
                                 cardBackUrl = it.cardBackUrl,
+                                prismaticCards = it.prismaticCards,
                                 scene = it.scene,
                                 deskLight = it.deskLight,
                                 // Tuning is a taste too, and one that took a

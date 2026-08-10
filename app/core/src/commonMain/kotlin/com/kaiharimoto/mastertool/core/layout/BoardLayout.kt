@@ -27,8 +27,8 @@ data class Slot(
  * The five piles are separate from the field zones because [FieldZone] is the
  * part the rules care about — a card *in* a zone is on the field — and a deck,
  * a graveyard or a banish pile is somewhere cards are kept rather than played.
- * `BoardState` already draws that line; this follows it rather than inventing
- * a second one.
+ * The game draws that line itself; this follows it rather than inventing a
+ * second one.
  */
 sealed interface BoardSlot {
     data class Zone(val zone: FieldZone) : BoardSlot

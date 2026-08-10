@@ -139,22 +139,9 @@ enum class Surface {
      * Its own surface rather than [SHADE] for the reason [FRAME] is not [WALL] —
      * a lamp is two materials, cloth and metal, and drawing both in one cream
      * was most of why the thing read as folded card. Brass is also the only
-     * surface in the room besides [GOLD] whose highlight is worth computing.
+     * surface in the room whose highlight is worth computing.
      */
     BRASS,
-
-    /**
-     * The one thing in the room that is not furniture.
-     *
-     * A finish rather than an object, which is why it is here beside the wood
-     * and the cloth even though no [ScenePiece] carries it: what a surface is
-     * made of is the room's business, and the alternative — a hex value living
-     * privately in whatever draws the prop — is exactly the split this enum
-     * exists to prevent. Gold is the material with the strongest opinion about
-     * the light on it, so the day room and the night room read as genuinely
-     * different rooms through it before anything else on the desk changes.
-     */
-    GOLD,
     ;
 
     /**
@@ -168,7 +155,6 @@ enum class Surface {
      */
     val gloss: StageRig.Gloss
         get() = when (this) {
-            GOLD -> StageRig.Gloss.Gold
             BRASS -> StageRig.Gloss.Brass
             FRAME -> StageRig.Gloss.Paint
             // Wood is lacquered and already has a highlight of its own, from a

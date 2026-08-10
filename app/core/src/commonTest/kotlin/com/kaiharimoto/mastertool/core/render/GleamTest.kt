@@ -21,6 +21,16 @@ class GleamTest {
 
     private val eyeAt = Vec3(800f, 1400f, 900f)
 
+    /**
+     * The gloss the Millennium Puzzle shipped with, kept here after the prop was
+     * deleted because the defect it caught is a fact about [StageRig.gleam] and
+     * not about the puzzle: a sharpness this tight against a source twenty-two
+     * degrees across blows a flat face out to white. Nothing in the room is this
+     * sharp any more, which is exactly why the exemplar has to be written down
+     * somewhere rather than inferred from whatever is left.
+     */
+    private val sharpMetal = StageRig.Gloss(sharpness = 36f, strength = 0.62f)
+
     private fun facingUp(at: Vec3 = Vec3(800f, 400f, 100f), size: Float = 60f) = Face(
         corners = listOf(
             Vec3(at.x - size, at.y - size, at.z),
@@ -35,7 +45,7 @@ class GleamTest {
 
     @Test
     fun aMatteSurfaceCostsOneComparisonAndAllocatesNothing() {
-        // Every surface in the room except two is `Gloss.None`, and the whole
+        // Every surface in the room except the brass is `Gloss.None`, and the whole
         // of `Scene.MINIMAL` is. A term that returned an object for those would
         // be a per-face allocation on every frame of the stage this app is.
         assertNull(
@@ -50,7 +60,7 @@ class GleamTest {
             normal = -StageLighting.DeskNight.key.toLight,
         )
         assertNull(
-            StageRig.gleam(away, eyeAt, StageLighting.DeskNight, StageRig.Gloss.Gold),
+            StageRig.gleam(away, eyeAt, StageLighting.DeskNight, sharpMetal),
         )
     }
 
@@ -59,8 +69,8 @@ class GleamTest {
      *
      * A highlight is the *source* reflected, so a large source makes a broad
      * weak one and a small source makes a tight bright one — from the same
-     * material. Without that, gold's own sharpness of thirty-six was applied to
-     * a window twenty-two degrees across, and the puzzle's flat top face came
+     * material. Without that, [sharpMetal]'s own sharpness of thirty-six was
+     * applied to a window twenty-two degrees across, and a flat top face came
      * out as a **white rectangle**: a large flat surface under a directional
      * lamp has one alignment over the whole of it, so it either all blows out
      * or none of it does.
@@ -77,8 +87,8 @@ class GleamTest {
         )
         val tight = broad.copy(key = broad.key.copy(radius = 20f, distance = 1000f))
 
-        val soft = assertNotNull(StageRig.gleam(face, eyeAt, broad, StageRig.Gloss.Gold))
-        val hard = assertNotNull(StageRig.gleam(face, eyeAt, tight, StageRig.Gloss.Gold))
+        val soft = assertNotNull(StageRig.gleam(face, eyeAt, broad, sharpMetal))
+        val hard = assertNotNull(StageRig.gleam(face, eyeAt, tight, sharpMetal))
 
         val softPeak = soft.stops.maxOf { it.amount }
         val hardPeak = hard.stops.maxOf { it.amount }

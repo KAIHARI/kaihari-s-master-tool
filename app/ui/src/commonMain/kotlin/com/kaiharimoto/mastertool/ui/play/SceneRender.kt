@@ -17,7 +17,6 @@ import com.kaiharimoto.mastertool.core.render.Tone
 import com.kaiharimoto.mastertool.core.render.LightPool
 import com.kaiharimoto.mastertool.core.scene.Scene
 import com.kaiharimoto.mastertool.core.scene.ScenePainter
-import com.kaiharimoto.mastertool.core.scene.SceneBox
 import com.kaiharimoto.mastertool.core.scene.ScenePiece
 import com.kaiharimoto.mastertool.core.scene.reachOf
 import com.kaiharimoto.mastertool.core.scene.Surface
@@ -116,18 +115,6 @@ internal data class StageLook(
     val glow: Color,
     /** The lamp's metal: its foot, its stem, its finial. */
     val brass: Color,
-    /**
-     * The puzzle: the one surface on this stage that no `ScenePiece` carries.
-     *
-     * Deliberately a dark gold rather than a bright one. Everything the shading
-     * does to a surface is a *multiply* — [Tone] can darken a colour and can
-     * never brighten it — so a base colour is the brightest that surface will
-     * ever be, and a bright yellow here would be a bright yellow object beside
-     * the cards at every angle. Dark, it is nearly black in the corner of a day
-     * room and comes alight when the lamp is on it, which is the whole point of
-     * having it there.
-     */
-    val gold: Color,
     /** The playmat itself. Near enough to ink that the cards still own the screen. */
     val mat: Color,
     /**
@@ -181,7 +168,6 @@ internal data class StageLook(
         Surface.SHADE -> shade
         Surface.GLOW -> glow
         Surface.BRASS -> brass
-        Surface.GOLD -> gold
     }
 
     companion object {
@@ -227,10 +213,6 @@ internal data class StageLook(
             shade = Color(0xFFE4DAC6),
             glow = Color(0xFFFFF2DC),
             brass = Color(0xFFB08A45),
-            // Never drawn: nothing stands on the minimal stage. Present because
-            // a palette with a hole in it is a palette somebody fills in with a
-            // literal the first time a room needs one.
-            gold = Color(0xFF8C6B1F),
             mat = Color(0xFF0A0A0E),
             shadow = Color(0xFF04060A),
             sheenCore = 0.062f,
@@ -277,17 +259,11 @@ internal data class StageLook(
             frame = Color(0xFF6E675B),
             shade = Color(0xFFE4DAC6),
             glow = Color(0xFFFFF2DC),
-            // Lacquered brass, dark on purpose and for the reason the gold is:
-            // everything the shading does is a multiply, so a base colour is
-            // the brightest that surface will ever be. Bright, it is a yellow
-            // stick beside the cards at every angle; dark, it is nearly the
-            // wood until the highlight lands on it.
+            // Lacquered brass, dark on purpose: everything the shading does is a
+            // multiply, so a base colour is the brightest that surface will ever
+            // be. Bright, it is a yellow stick beside the cards at every angle;
+            // dark, it is nearly the wood until the highlight lands on it.
             brass = Color(0xFFB08A45),
-            // The same gold as at night, and the difference is all light: a
-            // window is a broad, cool source with almost no highlight to give,
-            // so by day this reads as the shape of a thing in the corner rather
-            // than as metal.
-            gold = Color(0xFF8C6B1F),
             mat = Color(0xFF0C0C11),
             shadow = Color(0xFF07080E),
             sheenCore = 0.058f,
@@ -331,12 +307,11 @@ internal data class StageLook(
             frame = Color(0xFF6E675B),
             shade = Color(0xFFE4DAC6),
             glow = Color(0xFFFFF2DC),
-            brass = Color(0xFFB08A45),
-            // The same gold. A room does not repaint its ornaments at dusk
+            // The same brass. A room does not repaint its fittings at dusk
             // either, and the whole difference between the two is the lamp —
             // which is a point source close by, so this is the one surface in
             // the app that gets a real moving highlight rather than a wash.
-            gold = Color(0xFF8C6B1F),
+            brass = Color(0xFFB08A45),
             mat = Color(0xFF0C0C11),
             shadow = Color(0xFF05060B),
             sheenCore = 0.115f,
@@ -433,62 +408,17 @@ internal fun DrawScope.drawScene(
     eye: Vec3,
     look: StageLook,
     pool: LightPool? = null,
-    prop: Prop? = null,
     /** The desk's timber, if this platform has a runtime shader. */
     wood: StageShader? = null,
     grainOrigin: Pair<Float, Float> = 0f to 0f,
     grainPitch: Float = 1f,
 ) {
-    if (pieces.isEmpty() && prop == null) return
+    if (pieces.isEmpty()) return
     val eyeAt = stage.eyePoint(eye)
 
-    // The prop joins the sort as a *box* and is drawn from its own faces. That
-    // is the whole trick, and it is what lets `ScenePainter` stay ignorant of
-    // any shape that is not axis-aligned: what the painter's algorithm needs
-    // from an object is a separating axis, and a bounding box that shares no
-    // volume with anything supplies one exactly as well as the real solid would.
-    // `PuzzleTest.itStandsClearOfEverythingElseInTheRoom` is what makes that
-    // last clause true, and it is the precondition, not a nicety.
-    val standIn = prop?.let { ScenePiece(name = "prop", surface = it.surface, box = it.box) }
-    val all = if (standIn == null) pieces else pieces + standIn
-
-    val propParts = prop?.parts.orEmpty()
-
     ScenePainter
-        .order(all, eyeAt) { box -> stage.reachOf(box) }
+        .order(pieces, eyeAt) { box -> stage.reachOf(box) }
         .forEach { piece ->
-            // The prop is several convex parts under one sort box, and they are
-            // ordered among themselves by the same painter that ordered the room
-            // — which is what the box on each part is for. One list of faces
-            // instead would be a per-face depth sort across two solids, and the
-            // far side of the puzzle's ring would come out in front of the top
-            // it is standing on.
-            if (piece === standIn) {
-                // In the order the prop gave them, which is the order they are
-                // painted. A prop knows what separates its own parts —
-                // `Puzzle.parts` decides from the plane of its top face — and
-                // `ScenePainter` would decline the question anyway, because two
-                // parts of one object generally share a bounding box.
-                propParts.forEach { part ->
-                    drawSolid(
-                        faces = part.faces,
-                        stage = stage,
-                        eyeAt = eyeAt,
-                        eye = eye,
-                        look = look,
-                        colour = look.colourOf(part.surface),
-                        surface = part.surface,
-                        // No prop on this stage emits, and none has ever needed
-                        // to. The room's own fixtures do, through
-                        // `ScenePiece.emission`, and `drawSolid` is shared — so
-                        // the branch exists and is simply never reached here.
-                        emission = null,
-                        pool = pool,
-                    )
-                }
-                return@forEach
-            }
-
             // The inside of a shell, first. `ScenePiece.lining` carries the
             // argument for why before rather than interleaved: culling has
             // already removed the near half of it, so every face left is behind
@@ -521,61 +451,6 @@ internal fun DrawScope.drawScene(
                 grainPitch = grainPitch,
             )
         }
-}
-
-/**
- * A solid in the room that is not furniture: ordered by a box, drawn from its
- * own faces.
- *
- * Two shapes for one object, and the split is the point. [box] is everything it
- * could ever occupy, over every pose it can reach, which is what the room's
- * paint order needs and is the *only* thing it needs. [parts] are where it
- * actually is this frame.
- *
- * Painting it last instead was the first version, on the reasoning that it
- * stands alone on the bare left of the desk with nothing between it and the
- * camera. That reasoning quietly assumed a camera in front of the table, and
- * yaw on this stage is free: walk round past about a hundred and forty-five
- * degrees and you are looking at the room from behind its own wall, where the
- * header above the window is genuinely nearer to you than the desk is. Measured
- * seated at 150°, the puzzle drew through it over a 269 by 280 pixel patch.
- *
- * It casts no shadow, and that is deliberate rather than unfinished. Nothing
- * else in this room casts one — the lamp does not, the desk does not — because
- * shadows here belong to the cards, which are what the stage is about. One
- * object throwing a shadow onto a desk where nothing else does would not read as
- * better lighting; it would read as the one thing that had been given special
- * treatment. `docs/AAA.md` #61d is where that gets revisited, with the lamp.
- */
-internal class Prop(
-    val surface: Surface,
-    val box: SceneBox,
-    /**
-     * The convex solids it is really made of, each with the box that sorts it.
-     *
-     * One list of faces was the first version and it is right for exactly one
-     * shape: a single convex body. [drawSolid] orders the faces it is handed by
-     * the depth of their own centres, which is the painter's algorithm applied
-     * inside a solid — correct there, and meaningless across two solids that
-     * stand one on top of the other. The puzzle's ring sat behind its own
-     * pyramid from the seated seat the first time it was drawn that way.
-     *
-     * **In paint order, nearest the camera last** — the prop decides, because
-     * only the prop knows what separates its own parts, and `ScenePainter` would
-     * decline: two parts of one object generally share a bounding box, which is
-     * the one case it is built to have no opinion about.
-     *
-     * [box] above is still one box, because the *room* only needs one: what
-     * `ScenePainter` wants from an object is a separating axis, and the reach of
-     * the whole thing gives it exactly as well as a part of it would.
-     */
-    val parts: List<Part>,
-) {
-    class Part(
-        val surface: Surface,
-        val box: SceneBox,
-        val faces: List<Face>,
-    )
 }
 
 /**
@@ -713,7 +588,7 @@ private fun DrawScope.drawSolid(
 
             // And the lamp mirrored *in* it, which is the one term the room's
             // rig does not have: `StageRig.lit` is ambient plus lambert plus a
-            // graze-gated rim and there is no specular anywhere in it, so gold
+            // graze-gated rim and there is no specular anywhere in it, so brass
             // and cloth have always differed in colour and in nothing else.
             //
             // Additive, and beside the rig rather than inside it. Inside, it

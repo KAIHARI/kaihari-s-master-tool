@@ -41,7 +41,10 @@ import com.kaiharimoto.mastertool.core.model.BanStatus
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.LocalPrismaticCards
 import com.kaiharimoto.mastertool.ui.theme.animatedPrismAngle
+import com.kaiharimoto.mastertool.ui.theme.drawPrismaticInset
+import com.kaiharimoto.mastertool.ui.theme.foilAngleFor
 import com.kaiharimoto.mastertool.ui.theme.prismaticBorder
 
 /** Yu-Gi-Oh! cards are 59 x 86 mm. Everything that shows one uses this ratio. */
@@ -95,6 +98,12 @@ fun CardTile(
     // held in a group instead, and stays still.
     val ringed = highlighted && outline == null
     val prismAngle = if (ringed) animatedPrismAngle().value else 0f
+
+    // And the foil edge, which is the other effect entirely — see
+    // `drawPrismaticInset`. Suppressed while a card is ringed, because the
+    // sweeping ring is a *message* and a card wearing both says it twice in two
+    // different colours; the message wins.
+    val foiled = LocalPrismaticCards.current && !ringed
 
     // Where the pointer sits on the card, normalised to -1..1 from the centre.
     // Offset.Zero doubles as "nobody is touching this".
@@ -225,6 +234,22 @@ fun CardTile(
             )
         }
 
+        // The foil, over the art and inside the tile's own clip so it follows
+        // the cut corners. Its angle is the pointer's, through the same `feel`
+        // the tilt uses — one gesture, two consequences, which is why a card
+        // tilting under a finger and the light on it can never disagree.
+        if (foiled) {
+            Box(
+                Modifier.fillMaxSize().drawBehind {
+                    drawPrismaticInset(
+                        angleDegrees = foilAngleFor(feel),
+                        cornerRadiusPx = 4.dp.toPx(),
+                        highlight = if (feel == Offset.Zero) null else feel,
+                    )
+                },
+            )
+        }
+
         if (dimmed) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
         }
@@ -233,8 +258,14 @@ fun CardTile(
             BanBadge(banStatus, Modifier.align(Alignment.TopStart).padding(3.dp))
         }
 
+        // Bottom right, and this is a correction rather than a preference. A
+        // Yu-Gi-Oh! card carries its attribute in its own top-right corner, and
+        // a chip parked there covered the one mark on the face that says whether
+        // the card is DARK or LIGHT — information the card itself was already
+        // showing, hidden by a number the app had added. The bottom right is the
+        // card's own copyright line, which nobody reads at thumbnail size.
         if (copies > 0) {
-            CopyBadge(copies, Modifier.align(Alignment.TopEnd).padding(3.dp))
+            CopyBadge(copies, Modifier.align(Alignment.BottomEnd).padding(3.dp))
         }
 
         overlay()
@@ -266,19 +297,43 @@ private fun BanBadge(status: BanStatus, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * How many copies of this card the deck holds.
+ *
+ * White, on a scrim rather than on a chip. The chip was a solid accent rectangle
+ * — a second coloured object on a face that is already a picture, and the
+ * brightest thing on the tile at thumbnail size. A numeral over a soft dark
+ * gradient reads as an annotation *on* the card instead of a sticker stuck to
+ * it, and it is legible over pale art, which plain white text alone is not: a
+ * white 3 on a Blue-Eyes is invisible.
+ *
+ * The scrim is a radial rather than a plate for the same reason: a rounded
+ * rectangle has an edge, and an edge is another line competing with the card's
+ * own frame. This one has no edge anywhere.
+ */
 @Composable
 private fun CopyBadge(copies: Int, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(22.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(MasterToolPalette.Accent),
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.78f),
+                            Color.Transparent,
+                        ),
+                        center = Offset(size.width / 2f, size.height / 2f),
+                        radius = size.minDimension * 0.72f,
+                    ),
+                )
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = copies.toString(),
             fontSize = 13.sp,
-            color = MasterToolPalette.Ink,
+            color = Color.White,
             style = MaterialTheme.typography.labelMedium,
         )
     }

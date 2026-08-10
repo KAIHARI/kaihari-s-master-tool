@@ -235,7 +235,7 @@ Then normalisation: `CardMaterial` gains a precomputed `val normalisation = (shi
 
 ### N6. Fixed timestep, accumulated — AAA #37
 
-**You see:** the overshoot on a card landing is identical on a 120 Hz tablet and a 60 Hz desktop. It is not today: one variable `dt` (clamped at 0.05, re-clamped at `Springs.MAX_STEP = 1/30`) feeds `StageCard.step`, `puzzle.step` and `camera.rig.step`, so a spring tuned at 60 Hz genuinely overshoots differently at 120.
+**You see:** the overshoot on a card landing is identical on a 120 Hz tablet and a 60 Hz desktop. It is not today: one variable `dt` (clamped at 0.05, re-clamped at `Springs.MAX_STEP = 1/30`) feeds `StageCard.step` and `camera.rig.step`, so a spring tuned at 60 Hz genuinely overshoots differently at 120.
 
 New pure `core/motion/FixedStep.kt`: `advance(frameSeconds): Int` (clamp at 0.25, cap at 8 steps so a GC pause dilates time instead of bursting) plus an `alpha`. The loop becomes `repeat(steps) { … }` then one `draw(alpha)`. `StageCard` gains `previous: Pose3` beside `motion` and lerps into `pose`. Three teleports must force `previous = current` or a card slides in from its old place for one frame: `placeAt`, the settle snap, and — critically — **a carried card is excluded from interpolation outright**, not lerped: a frame of interpolation lag between a finger and the card it is holding is DESIGN.md §12's last anti-pattern by another name.
 

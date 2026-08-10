@@ -47,7 +47,7 @@ against but *"the bookshelf exists and has books in it"* is.
 | Sun outside | not possible through this window — iteration 8 has the numbers |
 | Floor | a flat plane, barely in frame |
 | Wall | **a fifth of the screen**, and painted rather than void |
-| Millennium Puzzle | **turned, chamfered, propped, with a bail.** No mark on it — see iteration 12 |
+| Millennium Puzzle | **deleted** — see iteration 13. Nothing stands on the left of the desk |
 | Lamp | **a turned lamp**: brass foot, tapered stem, a shade that is a shell and is lit from inside |
 | Bed | does not exist |
 | Bookshelf | does not exist |
@@ -742,6 +742,54 @@ on its point an inverted pyramid presents nothing but its base, and the shot
 without the lean is a flat gold square with a ring lying on it. Shot both ways
 before deciding, which is the only reason this paragraph is a claim rather than
 a preference.
+
+---
+
+### Iteration 13 — the puzzle is cut
+
+kai, correcting iteration 12: *"What I meant was to delete the puzzle entirely."*
+So the whole prop goes — `core/scene/Puzzle.kt`, `PuzzleTest`, `ui/play/StageProp.kt`,
+`SceneRender`'s `Prop`/`Prop.Part`, `Surface.GOLD`, `StageRig.Gloss.Gold`, and
+`MatPilot`'s two prop lambdas. The room is fourteen pieces and the left of the
+desk is bare.
+
+**Read iteration 12 as one iteration too narrow.** The instruction was
+"delete it entirely" and the thing that was cut was the mark on it, which is a
+reading the sentence permits and the release did not support: the object had been
+called out by name in the same breath as the lamp, and taking the decoration off
+the decoration is not what "entirely" means. The check that would have caught it
+is the one this loop already has and I did not run — *say what will change, in a
+sentence, before building* — because "the puzzle loses its eye" is visibly not
+"the puzzle goes".
+
+**What is worth keeping out of it**, because a second prop will want all of it:
+
+- **A prop is a pose, not a `ScenePiece`.** Furniture is solved twice a day and
+  remembered; a thing that moves cannot live in a value that is deliberately
+  recomputed. `Puzzle.stirred(layout, turns, lifted)` was a pure function of two
+  numbers the screen owned, so what was drawn, what was touched and where it
+  stood could not come apart.
+- **It must be convex, or arrive as convex parts.** Inside one piece the renderer
+  sorts faces by the depth of their own centres, which is meaningless across two
+  solids — the bail sat behind its own pyramid the first time it was drawn as one
+  list.
+- **And it must share no volume with anything**, which is what `ScenePainter`'s
+  separating axis needs *between* pieces.
+- **It is claimed after the mat's own affordances**, never before: a shuffle mark
+  and an open fan outrank an ornament beside them, and all three come out before
+  `claimForCamera`.
+
+`Turned`, `gleam`, `spill`, `Face.smooth` and `ScenePiece.mesh` all stay. They
+were built for the puzzle and the lamp together, and the lamp is still standing
+on the other side of the desk using every one of them.
+
+**Two things in the picture changed that are not the puzzle**, and they are worth
+knowing before reading a diff of the shots: the deck-builder copy count moved off
+the attribute symbol to the bottom right, and every card now wears the legacy
+tool's foil edge (`UiPreferences.prismaticCards`, on by default). Both are card
+treatments rather than room work, and both move `minimal-day-table` — which is
+the one shot this document otherwise insists must never move. It is still the
+control for *the room*; it is no longer the control for a card.
 
 ---
 

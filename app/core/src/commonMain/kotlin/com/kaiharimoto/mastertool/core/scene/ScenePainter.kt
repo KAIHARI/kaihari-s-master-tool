@@ -78,7 +78,7 @@ import com.kaiharimoto.mastertool.core.motion.Vec3
  * overtake another is stuck the moment something with *no opinion either way*
  * sits between them — and pieces with no opinion are the common case here, not
  * the exception. Adding a window's joinery put a glazing bar four places ahead
- * of the Millennium Puzzle it stands behind, with a stile between them
+ * of an ornament on the desk it stands behind, with a stile between them
  * abstaining, and no number of passes could ever have closed it. Bubbling is a
  * total-order algorithm; nothing about running it longer makes it a topological
  * one.

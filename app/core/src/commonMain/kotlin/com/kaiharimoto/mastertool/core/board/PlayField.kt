@@ -61,11 +61,12 @@ data class PlacedCard(
 /**
  * A duel table you can put cards down on anywhere.
  *
- * The sibling of [BoardState], not a replacement for it. That one is
- * zone-indexed — five monster zones, five spell/trap, one card each — which is
- * the game's own geometry and exactly right for reading a board back. It cannot
- * express a card at an arbitrary point, or two cards on one square, and bending
- * it into doing so would have cost the thing it is good at.
+ * It began as the sibling of a zone-indexed `BoardState` — five monster zones,
+ * five spell/trap, one card each — which is the game's own geometry and exactly
+ * right for reading a board back. What that one could not express is a card at
+ * an arbitrary point, or two cards on one square, and bending it into doing so
+ * would have cost the thing it was good at. Both existed for a while, behind two
+ * screens; the zone board is gone and this is the only table now.
  *
  * So this holds the same piles, in the same order, with the same rules about
  * what is physically possible, and swaps the zone arrays for a list of cards at

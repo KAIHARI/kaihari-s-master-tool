@@ -26,6 +26,7 @@ import com.kaiharimoto.mastertool.ui.MasterToolApp
 import com.kaiharimoto.mastertool.ui.SafeArea
 import com.kaiharimoto.mastertool.ui.components.CardBackChoice
 import com.kaiharimoto.mastertool.ui.components.LocalCardBack
+import com.kaiharimoto.mastertool.ui.theme.LocalPrismaticCards
 import com.kaiharimoto.mastertool.ui.configureImageLoader
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckBuilderState
 import com.kaiharimoto.mastertool.ui.deckbuilder.DeckLayoutState
@@ -33,7 +34,6 @@ import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.rememberFeedback
 import com.kaiharimoto.mastertool.ui.library.DeckLibraryScreen
 import com.kaiharimoto.mastertool.ui.play.PlayScreen
-import com.kaiharimoto.mastertool.ui.table.DuelTableScreen
 import com.kaiharimoto.mastertool.ui.theme.MasterToolTheme
 import com.kaiharimoto.mastertool.ui.update.AppUpdater
 import com.kaiharimoto.mastertool.ui.update.InstallOutcome
@@ -307,6 +307,10 @@ private fun Stage(deps: AppDependencies, director: Director, opts: Options) {
                 style = layoutState.preferences.cardBack,
                 imageUrl = layoutState.preferences.cardBackUrl,
             ),
+            // Provided rather than left to the default for the reason the whole
+            // harness exists: a shot has to be of the app, and the app reads
+            // this from the same document.
+            LocalPrismaticCards provides layoutState.preferences.prismaticCards,
         ) {
             SafeArea {
                 // The whole app, or the play stage on its own.
@@ -318,7 +322,6 @@ private fun Stage(deps: AppDependencies, director: Director, opts: Options) {
                 // harness was pointed at the one screen that was fine.
                 when (opts.screen) {
                     "builder" -> MasterToolApp(deps)
-                    "table" -> DuelTableScreen(state = builderState, onBack = {})
                     "library" -> DeckLibraryScreen(deps = deps, onOpenDeck = {}, onBack = {})
                     else -> PlayScreen(
                         state = builderState,

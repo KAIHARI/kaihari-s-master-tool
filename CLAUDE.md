@@ -168,6 +168,14 @@ be corrected.
   Primitives live in `ui/theme/Prismatic.kt`; use them sparingly — fringing
   everything reads as decoration, fringing the thing under your finger reads
   as light.
+- **Cards are the one exception, and it is the user's.** `drawPrismaticInset`
+  is the original tool's card border, restored at kai's request: a *foil*, not
+  a fringe — two hues rather than six, inset four per cent inside the card
+  rather than glowing outside it, and swung by where the card is rather than by
+  a timer. It is on every card, in the builder and on the play stage, because
+  that is what it was; and it is `UiPreferences.prismaticCards`, on by default
+  and one menu item away from off, because "sparingly" is a house rule and this
+  is a matter of taste somebody is entitled to disagree with.
 - **Typeface: Archivo** (bundled, OFL; expanded cut for display moments).
 - **Tactility lives on things the user interacts with** — tilt, lift, sheen,
   quiet card sounds, haptics. No decorative clutter, no skeuomorphic
@@ -214,8 +222,8 @@ be corrected.
 ## Roadmap State
 
 Shipped: the full deck builder (drag-and-drop, exact consistency calculator,
-per-card tactility, sound/haptics, 3D card inspect), the zone duel table, and
-the freeform play stage that replaced the goldfish screen.
+per-card tactility, sound/haptics, 3D card inspect) and the freeform play stage
+that replaced the goldfish screen.
 
 Two parts of the builder are worth knowing before touching them, because both
 replaced an earlier design that looked reasonable and was not:
@@ -241,20 +249,21 @@ its type split, its copy counts and its banlist exposure. Every key reports its
 exact opening rate (`core/hand/LensOdds.kt`), and the consistency question is
 stored *with the deck* as a `HandGoal` rather than rebuilt in a sheet each time.
 
-Both play surfaces now exist, and they answer different questions:
+**There is one play surface, and there used to be two.** `ui/play/` is the
+freeform table that replaced the goldfish screen: cards go anywhere, stack on
+each other, and can be set face-down. Its domain is `core/board/PlayField.kt`,
+and everything about *what a release means* is core and tested — `DropTargets`
+resolves the finger's position to an intent, `DropCommit` carries it out, and the
+indicator the user sees is that same value, so the table cannot promise one thing
+and do another.
 
-- **Table** (`ui/table/DuelTableScreen.kt`) is the zone board over
-  `core/board/BoardState.kt`. Cards go in the five monster and five
-  spell/trap zones, and the question it answers is where a card is *allowed*
-  to go. Geometry is solved in core (`core/layout/BoardLayout.kt`), the way
-  `DeckFit` is, and not negotiated in the composable.
-- **Play** (`ui/play/`) is the freeform table that replaced the goldfish
-  screen: cards go anywhere, stack on each other, and can be set face-down.
-  Its domain is `core/board/PlayField.kt`, and everything about *what a
-  release means* is core and tested — `DropTargets` resolves the finger's
-  position to an intent, `DropCommit` carries it out, and the indicator the
-  user sees is that same value, so the table cannot promise one thing and
-  do another.
+The other was **Table**, a zone board over a `BoardState` that put cards in the
+five monster and five spell/trap zones. kai cut it — *"delete table mode
+entirely, it's redundant"* — and it is gone, along with `BoardState` itself.
+What survives it is `FieldZone` and `CardPosition` in `core/board/BoardCard.kt`,
+because the zones did not go anywhere: `core/layout/BoardLayout.kt` still solves
+all ten of them, the play stage still draws them and still snaps to them, and the
+only thing that has stopped being true is that a card must be inside one.
 
 Four rules the play stage would be broken without, each of which was a bug
 first:
@@ -294,7 +303,8 @@ whole of it at the input end was that the hit test returned
 was written.
 
 The room is eighteen pieces: a floor, the desk, four wall pieces around a
-window opening, the pane, seven of joinery around it, and four for the lamp. `docs/AAA.md` #62 was the brief —
+window opening, the pane, seven of joinery around it, and four for the lamp.
+`docs/AAA.md` #62 was the brief —
 *"there is a room past it. Dark, out of focus, present."* — and #16 and #17 are
 what made day and night two rooms rather than two colour grades: a `Light` may
 now have a **position**, a **radius** and a **distance**, so shadows diverge
@@ -345,8 +355,8 @@ day room. `docs/AAA.md` #61c has it.
 **The room is turned on a lathe.** `core/render/Turned.kt` is the third mesh
 primitive, beside `CardSolid.face` and `CardSolid.slab`: a profile of rings, spun
 about the pose's own vertical, capped. Everything round in the room comes off it
-— the lamp's foot, its stem, its shade and its finial, and the puzzle's body and
-bail. Four things about it are load-bearing:
+— the lamp's foot, its stem, its shade and its finial. Four things about it are
+load-bearing:
 
 - **It is genuinely posed.** A slab hangs its body down the *stage's* z whatever
   the pose says, because that is a fact about the felt a card rests on. Every
@@ -375,54 +385,31 @@ convexity as such — a piece's faces are ordered by the depth of their own
 centres, so the faces the camera can *see* must come out right that way. Convex
 satisfies it for free; the lampshade's **shell** is the one argued exception.
 
-**The room has one thing in it that answers a finger.** The Millennium Puzzle
-sits on the bare left of the desk, opposite the lamp: a four-sided turn — a
-pyramid, apex down — with a chamfer round its top edge and a torus bail standing
-on it, **propped back thirty-four degrees**. Tap it and it turns a third of a
-turn and rises. Five things about it are the pattern a second prop inherits:
+**Nothing stands on the left of the desk, and that is a deletion rather than a
+gap.** A Millennium Puzzle stood there for two releases — a four-sided turn,
+propped back, with a torus bail, that turned a third of a turn when tapped — and
+kai cut it: *"delete the puzzle entirely."* `docs/LOOP.md` iterations 12 and 13
+are the record. Four things it established are the pattern a second prop
+inherits, and all four are why the machinery it used is still here:
 
 - **A prop is a pose, not a `ScenePiece`.** Furniture is solved twice a day and
   remembered; a moving thing cannot live in a value that is deliberately
-  recomputed. `Puzzle.stirred(layout, turns, lifted)` is a pure function of two
-  numbers the screen owns, so what is drawn, what is touched and where it stands
-  cannot come apart.
-- **It is propped, and that is what makes it read.** Balanced on its point an
-  inverted pyramid shows you nothing but its base — every flank slopes inward and
-  away and is occluded by the top face's own edge, so the whole object comes out
-  as a flat gold square with a ring lying on it. Shot both ways before deciding.
-- **Where it rests is solved, not chosen.** `Rot3` spins about the object's own
-  axis *before* tipping it, so which corner is lowest changes with the turn;
-  dropping the solid by one number sank it three quarters of a pixel into the
-  wood on every nudge. `Puzzle.reach` is solved the same way, over every turn at
-  both ends of the lift, because the hand-written diagonal it replaced was true
-  right up until the shape changed underneath it.
-- **Two shapes, and now two parts.** It joins `ScenePainter`'s order as
-  `Puzzle.reach` and is drawn from its live pose, which is what lets the painter
-  stay ignorant of any shape without axes. Its own body and bail are ordered
-  *among themselves* by the same painter — one list of faces would sort the far
-  side of the ring in front of the top it stands on. Painting the whole thing last
-  instead assumes a camera in front of the table, and yaw is free: past about 145°
-  you are behind the room's own wall.
-- **Hit-tested where it appears, not where it stands.** Against the flattened
-  silhouette: the middle of its top face lands 98px from the point it touches the
-  desk at overhead, 140px at the table and 188px seated, against cards 104px wide.
-- **The camera claims the gesture last.** A prop is the third thing that is
-  neither a card nor the felt, after a shuffle mark and the inside of an open
-  fan, and like both it is taken out before `claimForCamera` — asked last of the
-  three, because the table's own affordances outrank an ornament beside it. It is
-  deliberately *not* in `MatGuide`: an easter egg's value is that nobody told you.
-
-**It carries no mark, and that was tried.** An Eye of Wdjat was drawn in a unit
-square and cast into the front flank through `Homography.squareToQuad`; kai's
-verdict on the shipped build was that it was "completely unsatisfactory", and it
-is deleted. `docs/LOOP.md` iteration 12 records why it failed and what a second
-attempt would need — the short version is that six tapered marks over a hundred
-pixels of slanted facet come out as four pixels of stroke each, and relief that
-thin needs a normal, which means it needs the shader seam.
+  recomputed. It was a pure function of two numbers the screen owned, so what was
+  drawn, what was touched and where it stood could not come apart.
+- **It must be convex, or arrive as convex parts.** Inside one piece the renderer
+  sorts faces by the depth of their own centres, which is right for a convex body
+  and meaningless across two solids; the bail sat behind the pyramid it stands on
+  the first time it was drawn as one list of faces.
+- **And it must share no volume with anything else in the room**, which is what
+  `ScenePainter`'s separating axis needs *between* pieces.
+- **The camera claims the gesture last.** A prop is a third thing that is neither
+  a card nor the felt, after a shuffle mark and the inside of an open fan, and
+  like both it has to be taken out before `claimForCamera` — asked last of the
+  three, because the table's own affordances outrank an ornament beside it.
 
 **The room has a material now, as well as a colour.** `StageRig.lit` is ambient
 plus lambert plus a graze-gated rim and has no specular in it, so until this the
-gold and the cloth and the painted timber differed in colour and in nothing else
+brass and the cloth and the painted timber differed in colour and in nothing else
 (`docs/AAA.md` #67's unfinished half). Three terms sit *beside* it rather than
 inside it, because `GoldenStageTest` records what `lit` returns: `gleam`, an
 additive Blinn-Phong highlight whose lobe is **widened by the source's own
@@ -432,12 +419,7 @@ in the shade; and `Surface.gloss`, so a finish stays a fact about a material.
 
 Next for the room: `docs/AAA.md` #61d is the shadow question — nothing in the
 room casts one, on purpose, and that is a decision to revisit as a set rather
-than to bolt onto one object. A second prop needs two things, and the bail is
-what proved the second: it must share no volume with anything, which is what
-`PuzzleTest` measures and what `ScenePainter`'s separating axis needs *between*
-pieces — and if it is not convex it must arrive as convex **parts**, because
-inside one piece the renderer sorts faces by the depth of their own centres and
-that is meaningless across two solids.
+than to bolt onto one object.
 
 Next: attaching as material is reachable in the domain and not yet by gesture
 (`DropIntent.Attach` needs an idiom that is not already spoken for). After

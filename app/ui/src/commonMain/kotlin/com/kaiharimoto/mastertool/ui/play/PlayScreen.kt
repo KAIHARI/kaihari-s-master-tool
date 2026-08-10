@@ -87,7 +87,6 @@ import com.kaiharimoto.mastertool.core.haptics.Haptic
 import com.kaiharimoto.mastertool.core.perf.FrameProbe
 import com.kaiharimoto.mastertool.core.scene.DeskClock
 import com.kaiharimoto.mastertool.core.scene.DeskLight
-import com.kaiharimoto.mastertool.core.scene.Puzzle
 import com.kaiharimoto.mastertool.core.scene.Scene
 import com.kaiharimoto.mastertool.core.tune.StageTuning
 import com.kaiharimoto.mastertool.core.tune.HandTune
@@ -115,7 +114,10 @@ import com.kaiharimoto.mastertool.ui.fx.SoundEffect
 import com.kaiharimoto.mastertool.ui.fx.localHour
 import com.kaiharimoto.mastertool.ui.fx.rememberRefreshHz
 import com.kaiharimoto.mastertool.ui.input.ShortcutHost
+import com.kaiharimoto.mastertool.ui.theme.FOIL_REST
+import com.kaiharimoto.mastertool.ui.theme.LocalPrismaticCards
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import com.kaiharimoto.mastertool.ui.theme.drawPrismaticInset
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
@@ -671,12 +673,6 @@ fun PlayScreen(
                 }
             }
 
-            // The one thing in the room that answers a finger. Remembered across
-            // scenes rather than per scene, so switching to minimal and back does
-            // not quietly square it up — it is where you left it, which is the
-            // only way an object on a desk can behave.
-            val puzzle = remember { StageProp() }
-
             // The playmat's cloth. Compiled once for the life of the screen —
             // it costs milliseconds and the result is immutable — and null on
             // any platform that has no runtime shader, which is every Android
@@ -696,17 +692,6 @@ fun PlayScreen(
                 // the hand's hit boxes have to move with the hand, and re-keying
                 // `pointerInput` is what tears the arbiter's event stream.
                 pilot.tune = tune
-                puzzle.standOn(layout)
-                // Asked of the *live* pose and the *live* camera, because both
-                // move: the puzzle is at its most inviting halfway up, and where
-                // it appears on the glass changes every time the table turns.
-                // Guarded by the scene rather than by the prop, because the
-                // handbook's stage holds no decoration and `Puzzle.standsIn` is
-                // where that rule is written down.
-                pilot.onProp = { at ->
-                    Puzzle.standsIn(scene) && puzzle.holds(camera.plane, camera.eye, at)
-                }
-                pilot.onPropTapped = { puzzle.nudge() }
                 // Asked before it opens rather than discovered when it draws.
                 // A `DropdownMenu` with nothing in it is not nothing — it is a
                 // three-pixel box that appears, sits there, and has to be
@@ -767,10 +752,10 @@ fun PlayScreen(
             // holding the previous map: every card in the new one stayed parked
             // at the pose it was dealt from, the five in the opening hand
             // included, stacked invisibly on the deck they came out of. The
-            // camera and the prop kept moving throughout, because those two are
-            // remembered against nothing and the loop still had the live ones —
-            // which is exactly why this read as "the hand is missing" rather
-            // than as "the stage is frozen".
+            // camera kept moving throughout, because it is remembered against
+            // nothing and the loop still had the live one — which is exactly why
+            // this read as "the hand is missing" rather than as "the stage is
+            // frozen".
             //
             // It never appeared in ordinary use: you pick a deck and *then* open
             // the table, so the first composition already had the right map. It
@@ -792,11 +777,10 @@ fun PlayScreen(
                         // that were parked.
                         var moving = 0
                         cards.values.forEach { if (it.step(SpringSpec.Bouncy, step)) moving++ }
-                        // Costs one boolean until somebody touches it, which is
-                        // the whole of "nothing idles" as an implementation:
-                        // there is no loop here that runs when the room is at
-                        // rest, so there is nothing to remember to switch off.
-                        if (puzzle.step(step)) moving++
+                        // Nothing in the room itself moves — see `docs/DESIGN.md`
+                        // §11, which grants the desk scenes decoration and refuses
+                        // them ambience. The only springs on this stage belong to
+                        // the cards and to the camera, and both are here.
                         // Snappy rather than Bouncy: a card overshooting reads as
                         // weight, and a whole table overshooting reads as a lurch.
                         if (camera.rig.step(SpringSpec.Snappy, step)) {
@@ -871,25 +855,7 @@ fun PlayScreen(
                         grainPitch = layout.cardWidth,
                     )
                     drawFelt(layout, camera.plane, camera.eye, look, pool, weave)
-                    // The prop is sorted *among* the standing pieces rather than
-                    // painted after them, because yaw is free: walk round past
-                    // about a hundred and forty-five degrees and you are looking
-                    // at this room from behind its own wall, and the header above
-                    // the window is genuinely in front of the desk. Reading
-                    // `puzzle.pose` here rather than in the composable body is
-                    // what keeps a moving prop from recomposing a stage that is
-                    // holding sixty cards.
-                    drawScene(
-                        scenery.standing,
-                        camera.plane,
-                        camera.eye,
-                        look,
-                        prop = if (Puzzle.standsIn(scene)) {
-                            puzzle.drawn(camera.plane.eyePoint(camera.eye))
-                        } else {
-                            null
-                        },
-                    )
+                    drawScene(scenery.standing, camera.plane, camera.eye, look)
                     drawMatControls(layout, play.field)
                     drawIndicator(play.carry?.intent, play.field, layout)
                 }
@@ -1681,6 +1647,10 @@ private fun CardFace(
     // changes what you can see.
     val material = remember(art, faceUp) { CardStock.of(art, faceUp) }
 
+    // The sleeve's foil edge, the same one the builder's tiles wear. Read in
+    // composition rather than per frame — it changes when somebody opens a menu.
+    val foiled = LocalPrismaticCards.current
+
     Box(
         Modifier
             .fillMaxSize()
@@ -1766,6 +1736,39 @@ private fun CardFace(
                             )
                         },
                     )
+
+                    // And the foil, last, so it sits over the light the way a
+                    // sleeve sits over a card.
+                    //
+                    // Its angle comes from **where the card is**, not from a
+                    // pointer — a card on this table has no pointer on it — and
+                    // that is what makes it read as light rather than as an
+                    // outline. Drawn at one angle it was exactly that: sixty
+                    // cards each wearing the identical pink-left, cyan-right
+                    // band, which is a border with a gradient in it and not a
+                    // room. Swung by the card's place on the mat, the hand fans
+                    // through the spectrum, a card carried across the table
+                    // sweeps its own, and every one of them agrees about which
+                    // way the light is — because they are all being told the
+                    // same thing about where they are standing.
+                    //
+                    // The other two terms are the card and the room: [rotZ] is
+                    // what a hand does to a sleeve, and the yaw at a third rate
+                    // is the table turning under it — enough that walking round
+                    // changes the picture, little enough that it does not spin.
+                    if (foiled) {
+                        val plane = camera.plane
+                        val across = (motion.pose.position.x - plane.centreX) / plane.width
+                        val down = (motion.pose.position.y - plane.centreY) / plane.height
+                        drawPrismaticInset(
+                            angleDegrees = FOIL_REST +
+                                motion.pose.rotZ -
+                                plane.yawDegrees / 3f +
+                                across * 90f -
+                                down * 55f,
+                            cornerRadiusPx = CardCornerRadius.toPx(),
+                        )
+                    }
                 },
             )
         }

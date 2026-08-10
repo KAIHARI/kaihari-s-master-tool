@@ -60,7 +60,6 @@ fun DeckBuilderScreen(
     layout: DeckLayoutState,
     updateState: UpdateState,
     onOpenLibrary: () -> Unit,
-    onOpenTable: () -> Unit = {},
     onOpenPlay: () -> Unit = {},
 ) {
     val snackbarHost = remember { SnackbarHostState() }
@@ -204,7 +203,6 @@ fun DeckBuilderScreen(
                         layout,
                         updateState,
                         onOpenLibrary,
-                        onOpenTable,
                         onOpenPlay,
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
