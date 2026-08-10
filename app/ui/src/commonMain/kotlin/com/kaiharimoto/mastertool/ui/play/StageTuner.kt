@@ -20,15 +20,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.core.layout.CameraRig
 import com.kaiharimoto.mastertool.core.scene.Scenery
 import com.kaiharimoto.mastertool.core.tune.Knob
 import com.kaiharimoto.mastertool.core.tune.StageKnobs
@@ -64,6 +67,28 @@ import kotlin.math.roundToInt
  * a frame — `StageCameraState` says so at length. So these write, and **Read
  * camera** is how a pose you orbited to gets *into* the panel.
  *
+ * ## Why a slider hands back one field and not a document
+ *
+ * [onTune] takes a [Knob] and a number rather than a finished [StageTuning], and
+ * that shape is the whole of a bug that made the panel very nearly unusable.
+ *
+ * A knob's track is a `pointerInput`, and a `pointerInput` block is started once
+ * and keyed — here on `knob.path`, which never changes. So the gesture coroutine
+ * keeps forever the lambda it captured the first time it was installed, and a
+ * lambda that closed over the *document* closed over the document as it stood
+ * when the panel opened. Every drag then wrote `documentAtOpen.copy(thisField)`,
+ * and every other knob moved since went back to where it had been: move Focal
+ * length and Distance reverted, move Distance and the lens reverted. All
+ * twenty-seven of them, which is what it was reported as. The readout was
+ * innocent — that is an ordinary composition read, so the numbers were right up
+ * until the moment a second slider was touched.
+ *
+ * `rememberUpdatedState` below is the local repair, and `DragSource` has been
+ * making it for the same reason for as long as there has been a drag. Handing
+ * back a field is the structural one: a stale lambda cannot carry a stale
+ * document if it never carries a document at all, and the read-modify-write
+ * happens inside the preferences transform where the live one is.
+ *
  * ## Why it is in the shipped build
  *
  * Not preference — necessity. A debug APK cannot install over the signed one, so
@@ -77,7 +102,16 @@ import kotlin.math.roundToInt
 @Composable
 internal fun StageTuner(
     tuning: StageTuning,
-    onTune: (StageTuning) -> Unit,
+    /** One knob, one number, applied to whatever the document is by then. */
+    onTune: (Knob, Float) -> Unit,
+    /**
+     * And the whole document, for the two buttons that legitimately replace it.
+     *
+     * Safe where a slider is not: these are `onClick` lambdas, which Compose
+     * hands the node afresh on every composition, so they see the document that
+     * is there rather than the one that was.
+     */
+    onReplace: (StageTuning) -> Unit,
     camera: StageCameraState,
     surface: TuningSurface,
     onClose: () -> Unit,
@@ -116,13 +150,13 @@ internal fun StageTuner(
             Text("Tune", style = MaterialTheme.typography.titleSmall, color = MasterToolPalette.Text)
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 BarButton("Read camera") {
-                    onTune(
+                    onReplace(
                         tuning.copy(
-                            camera = com.kaiharimoto.mastertool.core.tune.CameraTune.of(camera.pose),
+                            camera = tuning.camera.reading(camera.pose),
                         ),
                     )
                 }
-                BarButton("Reset") { onTune(StageTuning.DEFAULT) }
+                BarButton("Reset") { onReplace(StageTuning.DEFAULT) }
                 BarButton("Close", onClick = onClose)
             }
         }
@@ -139,8 +173,8 @@ internal fun StageTuner(
                     KnobRow(
                         knob = knob,
                         value = knob.get(tuning),
-                        extra = extraFor(knob, tuning),
-                        onChange = { onTune(knob.set(tuning, it)) },
+                        extra = extraFor(knob, tuning, camera.rig),
+                        onChange = { onTune(knob, it) },
                     )
                 }
             }
@@ -204,6 +238,14 @@ private fun KnobRow(
     val fraction = knob.fractionOf(value)
     val muted = MasterToolPalette.TextMuted
 
+    // The two gesture coroutines below are keyed on the knob's path, which never
+    // changes, so they are installed once and never restarted — and they would
+    // otherwise call whichever `onChange` existed at that moment for the rest of
+    // the panel's life. `DragSource` states the rule; this row is where ignoring
+    // it cost every knob on the panel. It is belt to the braces of `onChange`
+    // now carrying a number rather than a document, and both are worth having.
+    val currentOnChange by rememberUpdatedState(onChange)
+
     Column(Modifier.padding(vertical = 5.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(knob.label, style = MaterialTheme.typography.bodySmall, color = MasterToolPalette.Text)
@@ -228,18 +270,21 @@ private fun KnobRow(
                 .fillMaxWidth()
                 .height(TRACK_HEIGHT)
                 .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                // Measured by layout rather than sampled inside the gesture
+                // block, which runs once. A panel that is re-measured — and it
+                // is, the moment the JSON is shown underneath it — would
+                // otherwise leave every track mapping a stale width.
+                .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
                 .pointerInput(knob.path) {
-                    width = size.width.toFloat().coerceAtLeast(1f)
                     detectDragGestures(
-                        onDragStart = { at: Offset -> onChange(knob.valueAt(at.x / width)) },
+                        onDragStart = { at: Offset -> currentOnChange(knob.valueAt(at.x / width)) },
                     ) { change, _ ->
                         change.consume()
-                        onChange(knob.valueAt(change.position.x / width))
+                        currentOnChange(knob.valueAt(change.position.x / width))
                     }
                 }
                 .pointerInput(knob.path) {
-                    width = size.width.toFloat().coerceAtLeast(1f)
-                    detectTapGestures { at -> onChange(knob.valueAt(at.x / width)) }
+                    detectTapGestures { at -> currentOnChange(knob.valueAt(at.x / width)) }
                 },
         ) {
             Box(
@@ -270,8 +315,33 @@ private fun KnobRow(
  * the other. Focal length is magnification; where you stand is a different
  * question and has its own row.
  */
-private fun extraFor(knob: Knob, tuning: StageTuning): String? = when (knob.path) {
+private fun extraFor(knob: Knob, tuning: StageTuning, rig: CameraRig): String? = when (knob.path) {
     "camera.lens" -> "· ${(HOME_MM * tuning.camera.lens).roundToInt()}mm"
+    // The clamp, said out loud on the slider it silently eats.
+    //
+    // The distance a person dials is not always the distance the camera takes:
+    // `CameraEnvelope` solves a floor from the pitch and the mat's own diagonal,
+    // and below it the number moves and the picture does not. That is the exact
+    // report — "it goes below 1.4 and nothing happens" — and the whole of the
+    // fault was that nothing said so. Shown only when it binds, because a limit
+    // printed beside a value that is nowhere near it is noise.
+    //
+    // Solved rather than read back off the rig: this is a pure function of three
+    // numbers the panel already has, and reading `camera.pose` here would be a
+    // composable-body read of the live camera, which `StageCameraState` spends
+    // thirty lines forbidding.
+    "camera.distance" -> {
+        val floor = tuning.camera.envelope().minDistanceAt(
+            tuning.camera.pitchDegrees,
+            rig.width,
+            rig.height,
+        )
+        if (floor > tuning.camera.distance + FLOOR_EPSILON) {
+            "· held at ${TuningCodec.trim(floor)}"
+        } else {
+            null
+        }
+    }
     "focus.strength" -> if (tuning.focus.strength <= 0f) "· off" else null
     // The coupling, said out loud on the slider that causes it. Two knobs add
     // into one distance, and a person moving the depth needs to see the wall
@@ -290,6 +360,15 @@ private fun extraFor(knob: Knob, tuning: StageTuning): String? = when (knob.path
  * focal length and magnification are the same number wearing two units.
  */
 private const val HOME_MM = 33f
+
+/**
+ * How far above the dialled value the floor has to be before it is worth saying.
+ *
+ * Half a step of the distance knob. Resting exactly on the floor is the normal
+ * state of a slider pushed to its end, and "held at 1.17" beside a value of 1.17
+ * would be the panel arguing with itself.
+ */
+private const val FLOOR_EPSILON = 0.005f
 
 private val PANEL_WIDTH = 330.dp
 private val TRACK_HEIGHT = 14.dp

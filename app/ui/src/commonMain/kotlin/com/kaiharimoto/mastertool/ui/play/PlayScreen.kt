@@ -374,6 +374,10 @@ fun PlayScreen(
         // would fight the finger.
         if (placed[0] != tune.camera) {
             placed[0] = tune.camera
+            // The limit before the pose it limits, and in that order: `placeAt`
+            // clamps through the envelope, so writing the two the other way
+            // round would put every pose one drag behind its own floor.
+            camera.rig.envelope = tune.camera.envelope()
             camera.placeAt(tune.camera.pose())
         }
     }
@@ -925,7 +929,18 @@ fun PlayScreen(
         if (tuner) {
             StageTuner(
                 tuning = tune,
-                onTune = { next -> prefs.update(debounce = true) { it.copy(stageTuning = next) } },
+                // Read-modify-write against the *live* document rather than the
+                // one the panel was composed with. A slider's gesture coroutine
+                // outlives its composition — `StageTuner`'s own note has the
+                // whole story — so a callback that carried a finished document
+                // carried a stale one, and every other knob went back to where
+                // it had been when the panel opened.
+                onTune = { knob, value ->
+                    prefs.update(debounce = true) {
+                        it.copy(stageTuning = knob.set(it.stageTuning, value))
+                    }
+                },
+                onReplace = { next -> prefs.update(debounce = true) { it.copy(stageTuning = next) } },
                 camera = camera,
                 surface = tuningSurface,
                 onClose = { tuner = false },

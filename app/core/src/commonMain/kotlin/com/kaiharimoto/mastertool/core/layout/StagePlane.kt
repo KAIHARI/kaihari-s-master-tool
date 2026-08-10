@@ -386,6 +386,25 @@ data class StagePlane(
      * Raising the room's height ceiling is the wrong instrument for the same
      * problem: the danger is a function of the *pose*, and the ceiling is a
      * budget.
+     *
+     * ## The day the envelope did open wider
+     *
+     * [SAFE_DEPTH] was a half for as long as [CameraEnvelope]'s own clearance
+     * was, and the two being the same number was a coincidence that read as a
+     * design. When the clearance became a preference and its default went to
+     * 0.68, a *legal* mat corner — one the envelope had just solved a floor to
+     * permit — was suddenly past this guard. The mat is not the casualty; it is
+     * not drawn through here. The desk is: it reaches further toward the viewer
+     * than the mat does by construction, so the one production caller
+     * (`SceneRender`, culling room faces) would have quietly stopped painting
+     * the table you are sitting at, at exactly the seats the release was widening
+     * to reach.
+     *
+     * So it is nine tenths now, which is what it should always have been: this
+     * is the guard against a quad flying to a few hundred thousand pixels, and
+     * that is a fact about `MIN_GAP` and the number one, not about taste. Room
+     * geometry genuinely close to the lens is now drawn genuinely large, and a
+     * camera that has been walked inside the desk is allowed to look like it.
      */
     fun reaches(point: Vec3, clearance: Float = SAFE_DEPTH): Boolean =
         // A plane with no surface behind it yet has a camera distance of zero,
@@ -446,11 +465,15 @@ data class StagePlane(
         /**
          * How much of the way to the lens a point may be and still be drawn.
          *
-         * Half, which is generous: at that depth the projection is already
-         * doubling everything, so a surface past it is not a surface anybody is
-         * reading. See [reaches].
+         * Nine tenths: past it the projection is magnifying tenfold and heading
+         * for the clamp, which is where a quad stops being large and starts
+         * being nonsense. It was a half, and a half turned out to be a *style*
+         * judgement — "nobody is reading a surface at double size" — sitting in
+         * the one place that is supposed to hold nothing but arithmetic. Once
+         * the camera was allowed closer than the coincidence that number shared
+         * with [CameraEnvelope.clearance], it culled the desk. See [reaches].
          */
-        const val SAFE_DEPTH = 0.5f
+        const val SAFE_DEPTH = 0.9f
 
         private const val MIN_GAP = 1f
 

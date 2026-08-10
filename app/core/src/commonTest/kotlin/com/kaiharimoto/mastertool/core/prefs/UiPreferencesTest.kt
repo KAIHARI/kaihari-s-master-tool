@@ -183,4 +183,36 @@ class UiPreferencesTest {
         assertTrue(hostile.stageTuning.camera.pitchDegrees.isFinite())
         assertEquals(CameraEnvelope().maxLens, hostile.stageTuning.camera.lens)
     }
+
+    @Test
+    fun aStoredTuningWithoutACloseLimitOpensAtTheOneThatShipped() {
+        // The new field, arriving the way every preference here arrives: a
+        // default on a data class and no migration. What makes it worth its own
+        // test rather than the one above is that this field is a *limit* on
+        // another field, so a document that lost it would not merely look
+        // slightly different — it would put the distance floor somewhere the
+        // person who set that distance never chose.
+        val stored = """{"stageTuning":{"camera":{"pitchDegrees":40.0,"distance":1.2}}}"""
+        val read = Json { ignoreUnknownKeys = true }
+            .decodeFromString<UiPreferences>(stored)
+            .sanitised()
+
+        assertEquals(CameraEnvelope().clearance, read.stageTuning.camera.clearance)
+        assertEquals(40f, read.stageTuning.camera.pitchDegrees)
+        assertEquals(1.2f, read.stageTuning.camera.distance)
+    }
+
+    @Test
+    fun aCloseLimitFromDiskIsHeldToItsEndsLikeEverythingElse() {
+        listOf(0f to CameraEnvelope.MIN_CLEARANCE, 9f to CameraEnvelope.MAX_CLEARANCE).forEach {
+            val (stored, expected) = it
+            val read = UiPreferences.DEFAULT.copy(
+                stageTuning = StageTuning.DEFAULT.copy(
+                    camera = StageTuning.DEFAULT.camera.copy(clearance = stored),
+                ),
+            ).sanitised()
+
+            assertEquals(expected, read.stageTuning.camera.clearance, "a stored $stored")
+        }
+    }
 }

@@ -202,6 +202,107 @@ class StageCameraTest {
         }
     }
 
+    // ---- how close you may sit, which is now a preference -----------------------------
+
+    /**
+     * The measurement behind kai's report, kept so the next one has a baseline.
+     *
+     * "I can't lower the distance below one point four, and visually it is stuck
+     * there." The panel's slider went down to 0.8 the whole time; the *camera*
+     * was being floored, and at the low seat you would sit in to look for
+     * distortion the floor is exactly where it was reported to be. Nothing on
+     * the panel said so, which is the other half of the fix.
+     *
+     * The surface is a Tab S11-shaped stage rather than this file's 1600×1000,
+     * because the number in the report came off that screen and a floor is a
+     * function of the screen it is solved on.
+     */
+    @Test
+    fun theFloorAtALowSeatIsWhereTheReportSaidItWas() {
+        val tablet = 2800f to 1607f
+        val shipped = CameraEnvelope(clearance = 0.5f)
+
+        assertClose(
+            1.37f,
+            shipped.minDistanceAt(40f, tablet.first, tablet.second),
+            0.01f,
+            "the floor that was reported as 1.4:",
+        )
+        assertClose(
+            1.17f,
+            CameraEnvelope().minDistanceAt(40f, tablet.first, tablet.second),
+            0.01f,
+            "and where the shipped clearance now puts it:",
+        )
+        assertClose(
+            0.99f,
+            CameraEnvelope(clearance = CameraEnvelope.MAX_CLEARANCE)
+                .minDistanceAt(40f, tablet.first, tablet.second),
+            0.01f,
+            "and how close the knob's own far end reaches:",
+        )
+    }
+
+    @Test
+    fun raisingTheClearanceOnlyEverLetsYouCloser() {
+        // The property the knob is worth having: it is monotone, so dragging it
+        // one way always does one thing. A dial that sometimes reversed would be
+        // worse than no dial.
+        listOf(4f, 21f, 34f, 40f, 58f).forEach { pitch ->
+            var previous = Float.MAX_VALUE
+            var clearance = CameraEnvelope.MIN_CLEARANCE
+            while (clearance <= CameraEnvelope.MAX_CLEARANCE) {
+                val floor = CameraEnvelope(clearance = clearance).minDistanceAt(pitch, width, height)
+                assertTrue(
+                    floor <= previous + 1e-4f,
+                    "at $pitch degrees clearance $clearance floored at $floor, above the $previous before it",
+                )
+                previous = floor
+                clearance += 0.05f
+            }
+        }
+    }
+
+    @Test
+    fun aClearanceFromAnywhereAtAllStaysShortOfTheLens() {
+        // The document round-trips through JSON a person can edit, and a one in
+        // this field is a projection that cannot be inverted. So the guard is in
+        // `minDistanceAt` rather than only on the slider that usually feeds it.
+        listOf(-5f, 0f, 0.999f, 1f, 4f, Float.NaN).forEach { rubbish ->
+            val floor = CameraEnvelope(clearance = rubbish).minDistanceAt(58f, width, height)
+            val pose = CameraEnvelope(clearance = rubbish)
+                .clamp(CameraPose(45f, 58f, 0.1f), width, height)
+            val stage = plane(pose)
+
+            assertTrue(floor.isFinite() && floor > 0f, "clearance $rubbish solved a floor of $floor")
+            for (x in 0..1) {
+                for (y in 0..1) {
+                    assertTrue(
+                        stage.project(x * width, y * height).depth < stage.cameraDistance,
+                        "clearance $rubbish let a corner reach the lens",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun everySeatIsStillLegalAtEveryClearance() {
+        // Raising it only lowers floors, so nothing that was a legal seat can
+        // have stopped being one — but that is an argument, and this is the
+        // check. The three seats are what the keyboard and the bar put you at.
+        listOf(CameraEnvelope.MIN_CLEARANCE, 0.5f, 0.68f, CameraEnvelope.MAX_CLEARANCE).forEach { c ->
+            val at = CameraEnvelope(clearance = c)
+            StageSeat.entries.forEach { seat ->
+                assertEquals(
+                    seat.pose,
+                    at.clamp(seat.pose, width, height),
+                    "$seat stopped being a legal place to sit at clearance $c",
+                )
+            }
+        }
+    }
+
     @Test
     fun theTableNeverReachesTheCamera() {
         // The failure this floor exists for: at a steep pitch the far corner of
@@ -326,9 +427,22 @@ class StageCameraTest {
             withHand > floor + 0.3f,
             "the hand band used to cost a third of the range; now it costs $withHand vs $floor",
         )
+        // The field alone reaches at least as close as the envelope used to
+        // allow, which is the claim that was being made and is the durable half
+        // of it. The original assertion was `fieldOnly <= floor`, and it held
+        // only because the envelope's floor happened to sit *above* what the
+        // fitter would allow. Once the clearance became a preference and its
+        // default went to 0.68 the floor dropped underneath the fitter and the
+        // two swapped places — which is not a regression, it is the fitter
+        // becoming the binding constraint at this seat, and a test that reads
+        // "the fitter must never bind" would be asserting `CameraFit` does
+        // nothing.
+        val floorAsItShipped = envelope.copy(clearance = 0.5f)
+            .minDistanceAt(seat.pitchDegrees, width, height)
         assertTrue(
-            fieldOnly <= floor + 0.01f,
-            "the field alone should reach the envelope's own floor, stopped at $fieldOnly",
+            fieldOnly <= floorAsItShipped + 0.01f,
+            "the field alone should reach what the envelope used to floor at " +
+                "($floorAsItShipped), stopped at $fieldOnly",
         )
     }
 

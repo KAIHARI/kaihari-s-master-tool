@@ -852,6 +852,73 @@ from the shipped night key's own horizontal-to-vertical ratio and is arithmetic
 rather than taste; `lampMast` moves the lamp you can see, which is compressed to
 about a third of it because an honest desk lamp is off the top of the picture.
 
+### Iteration 15 — the panel had been eating its own settings
+
+kai: *"the slider can go below 1.4x but it doesn't show it visually and won't let
+me get closer… when I press focal length to adjust distortion it resets the
+distance to the table"*, and then: *"this resetting of the slider when touching
+another slider also happens for a lot of the other settings."*
+
+Two faults wearing one sentence, and the first guess at the first one was wrong
+in a way worth recording.
+
+**The reset was not the camera.** Iteration 10 had already fixed a real lens
+reset — `nudge` and `step` rebuilding a pose positionally — so the report read
+like that bug coming back, and the first pass went looking at `CameraPose`,
+`planeFor` and the two dials' arithmetic. All of it was innocent, and thirty
+minutes went on confirming it. The fault was one line of Compose:
+`KnobRow`'s track is `pointerInput(knob.path)`, a key that never changes, so the
+gesture coroutine is installed once and keeps the lambda it captured then — a
+lambda closing over the **whole tuning document**. Every drag wrote the document
+as it had been when the panel opened, plus its own field. Twenty-seven knobs, one
+mechanism, and it had been there since the panel shipped.
+
+The tell was in the report and not in the code: *"a lot of the other settings."*
+A camera bug cannot reach `room.lampOut`. **When a symptom spans knobs that share
+nothing but a widget, stop reading the domain and read the widget.**
+
+`ui/dnd/DragSource.kt` has carried the fix in its comments since the first
+drag — *"the gesture coroutine below outlives any single composition"* — which
+makes this the second time the same Compose fact has cost this repository a
+debugging round. The repair is structural rather than another
+`rememberUpdatedState` (though there is one of those too): a slider hands back a
+`Knob` and a number, and the read-modify-write happens against the live document
+inside the preferences transform. A lambda that carries no document cannot carry
+a stale one.
+
+**The floor was real, and it was 1.37.** `CameraEnvelope.minDistanceAt` solves a
+minimum distance from the pitch and the mat's diagonal; at forty degrees on a
+2800×1607 stage it lands at 1.368, which is kai's "one point four" measured. The
+low seat is the one you take looking for distortion, which is why the two
+complaints arrived together looking like one. Nothing on the panel said the value
+was being held — the distance row prints `· held at 1.17` now — and the number it
+was solved against, `CLEARANCE`, was a private constant. It is
+`CameraEnvelope.clearance` and on the panel, at 0.68 rather than 0.5.
+
+**Three things the tests found that reading would not have.**
+
+- `StagePlane.SAFE_DEPTH` was also 0.5, and the two being equal was a coincidence
+  that had read as a design. Letting the camera closer than 0.5 without moving it
+  would have culled the **desk**, which reaches further toward the viewer than the
+  mat does by construction. It is 0.9 now, which is what a guard about `MIN_GAP`
+  and the number one should always have been.
+- A `NaN` clearance survives `coerceIn` — every comparison against it is false —
+  and poisons the floor, the pose and every pile edge downstream without throwing.
+  Found on the first run of the test written to claim it could not happen.
+- The knob cannot go *below* what shipped. At 0.42 the floor at thirty-four
+  degrees passes 1.34, which is the **Seated** button, so tightening it far enough
+  makes a seat on the bar somewhere the envelope refuses to sit. Measured, not
+  guessed: "maximum ranges" met a limit that is about the app rather than the
+  geometry.
+
+**Also retired:** `StageCameraTest.fittingTheFieldRatherThanTheHandIsWhatLetsTheCameraComeClose`
+asserted the field alone reaches the envelope's floor. That was true only while
+the floor sat *above* what `CameraFit` allows; with the floor lowered the two
+swapped places and the fitter binds first. The assertion is now against the floor
+as it shipped, because the durable claim is "the fitter is not what holds you
+out", and a test reading "the fitter never binds" would assert `CameraFit` does
+nothing.
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find

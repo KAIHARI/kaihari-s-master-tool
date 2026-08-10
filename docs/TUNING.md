@@ -1,6 +1,6 @@
 # Tuning the play stage
 
-Twenty-six numbers, live, on the device they will be judged on — and a JSON
+Twenty-seven numbers, live, on the device they will be judged on — and a JSON
 export that comes back here to become the default.
 
 **Long-press the life-point number** on the play stage. It is the one element in
@@ -54,6 +54,7 @@ the shipped value (`x`), or fractions of a card (`cards`). Never solved pixels
 | `camera.pitchDegrees` | how far it is laid back | 21° |
 | `camera.distance` | how far back you sit, in stage heights. **The perspective dial** | 1.45 |
 | `camera.lens` | **focal length** — pure magnification, perspective untouched | 1.0 |
+| `camera.clearance` | **how close you are allowed to sit.** The floor under `distance` | 0.68 |
 | `focus.strength` | the defocus falloff. **Off by default** | 0 |
 | `focus.depth` | where it is sharp, across the board's depth | 0 |
 | `focus.fNumber` | how fast it falls away | f/8 |
@@ -101,7 +102,7 @@ bigger; the perspective across it is bit-identical. `CameraLensTest`
 
 | lens | 35mm equivalent | what the picture does |
 |---|---|---|
-| 0.70 | ~23mm | the same room, smaller in the frame |
+| 0.60 | ~20mm | the same room, smaller in the frame |
 | 1.00 | ~33mm | shipped |
 | 1.50 | ~49mm | half again as big, same perspective |
 | 2.00 | ~65mm | twice as big, same perspective |
@@ -133,8 +134,64 @@ both terms scale, so the ratio the board was solved against is untouched. The
 old warning that a baked-in lens under 0.947 would turn
 `StagePlaneTest.theStageSaysHowMuchRoomItsOwnTiltCosts` red is retired.
 `CameraEnvelope.minDistanceAt` lost its lens factor for the same reason: the
-lens cancels out of `halfDiagonal · zoom · sin ≤ CLEARANCE · cameraDistance`,
+lens cancels out of `halfDiagonal · zoom · sin ≤ clearance · cameraDistance`,
 and zooming cannot bring the table closer to a camera that has not moved.
+
+---
+
+## The distance dial has a floor, and it used to hide it
+
+kai's next report on the same pair: *"the slider can go below 1.4 but it doesn't
+show it visually and won't let me get closer."* Both halves of that were true, and
+neither was the lens.
+
+`CameraEnvelope.minDistanceAt` solves a floor from the pitch and the mat's own
+diagonal, and `CameraRig.placeAt` clamps to it. The panel kept displaying the raw
+number, so below the floor the value moved and the picture did not. On a
+2800×1607 stage:
+
+| pitch | floor at 0.5 | at 0.68 (shipped) | at 0.95 (the knob's end) |
+|---|---|---|---|
+| 21° — the table seat | 1.02 | 0.88 | 0.80 |
+| 34° — the seated one | 1.28 | 1.09 | 0.93 |
+| 40° | **1.37** | 1.17 | 0.99 |
+
+That 1.37 is the "one point four". It is a *low seat* that finds it — which is
+exactly the seat you take when you are looking for distortion, so the two
+complaints arrived together and looked like one.
+
+**`camera.clearance` is the number that floor is solved against**: how far toward
+the lens the nearest corner of the mat may travel. The keystone across the table
+goes as `1/(1−this)`, so a half caps it at two to one and 0.68 at about three.
+The ends are not taste:
+
+- **It cannot reach one.** At one the corner *is* the lens, `project` clamps
+  rather than dividing by zero, and a clamp cannot be inverted — so `unproject`
+  stops agreeing with `project` and every pile edge and airborne shadow tears.
+  0.95 is the stop.
+- **It does not go below what shipped.** Tightening it pushes floors *out*, and
+  at 0.42 the floor at thirty-four degrees passes 1.34 — which is the **Seated**
+  button, so a seat on the bar becomes somewhere the envelope refuses to let you
+  sit. There is nothing under a half worth offering.
+
+And the panel says so now: the distance row prints `· held at 1.17` when the
+floor is above the value you dialled, so the dead zone has a reason attached
+rather than looking like a broken slider.
+
+**`StagePlane.SAFE_DEPTH` went from 0.5 to 0.9 in the same change**, and it had
+to. It is the guard that culls a face close enough to the lens to fly off to a
+few hundred thousand pixels — and it had been the same number as the clearance by
+coincidence. Letting the camera closer than 0.5 without moving it would have
+culled the **desk**, which by construction reaches further toward you than the
+mat does. Nine tenths is what that guard was always about: `MIN_GAP` and the
+number one, not what is comfortable to look at.
+
+**What `CameraFit` still does.** Dialling in a close distance and then *pinching*
+gives it back — the fitter runs when a camera gesture ends and keeps every zone
+and pile on the glass, and with the table turned forty-five degrees it holds you
+at about 1.29 whatever the envelope allows. Square-on it does not bind: it would
+allow 0.93 at a forty-degree pitch, well inside the floor. That is the fitter
+doing its job rather than a second bug.
 
 ---
 
@@ -241,6 +298,7 @@ the list; the ones most likely to go red are:
 |---|---|
 | `camera.pitchDegrees`, `camera.distance` as new *seats* | `StageCameraTest.everySeatIsInsideTheEnvelope`, `theSeatTheStageOpensAtNeedsNoCorrectionAtAll`, and all three `GoldenStageTest` goldens |
 | `camera.lens` at all | `CameraLensTest` — four of its five claims are about the shipped 1.0 |
+| `camera.clearance` at all | `StageCameraTest.everySeatIsStillLegalAtEveryClearance`, `theFloorAtALowSeatIsWhereTheReportSaidItWas`, and `StagePlane.SAFE_DEPTH`, which has to stay above it |
 | `hand.leanDegrees` without the lift following | `CardShadowTest.aCardLeanedOnItsBottomEdgeKeepsEveryCornerAboveTheTable` |
 | `cards.carryLift` and the lifts under it | `CardShadowTest.itSoftensAndFadesWithHeight` |
 
@@ -251,7 +309,32 @@ picture.
 
 ---
 
-## Two things that went wrong building it, so they do not go wrong again
+## Three things that went wrong building it, so they do not go wrong again
+
+**Every slider reset every other slider, for three releases.** A knob's track is
+a `pointerInput`, keyed on the knob's path — a key that never changes. So Compose
+starts that gesture coroutine once and never restarts it, and it keeps the
+lambda it captured the first time. The lambda closed over the *document*, so
+every drag wrote `documentAsItWasWhenThePanelOpened.copy(thisOneField)`. Move the
+focal length and the distance went back to 1.45; move the distance and the lens
+went back to 1. All twenty-seven, and the readout was innocent throughout —
+that is an ordinary composition read, so the numbers looked right up until the
+moment a second slider was touched.
+
+`rememberUpdatedState` is the local repair, and `ui/dnd/DragSource.kt` has been
+making it since the first drag: *"the gesture coroutine below outlives any single
+composition, so it must read these through state."* The structural repair is that
+a slider now hands back **a knob and a number**, and the read-modify-write happens
+inside the preferences transform where the live document is. A stale lambda
+cannot carry a stale document if it never carries a document at all.
+
+`StageKnobsIndependenceTest` is what guards the half of this that core can see:
+writing one knob moves exactly one knob, pairwise, across all twenty-seven. It
+would not have caught the capture — that is a Compose fact and there is no
+Compose test target here — but it catches the other way in, which is a
+copy-and-paste in a setter lambda.
+
+
 
 **A focusable node ate the first key event.** The long-press door was
 `combinedClickable`, which makes its node focusable — and adding a newly

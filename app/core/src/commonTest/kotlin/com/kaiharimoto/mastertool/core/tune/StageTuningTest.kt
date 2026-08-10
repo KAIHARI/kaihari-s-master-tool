@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.core.tune
 
 import com.kaiharimoto.mastertool.core.layout.CameraEnvelope
+import com.kaiharimoto.mastertool.core.layout.CameraPose
 import com.kaiharimoto.mastertool.core.layout.StageSeat
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,6 +26,25 @@ class StageTuningTest {
         // The whole reason this can land in a release before the panel does.
         assertEquals(StageSeat.TABLE.pose, StageTuning.DEFAULT.camera.pose())
         assertTrue(StageTuning.DEFAULT.isDefault)
+    }
+
+    @Test
+    fun readingACameraTakesItsPoseAndKeepsTheLimitAPoseDoesNotCarry() {
+        // What **Read camera** does, and the reason it is not `CameraTune.of`.
+        // A `CameraPose` has four numbers; this document has five, and the fifth
+        // is how close the camera may come rather than where it is. Building the
+        // document from the pose alone would have put the close limit back to
+        // shipped every time somebody read a seat they had orbited to — the same
+        // shape of fault as a slider resetting its neighbour, arriving through a
+        // button instead.
+        val tuned = StageTuning.DEFAULT.camera.copy(clearance = 0.9f)
+        val orbited = CameraPose(yawDegrees = 33f, pitchDegrees = 41f, distance = 1.1f, lens = 0.8f)
+
+        val read = tuned.reading(orbited)
+
+        assertEquals(orbited, read.pose())
+        assertEquals(0.9f, read.clearance)
+        assertEquals(0.9f, read.envelope().clearance)
     }
 
     @Test

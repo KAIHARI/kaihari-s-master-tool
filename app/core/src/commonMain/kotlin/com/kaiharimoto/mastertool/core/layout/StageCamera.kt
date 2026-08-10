@@ -119,13 +119,45 @@ data class CameraEnvelope(
     /**
      * And how far the focal length may travel, in multiples of the shipped one.
      *
-     * Wider than 0.7 is a fisheye on a table and the card at the far edge stops
-     * being a card; longer than 2 is an orthographic diagram, which is a fine
-     * thing to look at and not a thing to sit at. Both ends are also where
-     * [CameraPose.lens]'s own note says the picture stops being a room.
+     * Longer than 2 is an orthographic diagram, which is a fine thing to look at
+     * and not a thing to sit at. The wide end is 0.6 — about twenty millimetres
+     * on the dial's own scale — and it is a magnification rather than a field of
+     * view, so nothing about it can bend a card at the far edge. What it costs
+     * is that the board is drawn small; what stops that being a fisheye is that
+     * the lens cancels out of the perspective entirely. See [CameraPose.lens].
      */
-    val minLens: Float = 0.7f,
+    val minLens: Float = 0.6f,
     val maxLens: Float = 2f,
+    /**
+     * How far toward the lens the nearest corner of the mat may travel.
+     *
+     * The one number [minDistanceAt] is solved against, and a property rather
+     * than a constant because it is the answer to "how close may I sit", which
+     * is a question of taste that somebody has to be able to ask on the device.
+     * The keystone across the table goes as `1 / (1 − this)`: a half caps it at
+     * two to one, and 0.68 at about three, which is a room you can lean into
+     * rather than a diagram you are looking down at.
+     *
+     * **It must stay below one.** At one the corner *is* the lens:
+     * [StagePlane.project] clamps rather than dividing by zero, and a clamp
+     * cannot be inverted, so
+     * `unproject` stops agreeing with `project` and every pile edge and airborne
+     * shadow goes with it. That is not a stylistic limit, and it is why the knob
+     * that offers this stops at 0.95.
+     *
+     * It shipped at a half for three releases. Raising it only ever *lowers* a
+     * floor, so no pose that was legal has become illegal and no seat has moved.
+     *
+     * **And it does not go below what shipped**, which is a limit that had to be
+     * measured rather than guessed. Tightening it pushes every floor *out*, and
+     * at 0.42 on this stage the floor at thirty-four degrees passes 1.34 — which
+     * is [StageSeat.SEATED], so the seat on the bar becomes a place the envelope
+     * refuses to let you sit. The shipped half is already within a few
+     * hundredths of that, so there is no room under it worth offering and one
+     * seat to lose by offering it. Everything anybody wants from this knob is in
+     * the other direction.
+     */
+    val clearance: Float = DEFAULT_CLEARANCE,
 ) {
     /**
      * The nearest pose inside the envelope. Yaw is free — a table turns all the way.
@@ -158,7 +190,7 @@ data class CameraEnvelope(
      * every pile edge and airborne shadow, at one pose and not the others.
      *
      * So the floor is solved rather than chosen. Requiring the nearest corner to
-     * sit no more than [CLEARANCE] of the way to the lens and substituting
+     * sit no more than [clearance] of the way to the lens and substituting
      * `zoom = HOME / distance` gives a floor in `distance²`, which is the square
      * root below. It says something sensible in plain terms too: you may come
      * close while you are looking down at the table, and you must step back as
@@ -167,7 +199,7 @@ data class CameraEnvelope(
     /**
      * **The lens does not appear here, and that is a result rather than an
      * oversight.** The clearance constraint is
-     * `halfDiagonal · zoom · sin(pitch) ≤ CLEARANCE · cameraDistance`, and a
+     * `halfDiagonal · zoom · sin(pitch) ≤ clearance · cameraDistance`, and a
      * focal length multiplies `zoom` and `cameraDistance` by the same amount —
      * so it cancels exactly. Zooming does not move the camera, so it cannot
      * bring the table any closer to it.
@@ -188,18 +220,32 @@ data class CameraEnvelope(
         val halfDiagonal = sqrt((width * width + height * height) / 4f)
         val reach = halfDiagonal * CameraPose.HOME_DISTANCE *
             sin(pitchDegrees.coerceIn(0f, 90f) * (PI.toFloat() / 180f))
-        return max(minDistance, sqrt(reach / (CLEARANCE * governing)))
+        return max(minDistance, sqrt(reach / (safeClearance() * governing)))
     }
 
-    private companion object {
+    /**
+     * [clearance], held to its ends and made finite.
+     *
+     * Enforced here rather than trusted from the caller because this one reaches
+     * the arithmetic through a stored preference, and the tuning round-trips
+     * through JSON a person edits. A one in this field is a projection that
+     * cannot be inverted; a `NaN` is worse, because `coerceIn` passes it
+     * straight through — every comparison against it is false — and it then
+     * poisons a floor, a pose, and every pile edge downstream of both, without
+     * anything throwing. That last one is not hypothetical: it is what the test
+     * for this found on the first run.
+     */
+    fun safeClearance(): Float =
+        if (clearance.isFinite()) clearance.coerceIn(MIN_CLEARANCE, MAX_CLEARANCE) else DEFAULT_CLEARANCE
+
+    companion object {
         /**
-         * How far toward the lens the nearest corner of the mat may travel.
-         *
-         * A half, which caps the keystone at two-to-one across the table: strong
-         * enough that the near edge is unmistakably nearer, short enough that a
-         * card at the far edge is still a card rather than a sliver.
+         * What [clearance] ships at, and the ends the panel and the arithmetic
+         * both hold it to. See the field for why neither end is arbitrary.
          */
-        const val CLEARANCE = 0.5f
+        const val DEFAULT_CLEARANCE = 0.68f
+        const val MIN_CLEARANCE = 0.5f
+        const val MAX_CLEARANCE = 0.95f
     }
 }
 
@@ -417,7 +463,20 @@ object Turns {
  * than as a place.
  */
 class CameraRig(
-    val envelope: CameraEnvelope = CameraEnvelope(),
+    /**
+     * Writable, because one of the limits is now a preference.
+     *
+     * [CameraEnvelope.clearance] is on the tuning panel, and a panel that could
+     * not change it would be a slider that does nothing — which is the fault
+     * this release exists to fix, not one to reintroduce. Written from the play
+     * screen's tuning `SideEffect`, immediately before the pose it goes with,
+     * and nowhere else: a rig whose envelope moves between a clamp and the
+     * `CameraFit` that reads the same one would be answering two questions.
+     *
+     * A plain field on purpose, like the pose beside it. Nothing draws from it —
+     * it is read when a pose is clamped and when a gesture settles.
+     */
+    var envelope: CameraEnvelope = CameraEnvelope(),
     seat: StageSeat = StageSeat.TABLE,
 ) {
     /**

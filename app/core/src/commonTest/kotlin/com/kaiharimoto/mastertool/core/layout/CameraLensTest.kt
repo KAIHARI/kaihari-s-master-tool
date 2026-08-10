@@ -198,7 +198,7 @@ class CameraLensTest {
             com.kaiharimoto.mastertool.core.motion.Vec3(0f, height, 0f),
         )
         var checked = 0
-        listOf(0.7f, 0.85f, 1f, 1.4f, 2f).forEach { lens ->
+        listOf(envelope.minLens, 0.85f, 1f, 1.4f, 2f).forEach { lens ->
             var pitch = envelope.minPitch
             while (pitch <= envelope.maxPitch) {
                 var yaw = 0f
@@ -216,6 +216,18 @@ class CameraLensTest {
                         assertTrue(
                             at.reaches(corner),
                             "at lens $lens pitch $pitch yaw $yaw the corner $corner crossed the lens",
+                        )
+                        // And the tighter claim, which is the one `minDistanceAt`
+                        // actually makes: the floor is solved so that the worst
+                        // corner sits at exactly the envelope's own clearance, so
+                        // no legal pose may exceed it. `reaches` above is the
+                        // renderer's guard and has slack in it on purpose; this
+                        // is the contract. A hair of tolerance because the worst
+                        // case is the diagonal and the sweep steps yaw by 15°.
+                        assertTrue(
+                            at.reaches(corner, envelope.clearance + 0.01f),
+                            "at lens $lens pitch $pitch yaw $yaw the corner $corner " +
+                                "passed the envelope's own clearance of ${envelope.clearance}",
                         )
                     }
                     yaw += 15f

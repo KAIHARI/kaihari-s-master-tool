@@ -52,16 +52,25 @@ so every pixel that moves is a change in the code. It needs the Android SDK
 writes `local.properties` itself.
 
 **`docs/TUNING.md` is the in-app tuning panel.** Long-press the life-point
-number on the play stage: twenty-six numbers — camera angle, focal length, the
-defocus falloff, the hand, the card lifts, and the room's own furniture — live,
-persisted, and exported as JSON that maps one-to-one onto named constants.
-`tools/shoot.sh --tune=x.json` replays one headlessly. Read it before changing
-any of those constants by hand, and before adding a knob: **nothing that
-re-solves the board may go on the panel.** The room is on it and does not break
-that rule — the desk, the wall, the window and the lamp are read inside
-`Scenery.of`, which is remembered against the *already solved* layout, so moving
-them cannot re-key `pointerInput(layout)` under a live gesture. `ROOM_ABOVE`,
-which really does re-solve, stays off it.
+number on the play stage: twenty-seven numbers — camera angle, focal length, how
+close you may sit, the defocus falloff, the hand, the card lifts, and the room's
+own furniture — live, persisted, and exported as JSON that maps one-to-one onto
+named constants. `tools/shoot.sh --tune=x.json` replays one headlessly. Read it
+before changing any of those constants by hand, and before adding a knob:
+**nothing that re-solves the board may go on the panel.** The room is on it and
+does not break that rule — the desk, the wall, the window and the lamp are read
+inside `Scenery.of`, which is remembered against the *already solved* layout, so
+moving them cannot re-key `pointerInput(layout)` under a live gesture.
+`ROOM_ABOVE`, which really does re-solve, stays off it.
+
+**A knob hands back a knob and a number, never a document.** A slider's track is
+a `pointerInput`, its gesture coroutine outlives the composition that installed
+it, and a callback closing over the whole `StageTuning` therefore wrote the
+document as it was when the panel *opened* — so for three releases every slider
+silently reset every other slider. The read-modify-write belongs inside the
+preferences transform, where the live document is; `StageKnobsIndependenceTest`
+pins the half of that core can see. The same Compose fact is written on
+`ui/dnd/DragSource.kt` and has now cost two debugging rounds.
 
 **`docs/LOOP.md` is the autonomous loop that uses it**: six steps an iteration
 takes, four gates a change passes, and a ledger of what has been tried. Read it

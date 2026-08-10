@@ -97,12 +97,45 @@ data class CameraTune(
     val distance: Float = StageSeat.TABLE.pose.distance,
     /** See [CameraPose.lens]: a focal length, with the subject pinned. */
     val lens: Float = StageSeat.TABLE.pose.lens,
+    /**
+     * How close the camera may sit. See [CameraEnvelope.clearance].
+     *
+     * The one field here that is not part of a pose. It is a limit rather than a
+     * position — where the *other* four may go — which is exactly why it belongs
+     * on the panel: [distance] was reported as a slider that stops working, and
+     * what it stops at is this.
+     */
+    val clearance: Float = CameraEnvelope().clearance,
 ) {
-    fun pose(): CameraPose = CameraPose(yawDegrees, pitchDegrees, distance, lens)
+    /** Named, not positional: [CameraPose] has grown a field once already. */
+    fun pose(): CameraPose = CameraPose(
+        yawDegrees = yawDegrees,
+        pitchDegrees = pitchDegrees,
+        distance = distance,
+        lens = lens,
+    )
+
+    /** The envelope this document asks for, which is the shipped one but closer. */
+    fun envelope(): CameraEnvelope = CameraEnvelope(clearance = clearance)
+
+    /**
+     * This document wearing [pose]'s four numbers, and keeping its own fifth.
+     *
+     * What **Read camera** does. A pose has no [clearance] — it is not somewhere
+     * the camera is — so building one of these from a pose alone would put the
+     * limit back to shipped every time somebody read a seat they liked. Which is
+     * the same shape of bug as a knob resetting its neighbour, arriving through
+     * a button instead of a slider.
+     */
+    fun reading(pose: CameraPose) = copy(
+        yawDegrees = pose.yawDegrees,
+        pitchDegrees = pose.pitchDegrees,
+        distance = pose.distance,
+        lens = pose.lens,
+    )
 
     companion object {
-        fun of(pose: CameraPose) =
-            CameraTune(pose.yawDegrees, pose.pitchDegrees, pose.distance, pose.lens)
+        fun of(pose: CameraPose) = CameraTune().reading(pose)
     }
 }
 
@@ -336,13 +369,19 @@ object StageKnobs {
         ),
         Knob(
             CAMERA, "camera.distance", "Distance", 0.8f, 2.6f, 0.01f, "x",
-            "Where you stand. This is what changes the perspective — the envelope may hold you further out at a low pitch.",
+            "Where you stand, and the only dial that changes the perspective. It is held out by Close limit, and the lower the pitch the further out that holds you.",
             { it.camera.distance }, { d, v -> d.copy(camera = d.camera.copy(distance = v)) },
         ),
         Knob(
-            CAMERA, "camera.lens", "Focal length", 0.7f, 2f, 0.02f, "x",
-            "Magnification. The board gets bigger; the perspective does not move. Past 1.0 it can crop, as a zoom does.",
+            CAMERA, "camera.lens", "Focal length", CameraEnvelope().minLens, CameraEnvelope().maxLens, 0.02f, "x",
+            "Magnification. The board gets bigger; the perspective does not move, and neither does how close you may sit. Past 1.0 it can crop, as a zoom does.",
             { it.camera.lens }, { d, v -> d.copy(camera = d.camera.copy(lens = v)) },
+        ),
+        Knob(
+            CAMERA, "camera.clearance", "Close limit",
+            CameraEnvelope.MIN_CLEARANCE, CameraEnvelope.MAX_CLEARANCE, 0.01f, "",
+            "How far toward the lens the near corner of the table may come. Higher lets you sit closer; the keystone across the table goes as 1/(1−this).",
+            { it.camera.clearance }, { d, v -> d.copy(camera = d.camera.copy(clearance = v)) },
         ),
 
         Knob(
@@ -512,4 +551,5 @@ data class EnvelopeReference(
     val maxDistance: Float = CameraEnvelope().maxDistance,
     val minLens: Float = CameraEnvelope().minLens,
     val maxLens: Float = CameraEnvelope().maxLens,
+    val clearance: Float = CameraEnvelope().clearance,
 )
