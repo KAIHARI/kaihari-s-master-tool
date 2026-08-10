@@ -5,13 +5,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.translate
 import com.kaiharimoto.mastertool.core.layout.StagePlane
-import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.Face
-import com.kaiharimoto.mastertool.core.render.Homography
 import com.kaiharimoto.mastertool.core.render.FaceWash
 import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.StageLighting
@@ -22,11 +19,9 @@ import com.kaiharimoto.mastertool.core.scene.Scene
 import com.kaiharimoto.mastertool.core.scene.ScenePainter
 import com.kaiharimoto.mastertool.core.scene.SceneBox
 import com.kaiharimoto.mastertool.core.scene.ScenePiece
-import com.kaiharimoto.mastertool.core.scene.Puzzle
 import com.kaiharimoto.mastertool.core.scene.reachOf
 import com.kaiharimoto.mastertool.core.scene.Surface
 import com.kaiharimoto.mastertool.core.scene.TimeOfDay
-import com.kaiharimoto.mastertool.core.scene.Wdjat
 import com.kaiharimoto.mastertool.ui.gpu.StageShader
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -122,7 +117,7 @@ internal data class StageLook(
     /** The lamp's metal: its foot, its stem, its finial. */
     val brass: Color,
     /**
-     * The puzzle: the one surface on this stage with a colour of its own.
+     * The puzzle: the one surface on this stage that no `ScenePiece` carries.
      *
      * Deliberately a dark gold rather than a bright one. Everything the shading
      * does to a surface is a *multiply* — [Tone] can darken a colour and can
@@ -420,7 +415,7 @@ internal fun List<Face>.facingTheCamera(stage: StagePlane, eye: Vec3): List<Face
  * So a box is ordered by the closest point it reaches — the largest depth of its
  * eight corners — which is the ordinary painter's rule for solids that do not
  * interpenetrate, and none of them do. It costs eight projections per piece,
- * for a room that is two pieces.
+ * for a room that is eighteen.
  *
  * ## Why the top face is not special-cased
  *
@@ -457,13 +452,7 @@ internal fun DrawScope.drawScene(
     val standIn = prop?.let { ScenePiece(name = "prop", surface = it.surface, box = it.box) }
     val all = if (standIn == null) pieces else pieces + standIn
 
-    // The prop's own parts, as pieces the painter can sort, paired with the
-    // faces to draw for each. Built here rather than inside the loop because it
-    // is per frame and the loop is per piece.
     val propParts = prop?.parts.orEmpty()
-    val propPieces = propParts.mapIndexed { index, part ->
-        ScenePiece(name = "part $index", surface = part.surface, box = part.box)
-    }
 
     ScenePainter
         .order(all, eyeAt) { box -> stage.reachOf(box) }
@@ -475,25 +464,31 @@ internal fun DrawScope.drawScene(
             // far side of the puzzle's ring would come out in front of the top
             // it is standing on.
             if (piece === standIn) {
-                ScenePainter
-                    .order(propPieces, eyeAt) { box -> stage.reachOf(box) }
-                    .forEach { sorted ->
-                        val part = propParts[propPieces.indexOfFirst { it === sorted }]
-                        drawSolid(
-                            faces = part.faces,
-                            stage = stage,
-                            eyeAt = eyeAt,
-                            eye = eye,
-                            look = look,
-                            colour = look.colourOf(part.surface),
-                            surface = part.surface,
-                            emission = part.emission,
-                            pool = pool,
-                            marked = part.marked,
-                        )
-                    }
+                // In the order the prop gave them, which is the order they are
+                // painted. A prop knows what separates its own parts —
+                // `Puzzle.parts` decides from the plane of its top face — and
+                // `ScenePainter` would decline the question anyway, because two
+                // parts of one object generally share a bounding box.
+                propParts.forEach { part ->
+                    drawSolid(
+                        faces = part.faces,
+                        stage = stage,
+                        eyeAt = eyeAt,
+                        eye = eye,
+                        look = look,
+                        colour = look.colourOf(part.surface),
+                        surface = part.surface,
+                        // No prop on this stage emits, and none has ever needed
+                        // to. The room's own fixtures do, through
+                        // `ScenePiece.emission`, and `drawSolid` is shared — so
+                        // the branch exists and is simply never reached here.
+                        emission = null,
+                        pool = pool,
+                    )
+                }
                 return@forEach
             }
+
             // The inside of a shell, first. `ScenePiece.lining` carries the
             // argument for why before rather than interleaved: culling has
             // already removed the near half of it, so every face left is behind
@@ -533,9 +528,9 @@ internal fun DrawScope.drawScene(
  * own faces.
  *
  * Two shapes for one object, and the split is the point. [box] is everything it
- * could ever occupy — turned to its diagonal and lifted all the way — which is
- * what the paint order needs and is the *only* thing it needs. [faces] is where
- * it actually is this frame.
+ * could ever occupy, over every pose it can reach, which is what the room's
+ * paint order needs and is the *only* thing it needs. [parts] are where it
+ * actually is this frame.
  *
  * Painting it last instead was the first version, on the reasoning that it
  * stands alone on the bare left of the desk with nothing between it and the
@@ -565,6 +560,11 @@ internal class Prop(
      * stand one on top of the other. The puzzle's ring sat behind its own
      * pyramid from the seated seat the first time it was drawn that way.
      *
+     * **In paint order, nearest the camera last** — the prop decides, because
+     * only the prop knows what separates its own parts, and `ScenePainter` would
+     * decline: two parts of one object generally share a bounding box, which is
+     * the one case it is built to have no opinion about.
+     *
      * [box] above is still one box, because the *room* only needs one: what
      * `ScenePainter` wants from an object is a separating axis, and the reach of
      * the whole thing gives it exactly as well as a part of it would.
@@ -575,15 +575,6 @@ internal class Prop(
         val surface: Surface,
         val box: SceneBox,
         val faces: List<Face>,
-        val emission: Lit? = null,
-        /**
-         * The one face of this part that carries a cast mark, by identity.
-         *
-         * By identity rather than by index because the renderer culls and sorts
-         * before it draws, so an index into the list handed in stops meaning
-         * anything two lines later.
-         */
-        val marked: Face? = null,
     )
 }
 
@@ -656,7 +647,6 @@ private fun DrawScope.drawSolid(
     wood: StageShader? = null,
     grainOrigin: Pair<Float, Float> = 0f to 0f,
     grainPitch: Float = 1f,
-    marked: Face? = null,
 ) {
     CardSolid.visible(faces, eyeAt)
         .sortedBy { stage.project(it.centre).depth }
@@ -719,28 +709,6 @@ private fun DrawScope.drawSolid(
                 } else {
                     facet(path, washBrush(wash, stage, colour), look)
                 }
-            }
-
-            // And the mark cast into it, if this is the face carrying one.
-            //
-            // Through `Homography.squareToQuad` from the face's **own flattened
-            // corners** — the same four points the path above was built from,
-            // and the same machinery a card's art already goes through. That
-            // sharing is the whole trick: the eye and the facet it is on are one
-            // calculation rather than two that have to be kept in agreement, so
-            // it cannot slide off the pyramid as the camera turns and it cannot
-            // stay behind when the puzzle is nudged.
-            if (face === marked) {
-                drawMark(
-                    quad = Puzzle.eyeQuad(face).map {
-                        val flat = stage.flatten(it)
-                        Vec2(flat.x, flat.y)
-                    },
-                    colour = colour,
-                    look = look,
-                    face = face,
-                    eye = eye,
-                )
             }
 
             // And the lamp mirrored *in* it, which is the one term the room's
@@ -822,71 +790,6 @@ private fun DrawScope.drawSolid(
                 )
             }
         }
-}
-
-/**
- * How much darker the groove is than the metal it is cut into.
- *
- * A cast relief is not ink. What an eye actually sees at the bottom of a groove
- * is the same gold with less of the room reaching it, so this is a multiply on
- * the surface's own shaded colour rather than a colour of its own — which is the
- * same argument `washBrush` and `poolBrush` make about never compositing over a
- * colour you do not know.
- */
-private const val GROOVE = 0.54f
-
-/** And the lit edge on the far side of it, where the groove wall catches the key. */
-private const val LIP = 1.34f
-private const val LIP_OFFSET = 1.2f
-
-/**
- * A mark cast into a facet, through the map that facet is drawn with.
- *
- * Two passes and no shader, so it reaches every Android this app ships to. The
- * groove first, then the same outline offset a pixel *toward the light* and
- * drawn brighter — which is what a bevelled edge is, and is enough at this size
- * to stop the eye reading as a decal printed on the gold.
- *
- * The offset is in the **flattened** frame rather than the facet's own, and that
- * is right rather than lazy: it stands for the lit wall of the groove, which is
- * a fact about where the lamp is on screen and not about the drawing's own
- * coordinates.
- */
-private fun DrawScope.drawMark(
-    quad: List<Vec2>,
-    colour: Color,
-    look: StageLook,
-    face: Face,
-    eye: Vec3,
-) {
-    if (quad.size < 4) return
-    val map = Homography.squareToQuad(quad) ?: return
-
-    val lit = StageRig.room(face, eye, look.lighting)
-    val ground = colour.shaded(lit)
-    val groove = Color(ground.red * GROOVE, ground.green * GROOVE, ground.blue * GROOVE, 1f)
-    val lip = Color(
-        (ground.red * LIP).coerceAtMost(1f),
-        (ground.green * LIP).coerceAtMost(1f),
-        (ground.blue * LIP).coerceAtMost(1f),
-        1f,
-    )
-    // Toward the lamp, on screen: the shorter of the two flattened axes of the
-    // facet tells us how big a pixel is here, so the lip does not become a
-    // stripe when the puzzle is close and vanish when it is far.
-    val toward = look.lighting.key.toLight
-    val nudge = Offset(toward.x, -toward.y) * LIP_OFFSET
-
-    Wdjat.parts().forEach { part ->
-        val path = Path()
-        part.forEachIndexed { index, at ->
-            val on = map.map(at.x, at.y)
-            if (index == 0) path.moveTo(on.x, on.y) else path.lineTo(on.x, on.y)
-        }
-        path.close()
-        translate(nudge.x, nudge.y) { drawPath(path, lip) }
-        drawPath(path, groove)
-    }
 }
 
 /**

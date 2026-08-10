@@ -47,7 +47,7 @@ against but *"the bookshelf exists and has books in it"* is.
 | Sun outside | not possible through this window — iteration 8 has the numbers |
 | Floor | a flat plane, barely in frame |
 | Wall | **a fifth of the screen**, and painted rather than void |
-| Millennium Puzzle | **turned, chamfered, with a bail and the Eye of Wdjat cast into its front flank** |
+| Millennium Puzzle | **turned, chamfered, propped, with a bail.** No mark on it — see iteration 12 |
 | Lamp | **a turned lamp**: brass foot, tapered stem, a shade that is a shell and is lit from inside |
 | Bed | does not exist |
 | Bookshelf | does not exist |
@@ -670,16 +670,18 @@ the curve it stands for.
    differently cannot meet at their shared edge. Measured at 0.074 of the
    surface's light — eighteen levels of 255. Grading along the axis the normal
    turns is the same choice for every facet of one turn.
-6. *An inverted pyramid balanced on its point hides its own sides.* The Eye of
-   Wdjat went onto the front flank first and came out as a six-pixel smudge,
-   because from anywhere above every flank slopes inward and away and is occluded
-   by the top face's own edge — twelve pixels of visible strip at the seat this
-   stage opens at. The puzzle is propped back thirty-four degrees now.
+6. *An inverted pyramid balanced on its point shows nothing but its base.* From
+   anywhere above every flank slopes inward and away and is occluded by the top
+   face's own edge — twelve pixels of visible strip at the seat this stage opens
+   at, and a flat gold square everywhere else. The puzzle is propped back
+   thirty-four degrees now, which is what makes the flanks, the chamfer and the
+   bail read at all.
 
-And one that is arithmetic rather than taste: a homography onto the facet's own
-corners **crushes the drawing toward the narrow end**, because a projective map's
-midline is where the projective midpoint is and this flank tapers 1:0.07. The
-eye gets its own patch cut out of the flank.
+And one that is arithmetic rather than taste: a homography onto a facet's own
+corners **crushes anything drawn on it toward the narrow end**, because a
+projective map's midline is where the projective midpoint is and this flank
+tapers 1:0.07. Anything cast into a facet of a cone or a pyramid wants its own
+patch, cut out of the face rather than taken as the whole of it.
 
 Two things were wrong before the code was, and both were tests rather than
 pictures. `rest` dropped the solid to the desk once, but `Rot3` spins about the
@@ -698,6 +700,48 @@ both run here now: `sdkmanager` into `/opt/android-sdk`, `sdk.dir` in
 other half of iteration 3's lesson — a contact sheet says whether the room reads,
 a 6x crop of one object says whether the object does. Every one of the six
 defects above was found in a crop.
+
+---
+
+### Iteration 12 — the eye is cut
+
+kai, on the release: *"while the lamp is alright, the millennium eye is
+completely unsatisfactory. I think the move here is to just delete it entirely."*
+So it is deleted — `core/scene/Wdjat.kt`, its test, `Puzzle.eyeQuad` and the
+renderer's `drawMark` — and this paragraph is the whole of what is left of it,
+because a loop that only records its wins relearns its losses.
+
+**What was actually wrong with it, so the next attempt does not start here.** The
+drawing was fine in the flat: rendered into a square it is a recognisable wedjat.
+What failed is everything between that square and the object. A hundred pixels of
+facet, seen at a slant, through a perspective map, engraved as two flat fills a
+pixel apart — the six marks come out as about four pixels of stroke each, and at
+four pixels a tapered ribbon is a scratch and a spiral is a blob. It is the same
+class of problem as `AAA.md` #61c's daylight patch: the idea was right, the thing
+it had to be drawn *through* was not able to carry it.
+
+Three things a second attempt would need, and none of them is a better outline:
+
+- **Relief, not fill.** A cast mark reads because its groove wall catches the key
+  and its far wall does not. Two flat fills offset by a pixel is a decal of that,
+  and at this size the pixel is the whole mark. It wants a normal, which means it
+  wants the shader seam — `docs/PHOTOREAL.md` stage 4's per-pixel path, with the
+  mark as a height field rather than a path.
+- **Or a bigger object.** The puzzle is a card wide because it has to clear the
+  mat and stay off the lens. Nothing about the mark works until the facet it is
+  on is two or three times the size, and that is a framing decision of the kind
+  `docs/LOOP.md` iteration 1 left open, not a rendering one.
+- **Or no mark at all**, which is where it is now, and which is not obviously
+  wrong: the object reads as a gold pyramid with a bail, propped on a desk, and
+  `docs/DESIGN.md` §11's whole argument for it is that an easter egg's value is
+  that nobody told you.
+
+**What survived, and why.** The lean. It went in so the flanks could carry the
+eye, and it turns out to be the thing that makes the object read at all: balanced
+on its point an inverted pyramid presents nothing but its base, and the shot
+without the lean is a flat gold square with a ring lying on it. Shot both ways
+before deciding, which is the only reason this paragraph is a claim rather than
+a preference.
 
 ---
 

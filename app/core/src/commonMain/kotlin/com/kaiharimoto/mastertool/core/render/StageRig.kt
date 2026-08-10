@@ -312,40 +312,6 @@ object StageRig {
     }
 
     /**
-     * How the light varies **across** one face of the room, as a run of samples
-     * along the axis it varies most along.
-     *
-     * ## Why a face needs more than one answer
-     *
-     * Because the room is four big boxes and [room] shades each of them once,
-     * at its centre. The wall behind the desk is fifteen hundred pixels wide;
-     * giving all of it the brightness of its own middle is a wall that steps
-     * from one flat grey to another at a seam, which is not a room falling away
-     * — it is the same defect [room] was written to fix, moved one level up.
-     * The arithmetic was right and invisible.
-     *
-     * ## The axis is measured, not assumed
-     *
-     * A quad has two of them, and which one the light runs along depends on
-     * where the lamp is standing: across the wall for a lamp beside it, up the
-     * wall for a lamp below it. So both are tried — the light at the middle of
-     * each of the four edges — and the pair that disagree more wins. Sampling a
-     * grid instead would be more general and would need a mesh; every surface
-     * in this room is flat and lit by one lamp, so the variation across it is
-     * monotone and a line through it is the whole story.
-     *
-     * ## Null is the common case and is the point
-     *
-     * Daylight has no placed lamp, so every sample comes back identical and
-     * this returns null — the caller keeps its solid fill, allocates no brush,
-     * and every daylit and minimal surface in the app stays exactly as it was.
-     * The same happens for a small face at night. What is left is the handful
-     * of large surfaces where a gradient is the difference between a room and a
-     * backdrop.
-     *
-     * @param samples how many stops to return, at least two.
-     */
-    /**
      * Which of a face's two axes to grade along — and for a curved face it is
      * **not** whichever direction the light happens to vary most in.
      *
@@ -380,6 +346,41 @@ object StageRig {
         return acrossTurn >= alongTurn
     }
 
+    /**
+     * How the light varies **across** one face of the room, as a run of samples
+     * along the axis it varies most along.
+     *
+     * ## Why a face needs more than one answer
+     *
+     * Because [room] shades a whole piece once, at its centre. The wall behind
+     * the desk is one of eighteen and is the size of several of the others. The wall behind the desk is fifteen hundred pixels wide;
+     * giving all of it the brightness of its own middle is a wall that steps
+     * from one flat grey to another at a seam, which is not a room falling away
+     * — it is the same defect [room] was written to fix, moved one level up.
+     * The arithmetic was right and invisible.
+     *
+     * ## The axis is measured, not assumed
+     *
+     * A quad has two of them, and which one the light runs along depends on
+     * where the lamp is standing: across the wall for a lamp beside it, up the
+     * wall for a lamp below it. So both are tried — the light at the middle of
+     * each of the four edges — and the pair that disagree more wins. Sampling a
+     * grid instead would be more general and would need a mesh; every *facet*
+     * in this room is flat and lit by one lamp, so the variation across it is
+     * monotone and a line through it is the whole story. A facet that stands in
+     * for a curve does not get to choose its own axis — see [gradeAcross].
+     *
+     * ## Null is the common case and is the point
+     *
+     * Daylight has no placed lamp, so on a flat face every sample comes back
+     * identical and this returns null — the caller keeps its solid fill, allocates no brush,
+     * and every daylit and minimal surface in the app stays exactly as it was.
+     * The same happens for a small face at night. What is left is the handful
+     * of large surfaces where a gradient is the difference between a room and a
+     * backdrop.
+     *
+     * @param samples how many stops to return, at least two.
+     */
     fun wash(
         face: Face,
         eye: Vec3,
@@ -598,10 +599,10 @@ object StageRig {
      * The one thing that is *not* Lambert about a surface: how sharply and how
      * strongly it mirrors the light.
      *
-     * The room has never had this. [lit] is ambient plus lambert plus a
-     * graze-gated rim and it contains **no specular term at all** — the only
-     * Blinn-Phong in this app is `Shading.of`, which takes a card's pose and a
-     * `CardMaterial` and is asked about nothing else. So gold and cloth and
+     * The room did not have this. [lit] is ambient plus lambert plus a
+     * graze-gated rim and contains **no specular term at all**, and until
+     * [gleam] the only Blinn-Phong in this app was `Shading.of`, which takes a
+     * card's pose and a `CardMaterial` and is asked about nothing else. So gold and cloth and
      * painted timber differ in *colour* and in nothing else, which is exactly
      * why `docs/LOOP.md` §6 records the lamp and the puzzle as "flat fills" and
      * `docs/AAA.md` #67 records the material half of a surface as unfinished.

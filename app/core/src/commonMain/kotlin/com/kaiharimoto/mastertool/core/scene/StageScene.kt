@@ -558,8 +558,12 @@ object Scenery {
     const val LAMP_RADIUS = 1.2f
 
     /**
-     * How high the lamp is **drawn**, in card widths — which is not how high its
-     * light is. See [lampHeight].
+     * How high the lamp's **shade** is drawn, in card widths — which is not how
+     * high its light is, and is no longer the top of the object either: the
+     * finial stands above it, by [LAMP_FINIAL]. It keeps its name because
+     * `SceneryTest.theLampStandsWhereItsLightComesFrom` pins the compression
+     * against exactly this number, and the shade is the part the light comes
+     * out of. See [lampHeight].
      */
     const val LAMP_DRAWN = 2.2f
 
@@ -841,7 +845,7 @@ object Scenery {
      * The desk, the wall it is pushed against with a window in it, the lamp
      * standing on it, and the floor underneath.
      *
-     * Ten pieces against a budget of twenty, and **the same ten at every hour** —
+     * Eighteen pieces against a budget of twenty, and **the same eighteen at every hour** —
      * a room does not repaint itself at dusk. What the hour changes is which
      * fixture is emitting and which rig is lighting the rest, which is the whole
      * of the difference between a scene and a colour grade.

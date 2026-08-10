@@ -186,7 +186,9 @@ be corrected.
   convention that made the first one invisible.
 - **Real geometry, no engine.** `core/render/` is a small, tested renderer:
   `Rot3` (the same Euler angles `graphicsLayer` rasterises with), `CardSolid`
-  (a card has a thickness and six faces), `Shading` (Lambert + Blinn-Phong,
+  (a card has a thickness and six faces), `Turned` (a solid of revolution: a
+  profile of rings, spun, capped, and genuinely posed — everything round in the
+  room comes off it), `Shading` (Lambert + Blinn-Phong,
   with a specular pool that *moves*), `Shadows` (cast by projecting every
   corner along the light), `StageRig` (one key, one fill, one eye). It reaches
   the screen through `graphicsLayer` — which is a real perspective-correct
@@ -291,8 +293,8 @@ whole of it at the input end was that the hit test returned
 `DragOrigin.Pile(slot, 0)` — the domain had taken an arbitrary index since it
 was written.
 
-The room is seventeen pieces: a floor, the desk, four wall pieces around a
-window opening, the pane, seven of joinery around it, and three for the lamp. `docs/AAA.md` #62 was the brief —
+The room is eighteen pieces: a floor, the desk, four wall pieces around a
+window opening, the pane, seven of joinery around it, and four for the lamp. `docs/AAA.md` #62 was the brief —
 *"there is a room past it. Dark, out of focus, present."* — and #16 and #17 are
 what made day and night two rooms rather than two colour grades: a `Light` may
 now have a **position**, a **radius** and a **distance**, so shadows diverge
@@ -301,16 +303,24 @@ window's edge is soft where a lamp's is hard.
 
 Four things about it are load-bearing, and three of them were bugs first:
 
-- **A light with no place is a no-op to the bit.** Every new term returns a
-  literal before touching a float when `position` is null, which is why
-  `GoldenStageTest` is green without being re-recorded across a release that
-  changed how every surface is lit.
+- **A light with no place is a no-op to the bit — and so is a flat face with no
+  material.** Every placed-lamp term returns a literal before touching a float
+  when `position` is null. Two later terms outgrew that exact test and reach the
+  same end another way: `StageRig.wash` now also fires for a face carrying
+  `Face.smooth` normals, because a turned solid is faceted at noon exactly as
+  badly as at midnight, and `gleam` is gated on the surface's own `Gloss` rather
+  than on a position at all. What keeps them inert is that a slab has no smooth
+  normals and the minimal key has no size. Which is why `GoldenStageTest` is
+  green without being re-recorded across three releases that changed how every
+  surface in the room is lit.
 - **The lamp's height is solved, not chosen.** The shipped night key's
   horizontal-to-vertical ratio *is* how long a night shadow is per unit of
   height, so the lamp stands where the ray to the middle of the table has
-  exactly that ratio. Its mast is then foreshortened five to one, because an
-  honest desk lamp is off the top of the picture — the foot and the light are
-  exact and `SceneryTest` pins the compression.
+  exactly that ratio. The lamp is then *drawn* at about a third of that height —
+  2.92 to one, measured — because an honest desk lamp is off the top of the
+  picture. The foot and the light are exact and `SceneryTest` pins the
+  compression; nobody can measure a stem. (This read "five to one" until it was
+  measured, which is what a number in prose with no test under it is worth.)
 - **Paint order is a topological sort over a separating axis.** Sorting boxes
   by nearest-corner depth puts a 511px wall after a 241px lamp and paints it
   over the top. `ScenePainter` finds an axis that separates each pair — and
@@ -332,39 +342,102 @@ stain, not light. Fixing it means splitting the day key into sky and sun and
 shading the room with the sky alone, which changes the brightness of the entire
 day room. `docs/AAA.md` #61c has it.
 
+**The room is turned on a lathe.** `core/render/Turned.kt` is the third mesh
+primitive, beside `CardSolid.face` and `CardSolid.slab`: a profile of rings, spun
+about the pose's own vertical, capped. Everything round in the room comes off it
+— the lamp's foot, its stem, its shade and its finial, and the puzzle's body and
+bail. Four things about it are load-bearing:
+
+- **It is genuinely posed.** A slab hangs its body down the *stage's* z whatever
+  the pose says, because that is a fact about the felt a card rests on. Every
+  vertex here goes through `Rot3.place` instead, so a turned solid may be tipped
+  without shearing — which is the "posed box in core with its own eight corners"
+  `docs/DESIGN.md` §11 said a tumble would cost, arriving for another reason.
+- **A facet's normal is solved from the profile, not crossed from its corners**,
+  which keeps it exact where a band ends in a point and one edge is gone. The
+  exact answer is short by `cos(π / sides)` in its radial half, because a chord is
+  shorter than the arc it spans; `TurnedTest` measures the normal each face
+  carries against the vector area its corners really have, so dropping that
+  cosine is a red build rather than a highlight one facet out.
+- **The side count is derived and always even.** A segment's sagitta is
+  `r·(1 − cos(π/n))` and half a pixel is where the flat stops being visible.
+  Even, because an even polygon is centrally symmetric and so has a bounding box
+  centred on its own axis — and the room sorts, measures and lights every fixture
+  through that box.
+- **A facet may carry the normals of the curve it stands for** (`Face.smooth`,
+  trailing and null for every card, pile and box). Shading twenty wedges by their
+  own twenty normals is correct arithmetic about the wrong object: it steps at
+  every seam and a round foot reads as a paper fan.
+
+`ScenePiece` gained a `mesh` and a `lining` to carry all that, both trailing and
+null by default. The rule for `mesh` is the painter's algorithm rather than
+convexity as such — a piece's faces are ordered by the depth of their own
+centres, so the faces the camera can *see* must come out right that way. Convex
+satisfies it for free; the lampshade's **shell** is the one argued exception.
+
 **The room has one thing in it that answers a finger.** The Millennium Puzzle
-stands on the bare left of the desk, opposite the lamp: a truncated pyramid
-apex-down (`CardSolid.slab` gained a trailing `backScale`, bit-identical at 1,
-which is why `GoldenStageTest` never moved). Tap it and it turns a third of a
-turn and rises. Four things about it are the pattern a second prop inherits:
+sits on the bare left of the desk, opposite the lamp: a four-sided turn — a
+pyramid, apex down — with a chamfer round its top edge and a torus bail standing
+on it, **propped back thirty-four degrees**. Tap it and it turns a third of a
+turn and rises. Five things about it are the pattern a second prop inherits:
 
 - **A prop is a pose, not a `ScenePiece`.** Furniture is solved twice a day and
   remembered; a moving thing cannot live in a value that is deliberately
   recomputed. `Puzzle.stirred(layout, turns, lifted)` is a pure function of two
   numbers the screen owns, so what is drawn, what is touched and where it stands
   cannot come apart.
-- **It may spin and rise, and may not tumble.** A body hangs along the *stage's*
-  z, so a turn about that axis is bit-exactly the turned solid, and a tilt would
-  leave the body hanging vertically while the face turned — a fraction of a pixel
-  on a card, the entire silhouette on a hand's width of pyramid.
-- **Two shapes: a box to sort it, a set of faces to draw it.** It joins
-  `ScenePainter`'s order as `Puzzle.reach` and is drawn from its live pose, which
-  is what lets the painter stay ignorant of any shape without axes. Painting it
-  last instead assumes a camera in front of the table, and yaw is free: past
-  about 145° you are behind the room's own wall.
+- **It is propped, and that is what makes it read.** Balanced on its point an
+  inverted pyramid shows you nothing but its base — every flank slopes inward and
+  away and is occluded by the top face's own edge, so the whole object comes out
+  as a flat gold square with a ring lying on it. Shot both ways before deciding.
+- **Where it rests is solved, not chosen.** `Rot3` spins about the object's own
+  axis *before* tipping it, so which corner is lowest changes with the turn;
+  dropping the solid by one number sank it three quarters of a pixel into the
+  wood on every nudge. `Puzzle.reach` is solved the same way, over every turn at
+  both ends of the lift, because the hand-written diagonal it replaced was true
+  right up until the shape changed underneath it.
+- **Two shapes, and now two parts.** It joins `ScenePainter`'s order as
+  `Puzzle.reach` and is drawn from its live pose, which is what lets the painter
+  stay ignorant of any shape without axes. Its own body and bail are ordered
+  *among themselves* by the same painter — one list of faces would sort the far
+  side of the ring in front of the top it stands on. Painting the whole thing last
+  instead assumes a camera in front of the table, and yaw is free: past about 145°
+  you are behind the room's own wall.
 - **Hit-tested where it appears, not where it stands.** Against the flattened
-  silhouette: at the table seat the middle of its top face is 102px from its own
-  foot, against cards 104px wide.
+  silhouette: the middle of its top face lands 98px from the point it touches the
+  desk at overhead, 140px at the table and 188px seated, against cards 104px wide.
 - **The camera claims the gesture last.** A prop is the third thing that is
   neither a card nor the felt, after a shuffle mark and the inside of an open
   fan, and like both it is taken out before `claimForCamera` — asked last of the
   three, because the table's own affordances outrank an ornament beside it. It is
   deliberately *not* in `MatGuide`: an easter egg's value is that nobody told you.
 
+**It carries no mark, and that was tried.** An Eye of Wdjat was drawn in a unit
+square and cast into the front flank through `Homography.squareToQuad`; kai's
+verdict on the shipped build was that it was "completely unsatisfactory", and it
+is deleted. `docs/LOOP.md` iteration 12 records why it failed and what a second
+attempt would need — the short version is that six tapered marks over a hundred
+pixels of slanted facet come out as four pixels of stroke each, and relief that
+thin needs a normal, which means it needs the shader seam.
+
+**The room has a material now, as well as a colour.** `StageRig.lit` is ambient
+plus lambert plus a graze-gated rim and has no specular in it, so until this the
+gold and the cloth and the painted timber differed in colour and in nothing else
+(`docs/AAA.md` #67's unfinished half). Three terms sit *beside* it rather than
+inside it, because `GoldenStageTest` records what `lit` returns: `gleam`, an
+additive Blinn-Phong highlight whose lobe is **widened by the source's own
+angular radius** so a window gives a broad whisper and a bulb a hard glint;
+`spill`, which grades a lit fixture down its own height because the bulb sits low
+in the shade; and `Surface.gloss`, so a finish stays a fact about a material.
+
 Next for the room: `docs/AAA.md` #61d is the shadow question — nothing in the
 room casts one, on purpose, and that is a decision to revisit as a set rather
-than to bolt onto one object. A second prop needs only to share no volume with
-anything, which is what `PuzzleTest` measures and what the sort needs.
+than to bolt onto one object. A second prop needs two things, and the bail is
+what proved the second: it must share no volume with anything, which is what
+`PuzzleTest` measures and what `ScenePainter`'s separating axis needs *between*
+pieces — and if it is not convex it must arrive as convex **parts**, because
+inside one piece the renderer sorts faces by the depth of their own centres and
+that is meaningless across two solids.
 
 Next: attaching as material is reachable in the domain and not yet by gesture
 (`DropIntent.Attach` needs an idiom that is not already spoken for). After

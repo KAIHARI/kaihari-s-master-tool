@@ -13,6 +13,7 @@ import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.StageRig
 import kotlin.math.hypot
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -47,7 +48,8 @@ class PuzzleTest {
      * normals and for the hit test, which is the body's job.
      */
     private fun drawn(pose: Pose3): List<Vec3> =
-        Puzzle.parts(layout, pose).flatMap { part -> part.faces.flatMap { it.corners } }
+        Puzzle.solid(layout, pose).flatMap { it.corners } +
+            Puzzle.bail(layout, pose).flatMap { it.corners }
 
     /** Every pose it can be in: a full revolution of nudges, at every lift. */
     private fun everyPose() = (0..11).flatMap { turns ->
@@ -259,6 +261,91 @@ class PuzzleTest {
      * pyramid under it turns, because after `rotX = 90` it is the *second* Euler
      * angle that swings a horizontal axis.
      */
+    /**
+     * What actually decides which of its two parts is painted first.
+     *
+     * This was written as *"they are z-disjoint by construction — the ring rests
+     * on the body's top face — so `ScenePainter` has an axis that separates
+     * them"*, and it was true of the object standing upright. Propped, the bail
+     * sits wholly **inside** the leaned pyramid's own bounding box: there is no
+     * separating axis on any of the three, so the painter declines and the sort
+     * falls through to a depth comparison nobody has proved anything about.
+     *
+     * What does separate them is a **plane** — the body's own top face, which
+     * the bail stands on and the body lies entirely under. That is what this
+     * pins, and it is why one boolean is enough: for two convex bodies either
+     * side of a plane, the painter's order is which side the eye is on.
+     */
+    @Test
+    fun theBodysTopFaceIsThePlaneThatSeparatesItFromItsRing() {
+        var checked = 0
+        everyPose().forEach { (name, pose) ->
+            val body = Puzzle.solid(layout, pose)
+            val top = body.last()
+            val plane = top.normal.normalised()
+            val on = plane dot top.centre
+
+            body.flatMap { it.corners }.forEach { corner ->
+                assertTrue(
+                    (plane dot corner) <= on + SLACK,
+                    "at $name a corner of the body at $corner is above its own top face",
+                )
+            }
+            Puzzle.bail(layout, pose).flatMap { it.corners }.forEach { corner ->
+                assertTrue(
+                    (plane dot corner) >= on - SLACK,
+                    "at $name a corner of the ring at $corner is below the face it stands on",
+                )
+                checked++
+            }
+        }
+        assertTrue(checked > 0, "nothing was compared")
+    }
+
+    /**
+     * And the order that plane implies, over the whole envelope rather than the
+     * three seats.
+     *
+     * The ring is **not** always on top. At the steepest pitch the camera can
+     * reach, the propped top face turns about five degrees away and the body is
+     * in front of the ring — so a prop that simply painted its ring last would
+     * be wrong at one corner of the camera's range, which is exactly the sort of
+     * thing that ships.
+     */
+    @Test
+    fun whicheverPartTheEyeIsInFrontOfIsPaintedLast() {
+        val envelope = CameraEnvelope()
+        var away = 0
+        var toward = 0
+        var pitch = envelope.minPitch
+        while (pitch <= envelope.maxPitch) {
+            val floor = envelope.minDistanceAt(pitch, surfaceWidth, surfaceHeight)
+            var yaw = 0f
+            while (yaw < 360f) {
+                val plane = CameraPose(yaw, pitch, floor).planeFor(surfaceWidth, surfaceHeight)
+                val eyeAt = plane.eyePoint(StageRig.eye(plane.tiltDegrees, plane.yawDegrees))
+                everyPose().forEach { (name, pose) ->
+                    val top = Puzzle.solid(layout, pose).last()
+                    val ringUp = top.facingFrom(eyeAt) > 0f
+                    val parts = Puzzle.parts(layout, pose, eyeAt)
+                    assertEquals(2, parts.size, "at $name it is not two parts")
+                    // The ring's box is the small one; the body's spans the lot.
+                    val lastIsRing = parts[1].box.max.z - parts[1].box.min.z <
+                        parts[0].box.max.z - parts[0].box.min.z
+                    assertTrue(
+                        lastIsRing == ringUp,
+                        "at $name, pitch $pitch yaw $yaw the parts are painted the wrong way round",
+                    )
+                    if (ringUp) toward++ else away++
+                }
+                yaw += 30f
+            }
+            pitch += 6f
+        }
+        assertTrue(toward > 0, "the ring is never in front, so this proves nothing")
+        assertTrue(away > 0, "the ring is always in front, so the boolean is dead code")
+    }
+
     @Test
     fun theRingIsClosedAndTurnsWithTheBodyItStandsOn() {
         everyPose().forEach { (name, pose) ->

@@ -146,19 +146,18 @@ internal class StageProp {
      *
      * Null when it is not standing on a board yet, which is the one frame
      * between the first composition and the `SideEffect` that places it.
+     *
+     * [eyeAt] because the order its two parts are painted in is a fact about
+     * where the camera is — see `Puzzle.parts`, which decides it from the plane
+     * of the body's own top face.
      */
-    fun drawn(): Prop? {
+    fun drawn(eyeAt: Vec3): Prop? {
         val layout = board ?: return null
         return Prop(
             surface = Surface.GOLD,
             box = Puzzle.reach(layout),
-            parts = Puzzle.parts(layout, pose).map { part ->
-                Prop.Part(
-                    surface = Surface.GOLD,
-                    box = part.box,
-                    faces = part.faces,
-                    marked = part.marked,
-                )
+            parts = Puzzle.parts(layout, pose, eyeAt).map { part ->
+                Prop.Part(surface = Surface.GOLD, box = part.box, faces = part.faces)
             },
         )
     }

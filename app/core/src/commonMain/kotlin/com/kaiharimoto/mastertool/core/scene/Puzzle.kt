@@ -25,11 +25,14 @@ import kotlin.math.sin
  * built from a **pose** the way a card is, and the screen holds that pose in the
  * same plain object a card's pose lives in.
  *
- * It costs nothing in the paint order either. It stands well clear of the mat on
- * the opposite side of the desk from the lamp, so nothing on the stage can be
- * both in front of it and behind something else — which means it can simply be
- * painted last, and `ScenePainter` never has to have an opinion about a shape
- * that is not a box.
+ * It does cost the paint order something, and the version that did not is the
+ * one this replaced. Standing alone on the bare left of the desk, it looked as
+ * though nothing on the stage could be both in front of it and behind something
+ * else, so it could simply be painted last — which quietly assumed a camera in
+ * front of the table. Yaw here is free: walk past about 145° and you are behind
+ * the room's own wall, where the header above the window really is nearer than
+ * the desk, and the puzzle drew straight through it. It joins `ScenePainter`'s
+ * sort as a box instead.
  *
  * ## What it is made of
  *
@@ -121,21 +124,20 @@ object Puzzle {
     /**
      * How far back it is propped, in degrees.
      *
-     * Balanced on its point, an inverted pyramid **hides its own sides**: from
-     * anywhere above, each flank slopes inward and away and is occluded by the
-     * top face's own edge. At the seat this stage opens at, the four faces that
-     * carry everything worth carving are a twelve-pixel strip and the Eye of
-     * Wdjat drawn on one of them is six pixels of scratch. That was measured
-     * rather than feared — it was drawn there first.
+     * Balanced on its point, an inverted pyramid **shows you nothing but its
+     * base**: from anywhere above, each flank slopes inward and away and is
+     * occluded by the top face's own edge, so what reaches the screen is a flat
+     * gold square with a ring lying on it. Every part of the object that says
+     * *pyramid* — the four flanks, the chamfer round the top, the bail standing
+     * proud — is in the twelve pixels the top face does not cover.
      *
-     * So it is propped back, which turns the near flank up toward the room and
-     * lays the top face away from it. It is no more balanced than it was — the
-     * point it used to stand on is seven per cent of a card wide — and it is the
-     * way a person actually leaves a pendant on a desk.
+     * Propped, all four read. It is no more balanced than it was — the point it
+     * used to stand on is seven per cent of a card wide — and it is the way a
+     * person actually leaves a pendant on a desk.
      *
      * A `rotX` and not a `rotZ`, applied **after** the spin in `Rot3`'s
      * Z-then-Y-then-X order, so a nudge turns it about its own leaned axis and
-     * the eye swings out of the room and back rather than the object rocking.
+     * the silhouette swings rather than the object rocking.
      */
     const val LEAN = 34f
 
@@ -166,11 +168,13 @@ object Puzzle {
     fun tall(layout: BoardLayout): Float = layout.cardWidth * TALL
 
     /**
-     * Where it sits when nothing has touched it.
+     * Where it sits when nothing has touched it, which is the first of the poses
+     * it can be nudged into rather than a case of its own.
      *
-     * The pose is the **top** face, because that is the face `CardSolid.slab`
-     * builds from and the body hangs down off it. So the point rests on the desk
-     * exactly when the pose stands a whole height above it.
+     * It used to be a height: the pose is the top face and the body hangs off it,
+     * so the point rested when the pose stood a whole [tall] above the desk. That
+     * was arithmetic about an object standing square on its own point, and it
+     * stopped being true the moment it was propped — see [LEAN] and [standing].
      */
     fun rest(layout: BoardLayout): Pose3 = stirred(layout, turns = 0, lifted = 0f)
 
@@ -214,9 +218,11 @@ object Puzzle {
     /**
      * The body: a square turn hanging apex-down off the pose, with a chamfer.
      *
-     * The pose is still the **top** face, so the lathe stands a whole height
-     * below it and the profile runs upward from the point — which is why every
-     * height here is negative before [tall] is added back.
+     * The pose is the plane of the **top** face, so the lathe hangs below it and
+     * every height in the profile is negative or zero. Nothing adds [tall] back:
+     * what puts the solid on the desk is [standing], which builds the shape,
+     * measures its lowest corner and drops it — see there for why that has to be
+     * per pose.
      *
      * A square turn's `radius` is its *circumcircle*, so the half-width of a
      * flat is `radius / sqrt(2)`: the numbers below are divided accordingly and
@@ -287,9 +293,9 @@ object Puzzle {
      * Everything it could ever occupy, as a box.
      *
      * Only ever asked whether it clears the mat and the rest of the room, so it
-     * is deliberately the *worst* case: turned to its diagonal and lifted all the
-     * way. A prop that clears the felt only while it happens to be still is a
-     * prop that stands over a card the first time somebody touches it.
+     * is deliberately the *worst* case: every turn, at both ends of the lift. A
+     * prop that clears the felt only while it happens to be still is a prop that
+     * stands over a card the first time somebody touches it.
      */
     fun reach(layout: BoardLayout): SceneBox {
         // Solved rather than derived, now that the object leans: the extent of a
@@ -330,99 +336,51 @@ object Puzzle {
     }
 
     /**
-     * The two parts it is drawn as, nearest the desk first.
+     * The two parts it is drawn as, **in paint order, nearest the camera last.**
      *
-     * Two rather than one because the ring is a torus and the body is a
-     * pyramid, and the renderer orders the faces *inside* one part by the depth
-     * of their own centres — the painter's algorithm, which is right for a
-     * convex solid and wrong across two of them. Handed the whole object as one
-     * list, a face of the ring at the back of the hole sorts in front of the top
-     * of the pyramid it is standing on.
+     * Two rather than one because the ring is a torus and the body is a pyramid,
+     * and the renderer orders the faces *inside* one part by the depth of their
+     * own centres — the painter's algorithm, which is right for a convex solid
+     * and has no meaning across two of them.
      *
-     * They are z-disjoint by construction — the ring rests on the body's top
-     * face — so `ScenePainter` has an axis that separates them from any seat,
-     * which is the same thing the room's own pieces rely on and the same reason.
+     * ## Why the order is decided here and not by `ScenePainter`
+     *
+     * Because the painter would decline. It orders boxes by a separating axis,
+     * and these two share every one: the bail sits in the middle of the top face
+     * and is wholly inside the leaned pyramid's own bounding box, so `behind`
+     * has no opinion about the pair and the sort falls through to a depth
+     * comparison nobody has proved anything about. It was written here as
+     * "z-disjoint by construction", which was true of the object standing upright
+     * and stopped being true the day it was propped — the kind of comment that
+     * goes on being read long after it stopped being a fact.
+     *
+     * ## And why one boolean is exact
+     *
+     * The two solids *are* separated — not by an axis but by a **plane**, the
+     * plane of the body's own top face, which the bail stands on and the body
+     * lies entirely under. For two convex bodies either side of a plane the
+     * painter's order is decided by which side the eye is on, and nothing else,
+     * so the whole question is whether the top face is turned toward the camera.
+     *
+     * It is not always. At the envelope's steepest pitch the propped top face
+     * turns away by about five degrees, and at that seat the body is in front of
+     * the ring and has to be painted after it. Asserting "the bail is always on
+     * top" would have been wrong at exactly one corner of the camera's range,
+     * which is the sort of thing that ships.
      */
-    fun parts(layout: BoardLayout, pose: Pose3): List<Part> {
+    fun parts(layout: BoardLayout, pose: Pose3, eyeAt: Vec3): List<Part> {
         val body = solid(layout, pose)
         val ring = bail(layout, pose)
-        return listOf(
-            Part(SceneBox.around(body), body, marked = body.getOrNull(EYE_FACE)),
-            Part(SceneBox.around(ring), ring),
-        )
+        val front = Part(SceneBox.around(ring), ring)
+        val back = Part(SceneBox.around(body), body)
+        // The top cap is the last face `Turned` emits, and its plane is the one
+        // that separates the two.
+        val towardTheRing = body.last().facingFrom(eyeAt) > 0f
+        return if (towardTheRing) listOf(back, front) else listOf(front, back)
     }
 
-    /**
-     * Which facet the Eye of Wdjat is cast into.
-     *
-     * [Turned.solid] emits its bands first, in profile order, `sides` at a time
-     * — so face zero is the first flank of the first band, which is the long one
-     * running from the point up to the chamfer. And with `sides = 4` and a
-     * forty-five degree phase, that facet's normal points along **+y**, which on
-     * this stage is straight at the player. So the eye faces the room when the
-     * puzzle has not been touched, and a nudge takes it away and brings it back
-     * — which is the best thing a third of a turn could do.
-     */
-    const val EYE_FACE = 0
-
-    /** One convex piece of it: what to sort it by, what to draw, and what is on it. */
-    data class Part(
-        val box: SceneBox,
-        val faces: List<Face>,
-        /** The face carrying the eye, by identity, or null on a part with none. */
-        val marked: Face? = null,
-    )
-
-    /**
-     * Where on the eye's facet the eye actually goes.
-     *
-     * How far down the flank the mark starts and ends, and how far in from each
-     * sloping side, as fractions of the facet.
-     */
-    const val EYE_FROM = 0.03f
-    const val EYE_TO = 0.72f
-    const val EYE_INSET = 0.04f
-
-    /**
-     * The quad the unit square is mapped onto, clockwise from its own top left.
-     *
-     * **Not the facet's own four corners**, and that was the first version. A
-     * flank of this pyramid runs from a full-width top edge down to the seven
-     * per cent flat at the point, and a homography onto a trapezoid that nearly
-     * degenerates does what a homography is supposed to do: it crushes the
-     * square toward the narrow end, so the eye came out as a six-pixel smudge
-     * sitting on the tip. A projective map's midline is where the *projective*
-     * midpoint is, which on a 1:0.07 taper is nowhere near the middle.
-     *
-     * So the eye gets its own patch, cut out of the flank by walking down the
-     * two sloping edges. It still tapers, because the face does and an engraving
-     * on a pyramid does too — just not to nothing.
-     *
-     * The corner order is the other half of this and it is not guessable.
-     * `Turned` winds a band's face as low@side, low@next, high@next, high@side,
-     * so 0 and 1 are at the point and 2 and 3 at the top — and *which of each
-     * pair is on the left* comes from the phase: at forty-five degrees `side`
-     * sits at 45° and `next` at 135°, which in this frame puts `side` on the
-     * right. Off by one and the eye is upside down; the pair the wrong way round
-     * and it is mirrored, which is the failure `docs/LOOP.md` iteration 3 found
-     * on the deck's own count.
-     */
-    fun eyeQuad(face: Face): List<Vec3> {
-        if (face.corners.size < 4) return emptyList()
-        // Down the left edge (top-left to bottom-left) and the right edge.
-        fun down(top: Vec3, point: Vec3, t: Float) = top + (point - top) * t
-        fun across(left: Vec3, right: Vec3, t: Float) = left + (right - left) * t
-        val topLeft = down(face.corners[2], face.corners[1], EYE_FROM)
-        val topRight = down(face.corners[3], face.corners[0], EYE_FROM)
-        val lowLeft = down(face.corners[2], face.corners[1], EYE_TO)
-        val lowRight = down(face.corners[3], face.corners[0], EYE_TO)
-        return listOf(
-            across(topLeft, topRight, EYE_INSET),
-            across(topRight, topLeft, EYE_INSET),
-            across(lowRight, lowLeft, EYE_INSET),
-            across(lowLeft, lowRight, EYE_INSET),
-        )
-    }
+    /** One convex piece of it: what to sort it by, and what to draw. */
+    data class Part(val box: SceneBox, val faces: List<Face>)
 
     /**
      * Whether a finger landed on it.

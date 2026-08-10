@@ -139,7 +139,10 @@ and all of them would take the desktop target with them.
 What changed is the first half. The geometry is now *real* and lives in
 `core/render/`, tested like everything else in core: `Rot3` interprets the same
 three Euler angles `graphicsLayer` is about to rasterise with, `CardSolid` gives
-a card a thickness and six faces with normals, `Shading` is Lambert plus
+a card a thickness and six faces with normals, `Turned` is a lathe — a profile of
+rings spun about the pose's own vertical, capped, and genuinely posed, which is
+what everything round in the room is made of and the only mesh here whose facets
+may carry the normals of the curve they stand for — `Shading` is Lambert plus
 Blinn-Phong with a moving specular pool, `Shadows` casts by projecting every
 corner along the light, and `StageRig` holds the one key, the one fill and the
 one eye that all of it agrees about.
@@ -519,21 +522,24 @@ The wood does not change at dusk; the lamp does.
 **A fixture and the light it throws are one value.** The lamp on the desk is
 not a picture of a lamp standing near where the key light happens to point: its
 position *is* the key's position, and the key's direction is derived from it.
-`Scenery` computes the foot once and emits both the boxes and the `Light`, so
-the object and the lamp cannot end up in two places. The same rule sends the
+`Scenery` computes the foot once and emits both the fixture and the `Light`, so
+the object and the lamp cannot end up in two places. (It emitted *boxes* when
+this was written; the lamp is four turned profiles on one spindle now, and the
+guarantee is the one thing about it that did not change.) The same rule sends the
 window's aperture through the identical function that casts a card's shadow —
 one arithmetic, two consumers, and no second place for the light to be.
 
 **A lamp's mast is foreshortened, and its foot and its light are exact.** This
 is §10's height rule run the other way. A physically honest desk lamp on this
-stage stands seven hundred pixels up and is off the top of the picture at every
-seat; one low enough to draw honestly throws shadows two and a third times too
-long. So the light is at its true height and the shade is drawn at a fifth of
-it. What survives the compression is the pair that survives for a pile: the
+stage stands six hundred and sixty-seven pixels up on a 1600×856 board and is off
+the top of the picture at every seat; one low enough to draw honestly throws
+shadows nearly three times too long. So the light is at its true height and the shade is drawn at
+about a third of it — 2.92 to one on a 1600×856 board, which is a measurement and
+was written here as "a fifth" for as long as nobody took it. What survives the compression is the pair that survives for a pile: the
 *foot* is exact — the shade is directly above the source, the pool is centred on
 it, every shadow points away from it, the sheen is its mirror — and the *light*
 is exact, because the height was solved from the shadow length the preset
-already shipped rather than chosen. Nobody can measure a mast. `SceneryTest`
+already shipped rather than chosen. Nobody can measure a stem. `SceneryTest`
 pins the ratio so it cannot drift into a lie by accident.
 
 **A light with no place must be a no-op, to the bit.** Every term a positioned
@@ -560,24 +566,44 @@ being touched and the thing casting a shadow are all that one value. A moving
 object in a value that is deliberately recomputed twice a day is a prop that
 snaps back to where it started the first time the clock crosses dusk.
 
-**It may spin and rise; it may not tumble.** `CardSolid.slab` hangs a solid's
-body straight down the *stage's* z, which is a fact about the surface a thing is
-resting on rather than about the thing. A rotation about that same axis commutes
-with a translation along it, so a solid spun that way is bit-exactly the rotated
-solid. Tip it about x or y instead and the body goes on hanging vertically while
-the face turns — over a card's four thousandths of a millimetre that is a
-fraction of a pixel and nobody has ever seen it; over a hand's width of pyramid
-it is the entire silhouette. A tumble is worth having and is worth what it
-costs: a posed box in core with its own eight corners, which nothing has yet
-needed.
+**It may spin and rise; it may not tumble — and that is now taste rather than
+arithmetic.** It used to be arithmetic. `CardSolid.slab` hangs a solid's body
+straight down the *stage's* z, which is a fact about the surface a thing is
+resting on rather than about the thing, so a rotation about that same axis
+commuted with a translation along it and gave bit-exactly the rotated solid,
+while a tip about x or y left the body hanging vertically as the face turned —
+a fraction of a pixel over a card, the entire silhouette over a hand's width of
+pyramid. The price of a tumble was named here as *a posed box in core with its
+own eight corners*, and `core/render/Turned.kt` is that box: a solid of
+revolution whose every vertex goes through `Rot3.place`. The puzzle is built from
+it and is **statically propped thirty-four degrees back** for exactly that
+reason — balanced on its point an inverted pyramid shows nothing but its base.
 
-**A prop is two shapes: a box to sort it, and faces to draw it.** `ScenePainter`
-knows only about axis-aligned boxes, and it does not need to know more — what a
-painter's algorithm wants from an object is a separating axis, and a bounding box
-that shares no volume with anything supplies one exactly as well as the real
-solid would. So the puzzle joins the sort as `Puzzle.reach` — everything it could
-occupy, turned to its diagonal and lifted all the way — and is drawn from where
-it actually is this frame. Painting it last instead was the first version, and it
+What is left of the rule is the part that was always taste: a nudge spins and
+lifts, and does not roll. A prop may answer a finger; a prop that tumbled would
+be performing.
+
+**A prop is two shapes: a box to sort it, and faces to draw it — and so is half
+the room now.** `ScenePainter` knows only about axis-aligned boxes, and it does
+not need to know more: what a painter's algorithm wants from an object is a
+separating axis, and a bounding box that shares no volume with anything supplies
+one exactly as well as the real solid would. `ScenePiece.mesh` is that same split
+applied to furniture, and four of the room's eighteen pieces use it.
+
+Inside one object the split stops helping, and the puzzle is where that shows.
+Its body and its ring share every axis — the ring sits in the middle of the top
+face, wholly inside the leaned pyramid's own box — so the painter declines the
+pair and something else has to decide. What decides it is a **plane**: the body's
+own top face, which the ring stands on and the body lies entirely under. For two
+convex bodies either side of a plane the order is which side the eye is on, and
+nothing else. It is not always the ring — at the envelope's steepest pitch the
+propped top face turns away and the body is in front. So the puzzle joins the sort as `Puzzle.reach` — everything it could
+occupy, solved over every turn at both ends of the lift, since the shape stopped
+being a square whose diagonal anybody could write down — and is drawn from where
+it actually is this frame. Its own two parts, the body and the bail, are ordered
+*among themselves* by the same painter and for the same reason: one list of faces
+depth-sorted across two solids puts the far side of the ring in front of the top
+it is standing on. Painting it last instead was the first version, and it
 assumed a camera in front of the table: yaw here is free, and walking round past
 about 145° puts you behind the room's own wall, where the header above the window
 really is nearer than the desk. Seated at 150° the puzzle drew straight through
@@ -585,8 +611,8 @@ it over a 269×280 patch.
 
 **A prop is hit-tested where it appears, not where it stands.** A solid a hand
 tall does not draw on top of its own base, and the gap is the whole game: on a
-1600×856 board the middle of the puzzle's top face lands 102px from its foot at
-the table seat and 159px seated, against cards 104px wide. So the test is
+1600×856 board the middle of the puzzle's top face lands 140px from the point it
+touches the desk at the table seat and 188px seated, against cards 104px wide. So the test is
 against the **flattened silhouette** — `StagePlane.flatten` answers in the mat's
 own coordinates, which is exactly the frame the finger has already been
 unprojected into, so both sides of the comparison are in the one frame the whole

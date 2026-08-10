@@ -884,7 +884,11 @@ fun PlayScreen(
                         camera.plane,
                         camera.eye,
                         look,
-                        prop = if (Puzzle.standsIn(scene)) puzzle.drawn() else null,
+                        prop = if (Puzzle.standsIn(scene)) {
+                            puzzle.drawn(camera.plane.eyePoint(camera.eye))
+                        } else {
+                            null
+                        },
                     )
                     drawMatControls(layout, play.field)
                     drawIndicator(play.carry?.intent, play.field, layout)
