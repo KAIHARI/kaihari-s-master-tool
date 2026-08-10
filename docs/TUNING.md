@@ -96,7 +96,13 @@ bigger; the perspective across it is bit-identical. `CameraLensTest`
 | 2.00 | ~65mm | twice as big, same perspective |
 
 The millimetres are a function of the **lens alone** and are honest only
-because of that. The first version computed a field of view from
+because of that. The proportionality is exact — `f = 18/tan(halfFov)` and the
+field of view goes as `atan(1/lens)`, which
+`CameraLensTest.theMillimetresBesideTheDialAreTheOnesTheProjectionHas` pins.
+The *calibration* is not: 33mm is this projection measured at the home
+distance, so moving `HOME_DISTANCE` means re-measuring `StageTuner.HOME_MM`.
+That test is the tripwire.
+ The first version computed a field of view from
 `distance × lens`, so touching the distance slider moved the number beside the
 focal-length slider — 36° at distance 1.45, 26° at 2.0, with the lens dial
 sitting still. That read, correctly, as one dial resetting the other.

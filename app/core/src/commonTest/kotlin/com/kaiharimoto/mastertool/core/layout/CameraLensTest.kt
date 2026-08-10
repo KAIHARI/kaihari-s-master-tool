@@ -123,6 +123,38 @@ class CameraLensTest {
     }
 
     @Test
+    fun theMillimetresBesideTheDialAreTheOnesTheProjectionHas() {
+        // `StageTuner` prints `33mm × lens` next to the slider, and that number is
+        // honest only if the field of view really is proportional to `1/lens` —
+        // which is to say only if this is a focal length and not a crop. It is:
+        // the visible world shrinks by the lens and the camera's world distance
+        // does not move (`cameraDistance / zoom` is lens-free), so the angle goes
+        // as `atan(1/lens)`. On a 36mm frame a focal length is `18/tan(halfFov)`.
+        //
+        // This is also the only test that would catch the mm readout drifting
+        // away from the projection, which is exactly the defect kai reported.
+        fun millimetres(lens: Float): Float {
+            val half = fieldOfView(StageSeat.TABLE.pose.copy(lens = lens)) / 2f * (kotlin.math.PI.toFloat() / 180f)
+            return 18f / kotlin.math.tan(half)
+        }
+
+        val shipped = millimetres(1f)
+        assertTrue(abs(shipped - 33f) < 1f, "the shipped lens measures ${shipped}mm, not the 33 the panel prints")
+        listOf(0.7f, 1.5f, 2f).forEach {
+            assertTrue(
+                abs(millimetres(it) - shipped * it) < 1f,
+                "a lens of $it measures ${millimetres(it)}mm, not the ${shipped * it} the panel prints",
+            )
+        }
+        // The proportionality above is exact and the *calibration* is not: 33mm is
+        // this projection measured at the home distance, so a stage that ever
+        // moves `HOME_DISTANCE` has to re-measure `StageTuner.HOME_MM` too. This
+        // assertion is the tripwire for that, and it is the reason the seat used
+        // here is TABLE rather than any other.
+        assertEquals(CameraPose.HOME_DISTANCE, StageSeat.TABLE.pose.distance)
+    }
+
+    @Test
     fun whereYouStandIsWhatChangesThePerspective() {
         // The other half of the pair, stated so that the two are documented as a
         // pair: distance is a position, so it does what walking backwards does.
