@@ -177,10 +177,18 @@ be corrected.
   is the original tool's card border, restored at kai's request: a *foil*, not
   a fringe — two hues rather than six, inset four per cent inside the card
   rather than glowing outside it, and swung by where the card is rather than by
-  a timer. It is on every card, in the builder and on the play stage, because
-  that is what it was; and it is `UiPreferences.prismaticCards`, on by default
-  and one menu item away from off, because "sparingly" is a house rule and this
-  is a matter of taste somebody is entitled to disagree with.
+  a timer. It is on every card *face*, in the builder and on the play stage,
+  because that is what it was — and never on a back, which is a sleeve's front
+  edge and made every pile in the room a neon rectangle. It is
+  `UiPreferences.prismaticCards`, on by default and one menu item away from off,
+  because "sparingly" is a house rule and this is a matter of taste somebody is
+  entitled to disagree with.
+- **The card back is kai's own artwork**, bundled at
+  `ui/composeResources/drawable/card_back.png` and drawn `FillBounds` because it
+  is 750×1050 against a card's 59×86. It replaced two *drawn* backs and the
+  preference that chose between them; the argument for drawing rather than
+  shipping still stands for **Konami's** back, which is why `cardBackUrl` is
+  still the way that one gets onto a device without this repository carrying it.
 - **Typeface: Archivo** (bundled, OFL; expanded cut for display moments).
 - **Tactility lives on things the user interacts with** — tilt, lift, sheen,
   quiet card sounds, haptics. No decorative clutter, no skeuomorphic

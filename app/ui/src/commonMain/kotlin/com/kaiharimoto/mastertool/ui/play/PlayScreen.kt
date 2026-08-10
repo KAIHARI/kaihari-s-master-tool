@@ -1655,9 +1655,19 @@ private fun CardFace(
     // changes what you can see.
     val material = remember(art, faceUp) { CardStock.of(art, faceUp) }
 
-    // The sleeve's foil edge, the same one the builder's tiles wear. Read in
-    // composition rather than per frame — it changes when somebody opens a menu.
-    val foiled = LocalPrismaticCards.current
+    // The sleeve's foil edge, the same one the builder's tiles wear — and the
+    // *printed side only*. A foil is what a sleeve does to the face of a card;
+    // on the back it is a rainbow outline round something that is meant to be
+    // anonymous, and since the deck, the graveyard and every set card are backs,
+    // it turned every pile in the room into a neon rectangle.
+    //
+    // One condition rather than a branch inside the draw, because this composable
+    // *is* one side: `StagedCard` calls it twice, and the two are separated by
+    // the alpha in the layer below rather than by anything read at draw time.
+    //
+    // Read in composition rather than per frame: it changes when somebody opens
+    // a menu.
+    val foiled = LocalPrismaticCards.current && faceUp
 
     Box(
         Modifier
@@ -1709,7 +1719,7 @@ private fun CardFace(
                     )
                 }
             } else {
-                CardBack(Modifier.fillMaxSize(), back.style, back.imageUrl)
+                CardBack(Modifier.fillMaxSize(), back.imageUrl)
             }
 
             // The light, over the picture and inside the card's own clip, so

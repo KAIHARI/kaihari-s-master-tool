@@ -85,10 +85,7 @@ fun MasterToolApp(deps: AppDependencies) {
     MasterToolTheme(mode = layoutState.preferences.themeMode) {
         CompositionLocalProvider(
             LocalFeedback provides feedback,
-            LocalCardBack provides CardBackChoice(
-                style = layoutState.preferences.cardBack,
-                imageUrl = layoutState.preferences.cardBackUrl,
-            ),
+            LocalCardBack provides CardBackChoice(layoutState.preferences.cardBackUrl),
             LocalPrismaticCards provides layoutState.preferences.prismaticCards,
         ) {
         SafeArea {

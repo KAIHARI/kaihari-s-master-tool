@@ -1,11 +1,18 @@
 package com.kaiharimoto.mastertool.ui.components
 
 import androidx.compose.runtime.staticCompositionLocalOf
-import com.kaiharimoto.mastertool.core.prefs.CardBackStyle
 
-/** Which back to draw, and an image to use instead if one has been supplied. */
+/**
+ * An image to use for the back instead of the one that ships, if somebody has
+ * pointed the app at one.
+ *
+ * One field, and it was two: the back used to be a choice between two drawn
+ * ones. It is kai's artwork now, and a bundled file is not a thing to offer
+ * alternatives to. Still a type rather than a bare `String`, because it is what
+ * the composition local carries and a local called `LocalCardBack` holding a URL
+ * would be a local that has to be renamed the next time the back gains anything.
+ */
 data class CardBackChoice(
-    val style: CardBackStyle = CardBackStyle.OVAL,
     val imageUrl: String = "",
 )
 

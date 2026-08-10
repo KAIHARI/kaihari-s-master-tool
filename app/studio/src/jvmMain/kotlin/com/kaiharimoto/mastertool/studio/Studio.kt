@@ -303,10 +303,7 @@ private fun Stage(deps: AppDependencies, director: Director, opts: Options) {
     MasterToolTheme(mode = layoutState.preferences.themeMode) {
         CompositionLocalProvider(
             LocalFeedback provides feedback,
-            LocalCardBack provides CardBackChoice(
-                style = layoutState.preferences.cardBack,
-                imageUrl = layoutState.preferences.cardBackUrl,
-            ),
+            LocalCardBack provides CardBackChoice(layoutState.preferences.cardBackUrl),
             // Provided rather than left to the default for the reason the whole
             // harness exists: a shot has to be of the app, and the app reads
             // this from the same document.

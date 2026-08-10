@@ -47,12 +47,12 @@ Colour appears for exactly two reasons. If a colour is doing neither, delete it.
 
 **And one thing that is neither, which is the user's.** The **foil** edge —
 `drawPrismaticInset`, white → hot pink → cyan → white in a ring four per cent
-inside the card, at an angle that follows the hand — is on every card in the app.
-It is not a fringe: two hues rather than six, its own two hex values rather than
-the aberration pair, inside the card rather than glowing outside it, and it means
-nothing at all. It is what a sleeved card does under a light, it is what the
-original tool drew on every card in its deck grid, and kai asked for it back by
-name after it had failed to make the crossing into this one.
+inside the card, at an angle that follows the hand — is on every card *face* in
+the app. It is not a fringe: two hues rather than six, its own two hex values
+rather than the aberration pair, inside the card rather than glowing outside it,
+and it means nothing at all. It is what a sleeved card does under a light, it is
+what the original tool drew on every card in its deck grid, and kai asked for it
+back by name after it had failed to make the crossing into this one.
 
 The rule it appears to break is the one directly above, and the resolution is
 that this is a **preference** (`UiPreferences.prismaticCards`), on by default and
@@ -60,6 +60,12 @@ one menu item from off. "Colour as meaning or as light" is how *the app* is
 allowed to spend colour, on its own initiative, everywhere the user has not said
 otherwise. Somebody asking for their cards to be foiled is not the app spending
 anything.
+
+**And never on a back.** A foil is what a sleeve does to the *printed* side; on
+the back it is a rainbow outline round the one thing on the table that is meant
+to be anonymous, and since the deck, the graveyard and every set card are backs,
+it turned every pile in the room into a neon rectangle. One condition, in
+`CardFace`, which is one side of a card by construction.
 
 **Solid, not translucent.** A tint over a card is a colour you cannot name and a
 card you cannot read. When something must be coloured, colour the space around
@@ -277,8 +283,8 @@ Idle things cost nothing: springs run only while touched.
   the card sits inside a drawn region, because the region's edge is the card's
   edge and two lines a millimetre apart read as a printing error. A solid ring
   means *chosen*; the turning prismatic ring means *this is the one you asked
-  for* and is reserved for reveals. Beneath both, every card wears the **foil**
-  edge (`drawPrismaticInset`) — see §5.
+  for* and is reserved for reveals. Beneath both, every card face wears the
+  **foil** edge (`drawPrismaticInset`) — see §2. Backs do not.
 - **Copy count** — bottom right, white on a soft dark scrim, no chip. The top
   right belongs to the card: a Yu-Gi-Oh! card prints its attribute there, and an
   accent rectangle parked on it hid information the card was already showing
@@ -490,9 +496,16 @@ A held card's shadow is also drawn **over** the cards it falls across, on a
 second canvas above the resting ones: a shadow is on the table even when the
 thing casting it is not.
 
-**Every face-down card has a back.** `CardBack` draws it — the brown field with
-either the oval or the spiral — and it is a preference, not a constant. Nothing
-in the app draws a blank rectangle where a card back belongs.
+**Every face-down card has a back.** `CardBack` draws it — kai's own artwork,
+bundled, a crimson field of speckle inside a white margin — and something correct
+is painted under it while the resource resolves, because a face-down card that is
+a blank rectangle for a frame is a face-down card that flickers when a hand is
+dealt. Nothing in the app draws a blank rectangle where a card back belongs.
+
+It replaced two *drawn* backs and the preference that chose between them. The
+argument for drawing rather than shipping is unchanged and was never about
+artwork in general: the official back is Konami's and this repository is public,
+which is what `cardBackUrl` is still for.
 
 ## 11. Scenes, and the exception they are
 
