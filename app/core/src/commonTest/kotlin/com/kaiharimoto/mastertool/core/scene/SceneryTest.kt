@@ -12,6 +12,9 @@ import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.Face
 import com.kaiharimoto.mastertool.core.render.StageLighting
+import com.kaiharimoto.mastertool.core.tune.RoomTune
+import com.kaiharimoto.mastertool.core.tune.StageKnobs
+import com.kaiharimoto.mastertool.core.tune.StageTuning
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -598,6 +601,118 @@ class SceneryTest {
     fun anHourThatIsNotAnHourStillLightsTheRoom() {
         assertEquals(DeskClock.resolve(DeskLight.AUTO, 9), DeskClock.resolve(DeskLight.AUTO, 33))
         assertEquals(DeskClock.resolve(DeskLight.AUTO, 21), DeskClock.resolve(DeskLight.AUTO, -3))
+    }
+
+    // ---- the room, once somebody has moved it ---------------------------------------
+
+    @Test
+    fun theUntouchedRoomIsTheRoomThatShipped() {
+        // What lets `RoomTune` land at all: it is a parameter with the shipped
+        // constants as its defaults, so every caller that has no opinion — and
+        // every other test in this file — is asking for the same room it always
+        // was. Piece for piece, box for box, at both hours.
+        TimeOfDay.entries.forEach { time ->
+            val plain = Scenery.desk(time, layout, surfaceWidth, surfaceHeight)
+            val tuned = Scenery.desk(time, layout, surfaceWidth, surfaceHeight, RoomTune())
+
+            assertEquals(plain.pieces.size, tuned.pieces.size)
+            plain.pieces.zip(tuned.pieces).forEach { (a, b) ->
+                assertEquals(a.name, b.name)
+                assertTrue(close(a.box.min, b.box.min), "${a.name}'s near corner moved")
+                assertTrue(close(a.box.max, b.box.max), "${a.name}'s far corner moved")
+            }
+            assertEquals(plain.lighting, tuned.lighting, "the rig moved at $time")
+        }
+    }
+
+    /**
+     * Every room-knob at both ends of its own slider, against the invariants the
+     * room cannot exist without.
+     *
+     * kai asked for maximum ranges, and a maximum range is exactly where a knob
+     * stops being safe. So the ranges are the claim: `StageKnobs` is the single
+     * source of both the slider's bounds and `StageTuning.sanitised`, and this
+     * says that everything inside those bounds still produces a room. What it
+     * protects is not tidiness — it is `ScenePainter`, which has *no correct
+     * answer* for two boxes that share volume, and the composable tree, which
+     * paints the whole room beneath every card.
+     *
+     * One knob at a time rather than the product of eleven: a sweep of 2^11 rooms
+     * would take a second and prove nothing extra, because every one of these
+     * clamps is against the wall or the mat rather than against another knob.
+     * The two that *do* interact — depth and wall distance — are asked together
+     * below.
+     */
+    @Test
+    fun everyRoomKnobAtEitherEndStillLeavesARoom() {
+        val felt = SceneBox.standing(mat.left, mat.top, mat.right, mat.bottom, 0f, 0f)
+        val ceiling = layout.cardHeight * Scenery.WALL_CEILING
+
+        StageKnobs.of(StageKnobs.ROOM).forEach { knob ->
+            listOf(knob.min, knob.max).forEach { value ->
+                val tuning = knob.set(StageTuning.DEFAULT, value)
+                TimeOfDay.entries.forEach { time ->
+                    val where = "${knob.path}=$value at $time"
+                    val model =
+                        Scenery.desk(time, layout, surfaceWidth, surfaceHeight, tuning.room)
+
+                    model.pieces.forEach { piece ->
+                        assertTrue(
+                            piece.box.max.z <= 0f || !piece.box.overlapsOnFelt(felt),
+                            "$where: ${piece.name} stands over the mat",
+                        )
+                        assertTrue(
+                            piece.box.max.z <= ceiling,
+                            "$where: ${piece.name} stands ${piece.box.max.z} high, over $ceiling",
+                        )
+                        assertTrue(
+                            piece.box.min.x <= piece.box.max.x &&
+                                piece.box.min.y <= piece.box.max.y &&
+                                piece.box.min.z <= piece.box.max.z,
+                            "$where: ${piece.name} came out inside out",
+                        )
+                    }
+                    model.pieces.forEachIndexed { i, a ->
+                        model.pieces.drop(i + 1).forEach { b ->
+                            assertTrue(
+                                !overlaps(a.box, b.box),
+                                "$where: ${a.name} and ${b.name} share volume",
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun extendingTheTableFromTheFrontPushesTheWallBack() {
+        // kai's coupling, and the floor under it. One slider does both, so the
+        // room deepens rather than the desk becoming a long shelf in front of a
+        // wall that stayed put — and the two knobs subtract, so the derived
+        // distance is floored where a wall would otherwise stand over the cards.
+        val deeper = RoomTune(deskDepth = RoomTune().deskDepth + 2f)
+        assertEquals(
+            Scenery.wallAt(RoomTune()) + 2f,
+            Scenery.wallAt(deeper),
+            1e-4f,
+            "the wall did not follow the table's front edge",
+        )
+
+        val wall = { room: RoomTune ->
+            Scenery.desk(TimeOfDay.NIGHT, layout, surfaceWidth, surfaceHeight, room)
+                .pieces.first { it.surface == Surface.WALL }.box.max.y
+        }
+        assertTrue(wall(deeper) < wall(RoomTune()), "the wall did not move away from the mat")
+
+        // And the floor: a shallow desk under a near wall drives the sum
+        // negative, which would put the wall on top of the board.
+        val squashed = RoomTune(deskDepth = 0f, wallBack = 0.1f)
+        assertEquals(Scenery.WALL_MIN_BACK, Scenery.wallAt(squashed), 1e-4f)
+        assertTrue(
+            wall(squashed) < mat.top,
+            "the floored wall still reaches over the mat's far edge",
+        )
     }
 
     // ---- helpers -------------------------------------------------------------------

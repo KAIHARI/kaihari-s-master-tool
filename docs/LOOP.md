@@ -570,6 +570,10 @@ replace the stage with "Not enough room to lay a table out here". The room, the
 window, `ROOM_ABOVE` and the gap fractions ride in the export's `reference`
 block instead, read off live constants so a paste cannot lie about its build.
 
+*(Later: eleven of those turned out to be on the wrong side of the line — see
+iteration 14. The rule is unchanged; the room simply never re-solved the board,
+and nobody had checked. `ROOM_ABOVE` does, and is still read-only.)*
+
 **The dial was wrong before the tool was.** kai: *"touching the distance slider
 resets the focal length and vice versa, it's not working as I envisioned."* The
 values were not resetting — the model was. `lens` multiplied `cameraDistance`
@@ -792,6 +796,50 @@ the one shot this document otherwise insists must never move. It is still the
 control for *the room*; it is no longer the control for a card.
 
 ---
+
+### Iteration 14 — the room goes on the panel
+
+kai: *"allow me to fine tune the following with maximum ranges: the size and
+location of the lamp, the length of the lamp pole; the dimensions of the table
+(extending the table from the front should push the wall with the window back);
+the size and location of the window on the wall."*
+
+Eleven knobs, in a `ROOM` group: desk depth, desk width, wall distance, four for
+the window, four for the lamp. `RoomTune` in `core/tune`, threaded through
+`Scenery.of`/`desk`/the lamp profiles/`lightingFor` as a trailing defaulted
+parameter, so `SceneryTest` and `GoldenStageTest` are asking for the room that
+shipped and did not move.
+
+**The rule this looked like it broke, and did not.** `docs/TUNING.md` had listed
+"the window, the lamp, the whole room" under *deliberately not on the panel*,
+with the re-solve argument attached. That entry was wrong and had been for two
+releases: only `ROOM_ABOVE` re-solves the board. Everything else about the room
+is read *inside* `Scenery.of`, which `PlayScreen` remembers against the already
+solved layout — so a room slider rebuilds the scene and leaves the board, the hit
+boxes and the live gesture untouched. Checking that took one `grep` and would
+have taken one at any point in the last two releases. **A constraint nobody has
+re-derived is a constraint that has started guessing.**
+
+**Maximum ranges cost four clamps, and every one of them was a red test.**
+`SceneryTest.everyRoomKnobAtEitherEndStillLeavesARoom` walks each slider to both
+ends and asks the room's own invariants — nothing over the mat, nothing above the
+ceiling, no two boxes sharing volume. It found, in order: a sill at zero hanging
+its bottom rail through the desk; a window squeezed shorter than a glazing bar is
+thick, so the bar reached through the head rail; head and sill clamping against
+each other into an opening with no height; and the lamp walking onto the felt.
+None of those is a taste question and none would have been found by looking at a
+picture of the default room.
+
+The last one is worth its own line: the first fix pushed the lamp out by
+`max(LAMP_BASE, LAMP_SHADE_RIM)`, which is the widest constant and not the widest
+*part* — the hoop rolled over the shade's rim is 0.025 of a card wider. So the
+reach is measured off the profiles themselves (`Turned.widest`), which cannot
+drift from the shape the way a hand-picked constant just did.
+
+**Not tunable, deliberately:** `Scenery.lampHeight`. Where the *light* is comes
+from the shipped night key's own horizontal-to-vertical ratio and is arithmetic
+rather than taste; `lampMast` moves the lamp you can see, which is compressed to
+about a third of it because an honest desk lamp is off the top of the picture.
 
 ## 6. Seen, not yet done
 

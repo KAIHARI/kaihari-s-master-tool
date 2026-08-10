@@ -29,6 +29,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import com.kaiharimoto.mastertool.core.scene.Scenery
 import com.kaiharimoto.mastertool.core.tune.Knob
 import com.kaiharimoto.mastertool.core.tune.StageKnobs
 import com.kaiharimoto.mastertool.core.tune.StageTuning
@@ -38,7 +39,8 @@ import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import kotlin.math.roundToInt
 
 /**
- * The instrument: fifteen numbers, live, on the device they will be judged on.
+ * The instrument: every number somebody has argued about, live, on the device
+ * they will be judged on.
  *
  * ## Why it is a panel and not a sheet
  *
@@ -271,6 +273,11 @@ private fun KnobRow(
 private fun extraFor(knob: Knob, tuning: StageTuning): String? = when (knob.path) {
     "camera.lens" -> "· ${(HOME_MM * tuning.camera.lens).roundToInt()}mm"
     "focus.strength" -> if (tuning.focus.strength <= 0f) "· off" else null
+    // The coupling, said out loud on the slider that causes it. Two knobs add
+    // into one distance, and a person moving the depth needs to see the wall
+    // move without having to find the other row and do the arithmetic.
+    "room.deskDepth", "room.wallBack" ->
+        "· wall ${((Scenery.wallAt(tuning.room) * 100).roundToInt() / 100f)}"
     else -> null
 }
 

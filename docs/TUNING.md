@@ -1,7 +1,7 @@
 # Tuning the play stage
 
-Fifteen numbers, live, on the device they will be judged on — and a JSON export
-that comes back here to become the default.
+Twenty-six numbers, live, on the device they will be judged on — and a JSON
+export that comes back here to become the default.
 
 **Long-press the life-point number** on the play stage. It is the one element in
 that bar that is pure output, which is what makes it the only place a hidden
@@ -65,6 +65,17 @@ the shipped value (`x`), or fractions of a card (`cards`). Never solved pixels
 | `cards.fanLiftRatio` | how far a searched pile floats | 0.85 |
 | `cards.peekLift` | how far a held card comes off the table | 1.35 |
 | `cards.peekScale` | and how much bigger it gets | 1.9 |
+| `room.deskDepth` | how far the desk reaches toward you — **and pushes the wall back by the same amount** | 0.9 |
+| `room.deskSpan` | how wide the desk is, as a share of the screen | 1.6 |
+| `room.wallBack` | how far past the mat the wall stands, before the depth pushes it | 0.5 |
+| `room.windowSpan` | how wide the hole in the wall is | 3.4 |
+| `room.windowAt` | where its centre is, across the mat: 0 is the left edge | 0.12 |
+| `room.windowSill` | how high the bottom of it is, in card *heights* | 0.24 |
+| `room.windowHead` | and the top | 2.05 |
+| `room.lampOut` | how far right of the mat the lamp stands. Negative is the other side | 1.15 |
+| `room.lampAlong` | and how far down it: 0 is level with the far edge | 0.26 |
+| `room.lampScale` | how stout it is — every radius at once | 1.0 |
+| `room.lampMast` | the pole: where the top of the shade is drawn | 2.2 |
 
 `camera` is the seat the stage **opens at** — not the live camera, which the
 rig owns and which orbiting writes to. **Read camera** is how a pose you
@@ -168,18 +179,50 @@ is a grey rectangle marking where the room ends.
 
 ---
 
-## What is deliberately not on the panel
+## The room, and the rule it looks like it breaks
 
-Anything that re-solves the board. `Scenery.ROOM_ABOVE`, the gap fractions, the
-window, the lamp, the whole room.
+The `room` group moves the desk, the wall, the window and the lamp — which for
+two releases this page listed as *deliberately not on the panel*. The rule has
+not changed and the room was never covered by it; the entry was wrong.
 
-The reason is one line in `MatInput`: the mat is a single
-`pointerInput(layout)`, so re-solving the layout tears down the gesture
-arbiter's event stream mid-gesture while the machine goes on believing the
-gesture is live. **A slider that re-solves is a slider that can kill the drag
-that is moving it.** Worse, card size is the single free variable in that solve,
-so a slider could cross `MIN_CARD_WIDTH`, flip `layout.fits`, and replace the
-whole stage with "Not enough room to lay a table out here" mid-drag.
+The rule is: **nothing that re-solves the board.** `Scenery.ROOM_ABOVE` does —
+it decides how much of the stage's height the board declines to use, and card
+size is the single free variable in that solve, so a slider on it could cross
+`BoardLayouter.MIN_CARD_WIDTH`, flip `layout.fits` and replace the whole stage
+with "Not enough room to lay a table out here" mid-drag. The desk, the wall, the
+window and the lamp do not: they are read *inside* `Scenery.of`, which
+`PlayScreen` remembers against the already-solved layout. Moving them rebuilds
+the room and leaves the board, the hit boxes and the gesture in flight exactly
+where they were.
+
+**The ranges are the widest the geometry survives, not the narrowest that stay
+tasteful.** That was kai's ask and it is the right one for an instrument: the
+point of moving a number on the device is to find out where it stops working,
+and a slider that stops before the answer cannot tell you. What holds the room
+together at the ends of them is a set of clamps rather than a set of shorter
+sliders, because the limits are relative to the board and the board is not the
+same on every device:
+
+- the window is clamped into the wall it is a hole in, on all four sides, and
+  its opening is kept at least a glazing bar tall;
+- the sill is kept above the bottom rail's own height, or that rail hangs
+  through the desk;
+- the lamp may not stand over the felt, and it is pushed out by *its own widest
+  measured radius* toward whichever side it was already nearer;
+- the derived wall distance is floored, because `deskDepth` and `wallBack`
+  subtract and a wall in front of the mat's far edge stands over the cards.
+
+`SceneryTest.everyRoomKnobAtEitherEndStillLeavesARoom` walks every one of these
+sliders to both ends and asks the room's own invariants about the result. Every
+clamp above is there because that sweep went red.
+
+## What is still deliberately not on the panel
+
+`Scenery.ROOM_ABOVE`, the gap fractions, and everything else that re-solves. The
+reason is one line in `MatInput`: the mat is a single `pointerInput(layout)`, so
+re-solving the layout tears down the gesture arbiter's event stream mid-gesture
+while the machine goes on believing the gesture is live. **A slider that
+re-solves is a slider that can kill the drag that is moving it.**
 
 Those numbers are in the export's `reference` block instead, read straight off
 the live constants so it cannot lie about the build it came from. Changing one

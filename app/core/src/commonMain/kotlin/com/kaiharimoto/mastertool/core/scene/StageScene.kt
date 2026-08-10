@@ -13,8 +13,10 @@ import com.kaiharimoto.mastertool.core.render.Ring
 import com.kaiharimoto.mastertool.core.render.StageLighting
 import com.kaiharimoto.mastertool.core.render.StageRig
 import com.kaiharimoto.mastertool.core.render.Turned
+import com.kaiharimoto.mastertool.core.tune.RoomTune
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.sqrt
 import kotlinx.serialization.Serializable
 
@@ -369,6 +371,27 @@ object Scenery {
     const val DESK_FAR = 0.5f
 
     /**
+     * How far past the mat the wall stands, once a person has moved things.
+     *
+     * kai's coupling: *"extending the table from the front should push the wall
+     * with the window back"*. So the depth the desk gains toward the player is
+     * added here as well, and the room grows rather than the desk becoming a
+     * long shelf in front of a wall that stayed where it was.
+     *
+     * **Floored, and the floor is load-bearing.** The two knobs subtract, so a
+     * shallow desk under a near wall drives this negative — and a wall at or in
+     * front of the mat's far edge stands *over the cards*, which is the one rule
+     * `docs/DESIGN.md` §11 says nothing in a scene may break: the room is painted
+     * beneath every card, so a piece that reaches over the mat is a piece the
+     * cards are drawn through.
+     */
+    fun wallAt(room: RoomTune = RoomTune()): Float =
+        (room.wallBack + room.deskDepth - 0.9f).coerceAtLeast(WALL_MIN_BACK)
+
+    /** The nearest the wall may come to the mat's far edge, in card widths. */
+    const val WALL_MIN_BACK = 0.12f
+
+    /**
      * How much of the stage's height the board declines to use, so that there
      * is somewhere for the room to be.
      *
@@ -627,13 +650,43 @@ object Scenery {
     const val LAMP_BASE_THICK = 0.045f
     const val LAMP_BASE_COVE = 0.155f
 
-    /** Where the lamp stands on the desk, in mat pixels. */
-    fun lampFoot(layout: BoardLayout): Vec2 {
+    /**
+     * Where the lamp stands on the desk, in mat pixels.
+     *
+     * **It may not stand on the playing surface**, and that is a clamp rather
+     * than a range on the slider, because the mat's width in card widths depends
+     * on the board and a static range could not promise it on every device.
+     * `docs/DESIGN.md` §11: the room is painted beneath every card, so anything
+     * of it that reaches over the felt is a thing the cards are drawn *through*.
+     *
+     * The clamp is by its own widest radius and toward whichever side of the mat
+     * it was already nearer, so pulling the slider left past the board sets it
+     * down on the left of the desk rather than sliding it across the table. It
+     * does not fire at the shipped numbers — 1.15 card widths out against a
+     * shade 0.62 wide — which is why every other test in this file is looking at
+     * the lamp that always shipped.
+     */
+    fun lampFoot(layout: BoardLayout, room: RoomTune = RoomTune()): Vec2 {
         val mat = mat(layout)
-        return Vec2(
-            x = mat.right + layout.cardWidth * LAMP_OUT,
-            y = mat.top + mat.height * LAMP_ALONG,
+        val card = layout.cardWidth
+        // Measured off the profiles rather than off the two constants that
+        // usually win, because "usually" is how the rolled hoop above the shade's
+        // rim — twenty-five thousandths of a card wider than the rim itself — got
+        // over the felt while a hand-written reach said it could not.
+        val reach = maxOf(
+            Turned.widest(lampBase(layout, room)),
+            Turned.widest(lampStem(layout, room)),
+            Turned.widest(lampShade(layout, room)),
+            Turned.widest(lampFinial(layout, room)),
         )
+        val wanted = mat.right + card * room.lampOut
+        val x = when {
+            wanted >= mat.right -> max(wanted, mat.right + reach)
+            wanted <= mat.left -> minOf(wanted, mat.left - reach)
+            wanted - mat.left < mat.right - wanted -> mat.left - reach
+            else -> mat.right + reach
+        }
+        return Vec2(x = x, y = mat.top + mat.height * room.lampAlong)
     }
 
     /**
@@ -662,13 +715,19 @@ object Scenery {
      * lamp. That the honest number and the shipped preset agree this well is the
      * argument for solving it rather than typing one.
      */
-    fun lampHeight(layout: BoardLayout): Float {
+    fun lampHeight(layout: BoardLayout, room: RoomTune = RoomTune()): Float {
         val mat = mat(layout)
-        val foot = lampFoot(layout)
+        val foot = lampFoot(layout, room)
         val shipped = StageLighting.DeskNight.key.direction.normalised()
         val ratio = sqrt(shipped.x * shipped.x + shipped.y * shipped.y) / abs(shipped.z)
-        if (ratio <= 1e-4f) return layout.cardWidth * LAMP_DRAWN
-        return hypot(mat.centerX - foot.x, mat.centerY - foot.y) / ratio
+        if (ratio <= 1e-4f) return layout.cardWidth * room.lampMast
+        // Never below the shade it is meant to be inside. Moving the lamp to the
+        // middle of the table sends the horizontal distance to zero and the
+        // solved height with it, which is a bulb buried in its own foot.
+        return max(
+            hypot(mat.centerX - foot.x, mat.centerY - foot.y) / ratio,
+            shadeTop(layout, room) * 0.75f,
+        )
     }
 
     // ---- the lamp, as four things a lathe made ---------------------------------------
@@ -690,15 +749,32 @@ object Scenery {
      * is two surfaces at one number, and two numbers that ought to be equal and
      * are computed twice are a seam that opens at some board size nobody tried.
      */
-    fun baseTop(layout: BoardLayout): Float = layout.cardWidth * LAMP_BASE_COVE
+    fun baseTop(layout: BoardLayout, room: RoomTune = RoomTune()): Float =
+        layout.cardWidth * LAMP_BASE_COVE * room.lampScale
 
-    fun neckTop(layout: BoardLayout): Float =
-        layout.cardWidth * (LAMP_DRAWN - LAMP_SHADE_THICK)
+    /**
+     * Where the stem ends and the shade begins.
+     *
+     * Floored just above [baseTop], because the two knobs can meet: a short mast
+     * under a stout shade puts the shade's underside below the top of its own
+     * foot, and a turned solid whose profile runs backwards is a stem drawn
+     * inside out. The floor is a hair rather than zero so the stem keeps a
+     * height for `Turned` to build bands over.
+     */
+    fun neckTop(layout: BoardLayout, room: RoomTune = RoomTune()): Float =
+        max(
+            layout.cardWidth * (room.lampMast - LAMP_SHADE_THICK * room.lampScale),
+            baseTop(layout, room) + layout.cardWidth * 0.02f,
+        )
 
-    fun shadeTop(layout: BoardLayout): Float = layout.cardWidth * LAMP_DRAWN
+    fun shadeTop(layout: BoardLayout, room: RoomTune = RoomTune()): Float =
+        max(
+            layout.cardWidth * room.lampMast,
+            neckTop(layout, room) + layout.cardWidth * 0.02f,
+        )
 
-    fun lampBase(layout: BoardLayout): List<Ring> {
-        val card = layout.cardWidth
+    fun lampBase(layout: BoardLayout, room: RoomTune = RoomTune()): List<Ring> {
+        val card = layout.cardWidth * room.lampScale
         return listOf(
             // A foot with a chamfer under it, so it sits on the desk on a line
             // rather than on its whole face — which is what stops the join
@@ -707,18 +783,19 @@ object Scenery {
             Ring(card * LAMP_BASE, card * LAMP_BASE_THICK * 0.4f),
             Ring(card * LAMP_BASE, card * LAMP_BASE_THICK),
             Ring(card * LAMP_BASE * 0.78f, card * LAMP_BASE_THICK * 1.9f),
-            Ring(card * LAMP_MAST * 1.7f, baseTop(layout)),
+            Ring(card * LAMP_MAST * 1.7f, baseTop(layout, room)),
         )
     }
 
-    fun lampStem(layout: BoardLayout): List<Ring> {
-        val card = layout.cardWidth
-        val neck = neckTop(layout)
-        val run = neck - baseTop(layout)
+    fun lampStem(layout: BoardLayout, room: RoomTune = RoomTune()): List<Ring> {
+        val card = layout.cardWidth * room.lampScale
+        val neck = neckTop(layout, room)
+        val foot = baseTop(layout, room)
+        val run = neck - foot
         return listOf(
-            Ring(card * LAMP_MAST, baseTop(layout)),
-            Ring(card * LAMP_MAST_NECK, baseTop(layout) + run * 0.86f),
-            Ring(card * LAMP_COLLAR, baseTop(layout) + run * 0.91f),
+            Ring(card * LAMP_MAST, foot),
+            Ring(card * LAMP_MAST_NECK, foot + run * 0.86f),
+            Ring(card * LAMP_COLLAR, foot + run * 0.91f),
             Ring(card * LAMP_MAST_NECK * 0.9f, neck),
         )
     }
@@ -743,10 +820,10 @@ object Scenery {
      * *far* surface, then the rim, then the outer *near* surface, in that order
      * from any seat in the envelope. There is no pair left to get wrong.
      */
-    fun lampShade(layout: BoardLayout): List<Ring> {
-        val card = layout.cardWidth
-        val bottom = neckTop(layout)
-        val top = shadeTop(layout)
+    fun lampShade(layout: BoardLayout, room: RoomTune = RoomTune()): List<Ring> {
+        val card = layout.cardWidth * room.lampScale
+        val bottom = neckTop(layout, room)
+        val top = shadeTop(layout, room)
         val run = top - bottom
         val wall = card * LAMP_SHADE_WALL
         return listOf(
@@ -761,9 +838,9 @@ object Scenery {
         )
     }
 
-    fun lampFinial(layout: BoardLayout): List<Ring> {
-        val card = layout.cardWidth
-        val foot = shadeTop(layout)
+    fun lampFinial(layout: BoardLayout, room: RoomTune = RoomTune()): List<Ring> {
+        val card = layout.cardWidth * room.lampScale
+        val foot = shadeTop(layout, room)
         val rise = card * LAMP_FINIAL
         return listOf(
             Ring(card * LAMP_FINIAL_WIDE * 0.45f, foot),
@@ -774,9 +851,9 @@ object Scenery {
     }
 
     /** The lamp, as a point of light. */
-    fun lamp(layout: BoardLayout): Vec3 {
-        val foot = lampFoot(layout)
-        return Vec3(foot.x, foot.y, lampHeight(layout))
+    fun lamp(layout: BoardLayout, room: RoomTune = RoomTune()): Vec3 {
+        val foot = lampFoot(layout, room)
+        return Vec3(foot.x, foot.y, lampHeight(layout, room))
     }
 
     /**
@@ -793,9 +870,17 @@ object Scenery {
         layout: BoardLayout,
         surfaceWidth: Float,
         surfaceHeight: Float,
+        /**
+         * Where the furniture is, if somebody has moved it.
+         *
+         * Trailing and defaulted, so every existing caller and every test asks
+         * for the room that shipped. It reaches [Scene.MINIMAL] not at all: the
+         * handbook's stage is one slab and has nothing in it to tune.
+         */
+        room: RoomTune = RoomTune(),
     ): SceneModel = when (scene) {
         Scene.MINIMAL -> minimal(layout)
-        Scene.DESK -> desk(time, layout, surfaceWidth, surfaceHeight)
+        Scene.DESK -> desk(time, layout, surfaceWidth, surfaceHeight, room)
     }
 
     /**
@@ -855,48 +940,74 @@ object Scenery {
         layout: BoardLayout,
         surfaceWidth: Float,
         surfaceHeight: Float,
+        room: RoomTune = RoomTune(),
     ): SceneModel {
         val mat = mat(layout)
         val card = layout.cardWidth
         val tall = layout.cardHeight
 
-        val halfSpan = maxOf(surfaceWidth, mat.width) * DESK_SPAN / 2f
+        val halfSpan = maxOf(surfaceWidth, mat.width) * room.deskSpan / 2f
         val left = mat.centerX - halfSpan
         val right = mat.centerX + halfSpan
         // Where the wall's face stands, and where the desk's far edge is behind it.
-        val face = mat.top - card * DESK_FAR
+        val face = mat.top - card * wallAt(room)
         val back = face - card * WALL_THICKNESS
         // Past the bottom of the picture as well as past the mat, and the
         // difference matters on a screen the board does not fill: an edge that
         // stops at the last card is a border round the board, and an edge that
         // stops beyond the glass is a table you are sitting at.
-        val near = maxOf(mat.bottom, surfaceHeight) + card * DESK_NEAR
+        val near = maxOf(mat.bottom, surfaceHeight) + card * room.deskDepth
 
         val wallOverhang = halfSpan * WALL_OVERHANG
         val wallLeft = mat.centerX - wallOverhang
         val wallRight = mat.centerX + wallOverhang
         val wallTop = tall * WALL_HEIGHT
 
-        val openingHalf = card * WINDOW_SPAN / 2f
-        val openingAt = mat.left + mat.width * WINDOW_AT
+        // The joinery's own two dimensions, needed here because the sill has to
+        // leave the bottom rail somewhere to sit. See FRAME_PROUD.
+        val stile = card * FRAME_STILE
+        val rail = tall * FRAME_RAIL
+
+        // The opening, clamped into the wall it is a hole in. Every clamp here
+        // is the difference between a tuned window and a broken room, and each
+        // one is a pair of boxes that would otherwise share volume — which is
+        // the one thing `ScenePainter` has no correct answer for:
+        //
+        // - wider than the wall, and the four pieces around it cannot tile it;
+        // - past the wall's own top, and the header comes out inside out;
+        // - a sill under the bottom rail's own height, and that rail hangs below
+        //   the desk top and into the desk;
+        // - an opening shorter than a glazing bar is thick, and the horizontal
+        //   bar reaches through the head rail above it.
+        val openingHalf = (card * room.windowSpan / 2f).coerceAtMost(wallOverhang * 0.98f)
+        val openingAt = (mat.left + mat.width * room.windowAt)
+            .coerceIn(wallLeft + openingHalf, wallRight - openingHalf)
         val openingLeft = openingAt - openingHalf
         val openingRight = openingAt + openingHalf
-        val sill = tall * WINDOW_SILL
-        val head = tall * WINDOW_HEAD
+        //
+        // The sill is settled first and the head is settled against it, because
+        // the two knobs can cross: asked the other way round, a head at its own
+        // minimum leaves nowhere for a sill to be and the clamps chase each
+        // other into a window with no height at all.
+        val leastOpen = card * FRAME_BAR * 1.2f
+        val ceilingForSill = max(rail, wallTop - rail - leastOpen)
+        val sill = (tall * room.windowSill).coerceIn(rail, ceilingForSill)
+        val head = (tall * room.windowHead)
+            .coerceIn(sill + leastOpen, max(sill + leastOpen, wallTop - rail))
 
-        val foot = lampFoot(layout)
+        val foot = lampFoot(layout, room)
         // The lathe stands at the lamp's foot on the desk, unturned: a body of
         // revolution has nothing a turn about its own axis could do to it, and
         // saying so here is cheaper than a comment on every ring.
         val spindle = Pose3(position = Vec3(foot.x, foot.y, 0f))
-        val turnedBase = Turned.solid(spindle, lampBase(layout))
-        val turnedStem = Turned.solid(spindle, lampStem(layout))
+        val turnedBase = Turned.solid(spindle, lampBase(layout, room))
+        val turnedStem = Turned.solid(spindle, lampStem(layout, room))
         // Closed, because the shade's profile comes back round to where it
         // started: it is a shell rather than a solid, so there is no end left
         // open for a cap to go on. The sides are named rather than defaulted so
         // that the band the lining lives in can be found by index — see
         // [LAMP_SHADE_INSIDE].
-        val shadeProfile = lampShade(layout)
+        val shadeProfile = lampShade(layout, room)
         val shadeSides = Turned.sidesFor(shadeProfile)
         val wholeShade = Turned.solid(spindle, shadeProfile, sides = shadeSides, closed = true)
         val shadeLining = Turned.band(wholeShade, LAMP_SHADE_INSIDE, shadeSides)
@@ -904,7 +1015,7 @@ object Scenery {
             index < LAMP_SHADE_INSIDE * shadeSides ||
                 index >= (LAMP_SHADE_INSIDE + 1) * shadeSides
         }
-        val turnedFinial = Turned.solid(spindle, lampFinial(layout))
+        val turnedFinial = Turned.solid(spindle, lampFinial(layout, room))
 
         fun wall(name: String, l: Float, r: Float, bottom: Float, top: Float) = ScenePiece(
             name = name,
@@ -915,8 +1026,6 @@ object Scenery {
         // Everything from here to the bars stands in front of the wall's face
         // and never inside it. See FRAME_PROUD: the paint order is a separating
         // axis, and two boxes that share volume have no correct order at all.
-        val stile = card * FRAME_STILE
-        val rail = tall * FRAME_RAIL
         val proud = card * FRAME_PROUD
         val barHalf = card * FRAME_BAR / 2f
         val barOut = card * FRAME_BAR_PROUD
@@ -1020,7 +1129,7 @@ object Scenery {
                     mesh = turnedFinial,
                 ),
             ),
-            lighting = lightingFor(Scene.DESK, time, layout),
+            lighting = lightingFor(Scene.DESK, time, layout, room),
         )
     }
 
@@ -1104,7 +1213,12 @@ object Scenery {
      * its real angular *size*, which is the half of the physics that is visible:
      * daylight's shadows are soft and lamplight's are not.
      */
-    fun lightingFor(scene: Scene, time: TimeOfDay, layout: BoardLayout): StageLighting =
+    fun lightingFor(
+        scene: Scene,
+        time: TimeOfDay,
+        layout: BoardLayout,
+        room: RoomTune = RoomTune(),
+    ): StageLighting =
         when (scene) {
             Scene.MINIMAL -> StageLighting.Minimal
             Scene.DESK -> when (time) {
@@ -1120,12 +1234,12 @@ object Scenery {
                     val mat = mat(layout)
                     rig.copy(
                         key = Light.at(
-                            position = lamp(layout),
+                            position = lamp(layout, room),
                             aimedAt = Vec3(mat.centerX, mat.centerY, 0f),
                             intensity = rig.key.intensity,
                             warmth = rig.key.warmth,
                             ambient = rig.key.ambient,
-                            radius = layout.cardWidth * LAMP_RADIUS,
+                            radius = layout.cardWidth * LAMP_RADIUS * room.lampScale,
                         ),
                     )
                 }

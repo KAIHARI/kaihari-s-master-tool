@@ -4,6 +4,7 @@ import com.kaiharimoto.mastertool.core.layout.CameraEnvelope
 import com.kaiharimoto.mastertool.core.layout.CameraPose
 import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.layout.StageSeat
+import com.kaiharimoto.mastertool.core.scene.Scenery
 import kotlinx.serialization.Serializable
 
 /**
@@ -27,13 +28,20 @@ import kotlinx.serialization.Serializable
  * somebody's afternoon.
  *
  * **Nothing in here re-solves a layout.** Every field is read either at draw
- * time or by the seat solver, and both of those already re-run when the board
- * changes. The numbers that *would* re-solve — `Scenery.ROOM_ABOVE`, the gap
- * fractions, the whole room — are deliberately absent; [StageReference] carries
- * them as read-only instead. The reason is one line in `MatInput`: the mat is a
- * single `pointerInput(layout)`, so re-solving the layout tears down the gesture
+ * time, by the seat solver, or by the *scene* — and none of those three is the
+ * board. The reason is one line in `MatInput`: the mat is a single
+ * `pointerInput(layout)`, so re-solving the layout tears down the gesture
  * arbiter's event stream mid-gesture. A slider that re-solves is a slider that
  * can kill the drag which is moving it.
+ *
+ * [RoomTune] looks like it should be barred by that and is not, which is worth
+ * stating rather than leaving to be rediscovered. The desk, the wall, the window
+ * and the lamp are read *inside* `Scenery.of`, which the play screen remembers
+ * against the solved layout rather than as part of solving it — so moving them
+ * rebuilds the room and leaves the board, the hit boxes and the live gesture
+ * exactly where they were. The number that genuinely does re-solve is
+ * `Scenery.ROOM_ABOVE`, which decides how much height the board declines to use;
+ * it stays out, and [StageReference] carries it read-only.
  *
  * **Every field is clamped on the way in and on the way out**, against
  * [StageKnobs] — the same bounds the sliders offer, from the same place, so the
@@ -55,6 +63,7 @@ data class StageTuning(
     val hand: HandTune = HandTune(),
     val cards: CardTune = CardTune(),
     val focus: FocusTune = FocusTune(),
+    val room: RoomTune = RoomTune(),
 ) {
     /**
      * Every field forced inside the range its own slider offers.
@@ -193,6 +202,71 @@ data class FocusTune(
 )
 
 /**
+ * The room the desk scenes are in: the table, the wall behind it, the window in
+ * the wall and the lamp standing on it.
+ *
+ * ## Why these and not the other forty
+ *
+ * `Scenery` holds something like forty numbers and most of them are joinery —
+ * the width of a glazing bar, how far a frame stands proud of the wall, the roll
+ * on the shade's rim. Those were solved by looking at a picture once and have
+ * stayed solved. These eleven are the ones kai named, and they share a property:
+ * they are about *where the furniture is*, which is a question a person can only
+ * answer sitting at the tablet with the room in front of them.
+ *
+ * **Every default here is the constant that shipped**, so `StageTuning.DEFAULT`
+ * is still what shipped and `SceneryTest` and `GoldenStageTest` do not move.
+ *
+ * ## The one coupling, and why it is not two sliders
+ *
+ * kai's brief was that *"extending the table from the front should push the wall
+ * with the window back"*. So [deskDepth] does both: the desk grows toward the
+ * player and the wall's plane retreats by the same amount, and the room gets
+ * deeper rather than the desk getting longer in front of a wall that stayed put.
+ * [wallBack] is then an independent offset on top of it, for the case where the
+ * wall wants moving on its own.
+ *
+ * The derived distance is floored rather than trusted — see `Scenery.wallAt` —
+ * because the two knobs can subtract, and a wall at or in front of the mat's far
+ * edge would stand over the cards, which is the one thing `docs/DESIGN.md` §11
+ * says nothing in a scene may do.
+ */
+@Serializable
+data class RoomTune(
+    /** How far the desk reaches toward the player, in card widths. Pushes the wall. */
+    val deskDepth: Float = 0.9f,
+    /** How wide the desk is, as a share of the stage. Over one runs off both sides. */
+    val deskSpan: Float = 1.6f,
+    /** How far past the mat the wall stands, in card widths, before [deskDepth]. */
+    val wallBack: Float = 0.5f,
+    /** How far right of the mat the lamp stands, in card widths. */
+    val lampOut: Float = 1.15f,
+    /** And how far down it, as a fraction of the mat's height from the top. */
+    val lampAlong: Float = 0.26f,
+    /**
+     * How stout the lamp is: a multiplier on every radius and on the base's own
+     * height. Not on [lampMast], which is the other half of the shape.
+     */
+    val lampScale: Float = 1f,
+    /**
+     * How tall the lamp is drawn, in card widths, to the top of its shade.
+     *
+     * The pole length, in kai's words. It is **not** the height of the light —
+     * that one is solved from the shipped night key's own ratio and is not a
+     * matter of taste (see `Scenery.lampHeight`). An honest desk lamp is off the
+     * top of the picture; this is the compressed one you can see.
+     */
+    val lampMast: Float = 2.2f,
+    /** How wide the opening in the wall is, in card widths. */
+    val windowSpan: Float = 3.4f,
+    /** Where its centre is, as a fraction of the mat's width from the mat's left. */
+    val windowAt: Float = 0.12f,
+    /** How high its sill and its head are, in card *heights* above the desk. */
+    val windowSill: Float = 0.24f,
+    val windowHead: Float = 2.05f,
+)
+
+/**
  * One number a person can move: where it lives, what it is called, and how far
  * it may go.
  *
@@ -247,6 +321,7 @@ object StageKnobs {
     const val FOCUS = "Focus"
     const val HAND = "Hand"
     const val CARDS = "Cards"
+    const val ROOM = "Room"
 
     val ALL: List<Knob> = listOf(
         Knob(
@@ -327,12 +402,73 @@ object StageKnobs {
             "And how much bigger it gets while it is up there.",
             { it.cards.peekScale }, { d, v -> d.copy(cards = d.cards.copy(peekScale = v)) },
         ),
+
+        // The room, at the widest ranges the geometry survives rather than the
+        // narrowest that stay tasteful. kai asked for maximum ranges, and an
+        // instrument whose slider stops before the answer is worse than none:
+        // the point of moving a number on the device is to find out where it
+        // stops working, and a knob that will not go there cannot tell you.
+        Knob(
+            ROOM, "room.deskDepth", "Table depth", 0f, 6f, 0.05f, "cards",
+            "How far the desk reaches toward you — and the wall goes back by the same amount.",
+            { it.room.deskDepth }, { d, v -> d.copy(room = d.room.copy(deskDepth = v)) },
+        ),
+        Knob(
+            ROOM, "room.deskSpan", "Table width", 0.8f, 4f, 0.05f, "x",
+            "As a share of the screen. Under one and both ends of the desk are in frame.",
+            { it.room.deskSpan }, { d, v -> d.copy(room = d.room.copy(deskSpan = v)) },
+        ),
+        Knob(
+            ROOM, "room.wallBack", "Wall distance", 0.1f, 8f, 0.05f, "cards",
+            "How far the wall stands past the mat, before the table depth pushes it further.",
+            { it.room.wallBack }, { d, v -> d.copy(room = d.room.copy(wallBack = v)) },
+        ),
+        Knob(
+            ROOM, "room.windowSpan", "Window width", 0.5f, 12f, 0.05f, "cards",
+            "How wide the hole in the wall is. Wider than the wall and it is clamped to it.",
+            { it.room.windowSpan }, { d, v -> d.copy(room = d.room.copy(windowSpan = v)) },
+        ),
+        Knob(
+            ROOM, "room.windowAt", "Window across", -0.6f, 1.6f, 0.01f, "",
+            "Where its centre sits, across the mat. Zero is the mat's left edge, one its right.",
+            { it.room.windowAt }, { d, v -> d.copy(room = d.room.copy(windowAt = v)) },
+        ),
+        Knob(
+            ROOM, "room.windowSill", "Window sill", 0f, 3f, 0.01f, "tall",
+            "How high the bottom of the window is, in card heights above the desk.",
+            { it.room.windowSill }, { d, v -> d.copy(room = d.room.copy(windowSill = v)) },
+        ),
+        Knob(
+            ROOM, "room.windowHead", "Window head", 0.1f, 3.2f, 0.01f, "tall",
+            "And the top. It cannot pass the wall, and it cannot go under the sill.",
+            { it.room.windowHead }, { d, v -> d.copy(room = d.room.copy(windowHead = v)) },
+        ),
+        Knob(
+            ROOM, "room.lampOut", "Lamp across", -4f, 6f, 0.05f, "cards",
+            "How far right of the mat the lamp stands. Negative puts it on the other side.",
+            { it.room.lampOut }, { d, v -> d.copy(room = d.room.copy(lampOut = v)) },
+        ),
+        Knob(
+            ROOM, "room.lampAlong", "Lamp along", -0.5f, 1.5f, 0.01f, "",
+            "And how far down the mat. Zero is level with its far edge, one with the near.",
+            { it.room.lampAlong }, { d, v -> d.copy(room = d.room.copy(lampAlong = v)) },
+        ),
+        Knob(
+            ROOM, "room.lampScale", "Lamp size", 0.2f, 3f, 0.02f, "x",
+            "How stout it is: every radius at once. The mast has its own slider.",
+            { it.room.lampScale }, { d, v -> d.copy(room = d.room.copy(lampScale = v)) },
+        ),
+        Knob(
+            ROOM, "room.lampMast", "Lamp height", 0.6f, 5f, 0.02f, "cards",
+            "The pole. Where the shade's top is drawn — not where the light is, which is solved.",
+            { it.room.lampMast }, { d, v -> d.copy(room = d.room.copy(lampMast = v)) },
+        ),
     )
 
     /** The knobs of one group, in order. */
     fun of(group: String): List<Knob> = ALL.filter { it.group == group }
 
-    val GROUPS: List<String> = listOf(CAMERA, FOCUS, HAND, CARDS)
+    val GROUPS: List<String> = listOf(CAMERA, FOCUS, HAND, CARDS, ROOM)
 }
 
 /**
@@ -352,6 +488,20 @@ data class StageReference(
     val tiltDefault: Float = StagePlane.TILT,
     val homeDistance: Float = CameraPose.HOME_DISTANCE,
     val safeDepth: Float = StagePlane.SAFE_DEPTH,
+    /**
+     * The room's own read-only number, and the one the [RoomTune] knobs are
+     * measured against.
+     *
+     * How much of the stage's height the board declines to use, so there is
+     * somewhere for the room to be. It is the one thing about the room that
+     * re-solves the *layout*, which is what keeps it off the panel and here
+     * instead — a slider on it would re-key `pointerInput(layout)` mid-drag and
+     * could take the card width under `BoardLayouter.MIN_CARD_WIDTH`, which
+     * unmounts the stage.
+     */
+    val roomAbove: Float = Scenery.ROOM_ABOVE,
+    /** How tall a piece of the room may stand, in card heights. */
+    val roomCeiling: Float = Scenery.WALL_CEILING,
 )
 
 @Serializable

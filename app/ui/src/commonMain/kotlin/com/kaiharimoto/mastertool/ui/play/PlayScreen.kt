@@ -547,8 +547,16 @@ fun PlayScreen(
             // discipline the board layout above obeys, and for the same reason:
             // this is geometry, and geometry that is re-derived while the camera
             // moves is geometry that can change under a gesture.
-            val scenery = remember(scene, time, layout, widthPx, heightPx) {
-                Scenery.of(scene, time, layout, widthPx, heightPx)
+            //
+            // The room's tuning is a key, and that is what makes it tunable at
+            // all. `docs/TUNING.md` bars anything that re-solves the *layout*,
+            // because the mat is one `pointerInput(layout)` and a re-solve tears
+            // the gesture arbiter's event stream down mid-drag. This is one
+            // `remember` below that: the layout above is untouched, so the board,
+            // the hit boxes and the gesture in flight all stay exactly where they
+            // were while the desk moves.
+            val scenery = remember(scene, time, layout, widthPx, heightPx, tune.room) {
+                Scenery.of(scene, time, layout, widthPx, heightPx, tune.room)
             }
             // The palette and the rig, together. The rig is solved beside the
             // room rather than looked up from the scene, because a placed lamp's
