@@ -4,9 +4,12 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.kaiharimoto.mastertool.core.layout.CameraFit
 import com.kaiharimoto.mastertool.core.layout.CameraPose
 import com.kaiharimoto.mastertool.core.layout.CameraRig
+import com.kaiharimoto.mastertool.core.layout.Slot
 import com.kaiharimoto.mastertool.core.layout.StagePlane
+import com.kaiharimoto.mastertool.core.layout.StageSeat
 import com.kaiharimoto.mastertool.core.layout.planeFor
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.StageRig
@@ -67,6 +70,61 @@ internal class StageCameraState(val rig: CameraRig) {
      */
     var eye: Vec3 by mutableStateOf(Vec3.Toward)
         private set
+
+    /**
+     * What must be on the glass when somebody asks to sit down again.
+     *
+     * Refreshed by the screen rather than captured, the same arrangement
+     * [CameraRig.width] and `MatPilot.layout` use and for the same reason: this
+     * object outlives any one composition. A plain field, because nothing draws
+     * from it — it is read once, when a seat is pressed.
+     *
+     * **The field, deliberately not the board.** `layout.bounds` adds the hand
+     * band along the bottom edge of the stage, and the hand is the first thing a
+     * push-in costs; treating that as a reason to dolly back is what used to cap
+     * the camera at 1.47 against a floor of 1.05. What must not leave the glass
+     * is a zone or a pile, and `BoardLayouter` puts every one of those — the
+     * deck, the graveyard, the banish pile, the extra deck — in the same seven
+     * columns as the monster zones.
+     */
+    var field: Slot? = null
+
+    /**
+     * Sit down somewhere known, and frame the board from there.
+     *
+     * **The one place `CameraFit` is still called, and the only place it was ever
+     * what somebody asked for.** It used to run on every camera release, dollying
+     * back until the board fit — which is how kai's *"it locks me out from
+     * getting closer"* happened: you pinch in, let go, and the table slides away.
+     * A correction nobody asked for reads as the tool refusing.
+     *
+     * Pressing "Table" *is* asking. It means put the board back where I can see
+     * it, and now that the camera can be walked anywhere and aimed anywhere, it
+     * is the way home from all of it — the fitter honours the seat's angles
+     * exactly and moves only the distance, and the seat's own pan of nothing
+     * comes along through [CameraRig.aimAt]'s clamp.
+     *
+     * The lens is carried across, because a seat is a chair and not a chair and a
+     * lens. [CameraRig.aimAt] makes the same argument at greater length.
+     */
+    fun sitAt(seat: StageSeat) {
+        val wanted = seat.pose.copy(lens = rig.pose.lens)
+        val bounds = field
+        if (bounds == null || rig.width <= 0f || rig.height <= 0f) {
+            rig.aimAt(wanted)
+            return
+        }
+        rig.aimAt(
+            CameraFit.fit(
+                wanted = wanted,
+                bounds = bounds,
+                envelope = rig.envelope,
+                surfaceWidth = rig.width,
+                surfaceHeight = rig.height,
+                plane = { it.planeFor(rig.width, rig.height) },
+            ),
+        )
+    }
 
     /** Told the surface, and asked for the plane that goes with it. */
     fun sync(width: Float, height: Float) {

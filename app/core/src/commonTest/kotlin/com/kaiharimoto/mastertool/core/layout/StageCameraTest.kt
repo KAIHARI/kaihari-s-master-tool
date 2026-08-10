@@ -2,6 +2,7 @@ package com.kaiharimoto.mastertool.core.layout
 
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
 import kotlin.math.abs
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -177,9 +178,15 @@ class StageCameraTest {
     @Test
     fun theCameraCannotGetUnderTheTableOrFlattenItCompletely() {
         assertEquals(envelope.minPitch, envelope.clamp(CameraPose(pitchDegrees = -40f)).pitchDegrees)
-        assertEquals(envelope.maxPitch, envelope.clamp(CameraPose(pitchDegrees = 89f)).pitchDegrees)
-        assertEquals(envelope.minDistance, envelope.clamp(CameraPose(distance = 0.1f)).distance)
-        assertEquals(envelope.maxDistance, envelope.clamp(CameraPose(distance = 9f)).distance)
+        assertEquals(envelope.maxPitch, envelope.clamp(CameraPose(pitchDegrees = 91f)).pitchDegrees)
+        // Half the flat floor rather than a fixed 0.1, which used to be under it
+        // and is now well above: the floor is a twentieth, and a test that reads
+        // a literal has to be edited every time an end moves.
+        assertEquals(
+            envelope.minDistance,
+            envelope.clamp(CameraPose(distance = envelope.minDistance / 2f)).distance,
+        )
+        assertEquals(envelope.maxDistance, envelope.clamp(CameraPose(distance = 99f)).distance)
     }
 
     @Test
@@ -205,42 +212,98 @@ class StageCameraTest {
     // ---- how close you may sit, which is now a preference -----------------------------
 
     /**
-     * The measurement behind kai's report, kept so the next one has a baseline.
+     * The measurement behind kai's two reports, kept so the next one has a baseline.
      *
-     * "I can't lower the distance below one point four, and visually it is stuck
-     * there." The panel's slider went down to 0.8 the whole time; the *camera*
-     * was being floored, and at the low seat you would sit in to look for
-     * distortion the floor is exactly where it was reported to be. Nothing on
-     * the panel said so, which is the other half of the fix.
+     * The first was *"I can't lower the distance below one point four, and
+     * visually it is stuck there."* The panel's slider went down to 0.8 the whole
+     * time; the *camera* was being floored, and at the low seat you would sit in
+     * to look for distortion the floor was exactly where it was reported to be —
+     * 1.37, at the clearance that shipped then.
+     *
+     * The second was *"there shouldn't be a limit I want complete freedom and
+     * control."* Two things moved for it. The floor is **linear** now rather than
+     * a square root, because the square root was the camera's own distance
+     * appearing on the focal length as well as on the magnification — so the same
+     * clearance that used to floor at 1.37 floors at 1.29. And the default
+     * clearance went to 0.9, which is what the middle row measures.
      *
      * The surface is a Tab S11-shaped stage rather than this file's 1600×1000,
-     * because the number in the report came off that screen and a floor is a
-     * function of the screen it is solved on.
+     * because the number in the first report came off that screen and a floor is
+     * a function of the screen it is solved on.
      */
     @Test
     fun theFloorAtALowSeatIsWhereTheReportSaidItWas() {
         val tablet = 2800f to 1607f
-        val shipped = CameraEnvelope(clearance = 0.5f)
+        val asItShipped = CameraEnvelope(clearance = 0.5f)
 
         assertClose(
-            1.37f,
-            shipped.minDistanceAt(40f, tablet.first, tablet.second),
+            1.29f,
+            asItShipped.minDistanceAt(40f, tablet.first, tablet.second),
             0.01f,
-            "the floor that was reported as 1.4:",
+            "the clearance that was reported as stuck at 1.4:",
         )
         assertClose(
-            1.17f,
+            0.72f,
             CameraEnvelope().minDistanceAt(40f, tablet.first, tablet.second),
             0.01f,
             "and where the shipped clearance now puts it:",
         )
         assertClose(
-            0.99f,
+            0.65f,
             CameraEnvelope(clearance = CameraEnvelope.MAX_CLEARANCE)
                 .minDistanceAt(40f, tablet.first, tablet.second),
             0.01f,
             "and how close the knob's own far end reaches:",
         )
+    }
+
+    /**
+     * The camera can come closer than it could, everywhere anybody sits.
+     *
+     * The claim kai is owed, and it needs stating precisely rather than broadly.
+     * The old floor was `sqrt(HOME_DISTANCE · new)`, and a square root pulls a
+     * number *toward one* from either side — so the two forms cross at exactly
+     * [CameraPose.HOME_DISTANCE]. Below a floor of 1.45 the new one is lower,
+     * which is the whole range a person can reach; above it the new one is
+     * higher, and that only happens at a low clearance and a steep pitch, where
+     * you were already most of a stage-height back and going further.
+     *
+     * So this asserts the real shape: strictly closer wherever the floor is
+     * inside the seat everything was tuned at, and — separately, so the first
+     * half cannot go quietly vacuous — that at the shipped clearance every legal
+     * angle *is* inside it.
+     */
+    @Test
+    fun theCameraCanComeCloserThanItCouldEverywhereAnybodySits() {
+        listOf(0.5f, 0.68f, 0.9f, CameraEnvelope.MAX_CLEARANCE).forEach { clearance ->
+            val at = CameraEnvelope(clearance = clearance)
+            var pitch = 0f
+            while (pitch <= at.maxPitch) {
+                val now = at.minDistanceAt(pitch, width, height)
+                // The floor as the square-root form solved it, from the very same
+                // reach, so the two differ by the projection and nothing else.
+                val before = sqrt(now * CameraPose.HOME_DISTANCE)
+                if (now <= CameraPose.HOME_DISTANCE) {
+                    assertTrue(
+                        now <= before + 1e-4f,
+                        "at $pitch degrees and clearance $clearance the floor went from $before to $now",
+                    )
+                }
+                pitch += 2f
+            }
+        }
+    }
+
+    @Test
+    fun atTheShippedClearanceEveryAngleIsInsideTheSeatEverythingWasTunedAt() {
+        var pitch = 0f
+        while (pitch <= envelope.maxPitch) {
+            assertTrue(
+                envelope.minDistanceAt(pitch, width, height) <= CameraPose.HOME_DISTANCE,
+                "at $pitch degrees the floor is past the table seat itself",
+            )
+            pitch += 2f
+        }
     }
 
     @Test
@@ -427,22 +490,22 @@ class StageCameraTest {
             withHand > floor + 0.3f,
             "the hand band used to cost a third of the range; now it costs $withHand vs $floor",
         )
-        // The field alone reaches at least as close as the envelope used to
-        // allow, which is the claim that was being made and is the durable half
-        // of it. The original assertion was `fieldOnly <= floor`, and it held
-        // only because the envelope's floor happened to sit *above* what the
-        // fitter would allow. Once the clearance became a preference and its
-        // default went to 0.68 the floor dropped underneath the fitter and the
-        // two swapped places — which is not a regression, it is the fitter
-        // becoming the binding constraint at this seat, and a test that reads
-        // "the fitter must never bind" would be asserting `CameraFit` does
-        // nothing.
-        val floorAsItShipped = envelope.copy(clearance = 0.5f)
-            .minDistanceAt(seat.pitchDegrees, width, height)
+        // The durable half, and the only one that cannot invert: whatever the
+        // fitter allows, it allows *more* of it against the field than against
+        // the board. The original assertion was `fieldOnly <= floor` — the field
+        // alone reaching the envelope's own floor — and it has now been wrong
+        // twice for the same reason, which is that it compares two numbers that
+        // move independently. It held while the floor sat above what the fitter
+        // allows; the 0.68 clearance dropped the floor underneath it and it was
+        // rewritten to compare against the floor *as it shipped*; the linear
+        // floor dropped that one underneath too. A test that reads "the fitter
+        // must never bind" is asserting `CameraFit` does nothing, and a test that
+        // reads "it must bind at exactly here" is a recording of two unrelated
+        // constants agreeing.
         assertTrue(
-            fieldOnly <= floorAsItShipped + 0.01f,
-            "the field alone should reach what the envelope used to floor at " +
-                "($floorAsItShipped), stopped at $fieldOnly",
+            fieldOnly < withHand - 0.2f,
+            "letting go of the hand should be worth a real push-in: " +
+                "field $fieldOnly against board $withHand",
         )
     }
 
@@ -609,5 +672,307 @@ class StageCameraTest {
 
         assertTrue(projected.scale.isFinite(), "scale was ${projected.scale}")
         assertTrue(projected.x.isFinite() && projected.y.isFinite())
+    }
+
+    // ---- aiming somewhere other than the middle ---------------------------------------
+
+    /**
+     * Poses again, and this time aimed away from the middle of the table.
+     *
+     * Every pan the envelope allows on both axes, at the seats and at the two
+     * angles where the projection is least forgiving — because the whole risk of
+     * a movable target is that the inverse stops being exact somewhere nobody
+     * looked, and an inexact inverse tears every pile edge, card thickness and
+     * airborne shadow rather than failing where it happened.
+     */
+    private val panned: List<CameraPose> = buildList {
+        listOf(-2f, -0.7f, 0f, 0.4f, 2f).forEach { px ->
+            listOf(-2f, -0.3f, 0f, 1.1f, 2f).forEach { py ->
+                add(envelope.clamp(CameraPose(0f, 21f, 1.45f, panX = px, panY = py), width, height))
+                add(envelope.clamp(CameraPose(38f, 5f, 2.6f, panX = px, panY = py), width, height))
+                add(envelope.clamp(CameraPose(-117f, 74f, 1f, panX = px, panY = py), width, height))
+            }
+        }
+    }
+
+    @Test
+    fun aPointOnTheMatComesBackToItselfFromAnywhereIncludingPannedAway() {
+        val points = listOf(0f to 0f, 800f to 500f, 1600f to 1000f, 120f to 880f)
+        panned.forEach { pose ->
+            val stage = plane(pose)
+            points.forEach { (x, y) ->
+                val screen = stage.project(x, y)
+                val back = stage.unproject(screen.x, screen.y)
+                assertClose(x, back.x, 0.3f, "x at ($x, $y) from $pose:")
+                assertClose(y, back.y, 0.3f, "y at ($x, $y) from $pose:")
+            }
+        }
+    }
+
+    @Test
+    fun somethingTouchingTheMatIsStillDrawnWhereItWasComputedWhenPannedAway() {
+        panned.forEach { pose ->
+            val stage = plane(pose)
+            listOf(0f to 0f, 400f to 900f, 1590f to 30f).forEach { (x, y) ->
+                val flat = stage.flatten(x, y, 0f)
+                assertEquals(x, flat.x, "flatten moved a resting point at $pose")
+                assertEquals(y, flat.y, "flatten moved a resting point at $pose")
+                assertEquals(1f, flat.scale)
+
+                val raised = stage.raise(x, y, 0f)
+                assertEquals(x, raised.x, "raise moved a resting point at $pose")
+                assertEquals(y, raised.y, "raise moved a resting point at $pose")
+            }
+        }
+    }
+
+    /**
+     * A card in the air still lands where the height says, off centre.
+     *
+     * `flatten` is projection composed with its own inverse, so this is the one
+     * assertion that catches a target added to one of the two and not the other —
+     * which would be invisible at a pan of nothing and wrong everywhere else.
+     */
+    @Test
+    fun aFlattenedPointLandsWhereTheRealOneWouldWhenPannedAway() {
+        panned.forEach { pose ->
+            val stage = plane(pose)
+            listOf(300f to 700f, 1200f to 260f).forEach { (x, y) ->
+                listOf(18f, 90f).forEach { z ->
+                    val honest = stage.project(x, y, z)
+                    val flat = stage.flatten(x, y, z)
+                    val drawn = stage.project(flat.x, flat.y, 0f)
+                    assertClose(honest.x, drawn.x, 0.4f, "x at $z above ($x, $y) from $pose:")
+                    assertClose(honest.y, drawn.y, 0.4f, "y at $z above ($x, $y) from $pose:")
+                }
+            }
+        }
+    }
+
+    /**
+     * The camera is aimed at the point it is panned to, and draws it in the middle.
+     *
+     * The definition, and worth pinning because it is what makes this a pan of the
+     * *camera* rather than a slide of the picture: the target lands dead centre,
+     * so the vanishing point never leaves the middle of the glass and
+     * [StagePlane.unprojectAt] never needs the off-axis inverse `CameraPose` once
+     * refused a target over.
+     */
+    @Test
+    fun whatTheCameraIsAimedAtIsWhatIsInTheMiddleOfTheScreen() {
+        listOf(-1.3f to 0.8f, 0.5f to -1.9f, 0f to 0f).forEach { (px, py) ->
+            val pose = envelope.clamp(CameraPose(31f, 26f, 1.6f, panX = px, panY = py), width, height)
+            val stage = plane(pose)
+            val middle = stage.project(stage.targetX, stage.targetY)
+            assertClose(stage.centreX, middle.x, 0.01f, "at $pose:")
+            assertClose(stage.centreY, middle.y, 0.01f, "at $pose:")
+            assertEquals(1f, middle.scale, "the target is the one point at scale one, at $pose")
+        }
+    }
+
+    /**
+     * Aiming away from the middle holds the camera out, because a corner got further.
+     *
+     * The floor is solved against the corner furthest from the *target*, not the
+     * half-diagonal of the surface, and this is why: pan toward one edge and the
+     * opposite corner is further from the lens axis, so it reaches the lens plane
+     * sooner. The half-diagonal would under-report it, and an under-reported
+     * floor is a corner across the lens, which is the one thing on this stage
+     * that cannot be drawn or inverted.
+     */
+    @Test
+    fun aimingAwayFromTheMiddleHoldsYouOutRatherThanLettingACornerCross() {
+        val middle = envelope.minDistanceAt(45f, width, height)
+        val off = envelope.minDistanceAt(45f, width, height, panX = 1.5f, panY = 1.5f)
+        assertTrue(off > middle, "panning away should push the floor out: $middle then $off")
+
+        // And the guarantee itself, everywhere: at the floor the furthest corner
+        // is inside the lens, whatever the camera is aimed at.
+        panned.forEach { pose ->
+            val stage = plane(pose)
+            for (x in 0..1) {
+                for (y in 0..1) {
+                    val depth = stage.project(x * width, y * height).depth
+                    assertTrue(
+                        depth < stage.cameraDistance,
+                        "a corner reached the lens at $pose: $depth of ${stage.cameraDistance}",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aPanFromAnywhereAtAllStaysInsideTheLeash() {
+        listOf(Float.NaN, Float.POSITIVE_INFINITY, -1e30f, 400f).forEach { rubbish ->
+            val pose = envelope.clamp(CameraPose(panX = rubbish, panY = rubbish), width, height)
+            assertTrue(pose.panX.isFinite() && pose.panY.isFinite(), "pan $rubbish survived as $pose")
+            assertTrue(abs(pose.panX) <= envelope.maxPan, "pan $rubbish landed at ${pose.panX}")
+            assertTrue(pose.distance.isFinite(), "pan $rubbish poisoned the floor")
+        }
+    }
+
+    @Test
+    fun aCameraAimedAwayFromTheMiddleIsNotSittingInASeat() {
+        val seat = StageSeat.TABLE.pose
+        assertEquals(StageSeat.TABLE, Turns.seatAt(seat))
+        assertNull(Turns.seatAt(seat.copy(panX = 0.4f)), "a panned camera named a seat it is not at")
+    }
+
+    // ---- the horizon, which is on the glass now -----------------------------------------
+
+    /**
+     * Past a certain pitch the table has a visible horizon, and above it is sky.
+     *
+     * [StagePlane.unprojectAt]'s divisor vanishes on exactly one screen row, and
+     * it has always been guarded — the guard returns the camera's own target,
+     * which is a defensible number and a terrible hit test. It never mattered
+     * while the pitch stopped at fifty-eight, where the row sits hundreds of
+     * pixels above the top of the glass. At eighty it is on screen, and every tap
+     * on the wall would otherwise grab whatever is in the middle of the table.
+     */
+    @Test
+    fun aTapAboveTheHorizonIsNotAPointOnTheTable() {
+        val steep = plane(CameraPose(pitchDegrees = 80f, distance = 1.6f))
+        val horizon = steep.horizonY
+        assertTrue(horizon != null, "a table laid back to eighty degrees has a horizon")
+        assertTrue(horizon!! < steep.centreY, "the horizon is above the middle, was $horizon")
+        assertTrue(horizon > 0f && horizon < height, "the horizon should be on the glass, was $horizon")
+
+        assertTrue(steep.above(horizon - 4f), "just above the horizon should be sky")
+        assertTrue(!steep.above(horizon + 40f), "well below it is table")
+        assertTrue(!steep.above(steep.centreY), "the middle of the screen is never sky")
+    }
+
+    /**
+     * And a finger up there lands a long way up the table rather than in the middle.
+     *
+     * The whole point of the clamp. Without it [StagePlane.unprojectAt]'s guard
+     * hands back the camera's own target, so a tap on the wall grabs whatever is
+     * in the middle of the board — which at eighty degrees of pitch is a quarter
+     * of the screen behaving like the centre of it.
+     */
+    @Test
+    fun aFingerInTheSkyLandsOffTheTableRatherThanInTheMiddleOfIt() {
+        val steep = plane(CameraPose(pitchDegrees = 80f, distance = 1.6f))
+        listOf(0f, 40f, steep.horizonY!! - 1f).forEach { sky ->
+            val held = steep.belowHorizon(sky)
+            assertTrue(held > sky, "$sky was not held down to the table")
+            assertTrue(!steep.above(held), "$sky was held to $held, which is still sky")
+
+            val landed = steep.unproject(steep.centreX, held)
+            assertTrue(landed.y.isFinite(), "$sky landed at ${landed.y}")
+            assertTrue(
+                landed.y < -height,
+                "$sky should land far up the table, not on it: ${landed.y}",
+            )
+        }
+        // And a row that is looking at the table is left exactly alone, or every
+        // finger on the board would be nudged by the guard meant for one corner
+        // of the screen.
+        assertEquals(steep.centreY, steep.belowHorizon(steep.centreY))
+        assertEquals(height, steep.belowHorizon(height))
+    }
+
+    @Test
+    fun aTableLookedStraightDownAtHasNoHorizonAtAll() {
+        val flat = plane(CameraPose(pitchDegrees = 0f, distance = 1.45f))
+        assertNull(flat.horizonY, "a flat table has no horizon to point above")
+        assertTrue(!flat.above(-5000f), "nothing is above the horizon of a flat table")
+    }
+
+    // ---- letting go of a turn -------------------------------------------------------
+
+    private fun rig(): CameraRig = CameraRig().also {
+        it.width = width
+        it.height = height
+    }
+
+    @Test
+    fun aFlickedTableKeepsTurningAndComesToRest() {
+        val rig = rig()
+        val from = rig.pose.yawDegrees
+        rig.coast(yawPerSecond = 220f, pitchPerSecond = 0f)
+        assertTrue(rig.moving, "a flick should leave the camera travelling")
+
+        var frames = 0
+        while (rig.moving && frames < 2000) {
+            rig.step(SpringSpec.Snappy, 1f / 60f)
+            frames++
+        }
+
+        assertTrue(!rig.moving, "the flick never ran down")
+        assertTrue(rig.pose.yawDegrees > from + 30f, "it barely moved: ${rig.pose.yawDegrees}")
+        assertTrue(frames < 600, "ten seconds is a table that got away, took $frames frames")
+    }
+
+    @Test
+    fun aReleaseThatIsNotAFlickDoesNotDrift() {
+        val rig = rig()
+        rig.coast(yawPerSecond = 4f, pitchPerSecond = 3f)
+        assertTrue(!rig.moving, "a slow release should stop where it was let go of")
+        assertEquals(StageSeat.TABLE.pose, rig.pose)
+    }
+
+    @Test
+    fun aCoastingTableStopsDeadAtTheEnvelope() {
+        val rig = rig()
+        rig.coast(yawPerSecond = 0f, pitchPerSecond = 600f)
+
+        var frames = 0
+        while (rig.moving && frames < 2000) {
+            rig.step(SpringSpec.Snappy, 1f / 60f)
+            frames++
+        }
+
+        assertEquals(envelope.maxPitch, rig.pose.pitchDegrees, "it should rest against the ceiling")
+        assertTrue(frames < 60, "a coast into a wall should stop at once, took $frames frames")
+    }
+
+    @Test
+    fun aPressCatchesACoastingTable() {
+        val rig = rig()
+        rig.coast(yawPerSecond = 400f, pitchPerSecond = 0f)
+        repeat(5) { rig.step(SpringSpec.Snappy, 1f / 60f) }
+
+        val caught = rig.pose
+        rig.halt()
+        assertTrue(!rig.moving, "the press did not catch it")
+        assertEquals(caught, rig.pose, "catching it should not move it")
+        assertTrue(!rig.step(SpringSpec.Snappy, 1f / 60f), "a caught camera should cost the loop nothing")
+    }
+
+    @Test
+    fun aFlickRunsDownOverTheSameSecondsAtEveryFrameRate() {
+        // Per second, not per frame. A decay applied once a frame runs a flick
+        // down twice as fast on a 120Hz tablet, which is the bug this shape of
+        // arithmetic always eventually is.
+        fun travelled(dt: Float): Float {
+            val rig = rig()
+            rig.coast(yawPerSecond = 300f, pitchPerSecond = 0f)
+            var elapsed = 0f
+            while (rig.moving && elapsed < 10f) {
+                rig.step(SpringSpec.Snappy, dt)
+                elapsed += dt
+            }
+            return rig.pose.yawDegrees
+        }
+        assertClose(travelled(1f / 60f), travelled(1f / 120f), 2f, "the same flick at two frame rates:")
+    }
+
+    @Test
+    fun aSeatPressCancelsACoast() {
+        val rig = rig()
+        rig.coast(yawPerSecond = 500f, pitchPerSecond = 0f)
+        repeat(3) { rig.step(SpringSpec.Snappy, 1f / 60f) }
+
+        rig.aimAt(StageSeat.OVERHEAD)
+        var frames = 0
+        while (rig.moving && frames < 600) {
+            rig.step(SpringSpec.Snappy, 1f / 60f)
+            frames++
+        }
+        assertEquals(StageSeat.OVERHEAD.pose.pitchDegrees, rig.pose.pitchDegrees, "it did not arrive")
+        assertClose(0f, Turns.signed(rig.pose.yawDegrees), 0.1f, "the coast kept running under the seat:")
     }
 }

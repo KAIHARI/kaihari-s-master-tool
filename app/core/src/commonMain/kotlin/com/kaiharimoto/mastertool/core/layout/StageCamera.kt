@@ -5,26 +5,36 @@ import com.kaiharimoto.mastertool.core.motion.SpringValue
 import com.kaiharimoto.mastertool.core.motion.Springs
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Where the camera is: two angles and how far back.
+ * Where the camera is: two angles, how far back, what through, and what at.
  *
- * Three numbers and deliberately not four. There is no pan — the camera always
- * looks at the middle of the table — because a movable target means the
+ * It was three numbers and it said so at length. *"There is no pan — the camera
+ * always looks at the middle of the table — because a movable target means the
  * vanishing point stops being the centre of the layer, and then the mat's
  * `graphicsLayer` needs a `transformOrigin` and [StagePlane.unproject] needs an
- * off-axis inverse. That is a great deal of arithmetic to buy something nobody
- * asked for: you orbit a table, you do not pan across one. A camera that leans
- * toward whatever is being played leans by a degree or two of [yawDegrees],
- * which reads the same and costs nothing.
+ * off-axis inverse."* Half of that was right and it is the cheap half: the mat's
+ * layer does need a `transformOrigin`, and it is two lines.
  *
- * [distance] is a multiple of the stage's governing dimension rather than a
- * number of pixels, exactly as [StagePlane.forStage]'s lens is, so a pose means
- * the same thing on a phone and on a desk monitor.
+ * The other half was a description of a **different pan**. Sliding the finished
+ * picture sideways does move the vanishing point off the middle of the glass,
+ * and that would need the off-axis inverse. Moving what the camera *looks at*
+ * does not: the divide stays centred on the pivot and the pivot stays drawn in
+ * the middle, so [StagePlane.unprojectAt] is unchanged but for which point it
+ * adds back at the end. The inverse stays closed form, and so does [StagePlane.flatten],
+ * which is the property everything with a height on this stage is drawn through.
+ *
+ * kai asked for *"complete freedom and control"*, which is not something a
+ * camera bolted to the middle of one table has.
+ *
+ * [distance], [panX] and [panY] are multiples of the stage's governing dimension
+ * rather than numbers of pixels, exactly as [StagePlane.forStage]'s lens is, so
+ * a pose means the same thing on a phone and on a desk monitor.
  */
 data class CameraPose(
     val yawDegrees: Float = 0f,
@@ -57,6 +67,24 @@ data class CameraPose(
      * from 1.45 to 2.0 took the field of view from 36 degrees to 26 with the
      * lens number sitting still. kai's word for it was that it reset.
      *
+     * ## And the half of that bug which survived the fix
+     *
+     * Putting the lens on both terms made *this* dial honest and left the other
+     * one carrying a fault of exactly the same shape, for another five releases:
+     * `cameraDistance` still had [distance] on it. So the focal length moved
+     * whenever the camera did. On a 1600-wide stage the field of view ran from 34
+     * degrees at the back of the envelope to 77 at the front — a fifty-seven
+     * millimetre lens to a twenty-one — and the keystone across the table swung
+     * as `1/distance²` where a real camera swings as `1/distance`. Every push-in
+     * was a dolly zoom; so was every *tilt*, because the pitch moves
+     * [CameraEnvelope.minDistanceAt], which moved the distance, which moved the
+     * lens. kai's word for that one was that it did not behave like a real
+     * camera, and it did not.
+     *
+     * `planeFor` now takes [distance] off the focal length entirely. Where the
+     * two dials sit is unchanged — this one magnifies, that one moves you — and
+     * the difference is that the second one has stopped doing both.
+     *
      * ## What it costs, which is less than the dolly zoom did
      *
      * `perspectiveGrowth` no longer moves with it — both terms scale, so the
@@ -83,6 +111,38 @@ data class CameraPose(
      * dragged, so a tuned lens survived exactly until anybody touched the table.
      */
     val lens: Float = HOME_LENS,
+    /**
+     * What the camera is aimed at, as an offset from the middle of the mat.
+     *
+     * ## What moves
+     *
+     * The **target**, not the picture. The camera orbits this point, is
+     * [distance] from this point, and draws this point in the middle of the
+     * glass — so panning walks the eye across the room rather than sliding a
+     * finished image, and every angle you were looking from you are still
+     * looking from.
+     *
+     * ## Why the units are these
+     *
+     * Multiples of the governing dimension, like [distance], because a pan of
+     * "half a stage to the left" has to mean the same thing on a tablet and on a
+     * monitor. Mat pixels would mean a saved pose framed one thing on the device
+     * it was saved on and something else everywhere else.
+     *
+     * ## Last, and defaulted to nothing, and that is load-bearing twice
+     *
+     * At zero every byte of every projection is what it was, so this landed in a
+     * release ahead of anything that moves it and `GoldenStageTest` never
+     * noticed — the same move [lens] and `CardSolid.slab`'s trailing `backScale`
+     * made.
+     *
+     * And it is last because [CameraRig.step] and [CameraRig.nudge] once built a
+     * pose *positionally*, and a field inserted before [distance] would have been
+     * a silent re-binding rather than a compile error. Both use `copy` now; the
+     * ordering rule survives them because the next person will not know that.
+     */
+    val panX: Float = 0f,
+    val panY: Float = 0f,
 ) {
     companion object {
         /** The lens the stage has always used. See [StagePlane.forStage]. */
@@ -98,24 +158,67 @@ data class CameraPose(
 /**
  * Where the camera is allowed to be.
  *
- * Two of these three limits are about not making the table unusable and one is
- * about not making the *user* unusable:
+ * ## What this used to be, and what it is now
  *
- * - **Pitch has a floor** because a table seen from exactly head-on is a
- *   rectangle with no depth at all, and every one of the shading and shadow
- *   cues that were built for it disappears at once.
- * - **Pitch has a ceiling** well short of the grazing angle, because past about
- *   sixty degrees a card's own printed text starts to keystone badly enough to
- *   be unreadable, and reading cards is what this whole application is for.
+ * It used to hold three limits of taste and one of arithmetic, and the three
+ * were argued for at length: pitch had a floor because a table seen head-on has
+ * no depth cues, a ceiling because a card's printed text keystones past about
+ * sixty degrees, and a flat distance floor because nobody needs to be that
+ * close. Every one of those was a defensible answer to a question kai has since
+ * answered differently — *"there shouldn't be a limit I want complete freedom
+ * and control"* — so they are gone or opened right out.
+ *
+ * A card's text does keystone at eighty degrees. That is now something you can
+ * see happening and pull back from, rather than something the tool refuses on
+ * your behalf.
+ *
+ * ## The two that are not taste
+ *
+ * - **[clearance], and the floor it solves.** Past the lens plane
+ *   [StagePlane.project] clamps rather than dividing by zero, and a clamp cannot
+ *   be inverted — so `unproject` stops agreeing with `project`, and with it
+ *   `flatten`, and with that every pile edge, card thickness and airborne
+ *   shadow. This is arithmetic, it is the one wall left, and [minDistanceAt] is
+ *   where it stands.
  * - **There is no roll, ever.** Not because it is hard — it is one more angle —
  *   but because a horizon that tips is the single most reliable way to make
  *   somebody feel ill, and a table has a horizon.
  */
 data class CameraEnvelope(
-    val minPitch: Float = 4f,
-    val maxPitch: Float = 58f,
-    val minDistance: Float = 0.8f,
-    val maxDistance: Float = 2.6f,
+    /**
+     * Flat overhead is allowed now, and it is safe rather than merely permitted.
+     *
+     * At a pitch of nothing the projection is orthographic — every scale is one —
+     * and [StagePlane.unprojectAt]'s divisor is `cameraDistance`, which is the
+     * furthest from vanishing it ever gets. What is lost is the depth cues, and
+     * losing them at the top of the range is a picture you chose rather than a
+     * bug: the pile heights flatten, which is exactly what looking straight down
+     * at a table does.
+     */
+    val minPitch: Float = 0f,
+    /**
+     * And down to eighty, which is where the horizon arrives on the glass.
+     *
+     * Ninety is the one angle that genuinely cannot be drawn: the table is edge
+     * on, every card is a line, and [StagePlane.horizonY] runs through the middle
+     * of the screen. Eighty keeps it in the upper quarter and leaves the table a
+     * table. Card text is badly keystoned well before here and that is now the
+     * user's call — see the class note.
+     */
+    val maxPitch: Float = 80f,
+    /**
+     * And the flat floor stops binding.
+     *
+     * It was 0.8, which is a number about taste sitting in front of a number
+     * about arithmetic: [minDistanceAt]'s answer was below it at every pitch
+     * under about fifty degrees, so the wall anybody actually hit was this one
+     * and the solved one never got a say. A twentieth is far inside the mat's own
+     * lens plane at every angle, so from here on the floor is always the solved
+     * one — which is the point.
+     */
+    val minDistance: Float = 0.05f,
+    /** And back far enough to see the room the desk is standing in. */
+    val maxDistance: Float = 6f,
     /**
      * And how far the focal length may travel, in multiples of the shipped one.
      *
@@ -131,33 +234,44 @@ data class CameraEnvelope(
     /**
      * How far toward the lens the nearest corner of the mat may travel.
      *
-     * The one number [minDistanceAt] is solved against, and a property rather
-     * than a constant because it is the answer to "how close may I sit", which
-     * is a question of taste that somebody has to be able to ask on the device.
-     * The keystone across the table goes as `1 / (1 − this)`: a half caps it at
-     * two to one, and 0.68 at about three, which is a room you can lean into
-     * rather than a diagram you are looking down at.
+     * The one number [minDistanceAt] is solved against, and **the only limit on
+     * this camera that is not a matter of taste**. The keystone across the table
+     * goes as `1 / (1 − this)`: a half caps it at two to one, 0.9 at ten to one,
+     * and 0.99 at a hundred — which is a camera with its nose against the near
+     * edge of the table, and about as free as arithmetic gets.
      *
      * **It must stay below one.** At one the corner *is* the lens:
      * [StagePlane.project] clamps rather than dividing by zero, and a clamp
-     * cannot be inverted, so
-     * `unproject` stops agreeing with `project` and every pile edge and airborne
-     * shadow goes with it. That is not a stylistic limit, and it is why the knob
-     * that offers this stops at 0.95.
+     * cannot be inverted, so `unproject` stops agreeing with `project` and every
+     * pile edge and airborne shadow goes with it. That is not a stylistic limit,
+     * and it is why the knob that offers this stops a hundredth short.
      *
-     * It shipped at a half for three releases. Raising it only ever *lowers* a
-     * floor, so no pose that was legal has become illegal and no seat has moved.
+     * It shipped at a half, then 0.68, and is 0.9 now. Raising it only ever
+     * *lowers* a floor, so no pose that was ever legal has become illegal and no
+     * seat has moved. The default moved because freedom is the thing being asked
+     * for and a default is what almost everybody gets — a knob three menus deep
+     * is not an answer to "I want complete control".
      *
      * **And it does not go below what shipped**, which is a limit that had to be
      * measured rather than guessed. Tightening it pushes every floor *out*, and
-     * at 0.42 on this stage the floor at thirty-four degrees passes 1.34 — which
-     * is [StageSeat.SEATED], so the seat on the bar becomes a place the envelope
-     * refuses to let you sit. The shipped half is already within a few
-     * hundredths of that, so there is no room under it worth offering and one
-     * seat to lose by offering it. Everything anybody wants from this knob is in
-     * the other direction.
+     * with the old square-root floor 0.42 put thirty-four degrees past 1.34 —
+     * which is [StageSeat.SEATED], so a seat on the bar became a place the
+     * envelope refused to let you sit. The floor is linear now and every floor is
+     * lower, so a half has a great deal of room under it and still buys nothing
+     * anybody wants. Everything this knob is for is in the other direction.
      */
     val clearance: Float = DEFAULT_CLEARANCE,
+    /**
+     * How far the camera may be aimed away from the middle of the mat.
+     *
+     * A leash rather than a policy. Nothing goes wrong at a pan of forty — the
+     * projection is as exact out there as it is anywhere — you simply cannot see
+     * the table any more, and the way back is the seat buttons, which zero this.
+     * Two stage-heights in any direction puts the whole board comfortably off the
+     * glass already, so what this is really guarding is a flick of inertia
+     * integrating for a few seconds into a number with an exponent on it.
+     */
+    val maxPan: Float = 2f,
 ) {
     /**
      * The nearest pose inside the envelope. Yaw is free — a table turns all the way.
@@ -168,13 +282,35 @@ data class CameraEnvelope(
     fun clamp(pose: CameraPose, width: Float = 0f, height: Float = 0f): CameraPose {
         val pitch = pose.pitchDegrees.coerceIn(minPitch, maxPitch)
         val lens = pose.lens.coerceIn(minLens, max(minLens, maxLens))
-        val floor = minDistanceAt(pitch, width, height)
+        // The pan is held first, because the floor is solved against the corner
+        // furthest from wherever the camera is aimed — pan away from the middle
+        // and a corner of the mat gets further off, so the floor moves out. Clamp
+        // them the other way round and the floor answers about a pan that is
+        // about to be thrown away.
+        val panX = pose.panX.holdTo(maxPan)
+        val panY = pose.panY.holdTo(maxPan)
+        val floor = minDistanceAt(pitch, width, height, panX, panY)
         return pose.copy(
             pitchDegrees = pitch,
             distance = pose.distance.coerceIn(floor, max(floor, maxDistance)),
             lens = lens,
+            panX = panX,
+            panY = panY,
         )
     }
+
+    /**
+     * [this] held to ±[limit], and made finite on the way.
+     *
+     * `coerceIn` passes a `NaN` straight through — every comparison against it is
+     * false — and a `NaN` pan poisons a target, a floor, a pose and every pile
+     * edge downstream of all four without anything throwing. That is not
+     * hypothetical: it is what [safeClearance] was written for after a test found
+     * exactly that, and a pan reaches the arithmetic through the same stored JSON
+     * a person can edit.
+     */
+    private fun Float.holdTo(limit: Float): Float =
+        if (isFinite()) coerceIn(-limit, limit) else 0f
 
     /**
      * How close the camera may come at this pitch before the table reaches it.
@@ -189,38 +325,85 @@ data class CameraEnvelope(
      * stopped agreeing with `project` — and with it `flatten`, and with that
      * every pile edge and airborne shadow, at one pose and not the others.
      *
-     * So the floor is solved rather than chosen. Requiring the nearest corner to
-     * sit no more than [clearance] of the way to the lens and substituting
-     * `zoom = HOME / distance` gives a floor in `distance²`, which is the square
-     * root below. It says something sensible in plain terms too: you may come
-     * close while you are looking down at the table, and you must step back as
-     * you get low. That is also true of a real table.
-     */
-    /**
-     * **The lens does not appear here, and that is a result rather than an
-     * oversight.** The clearance constraint is
-     * `halfDiagonal · zoom · sin(pitch) ≤ clearance · cameraDistance`, and a
-     * focal length multiplies `zoom` and `cameraDistance` by the same amount —
-     * so it cancels exactly. Zooming does not move the camera, so it cannot
-     * bring the table any closer to it.
+     * So the floor is solved rather than chosen. Require the corner furthest from
+     * the camera's own target to sit no more than [clearance] of the way to the
+     * lens:
      *
-     * An earlier draft did carry a lens factor, because the first version of
-     * `planeFor` put the focal length on `cameraDistance` alone. That was a
-     * dolly zoom wearing a lens's name, and the floor moving with it was one of
-     * the several things it got wrong.
+     * ```
+     * reach · zoom · sin(pitch) ≤ clearance · cameraDistance
+     * ```
+     *
+     * and substitute what `planeFor` builds — `zoom = focal / (distance · G)` and
+     * `cameraDistance = focal` — and the focal length falls out of both sides:
+     *
+     * ```
+     * distance ≥ reach · sin(pitch) / (clearance · G)
+     * ```
+     *
+     * It says something sensible in plain terms too: you may come close while you
+     * are looking down at the table, and you must step back as you get low. That
+     * is also true of a real table.
+     *
+     * ## It used to be a square root, and that was the old lens showing through
+     *
+     * `cameraDistance` carried [CameraPose.distance] until the release this
+     * comment was rewritten in, so the distance appeared on *both* sides of the
+     * constraint and the floor came out in `distance²`. The square root of a
+     * number below one is larger than the number, which is why every floor has
+     * dropped: at twenty-one degrees on a 1600×1000 stage the answer goes from
+     * 0.85 to 0.38, and the flat [minDistance] that used to sit in front of it at
+     * 0.8 is now a twentieth. Nothing about the guarantee changed — the corner is
+     * still exactly [clearance] of the way to the lens at the floor — only the
+     * projection it is guarding stopped moving the goalposts.
+     *
+     * ## The lens does not appear here, and that is a result rather than an
+     * oversight
+     *
+     * A focal length multiplies `zoom` and `cameraDistance` by the same amount,
+     * so it cancels exactly, as the derivation above shows it doing. Zooming does
+     * not move the camera, so it cannot bring the table any closer to it. An
+     * earlier draft did carry a lens factor, because the first version of
+     * `planeFor` put the focal length on `cameraDistance` alone. That was a dolly
+     * zoom wearing a lens's name, and the floor moving with it was one of the
+     * several things it got wrong.
      */
     fun minDistanceAt(
         pitchDegrees: Float,
         width: Float,
         height: Float,
+        panX: Float = 0f,
+        panY: Float = 0f,
     ): Float {
         val governing = max(height, width * 0.55f)
         if (governing <= 0f) return minDistance
 
-        val halfDiagonal = sqrt((width * width + height * height) / 4f)
-        val reach = halfDiagonal * CameraPose.HOME_DISTANCE *
+        // The corner furthest from where the camera is aimed, rather than the
+        // half-diagonal. They are the same number until somebody pans, and after
+        // that the half-diagonal is an under-estimate — which is the direction
+        // that lets a corner cross the lens.
+        val reach = reachFrom(width, height, panX, panY, governing)
+        val toward = reach *
             sin(pitchDegrees.coerceIn(0f, 90f) * (PI.toFloat() / 180f))
-        return max(minDistance, sqrt(reach / (safeClearance() * governing)))
+        return max(minDistance, toward / (safeClearance() * governing))
+    }
+
+    /** How far the furthest corner of the surface is from the camera's target. */
+    private fun reachFrom(
+        width: Float,
+        height: Float,
+        panX: Float,
+        panY: Float,
+        governing: Float,
+    ): Float {
+        val offX = abs(if (panX.isFinite()) panX else 0f) * governing
+        val offY = abs(if (panY.isFinite()) panY else 0f) * governing
+        // The furthest corner from a point inside a rectangle is the one
+        // diagonally opposite it, so each axis contributes its half plus however
+        // far the target has walked the other way. Absolute values because which
+        // corner wins flips with the sign and the answer does not.
+        val alongX = width / 2f + offX
+        val alongY = height / 2f + offY
+        return sqrt(alongX * alongX + alongY * alongY)
     }
 
     /**
@@ -242,10 +425,16 @@ data class CameraEnvelope(
         /**
          * What [clearance] ships at, and the ends the panel and the arithmetic
          * both hold it to. See the field for why neither end is arbitrary.
+         *
+         * The top end is 0.99 rather than 0.95 because 0.95 was a margin of
+         * comfort in front of a wall, and the wall is the number one. A hundredth
+         * short of it is where the arithmetic actually stops; anything further
+         * back is somebody deciding on kai's behalf how close is too close, which
+         * is the thing this release exists to stop doing.
          */
-        const val DEFAULT_CLEARANCE = 0.68f
+        const val DEFAULT_CLEARANCE = 0.9f
         const val MIN_CLEARANCE = 0.5f
-        const val MAX_CLEARANCE = 0.95f
+        const val MAX_CLEARANCE = 0.99f
     }
 }
 
@@ -430,7 +619,14 @@ object Turns {
         .firstOrNull {
             abs(signed(pose.yawDegrees - it.pose.yawDegrees)) <= tolerance &&
                 abs(pose.pitchDegrees - it.pose.pitchDegrees) <= tolerance &&
-                abs(pose.distance - it.pose.distance) <= 0.04f
+                abs(pose.distance - it.pose.distance) <= 0.04f &&
+                // The pan *is* compared, where the lens is not, and the two are
+                // different kinds of thing. A seat is a place, and a camera aimed
+                // half a table away from the middle is not sitting at it however
+                // right the three angles are. A hundredth of a stage is a couple
+                // of pixels of slack for a float that has been through a spring.
+                abs(pose.panX - it.pose.panX) <= 0.01f &&
+                abs(pose.panY - it.pose.panY) <= 0.01f
             // [CameraPose.lens] is deliberately **not** compared. A seat is a
             // chair, not a chair and a lens: you do not change focal length by
             // sitting somewhere else, and a readout that refused to name the
@@ -499,6 +695,16 @@ class CameraRig(
     private var vDistance = 0f
     private var parked = true
 
+    /**
+     * Whether [step] is running a flick down rather than springing to a seat.
+     *
+     * Two modes over one set of velocities rather than two rigs, because they are
+     * mutually exclusive by construction: [aimAt] gives the camera somewhere to
+     * be and [coast] gives it a speed, and asking for either cancels the other.
+     * A camera doing both at once is a camera arguing with itself.
+     */
+    private var coasting = false
+
     /** True while the camera is still travelling, so the loop can skip it when not. */
     val moving: Boolean get() = !parked
 
@@ -506,17 +712,19 @@ class CameraRig(
     fun placeAt(pose: CameraPose) {
         val safe = envelope.clamp(pose, width, height)
         this.pose = safe
-        target = safe
-        vYaw = 0f
-        vPitch = 0f
-        vDistance = 0f
-        parked = true
+        halt()
     }
 
     /** Sends the camera somewhere. Yaw takes the short way round. */
     fun aimAt(pose: CameraPose) {
         val safe = envelope.clamp(pose, width, height)
         val next = safe.copy(yawDegrees = Turns.nearest(this.pose.yawDegrees, safe.yawDegrees))
+        // A coast has to be cancelled even when the destination is where the
+        // camera was already headed, because "already headed there" is what
+        // `target` says and a coasting camera writes its target every frame. The
+        // early return is below the mode change for that reason and not by
+        // accident.
+        coasting = false
         if (next == target) return
         target = next
         parked = false
@@ -546,30 +754,93 @@ class CameraRig(
      * rather than a hand. The spring is for going *to* a seat, not for being
      * dragged.
      */
-    fun nudge(deltaYaw: Float, deltaPitch: Float, dollyBy: Float = 0f) {
-        // `copy`, not a fresh pose: a gesture moves three of the four things a
-        // camera is, and building a new one from three arguments quietly reset
-        // the fourth on every frame of every drag.
+    fun nudge(
+        deltaYaw: Float,
+        deltaPitch: Float,
+        dollyBy: Float = 0f,
+        deltaPanX: Float = 0f,
+        deltaPanY: Float = 0f,
+    ) {
+        // `copy`, not a fresh pose: a gesture moves some of the things a camera
+        // is and not all of them, and building a new one from the arguments to
+        // hand quietly reset the rest on every frame of every drag.
         val next = envelope.clamp(
             pose.copy(
                 yawDegrees = pose.yawDegrees + deltaYaw,
                 pitchDegrees = pose.pitchDegrees + deltaPitch,
                 distance = pose.distance * (1f + dollyBy),
+                panX = pose.panX + deltaPanX,
+                panY = pose.panY + deltaPanY,
             ),
             width,
             height,
         )
         pose = next
         target = next
+        halt()
+    }
+
+    /**
+     * Stop, wherever you are.
+     *
+     * Called by [nudge] because a finger arriving on a camera that is still
+     * travelling has to win, and called on the press for the same reason: a table
+     * coasting away from a hand reaching for it is the failure that makes people
+     * describe inertia as "it fights me". Catching a flick is the gesture that
+     * makes the whole feature safe, and it is this one line.
+     */
+    fun halt() {
+        target = pose
         vYaw = 0f
         vPitch = 0f
         vDistance = 0f
+        coasting = false
         parked = true
+    }
+
+    /**
+     * Let go of a turn and let it run down.
+     *
+     * `docs/AAA.md` #7: *"Flick it and it coasts to rest on the same damping.
+     * This is most of what makes a camera feel like it weighs something."*
+     *
+     * ## Why this is not the spring already here
+     *
+     * A spring goes *to* somewhere, and a flick has no destination — it has a
+     * speed and a direction and nothing at the end of it. Expressing one as the
+     * other means inventing a target from the velocity, which is a guess that
+     * gets the overshoot wrong at both ends: a hard flick lands somewhere
+     * arbitrary and a gentle one refuses to move at all. So this integrates
+     * instead, and the damping is the only thing shared.
+     *
+     * ## The rates are per second
+     *
+     * Degrees per second, because the caller measures them from a pointer stream
+     * whose frames are not a fixed length, and a per-frame rate silently means
+     * something different on a 120Hz tablet than on a 60Hz one. [step] multiplies
+     * by its own `dt` for the same reason.
+     *
+     * Below [COAST_FLOOR] nothing happens at all, which is what stops a slow drag
+     * that merely ended from drifting on afterwards — a release is a release, and
+     * only a *flick* is a flick.
+     */
+    fun coast(yawPerSecond: Float, pitchPerSecond: Float) {
+        if (!yawPerSecond.isFinite() || !pitchPerSecond.isFinite()) return
+        val speed = sqrt(yawPerSecond * yawPerSecond + pitchPerSecond * pitchPerSecond)
+        if (speed < COAST_FLOOR) return
+
+        val scale = if (speed > COAST_CEILING) COAST_CEILING / speed else 1f
+        vYaw = yawPerSecond * scale
+        vPitch = pitchPerSecond * scale
+        vDistance = 0f
+        coasting = true
+        parked = false
     }
 
     /** Springs one frame. Returns whether anything moved. */
     fun step(spec: SpringSpec, dt: Float): Boolean {
         if (parked) return false
+        if (coasting) return glide(dt)
 
         val yaw = Springs.step(
             SpringValue(pose.yawDegrees, vYaw),
@@ -630,6 +901,47 @@ class CameraRig(
         return true
     }
 
+    /**
+     * One frame of a flick running down. Returns whether anything moved.
+     *
+     * Exponential decay applied as `exp(−λ·dt)` rather than as a fixed factor per
+     * frame, so a 120Hz tablet and a 60Hz desktop run the same flick down over
+     * the same *seconds*. That is the same reason [coast] takes its rates per
+     * second, and it is the bug a per-frame multiplier always eventually is.
+     *
+     * The pose is clamped through the envelope every step, which is what makes
+     * hitting the pitch ceiling stop the coast dead rather than let it grind
+     * against the limit for another second: the clamp refuses the movement, and
+     * a velocity that is no longer moving anything is spent.
+     */
+    private fun glide(dt: Float): Boolean {
+        if (dt <= 0f) return false
+
+        val before = pose
+        val next = envelope.clamp(
+            pose.copy(
+                yawDegrees = pose.yawDegrees + vYaw * dt,
+                pitchDegrees = pose.pitchDegrees + vPitch * dt,
+            ),
+            width,
+            height,
+        )
+        pose = next
+        target = next
+
+        val decay = exp(-COAST_DECAY * dt)
+        vYaw *= decay
+        vPitch *= decay
+        // A clamp that refused the move leaves the axis exactly where it was, and
+        // an axis that cannot move has no speed left worth carrying. Without this
+        // a flick into the pitch ceiling keeps its velocity, and the *next* flick
+        // the other way starts with a second one already in it.
+        if (next.pitchDegrees == before.pitchDegrees) vPitch = 0f
+
+        if (sqrt(vYaw * vYaw + vPitch * vPitch) < COAST_FLOOR) halt()
+        return true
+    }
+
     private companion object {
         /**
          * A twentieth of a degree, and a thousandth of a stage height.
@@ -640,6 +952,41 @@ class CameraRig(
          */
         const val ANGLE_TOLERANCE = 0.05f
         const val DISTANCE_TOLERANCE = 0.001f
+
+        /**
+         * Degrees a second below which a release is a release rather than a flick.
+         *
+         * Twelve, which is a finger crossing about a ninth of the screen in the
+         * last second of a drag — comfortably above the jitter of a hand coming
+         * to rest on glass, and comfortably below anything anybody would call a
+         * throw. It is also the speed the coast stops at, so the same number
+         * decides that a flick has begun and that it has finished, and the table
+         * cannot come to rest somewhere it would refuse to start from.
+         */
+        const val COAST_FLOOR = 12f
+
+        /**
+         * And a ceiling, because a pointer stream can report a very large number.
+         *
+         * Nine hundred degrees a second is two and a half turns, which takes about
+         * four seconds to run down — long, and still a table you are watching
+         * rather than one that has got away. Above it the velocity is scaled back
+         * along its own direction rather than clipped per axis, so a hard diagonal
+         * flick keeps its heading instead of squaring off against the axes.
+         */
+        const val COAST_CEILING = 900f
+
+        /**
+         * How fast it runs down: `exp(−this · seconds)`.
+         *
+         * Two and a half, so a flick keeps about eight per cent of its speed after
+         * a second and is under the floor shortly after — the same order as the
+         * springs the cards use, which is the point. `docs/DESIGN.md` §12's
+         * complaint about a scene reading as assembled rather than as a place is
+         * about exactly this: two things on one screen easing on two different
+         * curves.
+         */
+        const val COAST_DECAY = 2.5f
     }
 }
 
@@ -656,24 +1003,50 @@ class CameraRig(
  * Zoom is the ratio to the seat the stage opens at, so the home pose is
  * exactly `1` and every constant tuned against it still means what it meant.
  */
-fun CameraPose.planeFor(width: Float, height: Float) = StagePlane(
-    width = width,
-    height = height,
-    tiltDegrees = pitchDegrees,
-    // The lens scales **both** terms, and that is what makes it a focal length
-    // rather than a dolly zoom. Perspective across the table is the angle the
-    // table subtends — `zoom · extent / cameraDistance` — so multiplying the two
-    // together leaves that ratio alone and changes only how big the board is
-    // drawn. Which is what a longer lens does: it magnifies, it does not
-    // restage. Put it on `cameraDistance` alone and you get the opposite — the
-    // framing pinned and the perspective moving, which is a dolly zoom, and
-    // which is what shipped in v1.2.38 under the wrong name.
-    cameraDistance = distance * max(lens, MIN_LENS) * max(height, width * 0.55f),
-    yawDegrees = yawDegrees,
-    zoom = max(lens, MIN_LENS) * CameraPose.HOME_DISTANCE / max(distance, 1e-3f),
-)
+fun CameraPose.planeFor(width: Float, height: Float): StagePlane {
+    val governing = max(height, width * 0.55f)
+    val focal = max(lens, MIN_LENS) * CameraPose.HOME_DISTANCE * governing
+    return StagePlane(
+        width = width,
+        height = height,
+        tiltDegrees = pitchDegrees,
+        // **The focal length, and a function of the lens alone.** `project`
+        // divides by `cameraDistance − depth`, and so does Compose: this number
+        // *is* the lens, in pixels, and nothing but the lens may be on it.
+        //
+        // It carried `distance` for as long as there was a camera, and that is
+        // the whole of kai's "the perspective seems to shift a lot when moving
+        // the camera around". A focal length that moves when you walk is a dolly
+        // zoom on every dolly. Measured on a 1600-wide stage it swung from 34
+        // degrees of field of view at the back of the envelope to 77 at the
+        // front — twenty-one millimetres to fifty-seven — with the lens dial
+        // sitting still. It also made *tilting* change the lens, because the
+        // pitch moves `minDistanceAt`, which moves the distance, which moved
+        // this.
+        cameraDistance = focal,
+        yawDegrees = yawDegrees,
+        // And the magnification is where the walking lives. Stepping back
+        // shrinks the subject as `1/distance`, exactly as it does through a real
+        // lens you have not touched, and the keystone across the table now goes
+        // as `1/distance` rather than as its square.
+        zoom = focal / max(distance * governing, MIN_REACH),
+        targetX = width / 2f + panX * governing,
+        targetY = height / 2f + panY * governing,
+    )
+}
 
 /**
  * A lens of nothing is a division by nothing. Below anything the envelope allows.
  */
 private const val MIN_LENS = 1e-3f
+
+/**
+ * And an eye with nowhere to stand is the same division.
+ *
+ * A *pixel* rather than a thousandth of a stage, because unlike the lens this
+ * divides a length: `distance · governing` is how far back the camera really is,
+ * and on a stage with no surface yet that product is zero for both reasons at
+ * once. The envelope's floor is orders of magnitude above it — this is the guard
+ * for the first composition, not a limit anybody can reach.
+ */
+private const val MIN_REACH = 1f

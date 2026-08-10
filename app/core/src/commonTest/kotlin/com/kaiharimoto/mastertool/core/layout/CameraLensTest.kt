@@ -36,26 +36,154 @@ class CameraLensTest {
 
     // ---- at one, nothing happened -----------------------------------------------------
 
+    /**
+     * The lens field, at one, is not there — measured against the code without it.
+     *
+     * Not "close to". `GoldenStageTest` is a recording of this projection and the
+     * whole argument for landing the field inert is that it cannot see it.
+     *
+     * The reference formula is the pre-lens code **with the focal-length fix
+     * applied**, and the difference matters. The literal historical line was
+     * `cameraDistance = distance · G`, which put the camera's own position on the
+     * lens; that was the bug fixed alongside this, and comparing against it now
+     * would be pinning a projection nobody wants back. What survives is the claim
+     * this test was written to make — that adding a *lens* changed nothing — and
+     * it is still exact.
+     */
     @Test
     fun theShippedLensLeavesEveryProjectionExactlyWhereItWas() {
-        // Not "close to". `GoldenStageTest` is a recording of this projection and
-        // the whole argument for landing the field inert is that it cannot see it.
         listOf(
             StageSeat.OVERHEAD.pose, StageSeat.TABLE.pose, StageSeat.SEATED.pose,
             CameraPose(37f, 12f, 2.1f), CameraPose(-140f, 51f, 1.9f),
         ).forEach { pose ->
             val withField = plane(pose)
+            val governing = kotlin.math.max(height, width * 0.55f)
             val asItWas = StagePlane(
                 width = width,
                 height = height,
                 tiltDegrees = pose.pitchDegrees,
-                cameraDistance = pose.distance * kotlin.math.max(height, width * 0.55f),
+                cameraDistance = CameraPose.HOME_DISTANCE * governing,
                 yawDegrees = pose.yawDegrees,
-                zoom = CameraPose.HOME_DISTANCE / pose.distance,
+                // Spelled as the production line spells it — a focal length over
+                // a real distance — rather than as the algebraically equal
+                // `HOME / distance`. The two differ in the last bit at 2.1, and
+                // this asserts exact equality on purpose, so the reference has to
+                // round the same way. A test that has to be "close to" here is a
+                // test that cannot say the golden is safe.
+                zoom = (CameraPose.HOME_DISTANCE * governing) / (pose.distance * governing),
             )
             assertEquals(asItWas.cameraDistance, withField.cameraDistance, "at $pose")
             assertEquals(asItWas.zoom, withField.zoom, "at $pose")
         }
+    }
+
+    /**
+     * And at the home distance it is what the historical line built, to the bit.
+     *
+     * The one pose where the old projection and the corrected one agree, which is
+     * why `GoldenStageTest`'s `Home` and `Turned` recordings — both at
+     * [CameraPose.HOME_DISTANCE] — did not move when the focal length was taken
+     * off the distance, and its `Steep` one did. Worth a test of its own because
+     * "only the steep golden had to be re-recorded" is a claim about this exact
+     * arithmetic, and the next person deserves to be able to check it.
+     */
+    @Test
+    fun atTheSeatEverythingWasTunedAtTheOldProjectionIsTheNewOne() {
+        val governing = kotlin.math.max(height, width * 0.55f)
+        listOf(StageSeat.TABLE.pose, CameraPose(38f, 15f, CameraPose.HOME_DISTANCE)).forEach { pose ->
+            val now = plane(pose)
+            assertEquals(pose.distance * governing, now.cameraDistance, "at $pose")
+            assertEquals(1f, now.zoom, "at $pose")
+        }
+    }
+
+    // ---- and the fault that hid behind it ----------------------------------------------
+
+    /**
+     * **Walking toward the table does not change the lens.** kai's first
+     * complaint, and this is the whole of it in one assertion.
+     *
+     * `cameraDistance` is the focal length in pixels — [StagePlane.project]
+     * divides by `cameraDistance − depth` and Compose's `graphicsLayer` does the
+     * same thing — and it carried [CameraPose.distance] for as long as there was
+     * a camera. So the field of view swung from 34 degrees at the back of the
+     * envelope to 77 at the front, a fifty-seven millimetre lens to a twenty-one,
+     * with the lens dial sitting still. Every dolly was a dolly zoom.
+     */
+    @Test
+    fun theFieldOfViewDoesNotMoveWhenYouWalkTowardTheTable() {
+        val home = fieldOfView(StageSeat.TABLE.pose)
+        var distance = envelope.minDistance
+        while (distance <= envelope.maxDistance) {
+            assertEquals(
+                home,
+                fieldOfView(CameraPose(distance = distance)),
+                "the lens moved at a distance of $distance",
+            )
+            distance += 0.05f
+        }
+    }
+
+    /**
+     * And the perspective across the table moves as far as walking moves it.
+     *
+     * The honest measure of "how strong is the perspective" is what the nearest
+     * corner grows to, and for a camera at a fixed focal length that excess goes
+     * as `1/distance`: stand half as far away and the keystone is twice as
+     * strong. It used to go as `1/distance²`, because the distance was on the
+     * focal length *and* on the magnification and the two multiplied — which is
+     * the arithmetic behind "the perspective seems to shift a lot".
+     */
+    @Test
+    fun theKeystoneGoesAsTheDistanceAndNotItsSquare() {
+        listOf(1f, 2f, 4f).forEach { near ->
+            val close = plane(CameraPose(pitchDegrees = 30f, distance = near)).perspectiveGrowth - 1f
+            val far = plane(CameraPose(pitchDegrees = 30f, distance = near * 2f)).perspectiveGrowth - 1f
+            // Not exactly a half. The excess is `a / (d − a)` for a constant `a`
+            // — a quarter, here, being half the stage height times the sine of
+            // thirty over the governing dimension — so doubling the distance
+            // divides it by `(2d − a) / (d − a)`: 2.33 at the front of this
+            // sweep, 2.07 at the back, and two in the limit.
+            //
+            // The number that matters is what the *square* law would say, which
+            // is `(4d² − a) / (d² − a)` and is five at the front. There is no
+            // overlap, which is what makes this a measurement rather than a
+            // tolerance somebody widened until it went green.
+            val ratio = close / far
+            assertTrue(
+                ratio in 2f..2.4f,
+                "doubling the distance from $near should roughly halve the keystone " +
+                    "(a square law would put this near five), ratio was $ratio",
+            )
+        }
+    }
+
+    /**
+     * And tilting does not change the lens either, which was the same bug's tail.
+     *
+     * The pitch moves [CameraEnvelope.minDistanceAt], which moved the distance,
+     * which moved the focal length. So a one-finger drag *down* the felt — the
+     * plainest gesture on the stage — quietly zoomed. Nothing about that was
+     * visible on the tuning panel, which is why it took a measurement rather than
+     * a reading to find.
+     */
+    @Test
+    fun tiltingTheCameraDoesNotChangeTheLens() {
+        val rig = CameraRig()
+        rig.width = width
+        rig.height = height
+        rig.placeAt(StageSeat.TABLE.pose)
+
+        val lens = plane(rig.pose).cameraDistance
+        repeat(60) {
+            rig.nudge(deltaYaw = 0f, deltaPitch = 1.2f)
+            assertEquals(
+                lens,
+                plane(rig.pose).cameraDistance,
+                "the lens moved at a pitch of ${rig.pose.pitchDegrees}",
+            )
+        }
+        assertTrue(rig.pose.pitchDegrees > 60f, "the sweep never reached the steep end")
     }
 
     @Test

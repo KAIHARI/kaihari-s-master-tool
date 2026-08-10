@@ -8,7 +8,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.isAltPressed
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import com.kaiharimoto.mastertool.core.board.DragOrigin
@@ -29,8 +32,6 @@ import com.kaiharimoto.mastertool.core.layout.FanSpread
 import com.kaiharimoto.mastertool.core.layout.MatControl
 import com.kaiharimoto.mastertool.core.layout.MatControls
 import com.kaiharimoto.mastertool.core.layout.PileFan
-import com.kaiharimoto.mastertool.core.layout.CameraFit
-import com.kaiharimoto.mastertool.core.layout.planeFor
 import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.mat.MatEvent
 import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
@@ -41,6 +42,7 @@ import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.ui.fx.Feedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
 import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * The only part of the gesture system that knows what Compose is.
@@ -99,7 +101,7 @@ internal class MatPilot(
      *
      * The felt is the camera's surface. A press that lands on nothing claims the
      * gesture for the camera outright — [MatGestureMachine.claimForCamera] —
-     * and from there one finger orbits and two also pinch. That claim is what
+     * and from there one finger orbits and two pan and pinch. That claim is what
      * makes the whole control scheme sayable in one line, which is the test a
      * gesture vocabulary has to pass: *fingers on a card move the card, fingers
      * on the felt move the camera.*
@@ -153,9 +155,44 @@ internal class MatPilot(
     /** True while the secondary mouse button is down, so the menu opens once. */
     private var secondaryDown = false
 
-    fun frame(frame: TouchFrame) = carryOut(machine.onFrame(frame))
+    /** And the same edge for the pointer's pan, which is a drag rather than a click. */
+    private var panningDown = false
 
-    fun tick(timeMillis: Long) = carryOut(machine.onTick(timeMillis))
+    /**
+     * When the frame being carried out happened, and how fast the orbit is going.
+     *
+     * The arbiter's `CameraMoved` carries a finger count and no distances — by
+     * design, because the mat's own coordinates are being turned by the very
+     * camera the gesture is turning — so it carries no *time* either. The flick
+     * needs one: `CameraRig.coast` takes degrees per second, because a rate per
+     * frame runs a flick down twice as fast on a 120Hz tablet as on a 60Hz
+     * desktop, and that is the bug this shape of arithmetic always eventually is.
+     *
+     * So the host supplies it, from the same `TouchFrame` the arbiter was handed.
+     *
+     * The rates are a running average rather than the last frame's delta. One
+     * frame of a real hand is noisy enough that the difference between a firm
+     * throw and a twitch at the moment of lifting is mostly luck, and the failure
+     * that produces — a table that occasionally spins when you meant to stop it —
+     * is the exact thing that makes people say inertia fights them. Blending also
+     * gives the other half for free: a finger that comes to rest before it lifts
+     * blends its rate down to nothing, so *stopping* and then letting go does not
+     * throw the table.
+     */
+    private var frameMillis = 0L
+    private var lastFlyMillis = 0L
+    private var yawRate = 0f
+    private var pitchRate = 0f
+
+    fun frame(frame: TouchFrame) {
+        frameMillis = frame.timeMillis
+        carryOut(machine.onFrame(frame))
+    }
+
+    fun tick(timeMillis: Long) {
+        frameMillis = timeMillis
+        carryOut(machine.onTick(timeMillis))
+    }
 
     /**
      * The mouse's way of coming closer to the table.
@@ -174,6 +211,31 @@ internal class MatPilot(
         if (notches == 0f) return
         state.rig.nudge(deltaYaw = 0f, deltaPitch = 0f, dollyBy = notches * DOLLY_PER_NOTCH)
         state.refresh()
+    }
+
+    /**
+     * The mouse's way of aiming somewhere else — the pointer half of the two-finger pan.
+     *
+     * Taken before the arbiter, exactly as the wheel and the secondary button
+     * are, and for the arbiter's own reason: it exists to disambiguate contacts
+     * that all begin identically, and a middle button is not ambiguous about
+     * anything. [MatGestureMachine.cancel] on the rising edge, because on a
+     * platform where the middle button also reports a pointer down the arbiter
+     * will already have started asking what that press meant.
+     *
+     * Alt and the primary button do the same thing, and the redundancy is
+     * deliberate rather than untidy: most laptop trackpads have no middle button
+     * at all, and "you cannot aim the camera unless you own a three-button mouse"
+     * is not a control scheme. Shift was the obvious alternative and is spoken
+     * for — it takes the whole pile rather than the top card.
+     */
+    fun panning(down: Boolean, delta: Vec2) {
+        if (down && !panningDown) {
+            machine.cancel()
+            camera?.rig?.halt()
+        }
+        panningDown = down
+        if (down) aimBy(delta)
     }
 
     /**
@@ -230,6 +292,16 @@ internal class MatPilot(
             // over an ornament beside it.
             if (event is MatEvent.Pressed) {
                 cameraTravel = 0f
+                // Catch whatever the table is still doing. A hand reaching for a
+                // coasting table has to win — a flick you cannot stop is the
+                // thing that makes people describe inertia as fighting them —
+                // and it is right for *any* press, not only one that lands on
+                // felt: reaching for a card on a moving table is worse than
+                // reaching for the table.
+                camera?.rig?.halt()
+                yawRate = 0f
+                pitchRate = 0f
+                lastFlyMillis = frameMillis
                 pressedControl =
                     if (grabbed == null) MatControls.at(layout, event.at.x, event.at.y) else null
                 if (grabbed == null && pressedControl == null && !onFan(event.at)) {
@@ -271,7 +343,7 @@ internal class MatPilot(
                         feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
                     }
                 }
-                settle()
+                release()
             }
         }
     }
@@ -321,68 +393,133 @@ internal class MatPilot(
     private val fanLift: Float
         get() = layout.cardHeight * tune.cards.carryLift * tune.cards.fanLiftRatio
 
+    /**
+     * One finger orbits. Two pan, and also pinch.
+     *
+     * The control scheme still fits on one line — *fingers on a card move the
+     * card, fingers on the felt move the camera* — and the second half of it now
+     * reads "one orbits, two pan and pinch", which is the idiom every
+     * three-dimensional viewer has used for as long as trackpads have had two
+     * fingers on them. It needs no teaching, which is the bar a gesture on this
+     * table has to clear.
+     *
+     * Two fingers used to orbit *as well*, which meant the pan of the hand did
+     * two jobs at once and there was no way to aim the camera at anything but the
+     * middle of the mat. Splitting them costs nothing: the arbiter already
+     * reports how many fingers are down, and both signals — the centroid's travel
+     * and the pinch — were already being measured every frame.
+     */
     private fun fly(fingers: Int) {
         val state = camera ?: return
         val across = state.rig.width
         val down = state.rig.height
         if (across <= 0f || down <= 0f) return
 
-        val dolly = if (fingers >= 2 && spanRatio > 0.01f) 1f / spanRatio - 1f else 0f
-        state.rig.nudge(
-            deltaYaw = screenDelta.x / across * YAW_PER_SWEEP,
-            deltaPitch = -screenDelta.y / down * PITCH_PER_SWEEP,
-            dollyBy = dolly,
-        )
+        if (fingers >= 2) {
+            // The pinch first, so the pan is measured against the plane the
+            // dolly leaves behind rather than the one it arrived on. Half a
+            // frame's worth of difference, and free.
+            val dolly = if (spanRatio > 0.01f) 1f / spanRatio - 1f else 0f
+            if (dolly != 0f) {
+                state.rig.nudge(deltaYaw = 0f, deltaPitch = 0f, dollyBy = dolly)
+                state.refresh()
+            }
+            aimBy(screenDelta)
+            return
+        }
+
+        val deltaYaw = screenDelta.x / across * YAW_PER_SWEEP
+        val deltaPitch = -screenDelta.y / down * PITCH_PER_SWEEP
+        sample(deltaYaw, deltaPitch)
+        state.rig.nudge(deltaYaw = deltaYaw, deltaPitch = deltaPitch)
         state.refresh()
     }
 
     /**
-     * Let go, and the table comes back onto the glass.
+     * Aim the camera so that the felt under the hand stays under the hand.
      *
-     * [CameraFit] exists because a turned table can walk its own corners off the
-     * screen: [com.kaiharimoto.mastertool.core.layout.CameraEnvelope]'s distance
-     * floor is a guard against the *mat crossing the lens*, not a promise that
-     * anything stays visible.
+     * Solved through the projection's own inverse rather than by scaling the
+     * screen delta by something. A pan is a promise — the table follows your
+     * fingers — and the exchange rate between a glass pixel and a mat pixel is
+     * not one number: the plane is tilted, so a pixel across and a pixel away
+     * cover different distances, and the ratio changes with depth because of the
+     * perspective divide. Any single factor is right at one row of the screen and
+     * wrong everywhere else, and wrong in the way that reads as the table
+     * sliding out from under you.
      *
-     * **It fits the field, not the board, and that is what lets the camera come
-     * close.** Fitting `layout.bounds` — the zones *and* the hand band — meant
-     * the closest distance anybody could actually reach at the table seat was
-     * 1.47: the hand sits along the bottom edge of the stage, so the first thing
-     * a push-in costs is the hand, and the fitter treated that as a reason to
-     * refuse. kai's report was that the camera stopped getting closer at about
-     * 1.42, and this was the whole of it. Against the field alone the floor is
-     * the envelope's own 1.05, which is a third of the distance back and the
-     * "dynamic effect" that was being asked for.
-     *
-     * The hand is allowed to run off the bottom, in other words, exactly as
-     * `CameraFit.OVERHANG`'s note already says the *felt* is. What must not
-     * leave the glass is a zone or a pile, and every one of those is inside the
-     * field — `BoardLayouter` puts the deck, the graveyard, the banish pile and
-     * the extra deck in the same seven columns as the monster zones.
-     *
-     * Turning still dollies back, which is what the fitter was written for: at
-     * forty-five degrees the floor is 1.42 rather than 1.05, because a diagonal
-     * really does need more room.
-     *
-     * On release rather than per frame: sixteen projections of four points is
-     * nothing once, and a correction applied *during* a drag is a camera
-     * fighting the finger holding it. Sprung rather than assigned, so it reads
-     * as the table settling.
+     * `unproject` at the middle of the glass *is* the camera's target, exactly —
+     * that is what a target means — so the second call is the honest way to say
+     * "and where it was", and it costs four multiplications.
      */
-    private fun settle() {
+    private fun aimBy(delta: Vec2) {
         val state = camera ?: return
-        val rig = state.rig
-        if (rig.width <= 0f || rig.height <= 0f) return
+        if (delta == Vec2.Zero) return
+        val plane = state.plane
+        val governing = max(state.rig.height, state.rig.width * 0.55f)
+        if (governing <= 0f) return
 
-        val fitted = CameraFit.fit(
-            wanted = rig.pose,
-            bounds = layout.field,
-            envelope = rig.envelope,
-            surfaceWidth = rig.width,
-            surfaceHeight = rig.height,
-            plane = { it.planeFor(rig.width, rig.height) },
+        val to = plane.unproject(plane.centreX + delta.x, plane.centreY + delta.y)
+        val from = plane.unproject(plane.centreX, plane.centreY)
+        state.rig.nudge(
+            deltaYaw = 0f,
+            deltaPitch = 0f,
+            // Backwards, and that is the whole of it being right: dragging the
+            // table to the right means aiming the camera to the left of what it
+            // was aimed at.
+            deltaPanX = -(to.x - from.x) / governing,
+            deltaPanY = -(to.y - from.y) / governing,
         )
-        if (fitted != rig.pose) rig.aimAt(fitted)
+        state.refresh()
+    }
+
+    /** One frame of the orbit, folded into the running rate the flick is thrown at. */
+    private fun sample(deltaYaw: Float, deltaPitch: Float) {
+        val since = (frameMillis - lastFlyMillis) / 1000f
+        lastFlyMillis = frameMillis
+        // A frame that took no time divides by nothing, and one that took a
+        // tenth of a second is a gesture that paused: neither is a rate, and
+        // dropping both leaves the average holding what it already had — which
+        // for the pause is exactly right, because the next real frame will blend
+        // it down.
+        if (since < 0.001f || since > 0.1f) return
+        yawRate += (deltaYaw / since - yawRate) * FLICK_BLEND
+        pitchRate += (deltaPitch / since - pitchRate) * FLICK_BLEND
+    }
+
+    /**
+     * Let go, and a turn that was going somewhere keeps going.
+     *
+     * ## What used to be here, and why it is not
+     *
+     * `CameraFit`, run on every release, dollying the camera back until
+     * `layout.field` was on the glass. It was written for a real problem — a
+     * turned table can walk its own corners off the screen — and it was the whole
+     * of kai's *"it locks me out from getting closer past the close limit"*: you
+     * pinch in, let go, and the table slides away from you. Nothing about that
+     * reads as a safety rail. It reads as the tool refusing.
+     *
+     * The refusal was also inconsistent, which is the tell. The mouse wheel never
+     * went through the arbiter, so it never called this, so a desktop user could
+     * already dolly past where a finger was allowed to stop.
+     *
+     * `CameraFit` is not gone. It is on the **seat buttons** now — the one place
+     * a correction is what was actually asked for, because pressing "Table" means
+     * *put the board back where I can see it*, and it is the way home from
+     * anywhere free flight can reach. `PlayScreen` does that; the felt no longer
+     * argues with the hand that just let go of it.
+     *
+     * ## And a flick keeps its momentum
+     *
+     * `docs/AAA.md` #7, and the rest of what a release means now. The rate has
+     * been accumulating all through the gesture (see [sample]); below
+     * `CameraRig.COAST_FLOOR` this does nothing at all, which is what keeps a
+     * slow drag that merely ended from drifting on afterwards.
+     */
+    private fun release() {
+        val state = camera ?: return
+        state.rig.coast(yawRate, pitchRate)
+        yawRate = 0f
+        pitchRate = 0f
     }
 
     private companion object {
@@ -417,6 +554,18 @@ internal class MatPilot(
          * clearly a step and a flick of the finger is not a teleport.
          */
         const val DOLLY_PER_NOTCH = 0.08f
+
+        /**
+         * How much of one frame goes into the running rate a flick is thrown at.
+         *
+         * A third, which is a time constant of about three frames at sixty a
+         * second — long enough that one noisy sample cannot decide where the
+         * table goes, short enough that the rate is about the *end* of the drag
+         * rather than an average of the whole of it. Somebody who sweeps across
+         * the table and then slows to a stop before lifting has said they want it
+         * to stop, and at a third that is what they get after five frames.
+         */
+        const val FLICK_BLEND = 1f / 3f
     }
 }
 
@@ -470,7 +619,13 @@ internal fun MatInput(
                         machine.stackModifier = event.keyboardModifiers.isShiftPressed
 
                         fun onFelt(change: PointerInputChange): Touch {
-                            val onPlane = plane.unproject(change.position.x, change.position.y)
+                            // Held below the horizon on the way in. Past about
+                            // seventy degrees of pitch the table's horizon is on
+                            // the glass, and a finger above it is pointing at no
+                            // table at all — `StagePlane.belowHorizon` has the
+                            // argument for clamping rather than refusing.
+                            val y = plane.belowHorizon(change.position.y)
+                            val onPlane = plane.unproject(change.position.x, y)
                             return Touch(change.id.value, Vec2(onPlane.x, onPlane.y))
                         }
 
@@ -488,9 +643,23 @@ internal fun MatInput(
                         pilot.spanRatio = spanRatio(lastOnGlass, onGlass)
                         lastOnGlass = onGlass
 
-                        // The mouse's right button, before the gesture machine
-                        // sees anything: it is a request for a menu, never the
-                        // start of a drag.
+                        // The mouse's way of aiming somewhere else, before the
+                        // gesture machine sees anything: the middle button, or
+                        // alt and the primary one for the great many pointing
+                        // devices that have no middle button. Taken here for the
+                        // same reason the wheel and the right button are — the
+                        // arbiter disambiguates presses that all begin alike, and
+                        // these do not begin alike.
+                        val panning = event.buttons.isTertiaryPressed ||
+                            (event.buttons.isPrimaryPressed && event.keyboardModifiers.isAltPressed)
+                        pilot.panning(panning, pilot.screenDelta)
+                        if (panning) {
+                            event.changes.forEach { it.consume() }
+                            continue
+                        }
+
+                        // The mouse's right button: it is a request for a menu,
+                        // never the start of a drag.
                         val secondary = event.buttons.isSecondaryPressed
                         event.changes.firstOrNull()?.let {
                             pilot.secondary(secondary, onFelt(it).at)

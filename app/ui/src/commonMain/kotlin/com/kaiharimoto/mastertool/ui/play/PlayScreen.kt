@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -485,9 +486,9 @@ fun PlayScreen(
                 ShortcutAction.PLAY_END_TURN -> play.move { it.endTurn() }
                 ShortcutAction.UNDO -> play.undo()
                 ShortcutAction.REDO -> play.redo()
-                ShortcutAction.PLAY_SEAT_OVERHEAD -> camera.rig.aimAt(StageSeat.OVERHEAD)
-                ShortcutAction.PLAY_SEAT_TABLE -> camera.rig.aimAt(StageSeat.TABLE)
-                ShortcutAction.PLAY_SEAT_SEATED -> camera.rig.aimAt(StageSeat.SEATED)
+                ShortcutAction.PLAY_SEAT_OVERHEAD -> camera.sitAt(StageSeat.OVERHEAD)
+                ShortcutAction.PLAY_SEAT_TABLE -> camera.sitAt(StageSeat.TABLE)
+                ShortcutAction.PLAY_SEAT_SEATED -> camera.sitAt(StageSeat.SEATED)
                 ShortcutAction.PLAY_SCENE -> cycleScene()
                 ShortcutAction.PLAY_GUIDE -> guide = !guide
                 // Outward one layer at a time, and the guide is the outermost
@@ -539,13 +540,26 @@ fun PlayScreen(
                     // Handing it the *worst* growth the camera could ever reach
                     // is no better — that is the mat's diagonal, and it would
                     // cost a fifth of every card forever to buy an angle that
-                    // might never be used. So the layout is solved once and the
-                    // camera obeys it: CameraFit dollies back instead.
+                    // might never be used. So the layout is solved once, for
+                    // this seat, and the camera is free to be anywhere else.
+                    //
+                    // It used to say "the camera obeys it: CameraFit dollies
+                    // back instead", and that is no longer true and was the
+                    // whole of kai's "it locks me out from getting closer". The
+                    // fitter runs when somebody *presses a seat* now — see
+                    // `StageCameraState.sitAt` — which is the one time being put
+                    // back where the board fits is what was asked for.
                     perspectiveGrowth = StageSeat.TABLE.pose
                         .planeFor(widthPx, heightPx)
                         .perspectiveGrowth,
                 )
             }
+
+            // What a seat press has to put back on the glass. Assigned rather
+            // than passed, because `PlayTopBar` is outside this `BoxWithConstraints`
+            // and the alternative is threading a `Slot` through a bar that takes
+            // nine parameters already.
+            SideEffect { camera.field = layout.field }
 
             // Solved once per room and per surface, never per frame. The same
             // discipline the board layout above obeys, and for the same reason:
@@ -838,6 +852,33 @@ fun PlayScreen(
                         scaleX = plane.zoom
                         scaleY = plane.zoom
                         cameraDistance = plane.cameraDistance / this.density
+
+                        // And where the camera is aimed, which is the other half
+                        // of that agreement now that it can be aimed anywhere.
+                        //
+                        // `transformOrigin` is the pivot everything above turns
+                        // about *and* the point the perspective divide is centred
+                        // on — which is exactly what `StagePlane.targetX` means.
+                        // The translation then slides that pivot to the middle of
+                        // the glass, and it is applied outside the pivoted
+                        // transform on both platforms, so the composite is
+                        // `subtract the target, turn, divide, add the screen
+                        // centre` — `project`, term for term.
+                        //
+                        // This is what `CameraPose`'s KDoc used to refuse a pan
+                        // over. It is two lines, and it is the cheap half; the
+                        // expensive half it also predicted — an off-axis inverse
+                        // in `unproject` — never arrived, because moving what the
+                        // camera looks at leaves the vanishing point in the
+                        // middle of the screen where the closed form needs it.
+                        if (size.width > 0f && size.height > 0f) {
+                            transformOrigin = TransformOrigin(
+                                plane.targetX / size.width,
+                                plane.targetY / size.height,
+                            )
+                            translationX = plane.centreX - plane.targetX
+                            translationY = plane.centreY - plane.targetY
+                        }
                     },
             ) {
                 // The felt, what is about to happen to it, and the shadow and
@@ -2002,7 +2043,7 @@ private fun PlayTopBar(
         // turns the table and a key puts it back, but neither of those is
         // discoverable, and a row of three words is.
         StageSeat.entries.forEach { seat ->
-            BarButton(seat.label) { camera.rig.aimAt(seat) }
+            BarButton(seat.label) { camera.sitAt(seat) }
         }
         // Beside the seats, because choosing a room and choosing where to sit
         // are the same kind of act — neither is about a card — and because one

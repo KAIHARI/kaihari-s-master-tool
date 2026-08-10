@@ -71,6 +71,12 @@ object MatGuide {
         ),
         Gesture(
             GestureGroup.CAMERA,
+            what = "Aim somewhere other than the middle",
+            touch = "Two fingers on the mat",
+            pointer = "Middle-drag, or Alt and drag",
+        ),
+        Gesture(
+            GestureGroup.CAMERA,
             what = "Sit back down in a known seat",
             touch = "Overhead / Table / Seated on the bar",
             pointer = "Overhead / Table / Seated on the bar",

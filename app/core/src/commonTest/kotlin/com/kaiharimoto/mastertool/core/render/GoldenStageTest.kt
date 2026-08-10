@@ -121,25 +121,25 @@ class GoldenStageTest {
         assertGolden(
             seat = "steep",
             expected = """
-            rest face   464.1,535.1  557.8,535.1  543.4,625.9  444.0,625.9
-            rest solid  right 0.817/-0.080 550.8,579.4  near 0.749/-0.037 493.7,626.1  front 1.000/0.094 502.6,579.2
-            rest shadow 463.9,534.9  557.7,534.9  543.2,625.7  443.9,625.7  dark 0.660  soft 3.1
+            rest face   472.3,534.3  563.7,534.3  545.4,624.9  446.8,624.9
+            rest solid  right 0.817/-0.080 554.9,578.1  near 0.749/-0.037 496.1,625.1  front 1.000/0.094 507.5,577.9
+            rest shadow 472.1,534.1  563.6,534.1  545.2,624.7  446.7,624.7  dark 0.660  soft 3.1
             rest shade  diff 0.955  spec 0.069  rim 0.069  hot 0.263,0.767
-            held face   842.1,324.9  919.6,348.5  923.9,456.2  843.7,433.7
-            held solid  near 0.753/-0.041 884.2,445.2  left 0.804/0.078 842.9,378.5  front 0.925/0.003 882.7,390.0
-            held shadow 880.6,449.1  944.0,428.9  933.0,486.1  866.8,508.0  dark 0.352  soft 34.2
+            held face   840.6,331.3  914.7,354.8  919.9,457.6  842.5,435.5
+            held solid  near 0.753/-0.041 881.7,446.9  left 0.804/0.078 841.5,382.4  front 0.925/0.003 879.8,393.8
+            held shadow 877.4,451.1  937.8,432.0  928.6,486.5  864.9,507.7  dark 0.352  soft 34.2
             held shade  diff 0.837  spec 0.000  rim 0.014  hot -0.414,0.299
-            set  face   1057.9,563.7  1068.5,627.6  1212.7,627.6  1196.4,563.7
-            set  solid  back 1.000/0.094 1133.7,595.4  far 0.804/0.078 1063.1,595.2  right 0.749/-0.037 1140.6,627.7
-            set  shadow 1057.7,563.5  1068.3,627.4  1212.5,627.4  1196.1,563.5  dark 0.660  soft 3.1
+            set  face   1052.9,562.5  1066.5,626.6  1209.6,626.6  1188.7,562.5
+            set  solid  back 1.000/0.094 1129.1,594.1  far 0.804/0.078 1059.5,593.9  right 0.749/-0.037 1138.0,626.8
+            set  shadow 1052.7,562.3  1066.3,626.4  1209.3,626.4  1188.5,562.3  dark 0.660  soft 3.1
             set  shade  diff 0.955  spec 0.101  rim 0.032  hot 0.233,0.263
-            pile face   431.6,325.4  515.0,325.4  500.0,394.6  412.2,394.6
-            pile solid  right 0.817/-0.080 509.3,373.2  near 0.749/-0.037 458.0,408.8  front 1.000/0.094 464.9,359.1
-            pile shadow 435.6,353.1  518.1,353.1  503.3,422.9  416.5,422.9  dark 0.660  soft 3.1
+            pile face   451.3,334.7  530.3,334.7  512.4,398.9  428.2,398.9
+            pile solid  right 0.817/-0.080 523.5,379.4  near 0.749/-0.037 472.6,412.7  front 1.000/0.094 480.9,365.8
+            pile shadow 455.9,361.3  533.8,361.3  516.4,426.3  433.4,426.3  dark 0.660  soft 3.1
             pile shade  diff 0.955  spec 0.103  rim 0.046  hot 0.263,0.767
-            deck face   1196.7,344.3  1111.7,344.3  1128.5,415.8  1218.1,415.8
-            deck solid  back 1.000/0.094 1158.9,411.6  right 0.804/0.078 1117.8,395.5  near 0.749/-0.037 1170.8,432.4
-            deck shadow 1191.8,376.4  1107.8,376.4  1124.2,448.7  1212.6,448.7  dark 0.660  soft 3.1
+            deck face   1177.2,351.9  1096.4,351.9  1116.6,418.9  1202.9,418.9
+            deck solid  back 1.000/0.094 1142.4,415.7  right 0.804/0.078 1103.7,400.1  near 0.749/-0.037 1156.8,435.0
+            deck shadow 1171.4,382.8  1091.8,382.8  1111.4,450.8  1196.3,450.8  dark 0.660  soft 3.1
             deck shade  diff 0.955  spec 0.101  rim 0.032  hot 0.263,0.767
             """.trimIndent(),
             actual = dump(Steep),
@@ -196,10 +196,29 @@ class GoldenStageTest {
          * [com.kaiharimoto.mastertool.core.layout.CameraEnvelope]'s ceiling, and
          * far enough back that its solved distance floor is not what is being
          * recorded here.
+         *
+         * ## The one time a recording had to be re-taken
+         *
+         * The focal length used to carry [CameraPose.distance] as well as the
+         * lens, so walking toward the table quietly changed the field of view.
+         * Taking it off moved every pose that is not at
+         * [CameraPose.HOME_DISTANCE] — which is exactly one of these three.
+         * [Home] and [Turned] are both at 1.45 and came out **byte for byte**
+         * what they were, which is the property worth stating out loud: the
+         * projection was corrected, and the two recordings that could not tell
+         * did not move a digit. `CameraLensTest.atTheSeatEverythingWasTunedAtTheOldProjectionIsTheNewOne`
+         * is that claim as arithmetic rather than as a diff.
+         *
+         * [Steep] moved, because it is meant to. It also moved from 1.9 to 1.96,
+         * and that is the tie rule below rather than taste: at 1.9 the corrected
+         * projection put a quantised value exactly on a rounding boundary, which
+         * is a recording that lands the same way for years and then flips on
+         * somebody's laptop. 1.96 clears [TIE_MARGIN] by twelve times, and the
+         * distances either side of it were measured rather than guessed at.
          */
         val Home = CameraPose()
         val Turned = CameraPose(yawDegrees = 38f, pitchDegrees = 15f, distance = 1.45f)
-        val Steep = CameraPose(yawDegrees = 0f, pitchDegrees = 52f, distance = 1.9f)
+        val Steep = CameraPose(yawDegrees = 0f, pitchDegrees = 52f, distance = 1.96f)
 
         /** A landscape tablet's mat, which is the surface this app is judged on. */
         const val SURFACE_WIDTH = 1600f

@@ -335,6 +335,11 @@ private fun extraFor(knob: Knob, tuning: StageTuning, rig: CameraRig): String? =
             tuning.camera.pitchDegrees,
             rig.width,
             rig.height,
+            // The pan too, or the readout under-reports whenever the camera is
+            // aimed off the middle: the floor is solved against the corner
+            // furthest from the *target*, so aiming away holds you out further.
+            tuning.camera.panX,
+            tuning.camera.panY,
         )
         if (floor > tuning.camera.distance + FLOOR_EPSILON) {
             "· held at ${TuningCodec.trim(floor)}"
@@ -358,6 +363,14 @@ private fun extraFor(knob: Knob, tuning: StageTuning, rig: CameraRig): String? =
  * projection subtends 58 degrees horizontally, which on a 36mm frame is a 33mm
  * lens. Everything else on the dial is that times the magnification, because
  * focal length and magnification are the same number wearing two units.
+ *
+ * **And it is now true at every distance rather than only at the home one.** The
+ * focal length used to carry `CameraPose.distance` as well as the lens, so the
+ * field of view moved when the camera did — 21mm at the front of the envelope
+ * and 57mm at the back — and this number was an honest measurement of one pose
+ * printed beside a dial that meant something else everywhere else. `planeFor`
+ * takes the distance off the lens now, so the millimetres are a function of this
+ * dial alone. The constant did not move; what it describes stopped moving.
  */
 private const val HOME_MM = 33f
 

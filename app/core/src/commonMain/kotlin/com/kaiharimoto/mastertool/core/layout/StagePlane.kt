@@ -84,6 +84,45 @@ data class StagePlane(
      * `Rx · Ry · Rz · S`, so the point is scaled first and turned afterwards.
      */
     val zoom: Float = 1f,
+    /**
+     * The point on the mat the camera is aimed at, which used to be the middle.
+     *
+     * ## Two roles that were one number
+     *
+     * [centreX] plays two parts in this projection and they were the same value
+     * for as long as there was no pan. It is the **mat** point everything is
+     * measured from — the pivot the spin and the tilt turn about, and the point
+     * the perspective divide is centred on — and it is also the **screen** point
+     * that pivot lands on. Splitting them is the whole of panning: subtract the
+     * target, add the screen centre.
+     *
+     * ## Why this does not need the off-axis inverse it was said to need
+     *
+     * [CameraPose]'s own documentation refused a target on the grounds that
+     * *"a movable target means the vanishing point stops being the centre of the
+     * layer, and then … [unproject] needs an off-axis inverse."* That is true of
+     * the other pan — sliding the finished picture sideways, which moves the
+     * vanishing point off the glass's middle. It is not true of this one. Moving
+     * what the camera *looks at* leaves the vanishing point exactly where it was,
+     * at the centre of the screen, because the divide is still centred on the
+     * pivot and the pivot is still drawn in the middle. Every line of
+     * [unprojectAt] is unchanged but its last two: it adds these back instead of
+     * the screen's centre.
+     *
+     * So the inverse stays closed form, and [flatten] — which is projection
+     * composed with its own inverse, and which every pile edge, card thickness
+     * and airborne shadow is drawn through — stays exact.
+     *
+     * ## Trailing and defaulted, which is load-bearing
+     *
+     * At the middle of the mat every byte of every projection is what it was, so
+     * this landed in a release ahead of anything that moves it and
+     * `GoldenStageTest` never noticed — the same move [CameraPose.lens] and
+     * `CardSolid.slab`'s trailing `backScale` made. Defaulted *from* [width] and
+     * [height], which Kotlin allows because they are declared before it.
+     */
+    val targetX: Float = width / 2f,
+    val targetY: Float = height / 2f,
 ) {
     private val theta = tiltDegrees * (PI.toFloat() / 180f)
     private val sinTilt = sin(theta)
@@ -107,8 +146,10 @@ data class StagePlane(
 
     /** Where a point on the plane lands, raised [z] along the plane's normal. */
     fun project(x: Float, y: Float, z: Float = 0f): Projected {
-        val atX = (x - centreX) * zoom
-        val atY = (y - centreY) * zoom
+        // Measured from the point the camera is aimed at, and landed on the
+        // middle of the glass. The two are the same number until somebody pans.
+        val atX = (x - targetX) * zoom
+        val atY = (y - targetY) * zoom
         val up = z * zoom
         val localX = spinX(atX, atY)
         val localY = spinY(atX, atY)
@@ -154,8 +195,8 @@ data class StagePlane(
      * direction at every zoom.
      */
     fun jacobian(x: Float, y: Float): PlaneJacobian {
-        val atX = (x - centreX) * zoom
-        val atY = (y - centreY) * zoom
+        val atX = (x - targetX) * zoom
+        val atY = (y - targetY) * zoom
         val localX = spinX(atX, atY)
         val localY = spinY(atX, atY)
 
@@ -233,8 +274,9 @@ data class StagePlane(
      *
      * The denominator vanishes at exactly one screen row — the horizon of this
      * plane, where a ray parallel to it never lands. Guarded rather than solved:
-     * a finger there is pointing at infinity and the honest answer is "the middle
-     * of the mat", not a number with six digits in it.
+     * a finger there is pointing at infinity and the honest answer is "the point
+     * the camera is aimed at", not a number with six digits in it. [above] is how
+     * a caller asks *before* getting that answer, and the hit test now does.
      */
     fun unprojectAt(screenX: Float, screenY: Float, z: Float): Vec3 {
         val localX = screenX - centreX
@@ -243,7 +285,7 @@ data class StagePlane(
         val near = cameraDistance - up * cosTilt
 
         val divisor = cameraDistance * cosTilt + localY * sinTilt
-        if (abs(divisor) < MIN_GAP) return Vec3(centreX, centreY, z)
+        if (abs(divisor) < MIN_GAP) return Vec3(targetX, targetY, z)
 
         val onPlane = (localY * near + cameraDistance * up * sinTilt) / divisor
         val scale = cameraDistance / max(near - onPlane * sinTilt, MIN_GAP)
@@ -251,10 +293,88 @@ data class StagePlane(
         val safeZoom = if (abs(zoom) < 1e-4f) 1e-4f else zoom
 
         return Vec3(
-            x = centreX + (spunX * cosYaw - onPlane * sinYaw) / safeZoom,
-            y = centreY + (spunX * sinYaw + onPlane * cosYaw) / safeZoom,
+            x = targetX + (spunX * cosYaw - onPlane * sinYaw) / safeZoom,
+            y = targetY + (spunX * sinYaw + onPlane * cosYaw) / safeZoom,
             z = z,
         )
+    }
+
+    /**
+     * The screen row where this plane's horizon is, or null if it is not on the
+     * glass at all.
+     *
+     * [unprojectAt]'s divisor is `d·cosθ + localY·sinθ`, so it vanishes at
+     * `localY = −d·cosθ / sinθ` — one row, above the middle, and further above it
+     * the flatter the table is laid. At a tilt of nothing it is infinitely far up
+     * and there is no horizon, which is what a table seen from directly overhead
+     * should say.
+     *
+     * ## Why anything needs it now
+     *
+     * It has always been there and never mattered, because the camera could not
+     * pitch past fifty-eight degrees and at fifty-eight the row sits about four
+     * hundred pixels above the top of the screen. Opening the envelope to eighty
+     * brings it *onto* the glass — at eighty on a thousand-pixel stage it is a
+     * quarter of the way down from the top — and everything above it is sky.
+     *
+     * A finger up there is pointing at nothing. [unprojectAt] answers with the
+     * camera's own target, which is a defensible number and a terrible hit test:
+     * every tap on the wall would grab whatever is in the middle of the table. So
+     * the hit test asks this first and treats a yes as a miss, which then falls
+     * through to `claimForCamera` — pointing at the sky moves the camera, which
+     * is what pointing at anything that is not a card already does.
+     */
+    val horizonY: Float?
+        get() {
+            if (abs(sinTilt) < 1e-6f) return null
+            return centreY - cameraDistance * cosTilt / sinTilt
+        }
+
+    /**
+     * Whether [screenY] is above this plane's horizon — pointing at no table at all.
+     *
+     * A hair below the row itself rather than at it, using the same [MIN_GAP] the
+     * inverse guards with, so the answer here and the guard there cannot disagree
+     * about the one row between them.
+     */
+    fun above(screenY: Float): Boolean {
+        if (sinTilt <= 0f) return false
+        val divisor = cameraDistance * cosTilt + (screenY - centreY) * sinTilt
+        return divisor < MIN_GAP
+    }
+
+    /**
+     * [screenY], moved down to the nearest row that is looking at the table.
+     *
+     * ## What it is for
+     *
+     * Every finger on this stage arrives as a screen point and is turned into a
+     * mat point by [unproject]. Above the horizon there is no mat point, and
+     * [unprojectAt] answers with the camera's target — which is a defensible
+     * number and precisely the wrong one: a tap on the wall would grab whatever
+     * is in the middle of the board.
+     *
+     * ## Why it clamps rather than refusing
+     *
+     * A sentinel "nothing here" is right for a press and wrong for a *drag*. A
+     * card carried up toward the top of the screen would reach the horizon and
+     * teleport, which is a worse bug than the one being fixed. Clamping instead
+     * makes both cases fall out: a press in the sky lands tens of thousands of
+     * mat pixels up the table, which is off every card and every pile, so the hit
+     * test finds nothing and the gesture goes to the camera — pressing on nothing
+     * moves the camera, which is what pressing on nothing already did. And a card
+     * dragged that way slides to the far edge and stops, which is what dragging
+     * something toward the horizon should look like.
+     *
+     * The row it clamps to is the one where [unprojectAt]'s divisor reaches
+     * [MIN_GAP], so this and that guard cannot disagree about where the sky
+     * begins — the same reason [above] is written against the divisor rather
+     * than against [horizonY].
+     */
+    fun belowHorizon(screenY: Float): Float {
+        if (sinTilt <= 0f) return screenY
+        val lowest = centreY + (MIN_GAP - cameraDistance * cosTilt) / sinTilt
+        return max(screenY, lowest)
     }
 
     /**
@@ -319,7 +439,10 @@ data class StagePlane(
      * back — so in the mat's own frame the camera comes half as far.
      */
     fun eyePoint(direction: Vec3): Vec3 =
-        Vec3(centreX, centreY, 0f) + direction * (cameraDistance / max(zoom, MIN_ZOOM))
+        // From the point the camera is aimed at, which is what it is a distance
+        // *from*. Panning walks the eye across the room with the target rather
+        // than swinging it about a middle it is no longer looking at.
+        Vec3(targetX, targetY, 0f) + direction * (cameraDistance / max(zoom, MIN_ZOOM))
 
     /**
      * Where to draw a point *on the mat* so that it appears to be [z] above it.

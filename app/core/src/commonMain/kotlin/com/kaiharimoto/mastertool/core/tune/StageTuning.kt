@@ -106,13 +106,18 @@ data class CameraTune(
      * what it stops at is this.
      */
     val clearance: Float = CameraEnvelope().clearance,
+    /** Where the camera is aimed. See [CameraPose.panX]. */
+    val panX: Float = StageSeat.TABLE.pose.panX,
+    val panY: Float = StageSeat.TABLE.pose.panY,
 ) {
-    /** Named, not positional: [CameraPose] has grown a field once already. */
+    /** Named, not positional: [CameraPose] has grown a field twice now. */
     fun pose(): CameraPose = CameraPose(
         yawDegrees = yawDegrees,
         pitchDegrees = pitchDegrees,
         distance = distance,
         lens = lens,
+        panX = panX,
+        panY = panY,
     )
 
     /** The envelope this document asks for, which is the shipped one but closer. */
@@ -132,6 +137,8 @@ data class CameraTune(
         pitchDegrees = pose.pitchDegrees,
         distance = pose.distance,
         lens = pose.lens,
+        panX = pose.panX,
+        panY = pose.panY,
     )
 
     companion object {
@@ -363,12 +370,14 @@ object StageKnobs {
             { it.camera.yawDegrees }, { d, v -> d.copy(camera = d.camera.copy(yawDegrees = v)) },
         ),
         Knob(
-            CAMERA, "camera.pitchDegrees", "Pitch", 4f, 58f, 0.5f, "°",
-            "How far the table is laid back. Four is overhead, fifty-eight is the floor of legibility.",
+            CAMERA, "camera.pitchDegrees", "Pitch",
+            CameraEnvelope().minPitch, CameraEnvelope().maxPitch, 0.5f, "°",
+            "How far the table is laid back. Zero is flat overhead; eighty is level enough to put the horizon on screen, and card text keystones long before it.",
             { it.camera.pitchDegrees }, { d, v -> d.copy(camera = d.camera.copy(pitchDegrees = v)) },
         ),
         Knob(
-            CAMERA, "camera.distance", "Distance", 0.8f, 2.6f, 0.01f, "x",
+            CAMERA, "camera.distance", "Distance",
+            CameraEnvelope().minDistance, CameraEnvelope().maxDistance, 0.01f, "x",
             "Where you stand, and the only dial that changes the perspective. It is held out by Close limit, and the lower the pitch the further out that holds you.",
             { it.camera.distance }, { d, v -> d.copy(camera = d.camera.copy(distance = v)) },
         ),
@@ -378,9 +387,19 @@ object StageKnobs {
             { it.camera.lens }, { d, v -> d.copy(camera = d.camera.copy(lens = v)) },
         ),
         Knob(
+            CAMERA, "camera.panX", "Pan across", -CameraEnvelope().maxPan, CameraEnvelope().maxPan, 0.01f, "x",
+            "What the camera is aimed at, across the table. The camera orbits this point and draws it in the middle of the screen; a seat button puts it back.",
+            { it.camera.panX }, { d, v -> d.copy(camera = d.camera.copy(panX = v)) },
+        ),
+        Knob(
+            CAMERA, "camera.panY", "Pan along", -CameraEnvelope().maxPan, CameraEnvelope().maxPan, 0.01f, "x",
+            "The same, up and down the table. Aiming away from the middle puts a corner further off, so it holds Distance out a little.",
+            { it.camera.panY }, { d, v -> d.copy(camera = d.camera.copy(panY = v)) },
+        ),
+        Knob(
             CAMERA, "camera.clearance", "Close limit",
             CameraEnvelope.MIN_CLEARANCE, CameraEnvelope.MAX_CLEARANCE, 0.01f, "",
-            "How far toward the lens the near corner of the table may come. Higher lets you sit closer; the keystone across the table goes as 1/(1−this).",
+            "How far toward the lens the near corner of the table may come, and the only limit left on this camera that is not taste. One is the corner touching the lens, where the projection stops being invertible, so it stops a hundredth short.",
             { it.camera.clearance }, { d, v -> d.copy(camera = d.camera.copy(clearance = v)) },
         ),
 
@@ -552,4 +571,5 @@ data class EnvelopeReference(
     val minLens: Float = CameraEnvelope().minLens,
     val maxLens: Float = CameraEnvelope().maxLens,
     val clearance: Float = CameraEnvelope().clearance,
+    val maxPan: Float = CameraEnvelope().maxPan,
 )
