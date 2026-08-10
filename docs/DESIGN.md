@@ -387,8 +387,21 @@ sayable in one line — a table with fifteen gestures on it is not a table, it i
 a keyboard. The split is made in the arbiter, once, on the press:
 `claimForCamera` is called when the hit test finds nothing, and from there the
 gesture cannot become a drag, a peek, a twist or a menu whatever the fingers go
-on to do. On the felt, one finger orbits and two also pinch; the pointer idioms
-are a drag and the wheel.
+on to do. On the felt, **one finger orbits, and two pan and pinch**; the pointer
+idioms are a drag, the wheel, and a middle-drag (or alt and drag) for the pan.
+
+Two fingers used to orbit *as well*, which meant the hand's travel did two jobs
+at once and the camera could only ever be aimed at the middle of the mat. The
+split costs nothing — the arbiter already reports how many fingers are down, and
+both signals were being measured every frame — and it is the idiom every
+three-dimensional viewer has used for as long as trackpads have had two fingers
+on them, so it needs no teaching. That is the bar a gesture on this table has to
+clear.
+
+**And letting go of a turn does not stop it.** A flick coasts and eases to rest
+on the app's own damping, because a camera that stops dead the instant a finger
+leaves the glass has no weight. Any press catches it: a flick you cannot stop is
+the thing that makes people say inertia fights them.
 
 Before that split existed, all four two-finger gestures were reachable on empty
 felt, where there is no card for any of them to be about, and all four did

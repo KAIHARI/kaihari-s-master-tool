@@ -294,6 +294,37 @@ class StageCameraTest {
         }
     }
 
+    /**
+     * The table in `docs/TUNING.md`, cell for cell.
+     *
+     * A table of numbers in prose with nothing under it is worth what the last
+     * one was: the lamp's height read "five to one" for two releases and
+     * measured 2.92. This is the one somebody will read to decide whether the
+     * close limit is worth moving, so it is the one most worth being true.
+     */
+    @Test
+    fun theWholeFloorTableIsWhatTheDocumentSaysItIs() {
+        val tablet = 2800f to 1607f
+        //          pitch   at 0.5   at 0.9   at 0.99
+        val rows = listOf(
+            listOf(21f, 0.72f, 0.40f, 0.36f),
+            listOf(34f, 1.12f, 0.62f, 0.57f),
+            listOf(40f, 1.29f, 0.72f, 0.65f),
+            listOf(80f, 1.98f, 1.10f, 1.00f),
+        )
+        rows.forEach { row ->
+            listOf(0.5f, 0.9f, CameraEnvelope.MAX_CLEARANCE).forEachIndexed { column, clearance ->
+                assertClose(
+                    row[column + 1],
+                    CameraEnvelope(clearance = clearance)
+                        .minDistanceAt(row[0], tablet.first, tablet.second),
+                    0.006f,
+                    "at ${row[0]} degrees and clearance $clearance:",
+                )
+            }
+        }
+    }
+
     @Test
     fun atTheShippedClearanceEveryAngleIsInsideTheSeatEverythingWasTunedAt() {
         var pitch = 0f

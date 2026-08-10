@@ -86,12 +86,12 @@ orbited to gets into the panel.
 
 ## The two camera dials are a position and a lens, and they do different jobs
 
-This is the pair a photographer expects, and it took two goes to get there.
+This is the pair a photographer expects, and it took three goes to get there.
 
 **`distance` is where you stand.** Stepping back weakens the perspective *and*
-makes the table smaller, because that is what walking backwards does.
-`CameraPose.planeFor` welds `cameraDistance` to `zoom` to keep those two
-welded. This is the only dial that changes the perspective.
+makes the table smaller, because that is what walking backwards does. This is
+the only dial that changes the perspective, and it changes it by exactly as much
+as walking does: the keystone across the table goes as `1/distance`.
 
 **`lens` is magnification, and nothing else.** It multiplies `cameraDistance`
 and `zoom` by the same amount, so the angle the table subtends —
@@ -107,91 +107,182 @@ bigger; the perspective across it is bit-identical. `CameraLensTest`
 | 1.50 | ~49mm | half again as big, same perspective |
 | 2.00 | ~65mm | twice as big, same perspective |
 
-The millimetres are a function of the **lens alone** and are honest only
-because of that. The proportionality is exact — `f = 18/tan(halfFov)` and the
-field of view goes as `atan(1/lens)`, which
-`CameraLensTest.theMillimetresBesideTheDialAreTheOnesTheProjectionHas` pins.
-The *calibration* is not: 33mm is this projection measured at the home
-distance, so moving `HOME_DISTANCE` means re-measuring `StageTuner.HOME_MM`.
-That test is the tripwire.
- The first version computed a field of view from
-`distance × lens`, so touching the distance slider moved the number beside the
-focal-length slider — 36° at distance 1.45, 26° at 2.0, with the lens dial
-sitting still. That read, correctly, as one dial resetting the other.
+The millimetres are a function of the **lens alone** and are honest only because
+of that. The proportionality is exact — `f = 18/tan(halfFov)` and the field of
+view goes as `atan(1/lens)`, which
+`CameraLensTest.theMillimetresBesideTheDialAreTheOnesTheProjectionHas` pins. The
+*calibration* is a measurement: 33mm is this projection at a lens of one, so
+moving `HOME_DISTANCE` means re-measuring `StageTuner.HOME_MM`. That test is the
+tripwire.
 
-**What the first version actually was.** v1.2.38 put the lens on
-`cameraDistance` alone: framing pinned, perspective moving. That is a **dolly
-zoom** — a real control, a good one, and not a focal length. It is worth
-rebuilding one day as its own row, under its own name.
+### Two goes at the same mistake, and the second one lasted five releases
 
-**What it costs.** Framing. Past `1.0` the board is magnified and can run off
-the edges of the screen, exactly as a real zoom crops. Nothing catches it, and
-that is deliberate: `CameraFit` corrects by moving the *distance*, and calling
-it from here would re-couple the two dials this exists to separate.
+The mistake both times was putting something that is not a lens on the **focal
+length**. `cameraDistance` *is* the focal length, in pixels: `StagePlane.project`
+divides by `cameraDistance − depth`, and Compose's `graphicsLayer` does the
+identical thing. Whatever is on it sets the field of view.
 
-**What it stopped costing.** `perspectiveGrowth` no longer moves with the lens —
-both terms scale, so the ratio the board was solved against is untouched. The
-old warning that a baked-in lens under 0.947 would turn
-`StagePlaneTest.theStageSaysHowMuchRoomItsOwnTiltCosts` red is retired.
-`CameraEnvelope.minDistanceAt` lost its lens factor for the same reason: the
-lens cancels out of `halfDiagonal · zoom · sin ≤ clearance · cameraDistance`,
-and zooming cannot bring the table closer to a camera that has not moved.
+**v1.2.38 put the `lens` there alone.** Framing pinned, perspective moving —
+which is a **dolly zoom**, a real control and a good one and not a focal length.
+Both dials then changed the same thing, so tuning one appeared to undo the other.
+kai's word for it was that it reset. Worth rebuilding one day as its own row,
+under its own name.
+
+**The fix put the lens on both terms and left `distance` on the focal length,
+where it had been since there was a camera.** So the *other* dial had the same
+fault, and nobody looked at it for five releases because the dial that had been
+complained about was now correct. Measured on a 1600-wide stage:
+
+| distance | field of view | 35mm equivalent |
+|---|---|---|
+| 6.0 (back of the envelope) | 15° | ~130mm |
+| 1.45 (the Table seat) | 58° | ~33mm |
+| 0.5 | 116° | ~9mm |
+
+Every dolly was a dolly zoom. So was every *tilt*, because the pitch moves
+`CameraEnvelope.minDistanceAt`, which moved the distance, which moved this — so
+a one-finger drag down the felt, the plainest gesture on the stage, quietly
+zoomed. And the keystone swung as `1/distance²` rather than `1/distance`, which
+is twice as fast in log terms as walking. kai's report was that the perspective
+shifted a lot when moving the camera around, and that it did not behave like a
+real camera. Both were literally true.
+
+`planeFor` now reads `cameraDistance = lens · HOME_DISTANCE · governing`, with
+no `distance` term at all. `CameraLensTest.theFieldOfViewDoesNotMoveWhenYouWalkTowardTheTable`
+and `theKeystoneGoesAsTheDistanceAndNotItsSquare` are the two tripwires, and the
+second one is a measurement rather than a tolerance: doubling the distance
+divides the keystone by about 2.1, and the square law it replaced gives 5.
+
+**What it cost.** One golden recording. At the home distance the corrected
+projection is bit-identical to the old one, so `GoldenStageTest`'s `Home` and
+`Turned` — both at 1.45 — did not move a digit; `Steep`, at 1.9, did, and had to
+be re-recorded and nudged to 1.96 to clear the tie margin.
+`CameraLensTest.atTheSeatEverythingWasTunedAtTheOldProjectionIsTheNewOne` is that
+claim as arithmetic rather than as a diff.
+
+**What it stopped costing.** `CameraEnvelope.minDistanceAt` collapses from a
+square root to a line, because the distance had been on both sides of the
+constraint. Every floor anybody can reach is lower for it — see below.
+
+**What framing still costs.** Past a lens of `1.0` the board is magnified and can
+run off the edges of the screen, exactly as a real zoom crops. Nothing catches
+it, and that is deliberate.
 
 ---
 
-## The distance dial has a floor, and it used to hide it
+## The camera has one limit left, and it is arithmetic
 
-kai's next report on the same pair: *"the slider can go below 1.4 but it doesn't
-show it visually and won't let me get closer."* Both halves of that were true, and
-neither was the lens.
+kai, twice. First: *"the slider can go below 1.4 but it doesn't show it visually
+and won't let me get closer."* Then, after that was fixed and had not gone far
+enough: *"there shouldn't be a limit I want complete freedom and control."*
 
-`CameraEnvelope.minDistanceAt` solves a floor from the pitch and the mat's own
-diagonal, and `CameraRig.placeAt` clamps to it. The panel kept displaying the raw
-number, so below the floor the value moved and the picture did not. On a
-2800×1607 stage:
+There were three walls. Two were taste and are gone.
 
-| pitch | floor at 0.5 | at 0.68 (shipped) | at 0.95 (the knob's end) |
+- **A flat `minDistance` of 0.8.** It sat in front of the solved floor and never
+  let it speak — below about fifty degrees of pitch the solved answer was
+  *under* it, so the wall anybody actually hit was a round number somebody
+  chose. It is a twentieth now, and the floor is always the solved one.
+- **`CameraFit`, run on every release.** You pinch in, let go, and the table
+  slides away from you. It was written for a real problem — a turned table can
+  walk its own corners off the screen — but a correction nobody asked for reads
+  as the tool refusing, and it was inconsistent besides: the mouse wheel never
+  went through the arbiter, so a desktop user could already dolly past where a
+  finger was allowed to stop. It is on the **seat buttons** now
+  (`StageCameraState.sitAt`), where being put back is what was asked for, and it
+  is the way home from anywhere free flight can reach.
+- **`camera.clearance`, and the floor it solves.** This one stays, because it is
+  not taste. Past the lens plane `project` clamps rather than dividing by zero,
+  and a clamp cannot be inverted — so `unproject` stops agreeing with `project`,
+  and with it `flatten`, and with that every pile edge and airborne shadow.
+
+`CameraEnvelope.minDistanceAt` solves that floor from the pitch, the clearance,
+and the corner of the surface furthest from wherever the camera is **aimed**:
+
+```
+distance ≥ reach · sin(pitch) / (clearance · governing)
+```
+
+On a 2800×1607 stage, and the whole table is lower than it was:
+
+| pitch | floor at 0.5 | at 0.9 (shipped) | at 0.99 (the knob's end) |
 |---|---|---|---|
-| 21° — the table seat | 1.02 | 0.88 | 0.80 |
-| 34° — the seated one | 1.28 | 1.09 | 0.93 |
-| 40° | **1.37** | 1.17 | 0.99 |
+| 21° — the table seat | 0.72 | 0.40 | 0.36 |
+| 34° — the seated one | 1.12 | 0.62 | 0.57 |
+| 40° | 1.29 | **0.72** | 0.65 |
+| 80° | 1.98 | 1.10 | 1.00 |
 
-That 1.37 is the "one point four". It is a *low seat* that finds it — which is
-exactly the seat you take when you are looking for distortion, so the two
-complaints arrived together and looked like one.
+Every cell of that is `StageCameraTest.theWholeFloorTableIsWhatTheDocumentSaysItIs`,
+because a table of numbers in prose with nothing under it is worth what the last
+one was — it said "five to one" about the lamp for two releases and was measured
+at 2.92.
 
-**`camera.clearance` is the number that floor is solved against**: how far toward
-the lens the nearest corner of the mat may travel. The keystone across the table
-goes as `1/(1−this)`, so a half caps it at two to one and 0.68 at about three.
-The ends are not taste:
+That 40°/0.5 row is the old **1.37**, which is what kai measured as "one point
+four": same clearance, same screen, and 1.29 now because the projection stopped
+putting the distance on the lens. The shipped default moved from 0.68 to 0.9 in
+the same change — freedom is what was asked for, and a knob three menus deep is
+not an answer to "I want complete control".
 
-- **It cannot reach one.** At one the corner *is* the lens, `project` clamps
-  rather than dividing by zero, and a clamp cannot be inverted — so `unproject`
-  stops agreeing with `project` and every pile edge and airborne shadow tears.
-  0.95 is the stop.
-- **It does not go below what shipped.** Tightening it pushes floors *out*, and
-  at 0.42 the floor at thirty-four degrees passes 1.34 — which is the **Seated**
-  button, so a seat on the bar becomes somewhere the envelope refuses to let you
-  sit. There is nothing under a half worth offering.
+The ends of `camera.clearance` are still not taste:
 
-And the panel says so now: the distance row prints `· held at 1.17` when the
-floor is above the value you dialled, so the dead zone has a reason attached
-rather than looking like a broken slider.
+- **It cannot reach one**, for the reason above. 0.99 is the stop, a hundredth
+  short of the wall rather than the 0.95 that was a margin of comfort in front
+  of it.
+- **It does not go below a half.** Tightening it pushes floors *out*, and there
+  is nothing under a half anybody wants.
 
-**`StagePlane.SAFE_DEPTH` went from 0.5 to 0.9 in the same change**, and it had
-to. It is the guard that culls a face close enough to the lens to fly off to a
-few hundred thousand pixels — and it had been the same number as the clearance by
-coincidence. Letting the camera closer than 0.5 without moving it would have
-culled the **desk**, which by construction reaches further toward you than the
-mat does. Nine tenths is what that guard was always about: `MIN_GAP` and the
-number one, not what is comfortable to look at.
+And the panel says so: the distance row prints `· held at 0.72` when the floor is
+above the value you dialled, so the dead zone has a reason attached rather than
+looking like a broken slider.
 
-**What `CameraFit` still does.** Dialling in a close distance and then *pinching*
-gives it back — the fitter runs when a camera gesture ends and keeps every zone
-and pile on the glass, and with the table turned forty-five degrees it holds you
-at about 1.29 whatever the envelope allows. Square-on it does not bind: it would
-allow 0.93 at a forty-degree pitch, well inside the floor. That is the fitter
-doing its job rather than a second bug.
+**Pitch opens to 0..80 and the far end to 6.** Card text keystones badly past
+about sixty degrees, which is why the ceiling used to be fifty-eight; that is now
+something you can see happening and pull back from rather than something the tool
+refuses on your behalf. Ninety is the one angle that genuinely cannot be drawn.
+At eighty the table's **horizon** is on the glass — a quarter of the way down
+from the top — and a finger above it is pointing at no table at all, so
+`StagePlane.belowHorizon` holds it down to the last row that is looking at one.
+Without that, `unprojectAt`'s guard hands back the camera's own target and a tap
+on the wall grabs whatever is in the middle of the board.
+
+**`StagePlane.SAFE_DEPTH` went from 0.5 to 0.9** when the clearance first became
+a preference, and it had to. It is the guard that culls a face close enough to
+the lens to fly off to a few hundred thousand pixels — and it had been the same
+number as the clearance by coincidence. Letting the camera closer without moving
+it would have culled the **desk**, which by construction reaches further toward
+you than the mat does. Nine tenths is what that guard was always about: `MIN_GAP`
+and the number one, not what is comfortable to look at.
+
+---
+
+## `camera.panX` / `camera.panY`: what the camera is aimed at
+
+New, and the reason `CameraPose`'s own KDoc spent a paragraph refusing one is
+worth reading, because it was half right.
+
+> There is no pan — the camera always looks at the middle of the table — because
+> a movable target means the vanishing point stops being the centre of the layer,
+> and then the mat's `graphicsLayer` needs a `transformOrigin` and
+> `StagePlane.unproject` needs an off-axis inverse.
+
+The `transformOrigin` is real and is two lines. The off-axis inverse was a
+description of a **different pan**: sliding the finished picture sideways does
+move the vanishing point off the middle of the glass. Moving what the camera
+*looks at* does not — the divide stays centred on the pivot and the pivot stays
+drawn in the middle — so `unprojectAt` is unchanged but for which point it adds
+back at the end, and it stays closed form. That matters more than it sounds:
+`flatten` is the projection composed with its own inverse, and every card
+thickness, pile edge and airborne shadow on the stage is drawn through it.
+
+Both knobs are multiples of the governing dimension, like `distance`, so a saved
+pose frames the same thing on a tablet and on a monitor. Aiming away from the
+middle **holds the distance out a little**, because the corner furthest from the
+target is further off than the half-diagonal — `minDistanceAt` takes the pan for
+exactly that reason, and so does the `· held at` readout.
+
+The gesture is **two fingers on the mat**; on a pointer it is a middle-drag, or
+alt and drag for the great many trackpads with no middle button. One finger still
+orbits. The leash is two stage-heights in each direction, which is far enough
+that the board is long gone; a seat button is the way back.
 
 ---
 

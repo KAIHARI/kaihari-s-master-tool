@@ -19,23 +19,23 @@ Nothing here is scheduled. It is a menu.
 
 A movable camera is one change in core and eleven consequences. Everything here waits on the first item.
 
-1. **Turn the stage into a camera.** **[foundation]** Yaw, pitch, distance and a target, instead of one hard-coded tilt — keeping `project`, `unproject` and `flatten` exactly as they are, so nothing downstream notices it moved. Every other item in this section waits on this one.
+1. **Turn the stage into a camera.** **[foundation]** Yaw, pitch, distance and a target, instead of one hard-coded tilt — keeping `project`, `unproject` and `flatten` exactly as they are, so nothing downstream notices it moved. Every other item in this section waits on this one. *The target was the last of the four to arrive, six releases later, and it kept the promise: `unprojectAt` swapped which point it adds back at the end and stayed closed form, so `flatten` — and every pile edge, card thickness and airborne shadow drawn through it — never noticed.*
 
-2. **Clamp pitch, lock roll.** Five degrees to seventy-five, and no roll ever. A table you can get underneath is a bug report; a horizon that tips is nausea.
+2. **Clamp pitch, lock roll.** *Half of this is retired.* It shipped at four to fifty-eight and is **zero to eighty** now, on kai's *"complete freedom and control"*: card text keystones badly past sixty, and that is something to see happening and pull back from rather than something the tool refuses on your behalf. Ninety is the one angle that genuinely cannot be drawn. **No roll ever** stands — a horizon that tips is nausea, and that is not a matter of taste either.
 
-3. **Three seats, not free flight.** Overhead for reading the board, the player's seat for playing, the far side for checking what you are showing. Free-fly cameras always end up somewhere useless and then you have to fly back.
+3. ~~**Three seats, not free flight.**~~ **Half rejected by kai.** The seats stayed and are the way home; the *"not free flight"* did not survive contact — *"there shouldn't be a limit I want complete freedom and control."* The camera now walks, tilts and aims anywhere the arithmetic allows, and the argument this item made is answered rather than overruled: free-fly cameras end up somewhere useless and then you have to fly back, so **1 · 2 · 3 fly you back**, framing the board with `CameraFit` on the way.
 
 4. **Move the camera on the springs the cards use.** `PosePhysics` is already there. A camera that eases on a curve while the cards spring reads as two physical worlds sharing a screen.
 
 5. **Orbit needs a gesture that isn't already taken.** **[your call]** All four two-finger channels are spoken for on the mat — tap flips, twist turns, drag takes the pile, hold opens the menu. Three fingers, a margin outside the felt, or a held modifier: this needs a decision before it needs code.
 
-6. **Pinch dollies, it does not zoom.** Moving the camera changes the perspective. Scaling the image does not, and that difference is the entire reason to have a camera.
+6. **Pinch dollies, it does not zoom.** Moving the camera changes the perspective. Scaling the image does not, and that difference is the entire reason to have a camera. *This was true of the gesture and not of the projection for six releases: `cameraDistance` — which **is** the focal length — carried the camera's distance as well as the lens, so a dolly also swung the field of view from 130mm to 9mm across the envelope, and the keystone moved as `1/distance²`. `docs/TUNING.md` has the measurement.*
 
-7. **Inertial orbit.** Flick it and it coasts to rest on the same damping. This is most of what makes a camera feel like it weighs something.
+7. ~~**Inertial orbit.**~~ **Built.** Flick the felt and the table coasts to rest on the app's own damping. Rates are per *second*, so a flick runs down over the same seconds at 60Hz and 120Hz, and any press catches it — a flick you cannot stop is what makes people say inertia fights them.
 
 8. **Let the tablet's own tilt move it a degree or two.** The cheapest three-dimensional tell that exists on a handheld, and it costs one sensor listener and a low-pass filter.
 
-9. **A CameraFit, solved in core.** The mat has to stay fully on screen at every legal angle — solved once, the way `DeckFit` solves the panes, and never negotiated inside a composable.
+9. **A CameraFit, solved in core.** *Built, then moved.* It ran on every camera release, and that turned out to be the whole of kai's *"it locks me out from getting closer past the close limit"*: you pinch in, let go, and the table slides back out. A correction nobody asked for reads as the tool refusing. It lives on the **seat buttons** now (`StageCameraState.sitAt`), where being put back where the board fits is exactly what was asked for — and it is what makes free flight safe rather than what makes it impossible.
 
 10. **Dolly out as a peeked card comes in.** The card grows, the room recedes. It is two lines against the existing peek and it is the most cinematic thing the table could do.
 

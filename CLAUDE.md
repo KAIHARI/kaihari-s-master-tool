@@ -52,9 +52,10 @@ so every pixel that moves is a change in the code. It needs the Android SDK
 writes `local.properties` itself.
 
 **`docs/TUNING.md` is the in-app tuning panel.** Long-press the life-point
-number on the play stage: twenty-seven numbers — camera angle, focal length, how
-close you may sit, the defocus falloff, the hand, the card lifts, and the room's
-own furniture — live, persisted, and exported as JSON that maps one-to-one onto
+number on the play stage: twenty-nine numbers — camera angle, focal length, where
+it is aimed, how close you may sit, the defocus falloff, the hand, the card lifts,
+and the room's own furniture — live, persisted, and exported as JSON that maps
+one-to-one onto
 named constants. `tools/shoot.sh --tune=x.json` replays one headlessly. Read it
 before changing any of those constants by hand, and before adding a knob:
 **nothing that re-solves the board may go on the panel.** The room is on it and
@@ -298,7 +299,7 @@ first:
   The whole control scheme, and it has to stay sayable in one line. The split
   is made once, on the press, by `claimForCamera` when the hit test finds
   nothing; from there the gesture cannot become a drag, a peek or a menu. One
-  finger orbits, two also pinch. The table has almost no affordances drawn on
+  finger orbits, two pan and pinch. The table has almost no affordances drawn on
   it, so it has a guide — `core/input/MatGuide.kt`, data rather than prose,
   rendered by the button on the bar and held to both-idioms-present by a test.
   The one exception is the two shuffle marks (`core/layout/MatControls.kt`),
@@ -335,14 +336,42 @@ everything lying on the mat is pointed at exactly where it was computed. The
 hand carries the same offset and is deliberately left alone: its cards lean, so
 their footprint is a quad at two heights rather than a rectangle at one.
 
-**The camera fits the field, not the board.** `CameraFit` runs when a camera
-gesture ends and dollies back until the board is on the glass — which is what
-stops a turned table walking its own corners off the screen. Handed
-`layout.bounds` it also refused to let the *hand* leave, and since the hand sits
-along the bottom edge of the stage that capped the nearest reachable distance at
-1.47 against an envelope floor of 1.05: a third of the range, spent on the one
-thing a push-in is supposed to cost. It is handed `layout.field` instead. Every
-zone and every pile is inside it; turning still steps you back.
+**The camera is a camera, and the one limit left on it is arithmetic.** kai's
+brief was *"as realistic as possible … there shouldn't be a limit I want complete
+freedom and control"*, and four things came out of it. `docs/TUNING.md` is the
+authority; the short version:
+
+- **`cameraDistance` is the focal length in pixels** — `project` divides by
+  `cameraDistance − depth` and Compose's `graphicsLayer` does the same thing —
+  so nothing but the lens may be on it. It carried `CameraPose.distance` for six
+  releases, which made the field of view swing from 130mm to 9mm across the
+  envelope and the keystone move as `1/distance²`. Every dolly, and every *tilt*
+  (the pitch moves `minDistanceAt`, which moved the distance), was a dolly zoom.
+- **The floor is linear and there is nothing in front of it.** With the distance
+  off the lens, `minDistanceAt` collapses from a square root to a line, and the
+  flat `minDistance` that used to sit in front of it is a twentieth. What remains
+  is `clearance`: past the lens plane `project` clamps, and a clamp cannot be
+  inverted, so `unproject` stops agreeing with it and every pile edge and
+  airborne shadow tears. That one is not taste and is not going anywhere.
+- **`CameraFit` moved to the seat buttons.** Run on every release it *was* the
+  "locks me out" — pinch in, let go, and the table slides away. On `1 · 2 · 3`
+  (`StageCameraState.sitAt`) it is the way home from anywhere free flight can
+  reach, and it is still handed `layout.field` rather than `layout.bounds`: the
+  hand band along the bottom is the first thing a push-in costs, and treating
+  that as a reason to refuse capped the camera at 1.47 against a floor of 1.05.
+- **The camera can be aimed.** `CameraPose.panX/panY` move the *target* rather
+  than the picture, so the vanishing point stays in the middle of the glass and
+  `unprojectAt` keeps its closed form — the KDoc that refused a pan was
+  describing a different one. The mat's layer needs a `transformOrigin` and a
+  translation, which is the whole cost. Two fingers pan; a middle-drag or
+  alt-drag does on a pointer.
+
+A flick coasts (`CameraRig.coast`), on rates per *second* so it runs down over
+the same seconds at 60Hz and 120Hz, and any press catches it. And at eighty
+degrees of pitch the table's horizon is on the glass, so `StagePlane.belowHorizon`
+holds a finger above it down to the last row that is looking at the table —
+otherwise `unprojectAt`'s guard hands back the camera's own target and a tap on
+the wall grabs the middle of the board.
 
 The room is eighteen pieces: a floor, the desk, four wall pieces around a
 window opening, the pane, seven of joinery around it, and four for the lamp.
@@ -362,9 +391,11 @@ Four things about it are load-bearing, and three of them were bugs first:
   `Face.smooth` normals, because a turned solid is faceted at noon exactly as
   badly as at midnight, and `gleam` is gated on the surface's own `Gloss` rather
   than on a position at all. What keeps them inert is that a slab has no smooth
-  normals and the minimal key has no size. Which is why `GoldenStageTest` is
+  normals and the minimal key has no size. Which is why `GoldenStageTest` went
   green without being re-recorded across three releases that changed how every
-  surface in the room is lit.
+  surface in the room is lit. (It was re-recorded in the fourth, and only a
+  third of it: taking the camera's distance off the focal length moves every
+  pose that is not at `HOME_DISTANCE`, which is exactly one of its three.)
 - **The lamp's height is solved, not chosen.** The shipped night key's
   horizontal-to-vertical ratio *is* how long a night shadow is per unit of
   height, so the lamp stands where the ray to the middle of the table has

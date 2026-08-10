@@ -919,6 +919,77 @@ as it shipped, because the durable claim is "the fitter is not what holds you
 out", and a test reading "the fitter never binds" would assert `CameraFit` does
 nothing.
 
+### Iteration 16 — the focal length was carrying the camera's position
+
+Not a fidelity iteration either, and the second in a row that began with kai
+describing the tool as broken rather than as ugly: *"the perspective seems to
+shift a lot when moving the camera around and it doesn't behave the way a real
+life camera would … it also has a close distance issue where it locks me out
+from getting closer past the close limit. there shouldn't be a limit I want
+complete freedom and control."*
+
+**Two complaints, one cause, and the cause was a line iteration 10 had already
+half-fixed.** `cameraDistance` *is* the focal length in pixels —
+`StagePlane.project` divides by `cameraDistance − depth` and Compose's
+`graphicsLayer` does the identical thing — and `planeFor` had `distance` on it
+as well as `lens`. Measured on a 1600-wide stage the field of view ran from 15°
+at the back of the envelope to 116° at the front: a 130mm lens to a 9mm, with
+the lens dial sitting still. Every dolly was a dolly zoom. So was every *tilt*,
+because the pitch moves `minDistanceAt`, which moved the distance, which moved
+this — so a one-finger drag down the felt, the plainest gesture on the stage,
+quietly zoomed.
+
+**The lesson, and it is iteration 10's own lesson arriving from the other
+side.** Iteration 10 found the `lens` dial on `cameraDistance` alone, named it a
+dolly zoom, and fixed it by putting the lens on *both* terms. That fix was
+correct and it stopped the investigation one field early: the same expression
+still had `distance` on the focal length, and nobody looked, because the dial
+that had been complained about was now right. **When you find the wrong thing on
+a term, read the whole term.** A focal length has room for exactly one number,
+and there were two on it for five more releases.
+
+**The close limit was three walls and two of them were taste.** A flat
+`minDistance` of 0.8 sat in front of the solved floor and never let it speak —
+below about fifty degrees the solved answer was *under* it. `CameraFit` ran on
+every camera release and sprang the camera back out after every pinch; it was
+also inconsistent, because the mouse wheel never went through the arbiter, so a
+desktop user could already dolly past where a finger was allowed to stop. The
+third wall — the near corner reaching the lens plane — is arithmetic and stays,
+and it dropped on its own: with the distance off the focal length the floor
+collapses from a square root to a line, and every floor anybody can reach is
+lower for it (0.85 to 0.38 at the table seat).
+
+Three things worth keeping from the rest of it:
+
+- **A refusal in a KDoc is not a measurement.** `CameraPose` spent a paragraph
+  refusing a pan, and half of it was a description of a *different* pan. Sliding
+  the finished picture sideways moves the vanishing point off the middle of the
+  glass and would need an off-axis inverse; moving what the camera *looks at*
+  does not, so `unprojectAt` kept its closed form and swapped which point it
+  adds back. The expensive half never arrived. The cheap half — a
+  `transformOrigin` on the mat's layer — is two lines.
+- **Opening an envelope moves things that were true because it was closed.** At
+  eighty degrees the table's horizon is on the glass, and `unprojectAt`'s
+  vanishing-divisor guard hands back the camera's own target — a defensible
+  number and a terrible hit test, because a tap on the wall would grab whatever
+  is in the middle of the board. `StagePlane.belowHorizon` clamps rather than
+  refuses, so a press in the sky lands off the table (and goes to the camera,
+  which is what pressing on nothing already did) and a card dragged that way
+  slides to the far edge instead of teleporting.
+- **The golden was re-recorded for the first time in four releases, and only a
+  third of it.** `Home` and `Turned` are both at `HOME_DISTANCE`, which is the
+  one distance where the old projection and the corrected one agree, so they
+  came out byte for byte. `Steep` moved because it is meant to — and moved again,
+  1.9 to 1.96, because the corrected projection put a quantised value *exactly*
+  on a rounding boundary. The distances either side were swept and measured
+  rather than guessed, which took one throwaway test and about a minute.
+
+**And a table of numbers in prose got a test under it.** `docs/TUNING.md`'s
+distance-floor table is `StageCameraTest.theWholeFloorTableIsWhatTheDocumentSaysItIs`
+now, cell for cell — three of its twelve cells were wrong when first written out
+by hand. The lamp's height read "five to one" for two releases and measured
+2.92; this is the same failure caught before shipping instead of after.
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find
@@ -944,9 +1015,14 @@ what the eye has caught and the hand has not reached.
   picture. Coil serves a lower-resolution decode until the art lands, and the
   shot that comes first in a cold run gets it. Warm the cache with a throwaway
   shot before recording a before.
-- **The eye can only reach three seats.** `tools/shoot.sh` selects a seat by
-  pressing its digit, so every shot is one of 5°, 21° or 34° — and the camera's
-  envelope goes to 58°, which is where a procedural surface aliases and where
-  iteration 6's whole defect lived. Driving an orbit (a pointer drag on the
-  felt, which `MatInput` already understands) would close it, and it is the
-  cheapest remaining upgrade to the loop's own perception.
+- **The eye can only reach three seats by digit, and the envelope is much
+  larger than it was.** `tools/shoot.sh` selects a seat by pressing its digit,
+  so every unparameterised shot is one of 5°, 21° or 34°. `--tune=x.json`
+  reaches anywhere — a non-default `camera` block skips the seat press — which
+  is how iteration 16 photographed a distance of 0.5 and one of 4.0. But the
+  envelope now runs to **eighty** degrees of pitch and can be **panned**, and
+  neither of those is in the contact sheet. Eighty is where a procedural surface
+  aliases worst *and* where the table's horizon comes onto the glass; it should
+  be a standing shot, not something remembered. Driving a real orbit (a pointer
+  drag on the felt, which `MatInput` already understands) is still the cheapest
+  remaining upgrade to the loop's own perception.
