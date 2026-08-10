@@ -345,30 +345,94 @@ object StageRig {
      *
      * @param samples how many stops to return, at least two.
      */
+    /**
+     * Which of a face's two axes to grade along — and for a curved face it is
+     * **not** whichever direction the light happens to vary most in.
+     *
+     * A gradient is linear along one axis, and the light on a facet of a turn
+     * varies in two: round the axis, where the normal is turning, and up it,
+     * where the distance to the lamp is changing. Picking by brightness picks
+     * *per facet*, so one wedge grades round and the next grades up — and where
+     * two neighbours choose differently, no pair of linear ramps can meet at
+     * their shared edge. Measured on a sixteen-sided cylinder that step is 0.074
+     * of the light on the surface, which is eighteen levels of 255 and a
+     * visible rib.
+     *
+     * Grading along the axis the **normal** turns is the same choice for every
+     * facet of one turn, because it is a fact about the shape rather than about
+     * where the lamp is standing, so two neighbours agree at their seam by
+     * construction. A flat face has no normal that turns, so it keeps the
+     * brightness rule it always had — which is what leaves every box in this
+     * room, and every card on the table, exactly where it was.
+     *
+     * @return true to take the first axis.
+     */
+    private fun gradeAcross(
+        curved: Boolean,
+        acrossSpread: Float,
+        alongSpread: Float,
+        acrossNormals: Pair<Vec3, Vec3>,
+        alongNormals: Pair<Vec3, Vec3>,
+    ): Boolean {
+        if (!curved) return acrossSpread >= alongSpread
+        val acrossTurn = 1f - (acrossNormals.first dot acrossNormals.second)
+        val alongTurn = 1f - (alongNormals.first dot alongNormals.second)
+        return acrossTurn >= alongTurn
+    }
+
     fun wash(
         face: Face,
         eye: Vec3,
         lighting: StageLighting,
         samples: Int = 4,
     ): FaceWash? {
-        if (face.corners.size < 4 || lighting.key.position == null) return null
+        if (face.corners.size < 4) return null
+        // A face with no place to fall off from and no curvature to shade round
+        // has nothing to grade. A *smooth* face has the second even in daylight,
+        // which is why this is not simply the placed-lamp test it used to be:
+        // the lamp and the puzzle are turned solids and they are faceted at
+        // noon exactly as badly as they are at midnight.
+        if (lighting.key.position == null && face.smooth == null) return null
         val stops = samples.coerceAtLeast(2)
 
-        fun midpoint(a: Int, b: Int) = (face.corners[a] + face.corners[b]) * 0.5f
-        fun amountAt(at: Vec3) = roomAt(face.normal, eye, lighting, at).amount
+        val n = face.corners.size
+        fun midpoint(a: Int, b: Int) = (face.corners[a % n] + face.corners[b % n]) * 0.5f
+        fun midNormal(a: Int, b: Int) =
+            (face.normalAt(a % n) + face.normalAt(b % n)).normalised()
+        fun amountAt(normal: Vec3, at: Vec3) = roomAt(normal, eye, lighting, at).amount
 
-        val across = midpoint(0, 1) to midpoint(2, 3)
-        val along = midpoint(1, 2) to midpoint(3, 0)
-        val acrossSpread = abs(amountAt(across.first) - amountAt(across.second))
-        val alongSpread = abs(amountAt(along.first) - amountAt(along.second))
-        val (from, to) = if (acrossSpread >= alongSpread) across else along
+        val half = n / 2
+        val across = Pair(midpoint(0, 1), midNormal(0, 1)) to
+            Pair(midpoint(half, half + 1), midNormal(half, half + 1))
+        val along = Pair(midpoint(1, 2), midNormal(1, 2)) to
+            Pair(midpoint(half + 1, half + 2), midNormal(half + 1, half + 2))
+        val acrossSpread =
+            abs(amountAt(across.first.second, across.first.first) - amountAt(across.second.second, across.second.first))
+        val alongSpread =
+            abs(amountAt(along.first.second, along.first.first) - amountAt(along.second.second, along.second.first))
+        val (start, end) = if (
+            gradeAcross(
+                curved = face.smooth != null,
+                acrossSpread = acrossSpread,
+                alongSpread = alongSpread,
+                acrossNormals = across.first.second to across.second.second,
+                alongNormals = along.first.second to along.second.second,
+            )
+        ) across else along
         if (max(acrossSpread, alongSpread) < WASH_FLOOR) return null
 
         return FaceWash(
-            from = from,
-            to = to,
+            from = start.first,
+            to = end.first,
             stops = (0 until stops).map { step ->
-                roomAt(face.normal, eye, lighting, from + (to - from) * (step / (stops - 1f)))
+                val along01 = step / (stops - 1f)
+                val at = start.first + (end.first - start.first) * along01
+                // The normal is interpolated and then normalised, which is what
+                // makes this continuous across a seam: two facets sharing an
+                // edge sample the *same* midpoint and the *same* averaged
+                // normal, so their gradients meet at one value.
+                val normal = (start.second + (end.second - start.second) * along01).normalised()
+                roomAt(normal, eye, lighting, at)
             },
         )
     }
@@ -527,6 +591,251 @@ object StageRig {
         }
         return far
     }
+
+    // ---- what a surface in the room is made of ---------------------------------------
+
+    /**
+     * The one thing that is *not* Lambert about a surface: how sharply and how
+     * strongly it mirrors the light.
+     *
+     * The room has never had this. [lit] is ambient plus lambert plus a
+     * graze-gated rim and it contains **no specular term at all** — the only
+     * Blinn-Phong in this app is `Shading.of`, which takes a card's pose and a
+     * `CardMaterial` and is asked about nothing else. So gold and cloth and
+     * painted timber differ in *colour* and in nothing else, which is exactly
+     * why `docs/LOOP.md` §6 records the lamp and the puzzle as "flat fills" and
+     * `docs/AAA.md` #67 records the material half of a surface as unfinished.
+     *
+     * This is deliberately **not** a fifth term inside [lit]. `GoldenStageTest`
+     * records what [lit] returns for every face of a slab at three seats, and
+     * `docs/LOOP.md` §3 forbids re-recording a golden and changing behaviour in
+     * one release. So the highlight arrives beside it, additively, in the same
+     * register [pool] and [wash] established — and the day the rig grows a
+     * proper specular (`docs/PHOTOREAL.md` stage 2) this is the shape of the
+     * thing that gets absorbed into it.
+     */
+    data class Gloss(
+        /** The Blinn-Phong exponent: how tight the highlight is. */
+        val sharpness: Float,
+        /** How much of the lamp comes back, at the best angle. */
+        val strength: Float,
+    ) {
+        companion object {
+            /**
+             * Hammered gold. The tightest and strongest thing in the room by a
+             * long way, because a metal *is* a mirror with a rough surface and
+             * everything else here is a dielectric with a bit of sheen.
+             */
+            val Gold = Gloss(sharpness = 36f, strength = 0.62f)
+
+            /** Lacquered brass: a shade darker and a shade broader than the gold. */
+            val Brass = Gloss(sharpness = 28f, strength = 0.46f)
+
+            /** Painted timber, which has a sheen and nothing more. */
+            val Paint = Gloss(sharpness = 12f, strength = 0.10f)
+
+            /** Cloth, plaster, felt: no highlight worth the arithmetic. */
+            val None = Gloss(sharpness = 1f, strength = 0f)
+        }
+    }
+
+    /**
+     * Under this and a highlight is not a highlight, it is a rounding error.
+     *
+     * The same threshold [wash] uses and for the same reason: two levels of 255
+     * is where a term stops being visible and starts being a brush allocated
+     * every frame for nothing.
+     */
+    const val GLEAM_FLOOR = 0.008f
+
+    /**
+     * The lamp, mirrored in a surface — an **additive** highlight.
+     *
+     * Blinn-Phong from the half vector, and both vectors are taken from real
+     * *places* rather than directions: the eye is three feet from the table and
+     * the lamp is a hand above it, so a highlight computed from a direction
+     * would sit in the same spot on every facet of a turned solid and would not
+     * move when the camera did — which is precisely the thing a highlight is for.
+     *
+     * Returns null under [GLEAM_FLOOR], so a matte surface, a face turned away,
+     * and every surface on `Scene.MINIMAL` cost one comparison and allocate
+     * nothing.
+     */
+    fun gleam(
+        face: Face,
+        eyeAt: Vec3,
+        lighting: StageLighting,
+        gloss: Gloss,
+        samples: Int = 4,
+    ): FaceWash? {
+        if (gloss.strength <= 0f) return null
+        val key = lighting.key
+
+        /**
+         * The lobe, widened by how big the lamp is in the sky.
+         *
+         * A highlight is the *source* reflected, so its width is the source's
+         * own angular radius as much as the surface's roughness, and the two
+         * add in quadrature the way any pair of independent spreads does. That
+         * is not a refinement: the day key is a window at `SKY_RADIUS /
+         * SKY_DISTANCE`, which is twenty-two degrees across, and taking gold's
+         * own sharpness of thirty-six for it turns a flat face pointed anywhere
+         * near the half vector into a white rectangle — which is exactly what
+         * the puzzle's top face came out as, because a large flat surface under
+         * a directional lamp has *one* alignment over the whole of it.
+         *
+         * The strength falls with the same ratio, because a lobe spread over
+         * six times the solid angle is six times dimmer at its peak and the
+         * light did not get brighter. So the same two numbers give a broad
+         * whisper by day and a hard glint at night, from one lamp being a
+         * window and the other being a bulb — which is what `StageLook.gold`'s
+         * own note says it wants and had no way to get.
+         */
+        val spread = key.angularRadius(face.centre)
+        val sharpness = 1f / (1f / gloss.sharpness + spread * spread)
+        val strength = gloss.strength * (sharpness / gloss.sharpness)
+
+        fun amountAt(normal: Vec3, at: Vec3): Float {
+            val toLight = key.toLightFrom(at)
+            // Gated on the light reaching the face at all, not multiplied by it
+            // — the same choice `Shading.of` makes, and the reason is that a
+            // highlight multiplied by N·L is dimmed twice at exactly the
+            // grazing angles where a real one is strongest.
+            if ((normal dot toLight) <= 0f) return 0f
+            val half = (toLight + (eyeAt - at).normalised()).normalised()
+            val alignment = max(0f, normal dot half)
+            return (
+                alignment.pow(sharpness) *
+                    strength * key.intensity * key.attenuation(at)
+                ).coerceAtMost(1f)
+        }
+
+        if (amountAt(face.normal.normalised(), face.centre) < GLEAM_FLOOR &&
+            face.corners.indices.all {
+                amountAt(face.normalAt(it), face.corners[it]) < GLEAM_FLOOR
+            }
+        ) {
+            return null
+        }
+
+        // A *gradient* rather than one value per face, for the reason
+        // `docs/LOOP.md` iteration 9 gives about the wall: a facet is not a
+        // point, and a correct number evaluated at its centre comes out as one
+        // flat tone stepping to another at the seam. On a twenty-sided lamp
+        // base that is not a subtle artefact — it is a starburst, because the
+        // brightest facet is a wedge and its neighbours are visibly dimmer
+        // wedges, and the whole foot reads as a paper fan.
+        //
+        // Below four corners there is no axis to grade along and a flat answer
+        // is the honest one, which is the triangles at an apex.
+        if (face.corners.size < 4) {
+            val flat = amountAt(face.normal.normalised(), face.centre)
+            if (flat < GLEAM_FLOOR) return null
+            return FaceWash(face.centre, face.centre, listOf(Lit(flat, key.warmth)))
+        }
+
+        // The midpoints of **opposite** edges, which for a quad is [wash]'s own
+        // (0,1)–(2,3) and (1,2)–(3,0) and for an n-gon is the same walk half way
+        // round. Opposite matters and adjacent does not work: two facets that
+        // share an edge agree exactly at that edge's midpoint, so a gradient
+        // between opposite edges is continuous across the seam and one between
+        // adjacent edges steps at every one of them — which on a twenty-sided
+        // base is the starburst this function was rewritten to remove, still
+        // there afterwards.
+        val n = face.corners.size
+        fun midpoint(a: Int, b: Int) = (face.corners[a % n] + face.corners[b % n]) * 0.5f
+        fun midNormal(a: Int, b: Int) =
+            (face.normalAt(a % n) + face.normalAt(b % n)).normalised()
+        val half = n / 2
+        val across = Pair(midpoint(0, 1), midNormal(0, 1)) to
+            Pair(midpoint(half, half + 1), midNormal(half, half + 1))
+        val along = Pair(midpoint(1, 2), midNormal(1, 2)) to
+            Pair(midpoint(half + 1, half + 2), midNormal(half + 1, half + 2))
+        val acrossSpread = abs(
+            amountAt(across.first.second, across.first.first) -
+                amountAt(across.second.second, across.second.first),
+        )
+        val alongSpread = abs(
+            amountAt(along.first.second, along.first.first) -
+                amountAt(along.second.second, along.second.first),
+        )
+        val (start, end) = if (
+            gradeAcross(
+                curved = face.smooth != null,
+                acrossSpread = acrossSpread,
+                alongSpread = alongSpread,
+                acrossNormals = across.first.second to across.second.second,
+                alongNormals = along.first.second to along.second.second,
+            )
+        ) across else along
+
+        val stops = samples.coerceAtLeast(2)
+        return FaceWash(
+            from = start.first,
+            to = end.first,
+            stops = (0 until stops).map { step ->
+                val along01 = step / (stops - 1f)
+                val at = start.first + (end.first - start.first) * along01
+                val normal = (start.second + (end.second - start.second) * along01).normalised()
+                Lit(amountAt(normal, at), key.warmth)
+            },
+        )
+    }
+
+    /**
+     * How bright an emissive surface is across its own height.
+     *
+     * A lampshade is not evenly lit and the difference is not subtle: the bulb
+     * sits low inside it, so the cloth is brightest a little above the rim and
+     * falls away toward the opening at the top. Drawn flat instead — which is
+     * what shipped — it is a cream shape with no light in it, and at night the
+     * one fixture in the room reads as a paper bag.
+     *
+     * Returned as a [FaceWash] because that is already exactly this: real [Lit]
+     * values at points on the face, for a renderer to multiply its own colour
+     * by. Null when the face has no height to grade over, which is the rim and
+     * the underside, and they are right to be flat.
+     */
+    fun spill(
+        face: Face,
+        emission: Lit,
+        low: Float = SPILL_LOW,
+        high: Float = SPILL_HIGH,
+        samples: Int = 4,
+    ): FaceWash? {
+        if (face.corners.size < 4) return null
+        val bottom = face.corners.minByOrNull { it.z } ?: return null
+        val top = face.corners.maxByOrNull { it.z } ?: return null
+        val rise = top.z - bottom.z
+        if (rise < 1e-3f) return null
+
+        // The two ends are the midpoints of the low pair and the high pair, so
+        // the axis is the face's own and not a screen direction.
+        val byHeight = face.corners.sortedBy { it.z }
+        val from = (byHeight[0] + byHeight[1]) * 0.5f
+        val to = (byHeight[byHeight.size - 2] + byHeight[byHeight.size - 1]) * 0.5f
+
+        val stops = samples.coerceAtLeast(2)
+        return FaceWash(
+            from = from,
+            to = to,
+            stops = (0 until stops).map { step ->
+                val along = step / (stops - 1f)
+                Lit(emission.amount * (low + (high - low) * along), emission.warmth)
+            },
+        )
+    }
+
+    /**
+     * What is left of a fixture's own light at the bottom of it and at the top.
+     *
+     * Under one at both ends, because a shade drawn at full radiance everywhere
+     * has no shape at all — and brightest at the *bottom*, because that is where
+     * the bulb is and it is the half of this that a photograph makes obvious and
+     * a diagram does not.
+     */
+    const val SPILL_LOW = 1f
+    const val SPILL_HIGH = 0.62f
 }
 
 /**

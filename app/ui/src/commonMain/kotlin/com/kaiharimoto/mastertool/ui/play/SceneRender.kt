@@ -25,6 +25,7 @@ import com.kaiharimoto.mastertool.core.scene.TimeOfDay
 import com.kaiharimoto.mastertool.ui.gpu.StageShader
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.lerp
 import kotlin.math.abs
@@ -100,8 +101,21 @@ internal data class StageLook(
     val sky: Color,
     /** The painted joinery around the pane. */
     val frame: Color,
-    /** The lamp: its base, its mast, and the shade that is the light. */
+    /** The lamp's cloth, from outside. */
     val shade: Color,
+    /**
+     * The inside of that cloth.
+     *
+     * Bright, and deliberately brighter than anything else in the room. It is
+     * the one surface here that is *emissive* at night, and emission arrives as
+     * the base colour itself because `Tone` can darken a colour and can never
+     * brighten it — so a dim hex here is a lamp that cannot be switched on. By
+     * day it is shaded like everything else and comes back dark, because the
+     * inside of a shade is the one place in a sunlit room that sees no window.
+     */
+    val glow: Color,
+    /** The lamp's metal: its foot, its stem, its finial. */
+    val brass: Color,
     /**
      * The puzzle: the one surface on this stage with a colour of its own.
      *
@@ -165,6 +179,8 @@ internal data class StageLook(
         Surface.GLASS -> glass
         Surface.FRAME -> frame
         Surface.SHADE -> shade
+        Surface.GLOW -> glow
+        Surface.BRASS -> brass
         Surface.GOLD -> gold
     }
 
@@ -209,6 +225,8 @@ internal data class StageLook(
             sky = Color(0xFFDCE4EA),
             frame = Color(0xFF141519),
             shade = Color(0xFFE4DAC6),
+            glow = Color(0xFFFFF2DC),
+            brass = Color(0xFFB08A45),
             // Never drawn: nothing stands on the minimal stage. Present because
             // a palette with a hole in it is a palette somebody fills in with a
             // literal the first time a room needs one.
@@ -258,6 +276,13 @@ internal data class StageLook(
             // angled to catch what is coming through.
             frame = Color(0xFF6E675B),
             shade = Color(0xFFE4DAC6),
+            glow = Color(0xFFFFF2DC),
+            // Lacquered brass, dark on purpose and for the reason the gold is:
+            // everything the shading does is a multiply, so a base colour is
+            // the brightest that surface will ever be. Bright, it is a yellow
+            // stick beside the cards at every angle; dark, it is nearly the
+            // wood until the highlight lands on it.
+            brass = Color(0xFFB08A45),
             // The same gold as at night, and the difference is all light: a
             // window is a broad, cool source with almost no highlight to give,
             // so by day this reads as the shape of a thing in the corner rather
@@ -305,6 +330,8 @@ internal data class StageLook(
             sky = Color(0xFFB6C6DC),
             frame = Color(0xFF6E675B),
             shade = Color(0xFFE4DAC6),
+            glow = Color(0xFFFFF2DC),
+            brass = Color(0xFFB08A45),
             // The same gold. A room does not repaint its ornaments at dusk
             // either, and the whole difference between the two is the lamp —
             // which is a point source close by, so this is the one surface in
@@ -461,6 +488,23 @@ internal fun DrawScope.drawScene(
                     }
                 return@forEach
             }
+            // The inside of a shell, first. `ScenePiece.lining` carries the
+            // argument for why before rather than interleaved: culling has
+            // already removed the near half of it, so every face left is behind
+            // every face of the shell around it.
+            piece.lining?.let { lining ->
+                drawSolid(
+                    faces = lining.faces,
+                    stage = stage,
+                    eyeAt = eyeAt,
+                    eye = eye,
+                    look = look,
+                    colour = look.colourOf(lining.surface),
+                    surface = lining.surface,
+                    emission = lining.emission,
+                    pool = pool,
+                )
+            }
             drawSolid(
                 faces = piece.mesh ?: piece.box.faces(),
                 stage = stage,
@@ -546,15 +590,33 @@ internal class Prop(
  */
 private val Seam = Stroke(width = 1f)
 
-/** Fill and then close the seam, which is one operation and never one call. */
-private fun DrawScope.facet(path: Path, colour: Color) {
+/**
+ * And why the minimal stage does not get it.
+ *
+ * Closing the seam also grows a solid's own outline by half a pixel, which on
+ * `Scene.MINIMAL` — one slab, four seams nobody has ever seen — is a change to
+ * the handbook's stage in exchange for nothing. `docs/LOOP.md`'s mandate is not
+ * a preference about that: minimal is the **control** the room is judged
+ * against, and iteration 7's own note is that it "comes out bit-identical,
+ * which is the mandate's requirement and is checked rather than assumed". A
+ * quarter of one per cent of its pixels moving by nine levels is still moving.
+ */
+private fun StageLook.closesSeams(): Boolean = scene != Scene.MINIMAL
+
+/** Fill, and then close the seam — which is one operation and never one call. */
+private fun DrawScope.facet(path: Path, colour: Color, look: StageLook) {
     drawPath(path, colour)
-    drawPath(path, colour, style = Seam)
+    if (look.closesSeams()) drawPath(path, colour, style = Seam)
 }
 
-private fun DrawScope.facet(path: Path, brush: Brush, blendMode: BlendMode = BlendMode.SrcOver) {
+private fun DrawScope.facet(
+    path: Path,
+    brush: Brush,
+    look: StageLook,
+    blendMode: BlendMode = BlendMode.SrcOver,
+) {
     drawPath(path, brush, blendMode = blendMode)
-    drawPath(path, brush, style = Seam, blendMode = blendMode)
+    if (look.closesSeams()) drawPath(path, brush, style = Seam, blendMode = blendMode)
 }
 
 /**
@@ -608,27 +670,69 @@ private fun DrawScope.drawSolid(
                 //
                 // The upward-facing top of the pane's own box is excluded, since
                 // a sky drawn across a sliver seen edge-on is a bright line.
-                facet(path, skyBrush(face, stage, look, emission))
+                facet(path, skyBrush(face, stage, look, emission), look)
             } else if (emission != null) {
                 // A fixture is not shaded, and that is the physics rather than a
                 // shortcut: how bright a lit lampshade is does not depend on what
                 // is lighting the room it is in. It is also the only way to draw
                 // one at all — `Tone` can darken a colour and can never brighten
                 // it, so radiance has to arrive as the base colour itself.
-                facet(path, colour.shaded(emission))
+                //
+                // Not evenly bright, though. The bulb sits low inside the shade,
+                // so the cloth is brightest near the rim and falls away toward
+                // the opening; drawn flat it is a cream shape with no light in
+                // it. `StageRig.spill` returns null for the faces with no height
+                // to grade over — the rim, the underside — and those are right
+                // to be flat.
+                val spill = StageRig.spill(face, emission)
+                if (spill == null) {
+                    facet(path, colour.shaded(emission), look)
+                } else {
+                    facet(path, washBrush(spill, stage, colour), look)
+                }
             } else if (surface == Surface.TABLE) {
                 // The desk keeps the ordinary rig, because the pool below is
                 // already the lamp's answer for this surface. Handing it the
                 // room's falloff as well would darken the wood twice for the
                 // same lamp, and the seam between the two would land exactly
                 // where the pool's edge is.
-                facet(path, colour.shaded(StageRig.face(face, eye, look.lighting)))
+                facet(path, colour.shaded(StageRig.face(face, eye, look.lighting)), look)
             } else {
                 val wash = StageRig.wash(face, eye, look.lighting)
                 if (wash == null) {
-                    facet(path, colour.shaded(StageRig.room(face, eye, look.lighting)))
+                    facet(path, colour.shaded(StageRig.room(face, eye, look.lighting)), look)
                 } else {
-                    facet(path, washBrush(wash, stage, colour))
+                    facet(path, washBrush(wash, stage, colour), look)
+                }
+            }
+
+            // And the lamp mirrored *in* it, which is the one term the room's
+            // rig does not have: `StageRig.lit` is ambient plus lambert plus a
+            // graze-gated rim and there is no specular anywhere in it, so gold
+            // and cloth have always differed in colour and in nothing else.
+            //
+            // Additive, and beside the rig rather than inside it. Inside, it
+            // would move all three of `GoldenStageTest`'s dumps, and
+            // `docs/LOOP.md` §3 forbids re-recording a golden and changing
+            // behaviour in one release. Beside, it is the same shape as the
+            // pool and the wash, it cannot darken anything, and a bug in it
+            // cannot blank a surface.
+            if (emission == null) {
+                StageRig.gleam(face, eyeAt, look.lighting, surface.gloss)?.let { shine ->
+                    val brush = if (shine.stops.size < 2) {
+                        SolidColor(Color.White.shaded(shine.stops.first()))
+                    } else {
+                        washBrush(shine, stage, Color.White)
+                    }
+                    // Filled and **not** stroked, unlike every other pass here.
+                    // Closing a seam means painting its pixels twice, which is
+                    // free when the paint replaces what is under it and is a
+                    // doubling when the paint adds to it — so the seamed
+                    // version of this drew a bright spoke along every edge of
+                    // the lamp's foot and turned the highlight into a starburst
+                    // for the second time in one afternoon. There is nothing to
+                    // close here anyway: the fill underneath already did.
+                    drawPath(path, brush, blendMode = BlendMode.Plus)
                 }
             }
 
@@ -648,7 +752,7 @@ private fun DrawScope.drawSolid(
                 face.normal.z > 0.99f &&
                 abs(face.centre.z) < 0.5f
             ) {
-                facet(path, poolBrush(pool, colour))
+                facet(path, poolBrush(pool, colour), look)
             }
 
             // And the timber itself. Same test as the pool — facing straight up

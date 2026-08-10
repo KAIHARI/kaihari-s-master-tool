@@ -15,7 +15,35 @@ import kotlin.math.exp
 data class Face(
     val corners: List<Vec3>,
     val normal: Vec3,
+    /**
+     * The normals of the *smooth surface this facet stands for*, at its own
+     * corners — when it stands for one.
+     *
+     * Null for everything that is really flat, which is every card, every pile
+     * and every box in the room, and null is what keeps this inert: a facet
+     * with no smooth normals is shaded exactly as it always was.
+     *
+     * A turn is the case it exists for. A twenty-sided lamp base is twenty flat
+     * wedges standing in for a cone, and shading each of them by its own one
+     * normal is correct arithmetic about the wrong object: the answer steps at
+     * every seam and the foot comes out as a paper fan, which is what shipped
+     * the first time the room had a round thing in it. Two facets that share an
+     * edge agree exactly about the normal *on* that edge, so shading from these
+     * and interpolating between them is continuous across the seam — which is
+     * Gouraud's observation, and it needs nothing here but somewhere to put the
+     * normals.
+     *
+     * [normal] stays the facet's own and is still what culling and the paint
+     * order use, because whether a face can be seen and where it sorts are
+     * questions about the polygon that is really being drawn.
+     */
+    val smooth: List<Vec3>? = null,
 ) {
+
+    /** The surface's normal at corner [index], which for a flat face is its own. */
+    fun normalAt(index: Int): Vec3 =
+        smooth?.getOrNull(index) ?: normal
+
     /** How square-on the face is to an eye looking along [eye]. Negative is away. */
     fun facing(eye: Vec3 = Vec3.Toward): Float = normal dot eye
 

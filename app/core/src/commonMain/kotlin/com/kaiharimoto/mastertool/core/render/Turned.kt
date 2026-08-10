@@ -225,13 +225,23 @@ object Turned {
                     )
                 }
                 // The middle of the segment, where the facet's normal points.
-                val middle = (side + 0.5f) * step
+                val middle = (side + 0.5f) * step + turn
+                // And the cone's own normal at each corner's own angle, which is
+                // the same vector on both sides of every seam. `Face.smooth`
+                // says what that buys.
+                val here = Rot3.rotate(pose, Vec3(radial * cosines[side], radial * sines[side], vertical))
+                val there = Rot3.rotate(pose, Vec3(radial * cosines[next], radial * sines[next], vertical))
                 faces += Face(
                     corners = corners,
                     normal = Rot3.rotate(
                         pose,
                         Vec3(radial * cos(middle), radial * sin(middle), vertical),
                     ),
+                    smooth = when {
+                        high.radius <= 0f -> listOf(here, there, here)
+                        low.radius <= 0f -> listOf(here, there, here)
+                        else -> listOf(here, there, there, here)
+                    },
                 )
             }
         }
@@ -258,6 +268,26 @@ object Turned {
         }
 
         return faces
+    }
+
+    /**
+     * The faces of one band, for a caller that needs to treat part of a turn as
+     * a different material.
+     *
+     * [solid] returns bands first, in profile order, `sides` faces at a time,
+     * and then at most two caps — so a band is a `subList` and this function is
+     * the promise that it will go on being one. The inside of a lampshade is the
+     * only caller and it needs exactly this: one band of a six-station shell,
+     * drawn as a different surface from the five around it.
+     *
+     * The [sides] handed in must be the [sides] the solid was turned with, which
+     * is why anything doing this passes it explicitly at both ends rather than
+     * letting the default work it out twice.
+     */
+    fun band(faces: List<Face>, index: Int, sides: Int): List<Face> {
+        val from = index * sides
+        if (from < 0 || from + sides > faces.size) return emptyList()
+        return faces.subList(from, from + sides)
     }
 
     /**

@@ -11,6 +11,7 @@ import com.kaiharimoto.mastertool.core.render.Light
 import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.Ring
 import com.kaiharimoto.mastertool.core.render.StageLighting
+import com.kaiharimoto.mastertool.core.render.StageRig
 import com.kaiharimoto.mastertool.core.render.Turned
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -115,8 +116,32 @@ enum class Surface {
      */
     FRAME,
 
-    /** The lamp — its base, its mast and the shade that is the light. */
+    /** The cloth of the lampshade, seen from outside. */
     SHADE,
+
+    /**
+     * The inside of that cloth, which is a different surface and not a darker
+     * one.
+     *
+     * By day it is the one part of the room in shadow at noon — a shade's inside
+     * sees no window. At night it is the brightest thing on the stage, because
+     * it is what the bulb is actually shining on. The same hex value does both,
+     * which is the point: it is a *bright* warm white that daylight barely
+     * reaches and lamplight is emitted straight off, so the two hours differ by
+     * light and not by paint, exactly as `StageLook` insists everything else in
+     * this room does.
+     */
+    GLOW,
+
+    /**
+     * Lacquered brass: the lamp's foot, its stem, its finial.
+     *
+     * Its own surface rather than [SHADE] for the reason [FRAME] is not [WALL] —
+     * a lamp is two materials, cloth and metal, and drawing both in one cream
+     * was most of why the thing read as folded card. Brass is also the only
+     * surface in the room besides [GOLD] whose highlight is worth computing.
+     */
+    BRASS,
 
     /**
      * The one thing in the room that is not furniture.
@@ -130,6 +155,27 @@ enum class Surface {
      * different rooms through it before anything else on the desk changes.
      */
     GOLD,
+    ;
+
+    /**
+     * How this surface mirrors the light, which is the half of "what a thing is
+     * made of" the room has never had.
+     *
+     * Here rather than in the renderer for the reason the whole enum exists: a
+     * finish is a fact about a material, and the alternative is a `when` in
+     * whatever happens to be drawing, which is where two of them start
+     * disagreeing. `StageRig.Gloss` carries the argument for the numbers.
+     */
+    val gloss: StageRig.Gloss
+        get() = when (this) {
+            GOLD -> StageRig.Gloss.Gold
+            BRASS -> StageRig.Gloss.Brass
+            FRAME -> StageRig.Gloss.Paint
+            // Wood is lacquered and already has a highlight of its own, from a
+            // shader that knows where its grain runs; a second one computed off
+            // the flat normal would sit in a different place and argue with it.
+            TABLE, WALL, FLOOR, GLASS, SHADE, GLOW -> StageRig.Gloss.None
+        }
 }
 
 /**
@@ -192,6 +238,28 @@ data class ScenePiece(
      * paragraph written for it before it goes here.
      */
     val mesh: List<Face>? = null,
+    /**
+     * The faces of this piece that are made of something else.
+     *
+     * One object, two materials, and the alternative is two pieces — which the
+     * room cannot have, because the inside and the outside of a lampshade have
+     * the same bounding box on every axis and `SceneryTest` rightly refuses two
+     * pieces that share a volume.
+     *
+     * Drawn **before** [mesh], and that is an ordering claim rather than a
+     * convenience. Everything a lining can be is the far side of a shell seen
+     * through its own opening: back-face culling has already removed the near
+     * half of it, so every face left is behind every face of the shell around
+     * it, from any seat the camera can reach.
+     */
+    val lining: Lining? = null,
+)
+
+/** Some of a piece's faces, made of something else. See [ScenePiece.lining]. */
+data class Lining(
+    val surface: Surface,
+    val faces: List<Face>,
+    val emission: Lit? = null,
 )
 
 /**
@@ -524,6 +592,18 @@ object Scenery {
     const val LAMP_SHADE_WALL = 0.03f
 
     /**
+     * Which band of [lampShade]'s six is the inside of the cloth.
+     *
+     * The profile runs: rim, roll, cone foot, opening, across the opening, down
+     * the inside, and back under the bottom. Band four is the one that comes
+     * back down, which is the surface the bulb is shining on. A named constant
+     * beside the profile rather than a four in the middle of the room, because
+     * the two have to be changed together and a silent disagreement between them
+     * is a lampshade lit on its outside and dark within.
+     */
+    const val LAMP_SHADE_INSIDE = 4
+
+    /**
      * The finial: the bead that screws down over the harp and holds the shade
      * on, standing above [LAMP_DRAWN].
      *
@@ -823,8 +903,17 @@ object Scenery {
         val turnedStem = Turned.solid(spindle, lampStem(layout))
         // Closed, because the shade's profile comes back round to where it
         // started: it is a shell rather than a solid, so there is no end left
-        // open for a cap to go on.
-        val turnedShade = Turned.solid(spindle, lampShade(layout), closed = true)
+        // open for a cap to go on. The sides are named rather than defaulted so
+        // that the band the lining lives in can be found by index — see
+        // [LAMP_SHADE_INSIDE].
+        val shadeProfile = lampShade(layout)
+        val shadeSides = Turned.sidesFor(shadeProfile)
+        val wholeShade = Turned.solid(spindle, shadeProfile, sides = shadeSides, closed = true)
+        val shadeLining = Turned.band(wholeShade, LAMP_SHADE_INSIDE, shadeSides)
+        val turnedShade = wholeShade.filterIndexed { index, _ ->
+            index < LAMP_SHADE_INSIDE * shadeSides ||
+                index >= (LAMP_SHADE_INSIDE + 1) * shadeSides
+        }
         val turnedFinial = Turned.solid(spindle, lampFinial(layout))
 
         fun wall(name: String, l: Float, r: Float, bottom: Float, top: Float) = ScenePiece(
@@ -906,26 +995,37 @@ object Scenery {
                 frame("bar right", midX + barHalf, openingRight, midZ - barHalf, midZ + barHalf, barOut),
                 ScenePiece(
                     name = "lamp base",
-                    surface = Surface.SHADE,
+                    surface = Surface.BRASS,
                     box = SceneBox.around(turnedBase),
                     mesh = turnedBase,
                 ),
                 ScenePiece(
                     name = "lamp mast",
-                    surface = Surface.SHADE,
+                    surface = Surface.BRASS,
                     box = SceneBox.around(turnedStem),
                     mesh = turnedStem,
                 ),
                 ScenePiece(
                     name = "lamp shade",
                     surface = Surface.SHADE,
-                    box = SceneBox.around(turnedShade),
+                    // The whole shell, so the room goes on sorting against the
+                    // shape rather than against the half of it that is cloth.
+                    box = SceneBox.around(wholeShade),
                     mesh = turnedShade,
                     emission = shadeLight(time),
+                    lining = Lining(
+                        surface = Surface.GLOW,
+                        faces = shadeLining,
+                        // Full radiance inside, where the bulb is, against the
+                        // cloth's own [SHADE_THROUGH] on the way out. That
+                        // difference is the whole of what says the light is in
+                        // there rather than painted on.
+                        emission = insideLight(time),
+                    ),
                 ),
                 ScenePiece(
                     name = "lamp finial",
-                    surface = Surface.SHADE,
+                    surface = Surface.BRASS,
                     box = SceneBox.around(turnedFinial),
                     mesh = turnedFinial,
                 ),
@@ -958,8 +1058,39 @@ object Scenery {
      */
     private fun shadeLight(time: TimeOfDay): Lit? = when (time) {
         TimeOfDay.DAY -> null
+        TimeOfDay.NIGHT -> Lit(SHADE_THROUGH, StageLighting.DeskNight.key.warmth)
+    }
+
+    /**
+     * And the same lamp seen from inside the shade, which is not the same
+     * amount of light.
+     *
+     * The cloth is what the bulb is behind, so the outside of it is the light
+     * that got *through* — a real linen shade passes something between a third
+     * and a half — and the inside is very nearly the source. Drawn at one
+     * everywhere, which is what shipped, the shade is a flat cream shape with
+     * no light in it and the opening at the top is indistinguishable from the
+     * cloth around it. The difference between the two numbers is the entire
+     * read.
+     */
+    private fun insideLight(time: TimeOfDay): Lit? = when (time) {
+        TimeOfDay.DAY -> null
         TimeOfDay.NIGHT -> Lit(1f, StageLighting.DeskNight.key.warmth)
     }
+
+    /**
+     * How much of the bulb the cloth lets out.
+     *
+     * Nine tenths, and the first attempt at this was four — the honest
+     * transmission of a linen shade, and completely wrong here. Everything the
+     * renderer does with a colour is a multiply, so this is a fraction of
+     * `0xE4DAC6` and not a fraction of a bulb: at four tenths the one fixture
+     * in the room came out as a grey paper bag, dimmer at night than the same
+     * cloth is in daylight. The cloth is *lit from inside* and it is the
+     * brightest object on the stage; what shapes it is [StageRig.spill] and the
+     * inside being brighter still, not this being small.
+     */
+    const val SHADE_THROUGH = 0.90f
 
     /**
      * Which rig lights which room, once the board's size is known.
