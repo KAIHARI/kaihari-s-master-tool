@@ -28,6 +28,8 @@ class CameraLensTest {
 
     private fun plane(pose: CameraPose) = pose.planeFor(width, height)
 
+    private val growthAtHome = plane(StageSeat.TABLE.pose).perspectiveGrowth
+
     /** Horizontal field of view in degrees, which is what a lens is usually sold by. */
     private fun fieldOfView(pose: CameraPose): Float =
         2f * atan(width / (2f * plane(pose).cameraDistance)) * (180f / kotlin.math.PI.toFloat())
@@ -69,63 +71,85 @@ class CameraLensTest {
     // ---- and what it does when it moves ------------------------------------------------
 
     @Test
-    fun aShorterLensWidensTheViewAndALongerOneNarrowsIt() {
-        val wide = fieldOfView(StageSeat.TABLE.pose.copy(lens = 0.7f))
-        val shipped = fieldOfView(StageSeat.TABLE.pose)
-        val long = fieldOfView(StageSeat.TABLE.pose.copy(lens = 2f))
+    fun aLongerLensMagnifiesAndAShorterOneDoesNot() {
+        // What a focal length is: the board gets bigger. Measured at the middle
+        // of the table, where the projection's own scale is exactly one, so the
+        // only thing that can have moved it is the zoom.
+        fun widthOnGlass(lens: Float): Float {
+            val at = plane(StageSeat.TABLE.pose.copy(lens = lens))
+            return at.project(width, height / 2f, 0f).x - at.project(0f, height / 2f, 0f).x
+        }
 
-        assertTrue(wide > shipped && shipped > long, "$wide / $shipped / $long")
-        // And the numbers the KDoc's table promises, to the degree.
-        assertTrue(abs(wide - 76f) < 1f, "wide end was $wide degrees")
-        assertTrue(abs(shipped - 58f) < 1f, "the shipped lens is $shipped degrees")
-        assertTrue(abs(long - 31f) < 1f, "long end was $long degrees")
+        val wide = widthOnGlass(0.7f)
+        val shipped = widthOnGlass(1f)
+        val long = widthOnGlass(2f)
+
+        assertTrue(long > shipped && shipped > wide, "$wide / $shipped / $long")
+        // And it is a *multiplier*: twice the lens is twice the board.
+        assertTrue(abs(long / shipped - 2f) < 0.02f, "2.0 gave ${long / shipped}x")
+        assertTrue(abs(wide / shipped - 0.7f) < 0.02f, "0.7 gave ${wide / shipped}x")
     }
 
     @Test
-    fun theMiddleOfTheTableDoesNotMoveAndTheCornersDo() {
-        // The whole difference between a focal length and a dolly, as one claim.
-        // A point at zero depth projects at scale one whatever the camera
-        // distance, so pinning `zoom` pins the subject and frees the perspective.
-        val centre = Triple(width / 2f, height / 2f, 0f)
-        val shipped = plane(StageSeat.TABLE.pose)
-        val wide = plane(StageSeat.TABLE.pose.copy(lens = 0.7f))
+    fun theLensDoesNotTouchThePerspectiveAtAll() {
+        // The claim the whole re-parameterisation is for, and the one the first
+        // version got backwards: v1.2.38 put the lens on `cameraDistance` alone,
+        // which pins the framing and moves the perspective — a dolly zoom. Both
+        // dials then changed the perspective, so tuning one appeared to undo the
+        // other.
+        //
+        // Perspective is the ratio between the near edge and the far edge, and a
+        // magnification cannot change a ratio.
+        fun keystone(lens: Float): Float {
+            val at = plane(StageSeat.TABLE.pose.copy(lens = lens))
+            return at.project(width / 2f, height, 0f).scale / at.project(width / 2f, 0f, 0f).scale
+        }
 
-        val a = shipped.project(centre.first, centre.second, centre.third)
-        val b = wide.project(centre.first, centre.second, centre.third)
-        assertTrue(abs(a.x - b.x) < 0.01f && abs(a.y - b.y) < 0.01f, "the subject moved")
-        assertTrue(abs(a.scale - b.scale) < 1e-4f, "the subject changed size")
-
-        // The near edge is where the lens shows.
-        val nearShipped = shipped.project(width / 2f, height, 0f).scale
-        val nearWide = wide.project(width / 2f, height, 0f).scale
-        assertTrue(nearWide > nearShipped * 1.05f, "$nearWide against $nearShipped")
-    }
-
-    @Test
-    fun theKeystoneGrowsAsTheLensShortens() {
-        // `perspectiveGrowth` is what `BoardLayouter` is solved against, so this
-        // is also the reason a *baked-in* lens re-solves the board.
-        val growths = listOf(2f, 1.5f, 1f, 0.7f)
-            .map { plane(StageSeat.TABLE.pose.copy(lens = it)).perspectiveGrowth }
-
-        growths.zipWithNext { longer, shorter ->
-            assertTrue(shorter > longer, "growth did not rise as the lens shortened: $growths")
+        val shipped = keystone(1f)
+        listOf(0.7f, 0.85f, 1.4f, 2f).forEach {
+            assertTrue(
+                abs(keystone(it) - shipped) < 1e-3f,
+                "a lens of $it changed the keystone from $shipped to ${keystone(it)}",
+            )
+        }
+        // Which is also why a baked-in lens no longer threatens the bound
+        // `StagePlaneTest.theStageSaysHowMuchRoomItsOwnTiltCosts` asserts.
+        listOf(0.7f, 1f, 2f).forEach {
+            assertTrue(
+                abs(plane(StageSeat.TABLE.pose.copy(lens = it)).perspectiveGrowth - growthAtHome) < 1e-4f,
+                "a lens of $it moved perspectiveGrowth",
+            )
         }
     }
 
-    // ---- the floor moves with it -------------------------------------------------------
+    @Test
+    fun whereYouStandIsWhatChangesThePerspective() {
+        // The other half of the pair, stated so that the two are documented as a
+        // pair: distance is a position, so it does what walking backwards does.
+        fun keystone(distance: Float): Float {
+            val at = plane(StageSeat.TABLE.pose.copy(distance = distance))
+            return at.project(width / 2f, height, 0f).scale / at.project(width / 2f, 0f, 0f).scale
+        }
+
+        assertTrue(keystone(1.0f) > keystone(1.45f), "stepping in did not deepen it")
+        assertTrue(keystone(1.45f) > keystone(2.5f), "stepping back did not flatten it")
+    }
+
+    // ---- and the floor does not move with it -------------------------------------------
 
     @Test
-    fun aWiderLensMakesYouStandFurtherBack() {
-        // The dangerous one. A short lens deepens the table toward the camera in
-        // exactly the way laying it back does, so the clearance floor has to rise
-        // with it or the far corner crosses the lens.
-        val long = envelope.minDistanceAt(45f, width, height, lens = 2f)
-        val shipped = envelope.minDistanceAt(45f, width, height)
-        val wide = envelope.minDistanceAt(45f, width, height, lens = 0.7f)
+    fun theLensDoesNotMoveTheDistanceFloor() {
+        // It cancels: the clearance constraint is
+        // `halfDiagonal · zoom · sin ≤ CLEARANCE · cameraDistance`, and a focal
+        // length multiplies both sides' lens term. Zooming does not move the
+        // camera, so it cannot bring the table nearer to it. The first version
+        // did carry a lens factor here, because the first version was a dolly.
+        val floor = envelope.minDistanceAt(45f, width, height)
 
-        assertTrue(wide > shipped && shipped > long, "$wide / $shipped / $long")
-        assertEquals(shipped, envelope.minDistanceAt(45f, width, height, lens = 1f))
+        listOf(0.7f, 1f, 1.5f, 2f).forEach {
+            val pose = envelope.clamp(CameraPose(0f, 45f, 0.5f, it), width, height)
+            assertTrue(abs(pose.distance - floor) < 1e-4f, "a lens of $it moved the floor to ${pose.distance}")
+        }
     }
 
     @Test
@@ -171,18 +195,16 @@ class CameraLensTest {
     }
 
     @Test
-    fun theEnvelopeKeepsTheLensInRangeAndClampsItBeforeItAsksForTheFloor() {
+    fun theEnvelopeKeepsTheLensInRange() {
         val squashed = envelope.clamp(CameraPose(0f, 21f, 1.45f, 0.01f), width, height)
         val stretched = envelope.clamp(CameraPose(0f, 21f, 1.45f, 99f), width, height)
 
         assertEquals(envelope.minLens, squashed.lens)
         assertEquals(envelope.maxLens, stretched.lens)
-        // And the distance floor it was given is the one for the *clamped* lens,
-        // not for the nonsense that came in.
-        assertEquals(
-            envelope.minDistanceAt(21f, width, height, envelope.minLens),
-            envelope.minDistanceAt(21f, width, height, squashed.lens),
-        )
+        // And clamping it changes nothing else, which is only true because the
+        // floor no longer depends on it.
+        assertEquals(1.45f, squashed.distance)
+        assertEquals(21f, squashed.pitchDegrees)
     }
 
     // ---- and nothing quietly forgets it ------------------------------------------------

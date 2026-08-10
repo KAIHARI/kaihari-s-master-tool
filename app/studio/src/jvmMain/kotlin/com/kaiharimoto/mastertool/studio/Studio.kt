@@ -144,7 +144,16 @@ fun main(args: Array<String>) {
 
             for (shot in opts.shots) {
                 director.prefs?.update { it.copy(scene = shot.scene, deskLight = shot.light) }
-                Keys.press(scene, shot.seat.digit)
+                // A shot name carries a seat, and pressing it aims the camera —
+                // which overwrites a tuned pose completely. So a tuning with a
+                // camera in it *is* the camera, and the seat in the name is
+                // ignored. Without this, `--tune` could not be used to check the
+                // one group of knobs it was most wanted for: every shot came
+                // back at its named seat with only the lens surviving, because
+                // `aimAt(seat)` carries the lens across and nothing else.
+                if (opts.tuning.camera == StageTuning.DEFAULT.camera) {
+                    Keys.press(scene, shot.seat.digit)
+                }
                 // A seat change is a spring, and the room's palette crosses a
                 // recomposition. Both are done well inside this.
                 clock.run(opts.shotFrames)

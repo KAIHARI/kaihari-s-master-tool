@@ -33,51 +33,54 @@ data class CameraPose(
     /**
      * The focal length, as a multiple of the one this stage has always used.
      *
-     * ## What it is, and why it could not have been a fifth of [distance]
+     * ## What it is
      *
-     * [planeFor] turns a pose into the projection's two numbers, and it welds
-     * them together on purpose: stepping back both weakens the perspective and
-     * makes the table smaller, which is what walking backwards does. That is
-     * right for a *position* and it is exactly what a lens is not. A long lens
-     * from across the room and a wide lens from arm's length frame the same
-     * subject at the same size and look nothing like each other, and the whole
-     * of that difference is the one thing [distance] cannot express alone.
+     * A **magnification**, and nothing else. It multiplies `zoom` and
+     * `cameraDistance` by the same amount, which leaves the angle the table
+     * subtends — `zoom · extent / cameraDistance` — exactly where it was. So the
+     * board is drawn bigger or smaller and the perspective across it does not
+     * move a pixel. That is what a longer lens does: it magnifies, it does not
+     * restage.
      *
-     * This is the other half. It multiplies `cameraDistance` and leaves `zoom`
-     * untouched, so the middle of the table stays exactly where it was — a
-     * point at zero depth projects at scale one whatever the camera distance —
-     * and only the *strength of the perspective* moves. A dolly zoom, in other
-     * words, with the subject pinned.
+     * [distance] remains the other half and remains a *position*: stepping back
+     * both flattens the perspective and makes the table smaller, which is what
+     * walking backwards does. The two are now the pair a photographer expects —
+     * where you stand decides the perspective, the lens decides how much of it
+     * fills the frame.
      *
-     * At 1600x1000 the horizontal field of view it buys, as `2·atan(w / 2·cd)`:
+     * ## The version that shipped first, and why it was wrong
      *
-     * | lens | field of view | 35mm equivalent |
-     * |---|---|---|
-     * | 0.70 | 76 degrees | about 23mm |
-     * | 1.00 | 58 degrees | about 33mm |
-     * | 1.50 | 40 degrees | about 49mm |
-     * | 2.00 | 31 degrees | about 65mm |
+     * v1.2.38 put the lens on `cameraDistance` alone. That pins the framing and
+     * moves the perspective, which is a **dolly zoom** — a real and useful
+     * control, and not a focal length. It also meant both dials changed the
+     * perspective, so tuning one appeared to undo the other; moving the distance
+     * from 1.45 to 2.0 took the field of view from 36 degrees to 26 with the
+     * lens number sitting still. kai's word for it was that it reset.
+     *
+     * ## What it costs, which is less than the dolly zoom did
+     *
+     * `perspectiveGrowth` no longer moves with it — both terms scale, so the
+     * ratio the board was solved against is untouched — which retires the
+     * warning that a baked-in lens under 0.947 would turn `StagePlaneTest` red.
+     * [CameraEnvelope.minDistanceAt] loses its lens factor for the same reason:
+     * zooming cannot bring the table closer to a camera that has not moved.
+     *
+     * What it does cost is framing. Past `1.0` the board is magnified and can
+     * run off the edges of the screen, exactly as a real zoom crops. Nothing
+     * catches it, and that is the deal: `CameraFit` moves the *distance*, and
+     * calling it here would re-couple the two dials that this exists to separate.
      *
      * ## Last, and defaulted to one, and that is load-bearing twice
      *
-     * At `1f` every byte of every projection is what it was, so this lands in a
+     * At `1f` every byte of every projection is what it was, so this landed in a
      * release ahead of anything that moves it and `GoldenStageTest` never
-     * notices — the same move `CardSolid.slab`'s trailing `backScale` made.
+     * noticed — the same move `CardSolid.slab`'s trailing `backScale` made.
      *
      * And it is last because [CameraRig.step] and [CameraRig.nudge] used to
      * build a pose *positionally*. A field inserted before [distance] would have
-     * been a silent re-binding rather than a compile error. Both now use `copy`
-     * for the same reason, and that is not tidiness: without it the lens reset
-     * to one on every frame the camera sprang or was dragged, so a tuned lens
-     * would have survived until the moment anybody touched the table.
-     *
-     * ## A short lens makes the camera stand further back, not closer
-     *
-     * [CameraEnvelope.minDistanceAt] carries it. Widening the lens deepens the
-     * table toward the viewer in exactly the way laying it back does, so the
-     * clearance floor rises with it. Miss that and the mat's far corner crosses
-     * the camera plane, `project` clamps, and a clamp cannot be inverted — see
-     * that function for what silently stops agreeing with what.
+     * been a silent re-binding rather than a compile error. Both use `copy` now:
+     * without it the lens reset to one on every frame the camera sprang or was
+     * dragged, so a tuned lens survived exactly until anybody touched the table.
      */
     val lens: Float = HOME_LENS,
 ) {
@@ -132,11 +135,8 @@ data class CameraEnvelope(
      */
     fun clamp(pose: CameraPose, width: Float = 0f, height: Float = 0f): CameraPose {
         val pitch = pose.pitchDegrees.coerceIn(minPitch, maxPitch)
-        // The lens is clamped *before* the floor is asked for, because the floor
-        // is a function of it. Asking in the other order lets a pose one step
-        // outside the lens range set a distance floor no legal pose has.
         val lens = pose.lens.coerceIn(minLens, max(minLens, maxLens))
-        val floor = minDistanceAt(pitch, width, height, lens)
+        val floor = minDistanceAt(pitch, width, height)
         return pose.copy(
             pitchDegrees = pitch,
             distance = pose.distance.coerceIn(floor, max(floor, maxDistance)),
@@ -164,21 +164,23 @@ data class CameraEnvelope(
      * close while you are looking down at the table, and you must step back as
      * you get low. That is also true of a real table.
      */
+    /**
+     * **The lens does not appear here, and that is a result rather than an
+     * oversight.** The clearance constraint is
+     * `halfDiagonal · zoom · sin(pitch) ≤ CLEARANCE · cameraDistance`, and a
+     * focal length multiplies `zoom` and `cameraDistance` by the same amount —
+     * so it cancels exactly. Zooming does not move the camera, so it cannot
+     * bring the table any closer to it.
+     *
+     * An earlier draft did carry a lens factor, because the first version of
+     * `planeFor` put the focal length on `cameraDistance` alone. That was a
+     * dolly zoom wearing a lens's name, and the floor moving with it was one of
+     * the several things it got wrong.
+     */
     fun minDistanceAt(
         pitchDegrees: Float,
         width: Float,
         height: Float,
-        /**
-         * A wide lens brings the far corner toward the camera exactly as laying
-         * the table back does, so the floor rises as it shortens. The derivation
-         * substitutes `cameraDistance = distance * lens * governing` alongside
-         * `zoom = HOME / distance`, and the lens comes out beside [CLEARANCE].
-         *
-         * Defaulted so that every caller and every test written before there was
-         * a lens still asks the question it used to ask, and gets the same answer
-         * to the bit.
-         */
-        lens: Float = CameraPose.HOME_LENS,
     ): Float {
         val governing = max(height, width * 0.55f)
         if (governing <= 0f) return minDistance
@@ -186,8 +188,7 @@ data class CameraEnvelope(
         val halfDiagonal = sqrt((width * width + height * height) / 4f)
         val reach = halfDiagonal * CameraPose.HOME_DISTANCE *
             sin(pitchDegrees.coerceIn(0f, 90f) * (PI.toFloat() / 180f))
-        val glass = CLEARANCE * max(lens, MIN_LENS) * governing
-        return max(minDistance, sqrt(reach / glass))
+        return max(minDistance, sqrt(reach / (CLEARANCE * governing)))
     }
 
     private companion object {
@@ -199,12 +200,6 @@ data class CameraEnvelope(
          * card at the far edge is still a card rather than a sliver.
          */
         const val CLEARANCE = 0.5f
-
-        /**
-         * A lens of nothing is a division by nothing, and a floor of infinity is
-         * not a camera. Below anything the envelope will ever allow.
-         */
-        const val MIN_LENS = 1e-3f
     }
 }
 
@@ -600,10 +595,20 @@ fun CameraPose.planeFor(width: Float, height: Float) = StagePlane(
     width = width,
     height = height,
     tiltDegrees = pitchDegrees,
-    // The lens lands here and nowhere else. `zoom` is deliberately left out of
-    // it: that is what pins the middle of the table while the perspective moves,
-    // and it is the whole difference between a focal length and a dolly.
-    cameraDistance = distance * max(lens, 1e-3f) * max(height, width * 0.55f),
+    // The lens scales **both** terms, and that is what makes it a focal length
+    // rather than a dolly zoom. Perspective across the table is the angle the
+    // table subtends — `zoom · extent / cameraDistance` — so multiplying the two
+    // together leaves that ratio alone and changes only how big the board is
+    // drawn. Which is what a longer lens does: it magnifies, it does not
+    // restage. Put it on `cameraDistance` alone and you get the opposite — the
+    // framing pinned and the perspective moving, which is a dolly zoom, and
+    // which is what shipped in v1.2.38 under the wrong name.
+    cameraDistance = distance * max(lens, MIN_LENS) * max(height, width * 0.55f),
     yawDegrees = yawDegrees,
-    zoom = CameraPose.HOME_DISTANCE / max(distance, 1e-3f),
+    zoom = max(lens, MIN_LENS) * CameraPose.HOME_DISTANCE / max(distance, 1e-3f),
 )
+
+/**
+ * A lens of nothing is a division by nothing. Below anything the envelope allows.
+ */
+private const val MIN_LENS = 1e-3f

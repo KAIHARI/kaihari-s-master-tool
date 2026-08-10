@@ -24,6 +24,13 @@ debug-only panel is a panel that can never be opened on the tablet.
 4. `tools/shoot.sh --tune=that.json` replays it headlessly, so the change can be
    diffed with `tools/compare.py` before a release is spent on it.
 
+A tuning whose `camera` block has moved **overrides the shot's seat**: the
+studio skips the seat keypress rather than pressing `1`/`2`/`3` over the pose it
+was just handed. Without that, two tunings that differ only in the camera come
+back bit-identical, and the harness looks like it is ignoring the file. Shot
+names still carry a seat because they still choose the scene and the light; the
+seat part is simply the pose the tuning replaced.
+
 The tuning **persists**. Set it, close the app, come back tomorrow and judge it
 again. That is deliberate: a look you like at 1am is not always a look you like
 at noon, and the whole reason the panel exists is to stop that question costing
@@ -45,8 +52,8 @@ the shipped value (`x`), or fractions of a card (`cards`). Never solved pixels
 |---|---|---|
 | `camera.yawDegrees` | round the table | 0° |
 | `camera.pitchDegrees` | how far it is laid back | 21° |
-| `camera.distance` | how far back you sit, in stage heights | 1.45 |
-| `camera.lens` | **focal length**, subject pinned | 1.0 |
+| `camera.distance` | how far back you sit, in stage heights. **The perspective dial** | 1.45 |
+| `camera.lens` | **focal length** — pure magnification, perspective untouched | 1.0 |
 | `focus.strength` | the defocus falloff. **Off by default** | 0 |
 | `focus.depth` | where it is sharp, across the board's depth | 0 |
 | `focus.fNumber` | how fast it falls away | f/8 |
@@ -65,30 +72,52 @@ orbited to gets into the panel.
 
 ---
 
-## Focal length is new, and it is not zoom
+## The two camera dials are a position and a lens, and they do different jobs
 
-`CameraPose.planeFor` welds `cameraDistance` to `zoom` on purpose: stepping
-back both weakens the perspective and shrinks the subject, which is what
-walking backwards does. That is right for a *position* and it is exactly what a
-lens is not — a long lens from across the room and a wide one at arm's length
-frame the same subject at the same size and look nothing alike.
+This is the pair a photographer expects, and it took two goes to get there.
 
-`lens` multiplies `cameraDistance` and leaves `zoom` alone, so the middle of
-the table does not move and only the strength of the perspective does.
+**`distance` is where you stand.** Stepping back weakens the perspective *and*
+makes the table smaller, because that is what walking backwards does.
+`CameraPose.planeFor` welds `cameraDistance` to `zoom` to keep those two
+welded. This is the only dial that changes the perspective.
 
-| lens | field of view | 35mm equivalent |
+**`lens` is magnification, and nothing else.** It multiplies `cameraDistance`
+and `zoom` by the same amount, so the angle the table subtends —
+`zoom · extent / cameraDistance` — does not move at all. The board is drawn
+bigger; the perspective across it is bit-identical. `CameraLensTest`
+(`theLensDoesNotTouchThePerspectiveAtAll`,
+`whereYouStandIsWhatChangesThePerspective`) pins both halves of that.
+
+| lens | 35mm equivalent | what the picture does |
 |---|---|---|
-| 0.70 | 76° | ~23mm |
-| 1.00 | 58° | ~33mm |
-| 1.50 | 40° | ~49mm |
-| 2.00 | 31° | ~65mm |
+| 0.70 | ~23mm | the same room, smaller in the frame |
+| 1.00 | ~33mm | shipped |
+| 1.50 | ~49mm | half again as big, same perspective |
+| 2.00 | ~65mm | twice as big, same perspective |
 
-**Baking one in is not free.** `perspectiveGrowth` at the table seat is 1.141
-today and `StagePlaneTest.theStageSaysHowMuchRoomItsOwnTiltCosts` asserts it
-stays under 1.15 — so a default lens below about **0.947** turns that test red,
-and `StagePlane.forStage` has to move with it or `StageCameraTest` follows.
-There is 0.8% of headroom. A wider default is a deliberate re-argument of that
-test, not a re-record.
+The millimetres are a function of the **lens alone** and are honest only
+because of that. The first version computed a field of view from
+`distance × lens`, so touching the distance slider moved the number beside the
+focal-length slider — 36° at distance 1.45, 26° at 2.0, with the lens dial
+sitting still. That read, correctly, as one dial resetting the other.
+
+**What the first version actually was.** v1.2.38 put the lens on
+`cameraDistance` alone: framing pinned, perspective moving. That is a **dolly
+zoom** — a real control, a good one, and not a focal length. It is worth
+rebuilding one day as its own row, under its own name.
+
+**What it costs.** Framing. Past `1.0` the board is magnified and can run off
+the edges of the screen, exactly as a real zoom crops. Nothing catches it, and
+that is deliberate: `CameraFit` corrects by moving the *distance*, and calling
+it from here would re-couple the two dials this exists to separate.
+
+**What it stopped costing.** `perspectiveGrowth` no longer moves with the lens —
+both terms scale, so the ratio the board was solved against is untouched. The
+old warning that a baked-in lens under 0.947 would turn
+`StagePlaneTest.theStageSaysHowMuchRoomItsOwnTiltCosts` red is retired.
+`CameraEnvelope.minDistanceAt` lost its lens factor for the same reason: the
+lens cancels out of `halfDiagonal · zoom · sin ≤ CLEARANCE · cameraDistance`,
+and zooming cannot bring the table closer to a camera that has not moved.
 
 ---
 
@@ -162,7 +191,7 @@ the list; the ones most likely to go red are:
 | baked knob | test |
 |---|---|
 | `camera.pitchDegrees`, `camera.distance` as new *seats* | `StageCameraTest.everySeatIsInsideTheEnvelope`, `theSeatTheStageOpensAtNeedsNoCorrectionAtAll`, and all three `GoldenStageTest` goldens |
-| `camera.lens` below 0.947 | `StagePlaneTest.theStageSaysHowMuchRoomItsOwnTiltCosts` |
+| `camera.lens` at all | `CameraLensTest` — four of its five claims are about the shipped 1.0 |
 | `hand.leanDegrees` without the lift following | `CardShadowTest.aCardLeanedOnItsBottomEdgeKeepsEveryCornerAboveTheTable` |
 | `cards.carryLift` and the lifts under it | `CardShadowTest.itSoftensAndFadesWithHeight` |
 

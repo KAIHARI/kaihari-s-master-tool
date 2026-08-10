@@ -553,6 +553,53 @@ And *"a glazing bar is too small for a gradient"* is false twice over: a bar is
 eight pixels thick and a hundred and seventy long, and a patch forty pixels tall
 varies by more than the threshold on its other axis.
 
+### Iteration 10 — an instrument, and a camera dial that was lying about its name
+
+Not a fidelity iteration. kai asked for a tuning tool — *"find tune the camera
+(angle, FOV, depth of field, focal length) and position of everything … it will
+export a copy paste json for me to feed you back to make the default"* — so this
+one builds the thing that makes the next ten cheaper. `docs/TUNING.md` is the
+handbook; only what the loop should remember is here.
+
+**Fifteen numbers, and the line that decides which fifteen.** Nothing that
+re-solves the board may go on the panel: the mat is a single
+`pointerInput(layout)`, so a slider that re-solves tears down the gesture
+arbiter mid-drag — including the drag moving the slider. Card size is the free
+variable in that solve, so a slider could also cross `MIN_CARD_WIDTH` and
+replace the stage with "Not enough room to lay a table out here". The room, the
+window, `ROOM_ABOVE` and the gap fractions ride in the export's `reference`
+block instead, read off live constants so a paste cannot lie about its build.
+
+**The dial was wrong before the tool was.** kai: *"touching the distance slider
+resets the focal length and vice versa, it's not working as I envisioned."* The
+values were not resetting — the model was. `lens` multiplied `cameraDistance`
+alone, which pins the framing and swings the perspective: a **dolly zoom**, and
+not a focal length. Both dials therefore changed the same thing, and the mm
+readout was computed from `distance × lens`, so walking backwards moved the
+number beside the lens slider from 36° to 26°. It now multiplies `zoom` too, so
+the subtended angle is untouched and the lens is pure magnification. It cost the
+`minDistanceAt` lens factor (it cancels) and it retired the caveat that a lens
+under 0.947 turns `StagePlaneTest` red. It buys back nothing that catches a zoom
+running off the edge of the screen, which is what a zoom does.
+
+Three harness bugs, each of which looked like the tool being broken:
+
+- **`combinedClickable` on the life-point number ate the first key event** by
+  making the node focusable, so the first shot of every studio run came back at
+  the table seat whatever it had asked for. `detectTapGestures` touches no focus.
+- **A `LaunchedEffect` placing the tuned camera cost determinism** — 77.7% of
+  pixels apart between two runs of an identical tuning, because *which frame* it
+  landed on was the scheduler's. `SideEffect` runs after composition and cannot
+  straddle one. For the same reason the studio writes the tuning once before the
+  settle: a preferences write is a coroutine and the seat press is not.
+- **The shot's seat press overrode the tuned camera**, so two tunings differing
+  only in the camera compared as identical and the file looked ignored. A
+  non-default `camera` block now skips the press.
+
+The whole thing is inert at its defaults — shot with and without the working
+tree via `git stash -u`, room and felt max difference **0** — which is what let
+it ship ahead of anything that moves a number.
+
 ---
 
 ## 6. Seen, not yet done

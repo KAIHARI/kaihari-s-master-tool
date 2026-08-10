@@ -261,12 +261,12 @@ object StageKnobs {
         ),
         Knob(
             CAMERA, "camera.distance", "Distance", 0.8f, 2.6f, 0.01f, "x",
-            "How far back you sit, in stage heights. The envelope may hold you further out at a low pitch.",
+            "Where you stand. This is what changes the perspective — the envelope may hold you further out at a low pitch.",
             { it.camera.distance }, { d, v -> d.copy(camera = d.camera.copy(distance = v)) },
         ),
         Knob(
             CAMERA, "camera.lens", "Focal length", 0.7f, 2f, 0.02f, "x",
-            "Wide to long, with the subject pinned. 0.7 is about 23mm, 2.0 about 65mm.",
+            "Magnification. The board gets bigger; the perspective does not move. Past 1.0 it can crop, as a zoom does.",
             { it.camera.lens }, { d, v -> d.copy(camera = d.camera.copy(lens = v)) },
         ),
 

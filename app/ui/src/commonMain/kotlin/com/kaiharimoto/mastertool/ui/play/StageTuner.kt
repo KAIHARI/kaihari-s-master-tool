@@ -29,14 +29,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import com.kaiharimoto.mastertool.core.layout.CameraPose
 import com.kaiharimoto.mastertool.core.tune.Knob
 import com.kaiharimoto.mastertool.core.tune.StageKnobs
 import com.kaiharimoto.mastertool.core.tune.StageTuning
 import com.kaiharimoto.mastertool.core.tune.TuningCodec
 import com.kaiharimoto.mastertool.core.tune.TuningSurface
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
-import kotlin.math.atan
 import kotlin.math.roundToInt
 
 /**
@@ -139,7 +137,7 @@ internal fun StageTuner(
                     KnobRow(
                         knob = knob,
                         value = knob.get(tuning),
-                        extra = extraFor(knob, tuning, surface),
+                        extra = extraFor(knob, tuning),
                         onChange = { onTune(knob.set(tuning, it)) },
                     )
                 }
@@ -260,28 +258,31 @@ private fun KnobRow(
 /**
  * The second number a knob is worth saying out loud.
  *
- * A focal length in multiples of a shipped constant means nothing to anybody; in
- * degrees of field and millimetres it means what a lens means. Same for the
- * distance floor, which moves with both the pitch and the lens and is the one
- * limit a person will hit and not understand.
+ * A focal length in multiples of a shipped constant means nothing to anybody;
+ * in millimetres it means what a lens means.
+ *
+ * And it is a function of the lens **alone**, which is the whole point of the
+ * re-parameterisation behind it. The first version computed a field of view
+ * from `distance × lens`, so touching the distance slider moved the number
+ * beside the focal-length slider — which read, correctly, as one dial resetting
+ * the other. Focal length is magnification; where you stand is a different
+ * question and has its own row.
  */
-private fun extraFor(knob: Knob, tuning: StageTuning, surface: TuningSurface): String? =
-    when (knob.path) {
-        "camera.lens" -> {
-            val width = surface.widthPx.toFloat().coerceAtLeast(1f)
-            val height = surface.heightPx.toFloat().coerceAtLeast(1f)
-            val plane = tuning.camera.pose().let {
-                CameraPose(it.yawDegrees, it.pitchDegrees, it.distance, it.lens)
-            }.planeForSafely(width, height)
-            val degrees = 2f * atan(width / (2f * plane)) * (180f / kotlin.math.PI.toFloat())
-            "· ${degrees.roundToInt()}° · ${(36f / (2f * kotlin.math.tan(degrees / 2f * (kotlin.math.PI.toFloat() / 180f)))).roundToInt()}mm"
-        }
-        "focus.strength" -> if (tuning.focus.strength <= 0f) "· off" else null
-        else -> null
-    }
+private fun extraFor(knob: Knob, tuning: StageTuning): String? = when (knob.path) {
+    "camera.lens" -> "· ${(HOME_MM * tuning.camera.lens).roundToInt()}mm"
+    "focus.strength" -> if (tuning.focus.strength <= 0f) "· off" else null
+    else -> null
+}
 
-private fun CameraPose.planeForSafely(width: Float, height: Float): Float =
-    distance * lens * kotlin.math.max(height, width * 0.55f)
+/**
+ * What the shipped lens is worth in the money everybody prices lenses in.
+ *
+ * Measured rather than chosen: at the home pose on a 1600-wide stage the
+ * projection subtends 58 degrees horizontally, which on a 36mm frame is a 33mm
+ * lens. Everything else on the dial is that times the magnification, because
+ * focal length and magnification are the same number wearing two units.
+ */
+private const val HOME_MM = 33f
 
 private val PANEL_WIDTH = 330.dp
 private val TRACK_HEIGHT = 14.dp
