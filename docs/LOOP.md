@@ -47,8 +47,8 @@ against but *"the bookshelf exists and has books in it"* is.
 | Sun outside | not possible through this window — iteration 8 has the numbers |
 | Floor | a flat plane, barely in frame |
 | Wall | **a fifth of the screen**, and painted rather than void |
-| Millennium Puzzle | flat gold facets, no material |
-| Lamp | flat cream, no material, casts no shadow |
+| Millennium Puzzle | **turned, chamfered, with a bail and the Eye of Wdjat cast into its front flank** |
+| Lamp | **a turned lamp**: brass foot, tapered stem, a shade that is a shell and is lit from inside |
 | Bed | does not exist |
 | Bookshelf | does not exist |
 | Room shadows | nothing in the room casts one (`AAA.md` #61d) |
@@ -600,6 +600,105 @@ The whole thing is inert at its defaults — shot with and without the working
 tree via `git stash -u`, room and felt max difference **0** — which is what let
 it ship ahead of anything that moves a number.
 
+### Iteration 11 — the two objects with no material get one
+
+kai, on the two things left in the frame that were still placeholders: *"the
+millennium puzzle and lamp both look extremely rudimentary and completely
+lackluster."* The contact sheet agreed in one sentence each. **The lamp is a
+cardboard box on a matchstick** — a cuboid shade, a grey stick, a flat tile,
+and at night the shade came back *darker* than the same cloth by day. **The
+puzzle is a Post-it note** — one mustard quadrilateral, no highlight, no seam,
+nothing to say which pendant it was.
+
+Both were the shapes core could express. Until this iteration `core/render` had
+exactly two mesh constructors — a quad and a slab — so the room was boxes and
+the table was cards, which is the right pair of primitives for a card table and
+the wrong pair for the things standing beside one.
+
+**`core/render/Turned.kt`** is a lathe: a profile of rings, spun, capped, posed.
+Three things about it are the design. Every vertex goes through `Rot3.place`,
+where a slab hangs its body down the *stage's* z whatever the pose says — which
+is what later bought the puzzle a lean it could not otherwise have had. A band's
+normal is *solved from the profile* rather than crossed from its corners, which
+keeps it exact at an apex; the exact answer is short by `cos(pi / sides)` in its
+radial half, because a chord is shorter than the arc it spans, and `TurnedTest`
+measures the normal each face carries against the vector area its corners
+really have. And the side count is derived from the sagitta at half a pixel, and
+forced **even**, because an even polygon is centrally symmetric and therefore
+has a bounding box centred on its own axis — which is what the room sorts,
+measures and lights every fixture through.
+
+The lamp is four turned pieces stacked in z, because `ScenePiece.mesh` holds one
+*convex* solid and a cove and an overhanging shade are not. The shade is a
+**shell** — up the outside, across the opening, back down the inside — and the
+picture is what found that: a solid frustum has a lid, and a lid at this camera
+is a bright disc in the middle of the rim, so it came out as a drum with a plate
+on it.
+
+Then the material, and the room had none: `StageRig.lit` is ambient plus lambert
+plus a graze-gated rim with **no specular term anywhere in it**. Three new terms,
+all *beside* the rig rather than inside it, because `GoldenStageTest` records
+what `lit` returns and §3 forbids re-recording a golden and changing behaviour in
+one release. `gleam` is the lamp mirrored in a surface, additive. `spill` grades
+a fixture down its own height. `Face.smooth` lets a facet carry the normals of
+the curve it stands for.
+
+**Six defects, and five of them only a picture could have found.**
+
+1. *Every shared edge came out as a hairline of background.* Two antialiased
+   fills each cover about half the pixels along the edge they share, and half
+   over half is three quarters. Four faint lines on a box nobody mentioned in
+   two years; twenty-six on a turned shade is a wireframe. Each facet now strokes
+   its own outline in its own paint — and **not** on `Scene.MINIMAL`, because
+   that also grows the silhouette by half a pixel and minimal is the control.
+2. *An additive pass must not close its own seam.* Painting a seam twice is free
+   when the paint replaces what is under it and is a doubling when it adds, so
+   the seamed `gleam` drew a bright spoke along every edge of the lamp's foot.
+3. *The lit shade came out grey.* Four tenths of the bulb is the honest
+   transmission of linen and completely wrong here — everything the renderer does
+   with a colour is a multiply, so that is four tenths of `#E4DAC6`.
+4. *The gold blew out to white.* A highlight is the source reflected, and the day
+   key is a window twenty-two degrees across; gold's own sharpness of thirty-six
+   applied to it turns a flat face into a white rectangle, because a large flat
+   surface under a directional lamp has **one** alignment over the whole of it.
+   The lobe is widened by the source's angular radius now, in quadrature, and the
+   same two numbers give a broad whisper by day and a hard glint at night.
+5. *The starburst, three times.* A facet is not a point (iteration 9's lesson, one
+   level down); the gradient's endpoints must be the midpoints of **opposite**
+   edges, not adjacent ones; and a curved face may not choose its gradient axis by
+   brightness, because that chooses *per facet* and two neighbours that choose
+   differently cannot meet at their shared edge. Measured at 0.074 of the
+   surface's light — eighteen levels of 255. Grading along the axis the normal
+   turns is the same choice for every facet of one turn.
+6. *An inverted pyramid balanced on its point hides its own sides.* The Eye of
+   Wdjat went onto the front flank first and came out as a six-pixel smudge,
+   because from anywhere above every flank slopes inward and away and is occluded
+   by the top face's own edge — twelve pixels of visible strip at the seat this
+   stage opens at. The puzzle is propped back thirty-four degrees now.
+
+And one that is arithmetic rather than taste: a homography onto the facet's own
+corners **crushes the drawing toward the narrow end**, because a projective map's
+midline is where the projective midpoint is and this flank tapers 1:0.07. The
+eye gets its own patch cut out of the flank.
+
+Two things were wrong before the code was, and both were tests rather than
+pictures. `rest` dropped the solid to the desk once, but `Rot3` spins about the
+object's own axis *before* tipping it, so which corner is lowest changes with the
+turn and the puzzle sank three quarters of a pixel into the wood on every nudge.
+And `reach` was the square's own diagonal, written by hand and true right up
+until the shape changed underneath it.
+
+`minimal-day-table` is bit-identical throughout, which is the mandate. Frame cost
+238–292ms against a 273ms baseline — inside the run-to-run spread.
+
+**And the loop got its eye back on this machine.** The Android SDK installs from
+`dl.google.com` inside this container, so `tools/shoot.sh` and `tools/compare.py`
+both run here now: `sdkmanager` into `/opt/android-sdk`, `sdk.dir` in
+`app/local.properties`, `pip install Pillow`. `tools/crop.py` is new and is the
+other half of iteration 3's lesson — a contact sheet says whether the room reads,
+a 6x crop of one object says whether the object does. Every one of the six
+defects above was found in a crop.
+
 ---
 
 ## 6. Seen, not yet done
@@ -621,9 +720,6 @@ what the eye has caught and the hand has not reached.
   the stock and at these sizes it is not reaching the picture. Worth measuring
   before assuming it needs to be stronger — the handbook is explicit that the
   highlight *moves* rather than brightens (§7).
-- **The lamp and the puzzle are flat fills.** They are the only two objects in
-  the frame with no material at all, and the frame around the window now makes
-  that obvious by contrast.
 - **The first run against a cold art cache is not comparable.** Iteration 8's
   before-shot showed 4.3% of the *minimal* stage moving, which no change in the
   tree could have caused; re-shooting the previous commit gave a bit-identical
