@@ -7,6 +7,12 @@ import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.Face
+import com.kaiharimoto.mastertool.core.render.Ring
+import com.kaiharimoto.mastertool.core.render.Rot3
+import com.kaiharimoto.mastertool.core.render.Turned
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * The one thing on this desk that answers a finger.
@@ -25,26 +31,28 @@ import com.kaiharimoto.mastertool.core.render.Face
  * painted last, and `ScenePainter` never has to have an opinion about a shape
  * that is not a box.
  *
- * ## Why it is a truncated pyramid, apex down
+ * ## What it is made of
  *
- * `CardSolid.slab` hangs a solid's body straight down the stage's z, which is a
- * fact about the surface a thing is resting on rather than about the thing. For
- * a card that is invisible; here it is the entire shape. A large square face at
- * the top and a nearly-vanished one at the bottom *is* an inverted pyramid, with
- * no machinery beyond one trailing parameter — see `CardSolid.slab`'s
- * `backScale`, and the note there about why the normals stay exact all the way
- * down to a point.
+ * Two parts, both off the same lathe. The **body** is a four-sided turn — which
+ * is a pyramid, apex down — with a chamfer round its top edge, phased a half
+ * segment so its flats face the room rather than its corners. The **bail** is
+ * the ring the chain goes through: a torus, turned about an axis lying in the
+ * desk, standing on top of the body.
  *
- * ## Why it may only spin
+ * It was one `CardSolid.slab` call before, and the difference between the two is
+ * not the count of faces. A slab hangs its body straight down the *stage's* z
+ * whatever pose it is given, because that is a fact about the felt a card is
+ * resting on; so the puzzle could be spun and could never be tipped, and the
+ * chamfer and the ring had nowhere to live. `Turned` poses every vertex, so the
+ * shape is the shape.
  *
- * The same hanging body is why. A rotation about the stage's own vertical axis
- * commutes with a translation along it, so a solid spun that way is *bit-exactly*
- * the rotated solid — no shear at all. Tip it instead, about x or y, and the
- * body goes on hanging vertically while the face turns: a card's four
- * thousandths of a millimetre of that is a fraction of a pixel, and a hand's
- * width of pyramid is the whole silhouette. So it turns and it rises, and it
- * does not tumble. What would buy a tumble is a posed box in core with its own
- * eight corners, and nothing has yet needed one.
+ * ## Why it still may only spin
+ *
+ * Not arithmetic any more — taste, and a hit test. It turns a third of a turn
+ * per nudge because a square has four-fold symmetry, and a thing that rose and
+ * *tumbled* would be performing rather than answering. `docs/DESIGN.md` §11 is
+ * where that gets argued if it ever should change; what used to be written there
+ * as an arithmetic limit is now only a decision.
  */
 object Puzzle {
 
@@ -78,6 +86,37 @@ object Puzzle {
      * an object a hand wide, and the real thing has a small flat there too.
      */
     const val APEX = 0.07f
+
+    /**
+     * A square turn is described by its circumcircle and drawn on its flats, so
+     * every half-width here is a radius divided by this.
+     */
+    const val DIAGONAL = 1.41421356f
+
+    /**
+     * The chamfer round the top edge: how far down it starts, in card widths,
+     * and how much of the width it takes in.
+     *
+     * Four pixels of bevel at the reference size, and it is the cheapest thing
+     * on the object. An edge where two flats meet at nothing is what a shape
+     * modelled out of paper has; a real cast or hammered thing has a facet
+     * there, and that facet catches a different amount of light from either side
+     * of it, which is the only reason an eye reads the join as an edge at all.
+     */
+    const val CHAMFER = 0.04f
+    const val CHAMFER_IN = 0.06f
+
+    /**
+     * The bail: how far out the ring's centre line runs, and how thick its wire
+     * is, both in card widths.
+     *
+     * Small. It is the one part of this object that is not the pyramid, and its
+     * whole job is silhouette — it says *pendant* from across the room and is
+     * about eleven pixels across at the reference size. Bigger, it reads as a
+     * handle and the thing becomes a bucket.
+     */
+    const val BAIL = 0.115f
+    const val BAIL_WIRE = 0.032f
 
     /** How far it rises when it is nudged, in card widths. */
     const val LIFT = 0.42f
@@ -133,14 +172,77 @@ object Puzzle {
         )
     }
 
-    /** Its six faces, for a pose. */
-    fun solid(layout: BoardLayout, pose: Pose3): List<Face> = CardSolid.slab(
-        pose = pose,
-        width = width(layout),
-        height = width(layout),
-        depth = tall(layout),
-        backScale = APEX,
-    )
+    /**
+     * The body: a square turn hanging apex-down off the pose, with a chamfer.
+     *
+     * The pose is still the **top** face, so the lathe stands a whole height
+     * below it and the profile runs upward from the point — which is why every
+     * height here is negative before [tall] is added back.
+     *
+     * A square turn's `radius` is its *circumcircle*, so the half-width of a
+     * flat is `radius / sqrt(2)`: the numbers below are divided accordingly and
+     * the shape is the shape the slab drew, to a pixel, apart from the chamfer.
+     * Phased forty-five degrees because at four sides that is the difference
+     * between a flat facing the room and an edge facing it, and a pyramid seen
+     * corner-on has no face to put an eye on.
+     */
+    fun solid(layout: BoardLayout, pose: Pose3): List<Face> {
+        val half = width(layout) / 2f * DIAGONAL
+        val body = tall(layout)
+        val chamfer = layout.cardWidth * CHAMFER
+        return Turned.solid(
+            pose = pose,
+            profile = listOf(
+                Ring(half * APEX, -body),
+                Ring(half, -chamfer),
+                Ring(half * (1f - CHAMFER_IN), 0f),
+            ),
+            sides = 4,
+            phase = 45f,
+        )
+    }
+
+    /**
+     * The ring the chain goes through, standing on the body's top face.
+     *
+     * A torus, and it is turned about an axis that lies **in the desk** rather
+     * than up out of it — `rotX = 90` takes the lathe's own vertical onto the
+     * stage's y, so the hole faces the player. That is only expressible because
+     * `Turned` poses every vertex; the slab this used to be could not have held
+     * it at any angle.
+     *
+     * It is drawn as part of the puzzle rather than beside it, and it is not a
+     * `ScenePiece.mesh`, because a torus is not convex. At this size — a
+     * seventh of a card across — its own far side is a couple of pixels behind
+     * its near one, which is the whole reason that is affordable here and would
+     * not be on a lampshade.
+     */
+    fun bail(layout: BoardLayout, pose: Pose3): List<Face> {
+        val card = layout.cardWidth
+        val ring = card * BAIL
+        val wire = card * BAIL_WIRE
+        // Laid down and then turned, which is `rotY` and not `rotZ`: the lathe's
+        // own vertical goes to `(sin b, -cos b, 0)` once `rotX` has tipped it a
+        // quarter turn, so the *second* angle in the order Z-then-Y-then-X is
+        // the one that swings a horizontal axis round. Given `rotZ` instead, the
+        // ring faces the player and stays facing the player while the body under
+        // it turns, which is a bail somebody has glued on.
+        val stand = Pose3(
+            position = Rot3.place(pose, Vec3(0f, 0f, ring + wire)),
+            rotX = 90f,
+            rotY = pose.rotZ,
+        )
+        val turns = 8
+        return Turned.solid(
+            pose = stand,
+            profile = (0 until turns).map { step ->
+                val around = step * (2f * PI.toFloat() / turns)
+                Ring(radius = ring + wire * cos(around), height = wire * sin(around))
+            },
+            sides = 10,
+            closed = true,
+        )
+    }
 
     /**
      * Everything it could ever occupy, as a box.
@@ -155,7 +257,7 @@ object Puzzle {
         // The diagonal, because a square turned forty-five degrees is that much
         // wider than its side.
         val half = width(layout) * 0.7072f
-        val top = tall(layout) + layout.cardWidth * LIFT
+        val top = tall(layout) + layout.cardWidth * (LIFT + 2f * (BAIL + BAIL_WIRE))
         return SceneBox.standing(
             left = foot.x - half,
             top = foot.y - half,
@@ -165,6 +267,32 @@ object Puzzle {
             ceiling = top,
         )
     }
+
+    /**
+     * The two parts it is drawn as, nearest the desk first.
+     *
+     * Two rather than one because the ring is a torus and the body is a
+     * pyramid, and the renderer orders the faces *inside* one part by the depth
+     * of their own centres — the painter's algorithm, which is right for a
+     * convex solid and wrong across two of them. Handed the whole object as one
+     * list, a face of the ring at the back of the hole sorts in front of the top
+     * of the pyramid it is standing on.
+     *
+     * They are z-disjoint by construction — the ring rests on the body's top
+     * face — so `ScenePainter` has an axis that separates them from any seat,
+     * which is the same thing the room's own pieces rely on and the same reason.
+     */
+    fun parts(layout: BoardLayout, pose: Pose3): List<Part> {
+        val body = solid(layout, pose)
+        val ring = bail(layout, pose)
+        return listOf(
+            Part(SceneBox.around(body), body),
+            Part(SceneBox.around(ring), ring),
+        )
+    }
+
+    /** One convex piece of it: what to sort it by, and what to draw. */
+    data class Part(val box: SceneBox, val faces: List<Face>)
 
     /**
      * Whether a finger landed on it.

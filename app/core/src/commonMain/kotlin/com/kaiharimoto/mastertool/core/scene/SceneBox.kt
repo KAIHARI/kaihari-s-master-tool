@@ -135,6 +135,39 @@ data class SceneBox(val min: Vec3, val max: Vec3) {
             min = Vec3(left, top, floor),
             max = Vec3(right, bottom, ceiling),
         )
+
+        /**
+         * The smallest box that holds a solid that is not one.
+         *
+         * `core/render` builds meshes and knows nothing about this type, on
+         * purpose — `core/scene` depends on `core/render` and the arrow may only
+         * point one way. So the lathe returns faces and this measures them, and
+         * the seam between the two is one loop over the corners.
+         *
+         * An empty list gives a box at the origin with no extent, which is what
+         * "nothing, in a room" should be: it overlaps nothing, it stands over
+         * nothing, and it sorts wherever the origin does.
+         */
+        fun around(faces: List<Face>): SceneBox {
+            var minX = Float.POSITIVE_INFINITY
+            var minY = Float.POSITIVE_INFINITY
+            var minZ = Float.POSITIVE_INFINITY
+            var maxX = Float.NEGATIVE_INFINITY
+            var maxY = Float.NEGATIVE_INFINITY
+            var maxZ = Float.NEGATIVE_INFINITY
+            faces.forEach { face ->
+                face.corners.forEach { corner ->
+                    if (corner.x < minX) minX = corner.x
+                    if (corner.x > maxX) maxX = corner.x
+                    if (corner.y < minY) minY = corner.y
+                    if (corner.y > maxY) maxY = corner.y
+                    if (corner.z < minZ) minZ = corner.z
+                    if (corner.z > maxZ) maxZ = corner.z
+                }
+            }
+            if (minX > maxX) return SceneBox(Vec3.Zero, Vec3.Zero)
+            return SceneBox(Vec3(minX, minY, minZ), Vec3(maxX, maxY, maxZ))
+        }
     }
 }
 

@@ -6,6 +6,7 @@ import com.kaiharimoto.mastertool.core.layout.CameraEnvelope
 import com.kaiharimoto.mastertool.core.layout.CameraPose
 import com.kaiharimoto.mastertool.core.layout.StageSeat
 import com.kaiharimoto.mastertool.core.layout.planeFor
+import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardSolid
@@ -34,6 +35,19 @@ class PuzzleTest {
     )
 
     private val mat get() = Scenery.mat(layout)
+
+    /**
+     * Everything the renderer actually puts on the desk, which is the body and
+     * the ring together.
+     *
+     * The claims about where the puzzle *is* — over the felt, inside its reach,
+     * on the glass, clear of the lens — are claims about what is drawn, and the
+     * moment it stopped being one solid they stopped being answerable by one of
+     * them. `Puzzle.solid` is still the right question for the body's own
+     * normals and for the hit test, which is the body's job.
+     */
+    private fun drawn(pose: Pose3): List<Vec3> =
+        Puzzle.parts(layout, pose).flatMap { part -> part.faces.flatMap { it.corners } }
 
     /** Every pose it can be in: a full revolution of nudges, at every lift. */
     private fun everyPose() = (0..11).flatMap { turns ->
@@ -67,7 +81,7 @@ class PuzzleTest {
         // that once. This has to prove it for every pose it can be nudged into,
         // which is why the corners are checked and not just the resting box.
         everyPose().forEach { (name, pose) ->
-            Puzzle.solid(layout, pose).flatMap { it.corners }.forEach { corner ->
+            drawn(pose).forEach { corner ->
                 assertTrue(
                     corner.x < mat.left || corner.x > mat.right ||
                         corner.y < mat.top || corner.y > mat.bottom,
@@ -84,7 +98,7 @@ class PuzzleTest {
         // the first time somebody touches it.
         val reach = Puzzle.reach(layout)
         everyPose().forEach { (name, pose) ->
-            Puzzle.solid(layout, pose).flatMap { it.corners }.forEach { corner ->
+            drawn(pose).forEach { corner ->
                 assertTrue(
                     corner.x >= reach.min.x - SLACK && corner.x <= reach.max.x + SLACK &&
                         corner.y >= reach.min.y - SLACK && corner.y <= reach.max.y + SLACK &&
@@ -211,15 +225,20 @@ class PuzzleTest {
     @Test
     fun itIsAClosedSolidWhoseNormalsAllPointOutward() {
         // The taper is what makes it a pyramid rather than a box, and a tapered
-        // side quad is the one case where a face normal could plausibly have
-        // come out inverted — the two back corners have moved *inward* relative
-        // to the front ones. `CardSolid.slab` takes the cross product of the
-        // diagonals for exactly this reason, and this is the check that says so.
+        // side is the one case where a face normal could plausibly have come out
+        // inverted — the corners at the point have moved *inward* relative to
+        // the ones at the top. `Turned` solves the normal from the profile for
+        // exactly this reason, and this is the check that says so.
+        //
+        // Asked of the body only. The ring is a torus, whose inside genuinely
+        // faces its own middle; what holds for it is that it is closed, which is
+        // the next test and is a stronger claim than this one.
         everyPose().forEach { (name, pose) ->
             val faces = Puzzle.solid(layout, pose)
-            val centre = faces.flatMap { it.corners }
-                .fold(Vec3.Zero) { sum, corner -> sum + corner } / (faces.size * 4f)
-            assertTrue(faces.size == 6, "at $name it has ${faces.size} faces")
+            val corners = faces.flatMap { it.corners }
+            val centre = corners.fold(Vec3.Zero) { sum, corner -> sum + corner } /
+                corners.size.toFloat()
+            assertTrue(faces.size >= 6, "at $name it has only ${faces.size} faces")
             faces.forEach { face ->
                 val outward = face.centre - centre
                 assertTrue(
@@ -228,6 +247,51 @@ class PuzzleTest {
                 )
             }
         }
+    }
+
+    /**
+     * The ring is a closed surface, and it turns with the body it is on.
+     *
+     * Both halves were a bug before the code was written. A torus made from a
+     * profile that does not join back to its first station is a tube with two
+     * open ends, which is invisible from most seats and a hole from one. And a
+     * bail posed with `rotZ` instead of `rotY` keeps facing the player while the
+     * pyramid under it turns, because after `rotX = 90` it is the *second* Euler
+     * angle that swings a horizontal axis.
+     */
+    @Test
+    fun theRingIsClosedAndTurnsWithTheBodyItStandsOn() {
+        everyPose().forEach { (name, pose) ->
+            val ring = Puzzle.bail(layout, pose)
+            assertTrue(ring.isNotEmpty(), "at $name there is no ring")
+            var leak = Vec3.Zero
+            var surface = 0f
+            ring.forEach { face ->
+                var area = Vec3.Zero
+                face.corners.indices.forEach { index ->
+                    val a = face.corners[index]
+                    val b = face.corners[(index + 1) % face.corners.size]
+                    area += (a cross b)
+                }
+                area *= 0.5f
+                leak += area
+                surface += area.length
+            }
+            assertTrue(leak.length < surface * 1e-3f, "at $name the ring is not closed: $leak")
+        }
+
+        // Its plane holds still through a whole turn of the body and then comes
+        // round with it. A ring that never turns has the same normal at every
+        // pose; this one has four.
+        val planes = (0..11).map { turns ->
+            val faces = Puzzle.bail(layout, Puzzle.stirred(layout, turns, 0f))
+            val axis = faces.first().centre - Puzzle.stirred(layout, turns, 0f).position
+            axis.normalised()
+        }
+        assertTrue(
+            planes.any { (it dot planes.first()) < 0.9f },
+            "the ring faces the same way however the puzzle is turned",
+        )
     }
 
     // ---- the hit test ---------------------------------------------------------------
@@ -310,7 +374,7 @@ class PuzzleTest {
         StageSeat.entries.forEach { seat ->
             val plane = seat.pose.planeFor(surfaceWidth, surfaceHeight)
             everyPose().forEach { (name, pose) ->
-                Puzzle.solid(layout, pose).flatMap { it.corners }.forEach { corner ->
+                drawn(pose).forEach { corner ->
                     val at = plane.project(corner)
                     assertTrue(
                         at.x > 0f && at.x < surfaceWidth && at.y > 0f && at.y < surfaceHeight,
@@ -333,7 +397,7 @@ class PuzzleTest {
         // that could reach it.
         val envelope = CameraEnvelope()
         val pose = Puzzle.stirred(layout, 0, 1f)
-        val corners = Puzzle.solid(layout, pose).flatMap { it.corners }
+        val corners = drawn(pose)
         var pitch = envelope.minPitch
         while (pitch <= envelope.maxPitch) {
             val floor = envelope.minDistanceAt(pitch, surfaceWidth, surfaceHeight)

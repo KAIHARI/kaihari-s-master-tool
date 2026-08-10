@@ -3,11 +3,15 @@ package com.kaiharimoto.mastertool.core.scene
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.layout.Slot
+import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
+import com.kaiharimoto.mastertool.core.render.Face
 import com.kaiharimoto.mastertool.core.render.Light
 import com.kaiharimoto.mastertool.core.render.Lit
+import com.kaiharimoto.mastertool.core.render.Ring
 import com.kaiharimoto.mastertool.core.render.StageLighting
+import com.kaiharimoto.mastertool.core.render.Turned
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.sqrt
@@ -155,6 +159,39 @@ data class ScenePiece(
      * so radiance has to arrive as the base colour itself.
      */
     val emission: Lit? = null,
+    /**
+     * The shape this piece really is, when a box is not it.
+     *
+     * Trailing and null by default, so every piece written before this existed
+     * goes on being drawn from `box.faces()` and is bit-identical — the same
+     * inert-default discipline `CardSolid.slab`'s `backScale = 1f` and
+     * `Light.position = null` already keep, and for the same reason: this file
+     * is upstream of a golden.
+     *
+     * [box] does not stop mattering when this is set. It goes on being what the
+     * room is sorted by, what `SceneryTest` measures, and what has to clear the
+     * mat — because `ScenePainter` needs a separating axis and a bounding box
+     * supplies one exactly as well as the real solid would, while being a shape
+     * the painter can reason about at all. What the mesh may not do is leave the
+     * box: a piece drawn outside the volume it was sorted by is a piece that can
+     * be painted in the wrong order, and `SceneryTest` holds it.
+     *
+     * The real rule is the painter's algorithm rather than convexity: the
+     * renderer orders a piece's faces by the depth of their own centres, so the
+     * faces the camera can *see* have to come out in the right order that way. A
+     * convex solid satisfies that for free and is the safe answer — a lamp is
+     * four pieces rather than one for exactly this reason, since its cove and
+     * its overhanging shade are not.
+     *
+     * A shell is the one exception in the room, and it earns it by argument
+     * rather than by inspection: back-face culling removes the outer far side
+     * and the inner near side of a cone before the sort ever sees them, so what
+     * is left is the inside of the far half, then the rim, then the outside of
+     * the near half, and no pair of those can be got wrong. See
+     * [Scenery.lampShade]. Anything else that is not convex wants the same
+     * paragraph written for it before it goes here.
+     */
+    val mesh: List<Face>? = null,
 )
 
 /**
@@ -458,15 +495,67 @@ object Scenery {
      */
     const val LAMP_DRAWN = 2.2f
 
-    /** The shade: half its width, half its depth, and how deep it hangs. */
-    const val LAMP_SHADE_HALF = 0.55f
-    const val LAMP_SHADE_DEPTH = 0.40f
-    const val LAMP_SHADE_THICK = 0.42f
+    /**
+     * The shade, as a lathe turns one: how wide it is at the rim, how wide at
+     * the opening it leaves for the finial, and how far down from [LAMP_DRAWN]
+     * its underside sits.
+     *
+     * A cone rather than a cuboid, and the numbers are a shade's rather than a
+     * box's. An empire shade's opening is a little over half its rim — narrower
+     * than that is a coolie and reads as a hat, wider is a drum and reads as a
+     * tin. The rim rolls: [LAMP_SHADE_ROLL] is how far the wire hoop at the
+     * bottom stands proud of the cone above it, and it is a fortieth of a card,
+     * which is one pixel of silhouette at the reference size and is the whole
+     * difference between a lampshade and a paper cone.
+     */
+    const val LAMP_SHADE_RIM = 0.62f
+    const val LAMP_SHADE_TOP = 0.34f
+    const val LAMP_SHADE_THICK = 0.58f
+    const val LAMP_SHADE_ROLL = 0.025f
 
-    /** The mast's half-width, and the base's half-width and thickness. */
+    /**
+     * How thick the cloth is, in card widths.
+     *
+     * Three pixels. It is what turns the shade from a cone into a shell with an
+     * opening you can see into — see [lampShade] — and it is the only dimension
+     * of the lamp that is a real measurement of a real object rather than a
+     * proportion of one.
+     */
+    const val LAMP_SHADE_WALL = 0.03f
+
+    /**
+     * The finial: the bead that screws down over the harp and holds the shade
+     * on, standing above [LAMP_DRAWN].
+     *
+     * It is four pixels of brass and it is worth its piece, because it is the
+     * only thing in the lamp's silhouette that is not a body of the lamp — a
+     * shade with nothing on top of it reads as a funnel balanced on a stick.
+     */
+    const val LAMP_FINIAL = 0.16f
+    const val LAMP_FINIAL_WIDE = 0.075f
+
+    /**
+     * The stem's width at the foot and at the neck, and the collar it carries.
+     *
+     * Two numbers because a turned stem tapers — a column of one width is a
+     * dowel, and the eye reads the taper before it reads anything else about
+     * the object. The collar is where a harp would be fixed, and it is there
+     * for the same reason the finial is: it breaks a long plain run.
+     */
     const val LAMP_MAST = 0.07f
+    const val LAMP_MAST_NECK = 0.052f
+    const val LAMP_COLLAR = 0.095f
+
+    /**
+     * The base: how wide it stands, how thick its rim is, and how high the cove
+     * above it rises before it becomes the stem.
+     *
+     * A weighted foot rather than a tile. [LAMP_BASE] is unchanged, so the
+     * footprint the room was arranged around has not moved.
+     */
     const val LAMP_BASE = 0.38f
-    const val LAMP_BASE_THICK = 0.10f
+    const val LAMP_BASE_THICK = 0.045f
+    const val LAMP_BASE_COVE = 0.155f
 
     /** Where the lamp stands on the desk, in mat pixels. */
     fun lampFoot(layout: BoardLayout): Vec2 {
@@ -510,6 +599,108 @@ object Scenery {
         val ratio = sqrt(shipped.x * shipped.x + shipped.y * shipped.y) / abs(shipped.z)
         if (ratio <= 1e-4f) return layout.cardWidth * LAMP_DRAWN
         return hypot(mat.centerX - foot.x, mat.centerY - foot.y) / ratio
+    }
+
+    // ---- the lamp, as four things a lathe made ---------------------------------------
+
+    /**
+     * The four silhouettes the lamp is turned from, bottom to top.
+     *
+     * Four rather than one because `ScenePiece.mesh` may only hold a **convex**
+     * solid: the renderer orders a piece's own faces by the depth of their
+     * centres, which is the painter's algorithm and is exactly right for a
+     * convex body and quietly wrong for anything else. A lamp is not convex —
+     * the cove above its foot faces back toward the middle of the object, and
+     * the underside of the shade overhangs the stem entirely — so it is four
+     * convex pieces stacked in z, which is also what makes `ScenePainter`'s
+     * separating axis answer for them: z separates every pair.
+     *
+     * They meet at exact shared heights ([baseTop], [neckTop], [shadeTop]) for
+     * the same reason the wall's four pieces tile the opening exactly: a joint
+     * is two surfaces at one number, and two numbers that ought to be equal and
+     * are computed twice are a seam that opens at some board size nobody tried.
+     */
+    fun baseTop(layout: BoardLayout): Float = layout.cardWidth * LAMP_BASE_COVE
+
+    fun neckTop(layout: BoardLayout): Float =
+        layout.cardWidth * (LAMP_DRAWN - LAMP_SHADE_THICK)
+
+    fun shadeTop(layout: BoardLayout): Float = layout.cardWidth * LAMP_DRAWN
+
+    fun lampBase(layout: BoardLayout): List<Ring> {
+        val card = layout.cardWidth
+        return listOf(
+            // A foot with a chamfer under it, so it sits on the desk on a line
+            // rather than on its whole face — which is what stops the join
+            // between a round object and a flat one reading as a sticker.
+            Ring(card * LAMP_BASE * 0.93f, 0f),
+            Ring(card * LAMP_BASE, card * LAMP_BASE_THICK * 0.4f),
+            Ring(card * LAMP_BASE, card * LAMP_BASE_THICK),
+            Ring(card * LAMP_BASE * 0.78f, card * LAMP_BASE_THICK * 1.9f),
+            Ring(card * LAMP_MAST * 1.7f, baseTop(layout)),
+        )
+    }
+
+    fun lampStem(layout: BoardLayout): List<Ring> {
+        val card = layout.cardWidth
+        val neck = neckTop(layout)
+        val run = neck - baseTop(layout)
+        return listOf(
+            Ring(card * LAMP_MAST, baseTop(layout)),
+            Ring(card * LAMP_MAST_NECK, baseTop(layout) + run * 0.86f),
+            Ring(card * LAMP_COLLAR, baseTop(layout) + run * 0.91f),
+            Ring(card * LAMP_MAST_NECK * 0.9f, neck),
+        )
+    }
+
+    /**
+     * The shade, and it is a **shell**: up the outside, across the opening, and
+     * back down the inside.
+     *
+     * Turned as a solid first, which is simpler and was wrong for one reason
+     * that only a picture could have found. A solid frustum has a lid, and a lid
+     * at this camera is a large bright disc sitting in the middle of the rim —
+     * so the object came out as a drum with a plate on it rather than as a cone.
+     * A real shade has a hole there, and what you see through the hole is the
+     * far half of its own **inside**, which is a darker surface than the outside
+     * by day and the brightest thing in the room at night.
+     *
+     * A shell is not convex, and `ScenePiece.mesh`'s rule is the painter's
+     * algorithm rather than convexity as such: the faces the camera can see have
+     * to sort correctly by the depth of their own centres. They do here, and the
+     * reason is the shape rather than luck — back-face culling removes the outer
+     * far side and the inner near side outright, and what is left is the inner
+     * *far* surface, then the rim, then the outer *near* surface, in that order
+     * from any seat in the envelope. There is no pair left to get wrong.
+     */
+    fun lampShade(layout: BoardLayout): List<Ring> {
+        val card = layout.cardWidth
+        val bottom = neckTop(layout)
+        val top = shadeTop(layout)
+        val run = top - bottom
+        val wall = card * LAMP_SHADE_WALL
+        return listOf(
+            // Up the outside: the rim, the hoop it is rolled over, the cone.
+            Ring(card * LAMP_SHADE_RIM, bottom),
+            Ring(card * (LAMP_SHADE_RIM + LAMP_SHADE_ROLL), bottom + run * 0.05f),
+            Ring(card * LAMP_SHADE_RIM, bottom + run * 0.12f),
+            Ring(card * LAMP_SHADE_TOP, top),
+            // Over the opening and straight back down the inside.
+            Ring(card * LAMP_SHADE_TOP - wall, top),
+            Ring(card * LAMP_SHADE_RIM - wall, bottom),
+        )
+    }
+
+    fun lampFinial(layout: BoardLayout): List<Ring> {
+        val card = layout.cardWidth
+        val foot = shadeTop(layout)
+        val rise = card * LAMP_FINIAL
+        return listOf(
+            Ring(card * LAMP_FINIAL_WIDE * 0.45f, foot),
+            Ring(card * LAMP_FINIAL_WIDE, foot + rise * 0.42f),
+            Ring(card * LAMP_FINIAL_WIDE * 0.72f, foot + rise * 0.74f),
+            Ring(card * LAMP_FINIAL_WIDE * 0.20f, foot + rise),
+        )
     }
 
     /** The lamp, as a point of light. */
@@ -624,9 +815,17 @@ object Scenery {
         val head = tall * WINDOW_HEAD
 
         val foot = lampFoot(layout)
-        val shadeTop = card * LAMP_DRAWN
-        val shadeBottom = shadeTop - card * LAMP_SHADE_THICK
-        val baseTop = card * LAMP_BASE_THICK
+        // The lathe stands at the lamp's foot on the desk, unturned: a body of
+        // revolution has nothing a turn about its own axis could do to it, and
+        // saying so here is cheaper than a comment on every ring.
+        val spindle = Pose3(position = Vec3(foot.x, foot.y, 0f))
+        val turnedBase = Turned.solid(spindle, lampBase(layout))
+        val turnedStem = Turned.solid(spindle, lampStem(layout))
+        // Closed, because the shade's profile comes back round to where it
+        // started: it is a shell rather than a solid, so there is no end left
+        // open for a cap to go on.
+        val turnedShade = Turned.solid(spindle, lampShade(layout), closed = true)
+        val turnedFinial = Turned.solid(spindle, lampFinial(layout))
 
         fun wall(name: String, l: Float, r: Float, bottom: Float, top: Float) = ScenePiece(
             name = name,
@@ -708,39 +907,27 @@ object Scenery {
                 ScenePiece(
                     name = "lamp base",
                     surface = Surface.SHADE,
-                    box = SceneBox.standing(
-                        left = foot.x - card * LAMP_BASE,
-                        top = foot.y - card * LAMP_BASE,
-                        right = foot.x + card * LAMP_BASE,
-                        bottom = foot.y + card * LAMP_BASE,
-                        floor = 0f,
-                        ceiling = baseTop,
-                    ),
+                    box = SceneBox.around(turnedBase),
+                    mesh = turnedBase,
                 ),
                 ScenePiece(
                     name = "lamp mast",
                     surface = Surface.SHADE,
-                    box = SceneBox.standing(
-                        left = foot.x - card * LAMP_MAST,
-                        top = foot.y - card * LAMP_MAST,
-                        right = foot.x + card * LAMP_MAST,
-                        bottom = foot.y + card * LAMP_MAST,
-                        floor = baseTop,
-                        ceiling = shadeBottom,
-                    ),
+                    box = SceneBox.around(turnedStem),
+                    mesh = turnedStem,
                 ),
                 ScenePiece(
                     name = "lamp shade",
                     surface = Surface.SHADE,
-                    box = SceneBox.standing(
-                        left = foot.x - card * LAMP_SHADE_HALF,
-                        top = foot.y - card * LAMP_SHADE_DEPTH,
-                        right = foot.x + card * LAMP_SHADE_HALF,
-                        bottom = foot.y + card * LAMP_SHADE_DEPTH,
-                        floor = shadeBottom,
-                        ceiling = shadeTop,
-                    ),
+                    box = SceneBox.around(turnedShade),
+                    mesh = turnedShade,
                     emission = shadeLight(time),
+                ),
+                ScenePiece(
+                    name = "lamp finial",
+                    surface = Surface.SHADE,
+                    box = SceneBox.around(turnedFinial),
+                    mesh = turnedFinial,
                 ),
             ),
             lighting = lightingFor(Scene.DESK, time, layout),

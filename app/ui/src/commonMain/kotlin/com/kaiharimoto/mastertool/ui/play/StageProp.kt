@@ -152,7 +152,9 @@ internal class StageProp {
         return Prop(
             surface = Surface.GOLD,
             box = Puzzle.reach(layout),
-            faces = Puzzle.solid(layout, pose),
+            parts = Puzzle.parts(layout, pose).map { part ->
+                Prop.Part(surface = Surface.GOLD, box = part.box, faces = part.faces)
+            },
         )
     }
 }

@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardSolid
@@ -422,14 +423,46 @@ internal fun DrawScope.drawScene(
     // `PuzzleTest.itStandsClearOfEverythingElseInTheRoom` is what makes that
     // last clause true, and it is the precondition, not a nicety.
     val standIn = prop?.let { ScenePiece(name = "prop", surface = it.surface, box = it.box) }
-    val propFaces = prop?.faces.orEmpty()
     val all = if (standIn == null) pieces else pieces + standIn
+
+    // The prop's own parts, as pieces the painter can sort, paired with the
+    // faces to draw for each. Built here rather than inside the loop because it
+    // is per frame and the loop is per piece.
+    val propParts = prop?.parts.orEmpty()
+    val propPieces = propParts.mapIndexed { index, part ->
+        ScenePiece(name = "part $index", surface = part.surface, box = part.box)
+    }
 
     ScenePainter
         .order(all, eyeAt) { box -> stage.reachOf(box) }
         .forEach { piece ->
+            // The prop is several convex parts under one sort box, and they are
+            // ordered among themselves by the same painter that ordered the room
+            // — which is what the box on each part is for. One list of faces
+            // instead would be a per-face depth sort across two solids, and the
+            // far side of the puzzle's ring would come out in front of the top
+            // it is standing on.
+            if (piece === standIn) {
+                ScenePainter
+                    .order(propPieces, eyeAt) { box -> stage.reachOf(box) }
+                    .forEach { sorted ->
+                        val part = propParts[propPieces.indexOfFirst { it === sorted }]
+                        drawSolid(
+                            faces = part.faces,
+                            stage = stage,
+                            eyeAt = eyeAt,
+                            eye = eye,
+                            look = look,
+                            colour = look.colourOf(part.surface),
+                            surface = part.surface,
+                            emission = part.emission,
+                            pool = pool,
+                        )
+                    }
+                return@forEach
+            }
             drawSolid(
-                faces = if (piece === standIn) propFaces else piece.box.faces(),
+                faces = piece.mesh ?: piece.box.faces(),
                 stage = stage,
                 eyeAt = eyeAt,
                 eye = eye,
@@ -472,8 +505,57 @@ internal fun DrawScope.drawScene(
 internal class Prop(
     val surface: Surface,
     val box: SceneBox,
-    val faces: List<Face>,
-)
+    /**
+     * The convex solids it is really made of, each with the box that sorts it.
+     *
+     * One list of faces was the first version and it is right for exactly one
+     * shape: a single convex body. [drawSolid] orders the faces it is handed by
+     * the depth of their own centres, which is the painter's algorithm applied
+     * inside a solid — correct there, and meaningless across two solids that
+     * stand one on top of the other. The puzzle's ring sat behind its own
+     * pyramid from the seated seat the first time it was drawn that way.
+     *
+     * [box] above is still one box, because the *room* only needs one: what
+     * `ScenePainter` wants from an object is a separating axis, and the reach of
+     * the whole thing gives it exactly as well as a part of it would.
+     */
+    val parts: List<Part>,
+) {
+    class Part(
+        val surface: Surface,
+        val box: SceneBox,
+        val faces: List<Face>,
+        val emission: Lit? = null,
+    )
+}
+
+/**
+ * How wide a facet is drawn past its own edge, in pixels.
+ *
+ * A seam, and it is antialiasing rather than geometry. Two faces that share an
+ * edge each cover about half of the pixels along it, and a half over a half is
+ * three quarters — so every shared edge in a solid comes out as a hairline of
+ * the background showing through. On a box it is four faint lines nobody
+ * mentioned in two years. On a turned lamp it is twenty-six of them radiating
+ * out of the middle of the shade, and the object reads as its own wireframe.
+ *
+ * The fix is to let each face paint a pixel past itself: stroke the same path
+ * with the same paint, so the pixels along the edge are covered twice by
+ * whichever face wants them and the seam has nowhere to be. It grows the
+ * silhouette by half a pixel, which is the price and is not a visible one.
+ */
+private val Seam = Stroke(width = 1f)
+
+/** Fill and then close the seam, which is one operation and never one call. */
+private fun DrawScope.facet(path: Path, colour: Color) {
+    drawPath(path, colour)
+    drawPath(path, colour, style = Seam)
+}
+
+private fun DrawScope.facet(path: Path, brush: Brush, blendMode: BlendMode = BlendMode.SrcOver) {
+    drawPath(path, brush, blendMode = blendMode)
+    drawPath(path, brush, style = Seam, blendMode = blendMode)
+}
 
 /**
  * One solid, painted: back-face culled, depth-sorted among its own faces, and
@@ -526,27 +608,27 @@ private fun DrawScope.drawSolid(
                 //
                 // The upward-facing top of the pane's own box is excluded, since
                 // a sky drawn across a sliver seen edge-on is a bright line.
-                drawPath(path, skyBrush(face, stage, look, emission))
+                facet(path, skyBrush(face, stage, look, emission))
             } else if (emission != null) {
                 // A fixture is not shaded, and that is the physics rather than a
                 // shortcut: how bright a lit lampshade is does not depend on what
                 // is lighting the room it is in. It is also the only way to draw
                 // one at all — `Tone` can darken a colour and can never brighten
                 // it, so radiance has to arrive as the base colour itself.
-                drawPath(path, colour.shaded(emission))
+                facet(path, colour.shaded(emission))
             } else if (surface == Surface.TABLE) {
                 // The desk keeps the ordinary rig, because the pool below is
                 // already the lamp's answer for this surface. Handing it the
                 // room's falloff as well would darken the wood twice for the
                 // same lamp, and the seam between the two would land exactly
                 // where the pool's edge is.
-                drawPath(path, colour.shaded(StageRig.face(face, eye, look.lighting)))
+                facet(path, colour.shaded(StageRig.face(face, eye, look.lighting)))
             } else {
                 val wash = StageRig.wash(face, eye, look.lighting)
                 if (wash == null) {
-                    drawPath(path, colour.shaded(StageRig.room(face, eye, look.lighting)))
+                    facet(path, colour.shaded(StageRig.room(face, eye, look.lighting)))
                 } else {
-                    drawPath(path, washBrush(wash, stage, colour))
+                    facet(path, washBrush(wash, stage, colour))
                 }
             }
 
@@ -566,7 +648,7 @@ private fun DrawScope.drawSolid(
                 face.normal.z > 0.99f &&
                 abs(face.centre.z) < 0.5f
             ) {
-                drawPath(path, poolBrush(pool, colour))
+                facet(path, poolBrush(pool, colour))
             }
 
             // And the timber itself. Same test as the pool — facing straight up

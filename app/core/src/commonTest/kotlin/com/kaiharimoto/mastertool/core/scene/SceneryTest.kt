@@ -164,6 +164,80 @@ class SceneryTest {
     }
 
     @Test
+    fun everyMeshInTheRoomFitsInsideItsOwnBox() {
+        // The one test that keeps all the others meaning what they say. A piece
+        // used to *be* its box, so "nothing stands over the mat", "nothing
+        // crosses the lens", "no two pieces share volume" and the paint order
+        // itself were all statements about the thing that gets drawn. Now that a
+        // piece may carry a mesh, they are statements about the thing it was
+        // sorted by — and they go on being true of the drawing only for as long
+        // as the drawing stays inside it.
+        var meshes = 0
+        everyRoom().forEach { (name, model) ->
+            model.pieces.forEach { piece ->
+                val mesh = piece.mesh ?: return@forEach
+                meshes++
+                assertTrue(mesh.isNotEmpty(), "$name's ${piece.name} has an empty mesh")
+                mesh.forEach { face ->
+                    face.corners.forEach { corner ->
+                        assertTrue(
+                            corner.x >= piece.box.min.x - GAP && corner.x <= piece.box.max.x + GAP &&
+                                corner.y >= piece.box.min.y - GAP && corner.y <= piece.box.max.y + GAP &&
+                                corner.z >= piece.box.min.z - GAP && corner.z <= piece.box.max.z + GAP,
+                            "$name's ${piece.name} is drawn at $corner, outside ${piece.box}",
+                        )
+                    }
+                }
+            }
+        }
+        assertTrue(meshes > 0, "nothing in the room is a mesh, so this test proves nothing")
+    }
+
+    @Test
+    fun theLampIsTurnedOnItsOwnFootAndNotBesideIt() {
+        // A body of revolution is centred on the axis it was turned about, and
+        // the room only ever asks about its box — so if the two came apart, the
+        // lamp would be lit from somewhere it is not standing and nothing else
+        // would notice. `Turned.sides` returning an even number is what makes
+        // this true; this is where it is claimed.
+        val foot = Scenery.lampFoot(layout)
+        listOf("lamp base", "lamp mast", "lamp shade", "lamp finial").forEach { name ->
+            val box = piece(name).box
+            assertEquals(foot.x, box.centre.x, 1e-2f, "$name has slid off the lamp's axis in x")
+            assertEquals(foot.y, box.centre.y, 1e-2f, "$name has slid off the lamp's axis in y")
+        }
+    }
+
+    @Test
+    fun theLampIsAStackAndEveryJointIsOneNumber() {
+        // Four convex pieces because `ScenePiece.mesh` may only hold one, and
+        // stacked in z because that is what gives `ScenePainter` an axis that
+        // separates every pair of them. A joint computed twice is a seam that
+        // opens at some board size nobody tried, so each is read off the same
+        // function both sides use.
+        assertEquals(0f, piece("lamp base").box.min.z, 1e-3f, "the lamp is not on the desk")
+        assertEquals(
+            Scenery.baseTop(layout),
+            piece("lamp base").box.max.z,
+            1e-3f,
+            "the base and the stem disagree about where they meet",
+        )
+        assertEquals(Scenery.baseTop(layout), piece("lamp mast").box.min.z, 1e-3f)
+        assertEquals(Scenery.neckTop(layout), piece("lamp mast").box.max.z, 1e-3f)
+        assertEquals(Scenery.neckTop(layout), piece("lamp shade").box.min.z, 1e-3f)
+        assertEquals(Scenery.shadeTop(layout), piece("lamp shade").box.max.z, 1e-3f)
+        assertEquals(Scenery.shadeTop(layout), piece("lamp finial").box.min.z, 1e-3f)
+
+        // And the shade genuinely overhangs the stem it stands on, which is what
+        // makes the lamp non-convex and is therefore the reason for all of this.
+        assertTrue(
+            piece("lamp shade").box.max.x - piece("lamp shade").box.min.x >
+                (piece("lamp mast").box.max.x - piece("lamp mast").box.min.x) * 3f,
+            "the shade does not overhang the stem, so it need not have been its own piece",
+        )
+    }
+
+    @Test
     fun noTwoPiecesOfTheRoomShareAnyVolume() {
         // The precondition `ScenePainter` needs: two boxes that overlap on all
         // three axes have no separating axis, so no painter's order is correct
