@@ -340,15 +340,8 @@ class PlayState(
      * one: [SetPosition] sets an unknown card upright, the way it sets a spell,
      * instead of guessing at a defence position for a card it cannot identify.
      */
-    private fun monsterAt(held: Carry): Boolean? {
-        val card = when (val from = held.from) {
-            is DragOrigin.Mat -> field.placed(from.id)?.card
-            is DragOrigin.Hand -> field.hand.getOrNull(from.index)
-            is DragOrigin.Pile -> field.pile(from.pile).getOrNull(from.index)
-            is DragOrigin.Buried -> field.under(from.under).getOrNull(from.index)
-        }
-        return card?.let { isMonster(it.cardId) }
-    }
+    private fun monsterAt(held: Carry): Boolean? =
+        field.cardAt(held.from)?.let { isMonster(it.cardId) }
 
     fun cancelCarry() {
         carry = null

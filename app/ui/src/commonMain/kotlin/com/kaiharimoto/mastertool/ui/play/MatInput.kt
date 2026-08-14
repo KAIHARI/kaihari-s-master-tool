@@ -98,6 +98,16 @@ internal class MatPilot(
     var onMenu: (DragOrigin) -> Unit = {}
 
     /**
+     * A held finger wants to *read* the card, not only look at it.
+     *
+     * Refreshed by the screen exactly as [onMenu] is. The peek — the card coming
+     * off the table and turning toward you — is still what a hold does; this is
+     * the other half of the same answer, and the two fire together so the lift
+     * is the way into the reader rather than a competing gesture.
+     */
+    var onRead: (DragOrigin) -> Unit = {}
+
+    /**
      * The camera, and how the hand moved on the *glass* since the last frame.
      *
      * The felt is the camera's surface. A press that lands on nothing claims the
@@ -287,7 +297,7 @@ internal class MatPilot(
             }
 
             grabbed = handle(
-                event, grabbed, play, layout, feedback, onMenu, attaching,
+                event, grabbed, play, layout, feedback, onMenu, onRead, attaching,
                 tune.hand.stepFraction, camera?.plane, fanLift,
             )
 
@@ -753,6 +763,7 @@ private fun handle(
     layout: BoardLayout,
     feedback: Feedback,
     onMenu: (DragOrigin) -> Unit,
+    onRead: (DragOrigin) -> Unit,
     attaching: Boolean,
     /**
      * How far apart the hand's cards are, so the hit boxes land where they are
@@ -939,6 +950,12 @@ private fun handle(
             val deck = what is DragOrigin.Pile && what.pile == BoardSlot.Deck
             if (!deck) {
                 play.peek(what)
+                // And the reader, which is the half of "what is this" the lift
+                // cannot answer: at the size a card is drawn on a board seen at
+                // an angle, its effect text is a texture. It outlives the peek
+                // on purpose — see `CardReader` — so lifting the finger puts the
+                // card down and leaves the text up.
+                onRead(what)
                 feedback.play(SoundEffect.LIFT, Haptic.PEEK)
             }
         }

@@ -195,6 +195,25 @@ data class PlayField(
      * are the same feature rather than two that look alike. A hand is not
      * something you search; you can already see all of it.
      */
+    /**
+     * The card an origin names, wherever on the table it is.
+     *
+     * The one place a `DragOrigin` is turned back into the card it points at, so
+     * that anything wanting to *read* one — the reader a held finger opens, the
+     * name a tap announces — asks the same question the gestures do and cannot
+     * end up looking at a different card from the one under the finger.
+     *
+     * Null for an index that has run off the end of its pile, which happens: a
+     * gesture is a memory of what the press landed on, and the board can change
+     * underneath it.
+     */
+    fun cardAt(what: DragOrigin): BoardCard? = when (what) {
+        is DragOrigin.Mat -> placed(what.id)?.card
+        is DragOrigin.Hand -> hand.getOrNull(what.index)
+        is DragOrigin.Pile -> pile(what.pile).getOrNull(what.index)
+        is DragOrigin.Buried -> under(what.under).getOrNull(what.index)
+    }
+
     fun fanOf(what: DragOrigin): List<BoardCard> = when (what) {
         is DragOrigin.Pile -> pile(what.pile)
         // What is *under* the card, and not the card. A monster stays where it

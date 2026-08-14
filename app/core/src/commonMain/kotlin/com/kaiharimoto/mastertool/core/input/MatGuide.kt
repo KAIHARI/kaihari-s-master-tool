@@ -194,6 +194,12 @@ object MatGuide {
         // ---- reading ---------------------------------------------------------
         Gesture(
             GestureGroup.READING,
+            what = "Read a card's text, big",
+            touch = "Press and hold it — it stays up until you tap away",
+            pointer = "Press and hold it, then Esc to close",
+        ),
+        Gesture(
+            GestureGroup.READING,
             what = "Look at a card, or the top of a pile, without moving it",
             touch = "Press and hold it",
             pointer = "Press and hold it",

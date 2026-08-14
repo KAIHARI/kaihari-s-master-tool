@@ -348,6 +348,12 @@ fun PlayScreen(
     val feedback = LocalFeedback.current
     val back = LocalCardBack.current
     var menuFor by remember { mutableStateOf<DragOrigin?>(null) }
+
+    // What is open in the reader, if anything. A `DragOrigin` and not a card,
+    // so the panel is looking at the same thing the finger was — and so it can
+    // be re-resolved against the live field rather than holding a snapshot of a
+    // card that has since been sent to the graveyard.
+    var reading by remember { mutableStateOf<DragOrigin?>(null) }
     var guide by remember { mutableStateOf(false) }
 
     // ---- the numbers a person has moved -------------------------------------
@@ -512,6 +518,12 @@ fun PlayScreen(
                 // walk out of the stage and lose the board.
                 ShortcutAction.DISMISS -> when {
                     guide -> guide = false
+                    // Above the tuner and below the guide. The reader is a modal
+                    // over the table with a scrim of its own, so it is the first
+                    // thing Esc should take away — and it is the only one of
+                    // these a person opens by *holding still*, which means it is
+                    // the one most often open by accident.
+                    reading != null -> reading = null
                     // Below the guide and above everything on the mat: the panel
                     // is over the table but the guide is over both.
                     tuner -> tuner = false
@@ -740,6 +752,7 @@ fun PlayScreen(
                 // dismissed, which is a worse answer than the gesture having
                 // done nothing at all.
                 pilot.onMenu = { if (hasMenu(it)) menuFor = it }
+                pilot.onRead = { reading = it }
                 pilot.camera = camera
                 // Refreshed here rather than captured, for the reason above and
                 // for one more: it is a preference, so it changes under a live
@@ -964,6 +977,25 @@ fun PlayScreen(
 
             menuFor?.let { origin ->
                 CardActions(play, origin, onDismiss = { menuFor = null })
+            }
+        }
+
+        // Over the stage and under the bar, in the outer box: Compose hit-tests
+        // siblings in reverse, so the scrim receives pointers before `MatInput`
+        // and a tap that closes the reader cannot also land on the table behind
+        // it. The bar stays reachable, which is deliberate — undo is the first
+        // thing you want after reading a card and finding out you were wrong.
+        reading?.let { origin ->
+            val card = play.field.cardAt(origin)?.let { state.index.byId(it.cardId) }
+            // Resolved every recomposition rather than captured, so a card that
+            // has left the table takes its reader with it instead of leaving a
+            // panel describing a card that is no longer there. The closing is an
+            // effect and not a write during composition, which would schedule a
+            // recomposition for a value this pass has already read.
+            if (card != null) {
+                CardReader(card) { reading = null }
+            } else {
+                LaunchedEffect(origin) { reading = null }
             }
         }
 
