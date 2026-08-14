@@ -24,6 +24,15 @@ data class Carry(
     val from: DragOrigin,
     /** The instance being carried, so the resolver can refuse to stack it on itself. */
     val id: Int,
+    /**
+     * Which physical card was picked up, whatever it was picked up *out of*.
+     *
+     * [id] is the mat's instance and is [PlayState.NO_CARD] for anything that
+     * was not already on the mat; this is the card itself, and it is what makes
+     * the release able to check that the origin still means what it meant. See
+     * `PlayField.stillHolds` for why that check exists at all.
+     */
+    val holding: Int = PlayState.NO_CARD,
     val at: MatPoint,
     val intent: DropIntent,
     /** True while the gesture means "tuck underneath" rather than "put on top". */
@@ -98,8 +107,26 @@ class PlayState(
     var field by mutableStateOf(dealt(main, extra, seed, OPENING_HAND))
         private set
 
-    var carry by mutableStateOf<Carry?>(null)
+    /**
+     * What is in the air, by the hand holding it.
+     *
+     * A map rather than one card, because kai's table is played with two hands:
+     * *"I should be able to use one finger on two cards to simultaneously drag
+     * both."* The key is `MatDesk`'s lane — the gesture, not the finger — so a
+     * two-finger twist is still one entry and two one-finger drags are two.
+     *
+     * Deliberately small and deliberately a map: at two lanes an array would be
+     * two nullable slots and every reader would have to remember which of them
+     * are live. The one thing every reader actually wants is [carried], and it
+     * is a list.
+     */
+    var carries by mutableStateOf<Map<Int, Carry>>(emptyMap())
         private set
+
+    /** Everything in the air, for the poses and the drop indicators. */
+    val carried: List<Carry> get() = carries.values.toList()
+
+    fun carryIn(lane: Int): Carry? = carries[lane]
 
     /** What the last release did, for a moment, so the table can say so. */
     var announcement by mutableStateOf<String?>(null)
@@ -247,7 +274,7 @@ class PlayState(
         val previous = past.removeLastOrNull() ?: return
         future.addLast(field)
         field = previous
-        carry = null
+        carries = emptyMap()
         stamp()
     }
 
@@ -255,7 +282,7 @@ class PlayState(
         val next = future.removeLastOrNull() ?: return
         past.addLast(field)
         field = next
-        carry = null
+        carries = emptyMap()
         stamp()
     }
 
@@ -266,13 +293,23 @@ class PlayState(
 
     fun restart(seed: Long = Random.nextLong()) {
         move { dealt(opening.first, opening.second, seed, OPENING_HAND) }
-        carry = null
+        carries = emptyMap()
     }
 
     // ---- carrying a card ------------------------------------------------------
 
-    /** Picks something up. The intent is resolved immediately so the indicator is never blank. */
+    /**
+     * Picks something up. The intent is resolved immediately so the indicator is
+     * never blank.
+     *
+     * Every one of these takes a [lane] — which hand is doing it — and none of
+     * them takes a default. A lane threaded by hand through every call is
+     * tedious exactly once; a lane with a default is a call site that silently
+     * moves the *other* hand's card, and there is no test that would catch it
+     * because both hands are holding perfectly valid cards.
+     */
     fun lift(
+        lane: Int,
         from: DragOrigin,
         at: MatPoint,
         layout: BoardLayout,
@@ -287,9 +324,10 @@ class PlayState(
             is DragOrigin.Mat -> from.id
             else -> NO_CARD
         }
-        carry = Carry(
+        carries = carries + (lane to Carry(
             from = from,
             id = id,
+            holding = field.cardAt(from)?.instanceId ?: NO_CARD,
             at = at,
             // Deliberately without [cameOutOf]: on the frame a card is lifted it
             // is still exactly where it came from, so passing it here would open
@@ -302,18 +340,19 @@ class PlayState(
             faceDown = faceDown ||
                 (from is DragOrigin.Mat && field.placed(from.id)?.faceUp == false),
             cameOutOf = cameOutOf,
-        ).settled()
+        ).settled())
     }
 
     /** Moves what is being carried, and re-decides what letting go would do. */
     fun carryTo(
+        lane: Int,
         at: MatPoint,
         layout: BoardLayout,
         attaching: Boolean = false,
         handStep: Float = StageTuning.DEFAULT.hand.stepFraction,
     ) {
-        val held = carry ?: return
-        carry = held.copy(
+        val held = carries[lane] ?: return
+        carries = carries + (lane to held.copy(
             at = at,
             attaching = attaching,
             intent = DropTargets.resolve(
@@ -329,11 +368,12 @@ class PlayState(
                 fromHand = (held.from as? DragOrigin.Hand)?.index,
                 handStep = handStep,
             ),
-        ).settled()
+        ).settled())
     }
 
-    fun twistCarry(quarterTurns: Int) {
-        carry = carry?.copy(quarterTurns = quarterTurns)?.settled()
+    fun twistCarry(lane: Int, quarterTurns: Int) {
+        val held = carries[lane] ?: return
+        carries = carries + (lane to held.copy(quarterTurns = quarterTurns).settled())
     }
 
     /**
@@ -343,9 +383,9 @@ class PlayState(
      * is the only way a card ever reaches the mat already face-down — the
      * alternative shows the table a card the player meant to hide.
      */
-    fun turnCarry(): Boolean {
-        val held = carry ?: return false
-        carry = held.copy(faceDown = !held.faceDown).settled()
+    fun turnCarry(lane: Int): Boolean {
+        val held = carries[lane] ?: return false
+        carries = carries + (lane to held.copy(faceDown = !held.faceDown).settled())
         return true
     }
 
@@ -356,9 +396,15 @@ class PlayState(
      * *is* the intent — there is no second decision made at release time that
      * could disagree with what the user was told.
      */
-    fun release(): Boolean {
-        val held = carry ?: return false
-        carry = null
+    fun release(lane: Int): Boolean {
+        val held = carries[lane] ?: return false
+        carries = carries - lane
+
+        // The other hand may have renumbered the pile this one is holding an
+        // index into. Putting the card back is the only safe answer: dropping
+        // whatever is at that index now would be moving a card nobody touched,
+        // and it would look exactly like the table working.
+        if (held.holding != NO_CARD && !field.stillHolds(held.from, held.holding)) return false
 
         val done = move { DropCommit.commit(it, held.from, held.intent, held.position) }
         if (done && held.intent !is DropIntent.Free) announcement = held.intent.label
@@ -393,8 +439,8 @@ class PlayState(
     private fun monsterAt(held: Carry): Boolean? =
         field.cardAt(held.from)?.let { isMonster(it.cardId) }
 
-    fun cancelCarry() {
-        carry = null
+    fun cancelCarry(lane: Int) {
+        carries = carries - lane
     }
 
     /** Where the finger is, in mat fractions, from a point on the stage. */

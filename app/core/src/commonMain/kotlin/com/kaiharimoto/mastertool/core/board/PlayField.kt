@@ -214,6 +214,27 @@ data class PlayField(
         is DragOrigin.Buried -> under(what.under).getOrNull(what.index)
     }
 
+    /**
+     * Whether an origin still names the card it named when it was picked up.
+     *
+     * A `DragOrigin` into the hand or a pile is an **index**, and an index is
+     * only true of the board it was taken from. One hand releasing a card
+     * renumbers everything below it, so with two hands in the same pile the
+     * second gesture is holding a memory that has quietly come to mean the card
+     * next door — and it would drop *that* one, correctly, silently, and wrong.
+     *
+     * The failure is not hypothetical and not confined to two hands: taking a
+     * card out of a spread by tapping it while another is being dragged out of
+     * the same spread does the same thing. It simply could not happen before,
+     * because there was only ever one gesture at a time to be wrong.
+     *
+     * Checked at the release rather than repaired continuously, because the
+     * honest answer to "the board moved under this gesture" is to put the card
+     * back, not to guess which card the user now means.
+     */
+    fun stillHolds(what: DragOrigin, instanceId: Int): Boolean =
+        cardAt(what)?.instanceId == instanceId
+
     fun fanOf(what: DragOrigin): List<BoardCard> = when (what) {
         is DragOrigin.Pile -> pile(what.pile)
         // What is *under* the card, and not the card. A monster stays where it

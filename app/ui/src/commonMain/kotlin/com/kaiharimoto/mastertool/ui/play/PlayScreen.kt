@@ -78,7 +78,6 @@ import com.kaiharimoto.mastertool.core.layout.MatControls
 import com.kaiharimoto.mastertool.core.layout.PileFan
 import com.kaiharimoto.mastertool.core.layout.StageSeat
 import com.kaiharimoto.mastertool.core.layout.planeFor
-import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
 import com.kaiharimoto.mastertool.core.model.Card
 import com.kaiharimoto.mastertool.core.model.CardCategory
 import com.kaiharimoto.mastertool.core.motion.Pose3
@@ -341,7 +340,6 @@ fun PlayScreen(
         }
     }
     val cards = remember(deck.main, deck.extra) { mutableMapOf<Int, StageCard>() }
-    val machine = remember(deck.main, deck.extra) { MatGestureMachine() }
     // Above the shortcut host, because three of the shortcuts are seats. It
     // needs no surface to exist — `sync` tells it one as soon as there is a box.
     val camera = remember { StageCameraState(CameraRig(seat = StageSeat.TABLE)) }
@@ -627,7 +625,7 @@ fun PlayScreen(
             // nothing until the user next touches the board, which reads as the
             // slider being broken rather than as a missing key.
             val seats = remember(
-                play.field, layout, play.carry, play.peeking, play.fanned,
+                play.field, layout, play.carries, play.peeking, play.fanned,
                 play.declared, tune,
             ) {
                 // The camera is read as a plain field, not as observable state:
@@ -638,7 +636,7 @@ fun PlayScreen(
                 seatsFor(
                     field = play.field,
                     layout = layout,
-                    carry = play.carry,
+                    carries = play.carried,
                     peeking = play.peeking,
                     fanned = play.fanned,
                     declared = play.declared?.id,
@@ -754,8 +752,8 @@ fun PlayScreen(
 
             // Both clocks report here, so a gesture the frame loop decides acts
             // on the same card the press landed on.
-            val pilot = remember(play, machine, feedback) {
-                MatPilot(machine, play, feedback, layout, tune)
+            val pilot = remember(play, feedback) {
+                MatPilot(play, feedback, layout, tune)
             }
             SideEffect {
                 pilot.layout = layout
@@ -960,7 +958,7 @@ fun PlayScreen(
                     drawFelt(layout, camera.plane, camera.eye, look, pool, weave)
                     drawScene(scenery.standing, camera.plane, camera.eye, look)
                     drawMatControls(layout, play.field)
-                    drawIndicator(play.carry, play.field, layout, tune.hand.stepFraction)
+                    play.carried.forEach { drawIndicator(it, play.field, layout, tune.hand.stepFraction) }
                 }
 
                 // Then one card at a time, each drawing its own shadow, its own
@@ -990,7 +988,7 @@ fun PlayScreen(
                 }
             }
 
-            MatInput(pilot = pilot, machine = machine, layout = layout, camera = camera)
+            MatInput(pilot = pilot, layout = layout, camera = camera)
 
             menuFor?.let { origin ->
                 CardActions(play, origin, onDismiss = { menuFor = null })
@@ -1172,7 +1170,16 @@ private data class Seat(
 private fun seatsFor(
     field: PlayField,
     layout: BoardLayout,
-    carry: Carry?,
+    /**
+     * Everything in the air, which on a two-handed table is up to two cards.
+     *
+     * A list rather than one card, and every reader below asks it *which* carry
+     * is about the seat it is building rather than assuming there is one. The
+     * bug that shape exists to prevent is the ordinary one: the right hand's
+     * card drawn at the left hand's position, which looks exactly like a card
+     * teleporting and would be blamed on the projection.
+     */
+    carries: List<Carry> = emptyList(),
     peeking: DragOrigin? = null,
     /** What has been spread out to be searched, if anything. */
     fanned: DragOrigin? = null,
@@ -1233,19 +1240,20 @@ private fun seatsFor(
     }
 
     field.mat.forEach { placed ->
-        val carrying = carry?.id == placed.id
+        val carry = carries.firstOrNull { it.id == placed.id }
+        val carrying = carry != null
         // In the air, the carry owns which face shows: it is what the card will
         // land as, so turning it over is visible before it is committed.
-        val faceUp = if (carrying) !carry.faceDown else placed.faceUp
+        val faceUp = if (carry != null) !carry.faceDown else placed.faceUp
         seats += Seat(
             id = placed.id,
             card = placed.card,
             pose = poseAt(
-                at = if (carrying) carry.at else placed.at,
+                at = carry?.at ?: placed.at,
                 // Resting on whatever is under it, which for a stack is the
                 // rest of the stack: a card on a pile of four is four cards
                 // off the felt, and its shadow is cast from up there.
-                z = if (carrying) {
+                z = if (carry != null) {
                     cardHeight * carryLift
                 } else {
                     CardSolid.pileDepth(placed.depth, cardWidth) +
@@ -1254,7 +1262,7 @@ private fun seatsFor(
                 // The carry's own solved position, not its raw twist: a card
                 // being *set* lies sideways because it is a monster going
                 // into a monster zone, and nobody twisted anything to say so.
-                turned = if (carrying) carry.turned else placed.turned,
+                turned = carry?.turned ?: placed.turned,
                 faceUp = faceUp,
                 landing = if (carrying) {
                     Settle.Landing.Square
@@ -1283,26 +1291,26 @@ private fun seatsFor(
 
     // The hand, fanned along the band the solver set aside.
     field.hand.forEachIndexed { index, card ->
-        val carrying = carry?.from is DragOrigin.Hand &&
-            (carry.from as DragOrigin.Hand).index == index
+        val carry = carries.firstOrNull { (it.from as? DragOrigin.Hand)?.index == index }
+        val carrying = carry != null
         val at = HandFan.pointFor(layout, index, field.hand.size, tune.hand.stepFraction)
         // A card in hand is always face-up to its owner; one turned over on the
         // way out of it is being set.
-        val faceUp = !(carrying && carry.faceDown)
+        val faceUp = carry?.faceDown != true
         seats += Seat(
             id = card.instanceId,
             card = card,
             pose = poseAt(
-                at = if (carrying) carry.at else at,
+                at = carry?.at ?: at,
                 // Not zero. A leaned card pivots on its bottom edge, and this
                 // is what buys that — see [handLiftOf].
-                z = if (carrying) {
+                z = if (carry != null) {
                     cardHeight * handLift
                 } else {
                     handLiftOf(cardHeight, CardSolid.pileDepth(1, cardWidth), tune.hand) +
                         if (card.instanceId == declared) cardHeight * DECLARE_LIFT else 0f
                 },
-                turned = carrying && carry.turned,
+                turned = carry?.turned == true,
                 faceUp = faceUp,
                 lean = if (carrying) 0f else tune.hand.leanDegrees,
                 landing = if (carrying) {
@@ -1376,29 +1384,29 @@ private fun seatsFor(
     // A card being carried out of a pile has no seat of its own yet — it is
     // still in the pile as far as the field is concerned — so it gets one here,
     // or dragging out of the graveyard would carry something invisible.
-    val from = carry?.from
-    if (from is DragOrigin.Pile || from is DragOrigin.Buried) {
+    carries.forEach { carry ->
+        val from = carry.from
+        if (from !is DragOrigin.Pile && from !is DragOrigin.Buried) return@forEach
         val held = when (from) {
             is DragOrigin.Pile -> field.pile(from.pile).getOrNull(from.index)
             is DragOrigin.Buried -> field.under(from.under).getOrNull(from.index)
             else -> null
-        }
-        held?.let { card ->
-            val faceUp = !carry.faceDown
-            seats += Seat(
-                id = card.instanceId,
-                card = card,
-                pose = poseAt(carry.at, cardHeight * carryLift, carry.turned, faceUp),
-                faceUp = faceUp,
-                carried = true,
-                pinned = true,
-                depth = 1,
-                materials = 0,
-                counters = 0,
-                width = cardWidth,
-                height = cardHeight,
-            )
-        }
+        } ?: return@forEach
+
+        val faceUp = !carry.faceDown
+        seats += Seat(
+            id = held.instanceId,
+            card = held,
+            pose = poseAt(carry.at, cardHeight * carryLift, carry.turned, faceUp),
+            faceUp = faceUp,
+            carried = true,
+            pinned = true,
+            depth = 1,
+            materials = 0,
+            counters = 0,
+            width = cardWidth,
+            height = cardHeight,
+        )
     }
 
     // The pile that has been spread out, laid across the board so a card can be
@@ -1419,7 +1427,10 @@ private fun seatsFor(
         val spread = PileFan.spread(cards.size, layout.field, cardWidth, cardHeight)
         spread.cards.forEach { fan ->
             val card = cards.getOrNull(fan.index) ?: return@forEach
-            if (carry?.from == fanned.fanCardAt(fan.index)) return@forEach
+            // Any hand holding it, not only the first: with two hands in a
+            // spread, checking one carry would draw the other's card twice —
+            // once floating under the finger and once still lying in the fan.
+            if (carries.any { it.from == fanned.fanCardAt(fan.index) }) return@forEach
             seats += Seat(
                 id = card.instanceId,
                 card = card,

@@ -127,6 +127,16 @@ those piles are ordered and public.
 
 Ordered by what it would change about a practice session, not by effort.
 
+**Done since this list was written**, as eight changes kai asked for in one go:
+card text on a hold (#3, and it *stays up* — a held finger is a glance, not a
+read); two-handed play, which was not on this list at all and is the largest of
+the eight; a hand you can arrange by dragging along it; two fingers to set a card
+face-down, with the zone deciding whether it lies sideways; a tap that declares
+an effect, which is #8's cheap half — the announcement without the chain state; a
+camera you can switch off, because the felt is most of the screen; a card put
+back into the gap it came out of; and the fan actually closing when you drag a
+card out of it, which had never worked at all.
+
 1. **Tokens.** A real functional gap — a large share of modern combos put tokens
    on the board and they are currently unrepresentable. Conjure one onto the mat;
    it behaves as a card with no back.
@@ -135,9 +145,10 @@ Ordered by what it would change about a practice session, not by effort.
    backwards and forwards through a combo the way you scrub a video. DuelingBook
    has replays of finished duels; nobody has this *while you are practising*, and
    it is close to free.
-3. **Card text on the peek.** A held card magnifies its art and shows nothing to
-   read. In practice you hold a card up precisely to check the wording. Show the
-   text beside it.
+3. ~~**Card text on the peek.**~~ Done — `ui/play/CardReader.kt`. It became a
+   panel that stays up rather than text beside the lifted card, and the reason is
+   worth keeping: reading four sentences of ruling text with your thumb on the
+   glass is not reading, it is holding still.
 4. **Excavate.** Turn the top N of the deck face-up in a row without committing
    to any of them — the `/ex` command, as a drag off the deck.
 5. **Mill by number.** `/send`, as a drag from the deck to the graveyard with a
@@ -147,9 +158,12 @@ Ordered by what it would change about a practice session, not by effort.
    put it on the table rather than in a bar.
 7. **Dice and a coin.** Both are real game actions, not decoration, and both are
    the best possible showcase for the rigid-body solver in `docs/AAA.md`.
-8. **Activation as a state.** A card being activated lifts and stays lifted until
-   it resolves. In a long combo, what is currently on the chain is a thing you
-   have to remember; the table could hold it for you without knowing any rules.
+8. **Activation as a state.** Half done. A tap now *declares* a card — its name
+   in the bar, a chime, and the card rising and settling — which is the moment.
+   What is still missing is the **chain**: a declaration that stays up until it
+   resolves, so that what is currently on the chain is something the table holds
+   for you rather than something you remember. The bump already goes through the
+   pose springs, so holding it up is a flag rather than an animation.
 9. **Attach as material by gesture.** `DropIntent.Attach` exists in the domain
    and has no idiom. Once the fan exists, the extra deck is reachable and Xyz
    play becomes the common case rather than an edge case.
@@ -175,7 +189,9 @@ Ordered by what it would change about a practice session, not by effort.
 17. **Hotkeys for the fan.** Every gesture ships with both idioms, so the fan
     needs keys: one per pile, plus type-to-filter on desktop.
 18. **Multi-select.** Taking three cards out of the graveyard at once is common
-    (banishing for a cost). The mat has no notion of a selection.
+    (banishing for a cost). The mat has no notion of a selection — though two
+    hands now take two cards at once, which covers the common case of two and
+    makes a selection model harder to justify than it was.
 19. **Sleeves and a playmat.** DuelingBook's whole cosmetic economy. We have card
     backs already; a user playmat is in `docs/AAA.md` §6.
 20. **Spectating, chat, rated duels, replays of others.** All require an

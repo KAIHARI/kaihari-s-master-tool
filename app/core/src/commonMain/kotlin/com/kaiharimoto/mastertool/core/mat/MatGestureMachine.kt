@@ -28,13 +28,20 @@ private class VelocitySampler {
 /**
  * One arbiter for the whole mat, deciding what the fingers on it mean.
  *
- * The single most consequential decision here is that there is **one** of
- * these, driven by **one** `pointerInput` on the mat — not one per card.
- * Compose hit-tests each pointer independently, so per-card detectors let one
- * finger start a drag on one card while a second finger starts a *separate*
+ * The single most consequential decision here is that these are driven by
+ * **one** `pointerInput` on the mat and routed by **one** arbiter — not one per
+ * card. Compose hit-tests each pointer independently, so per-card detectors let
+ * one finger start a drag on one card while a second finger starts a *separate*
  * drag on another. That is the two-competing-drags bug exactly, and no amount
  * of event consumption fixes it, because by then there are already two gesture
  * loops that each believe they are in charge.
+ *
+ * There may now be **two** of these, and that is not a retreat from the rule
+ * above: `MatDesk` owns them, decides at the instant a finger lands which one it
+ * belongs to, and hands each a frame containing only its own pointers. Two
+ * competing drags were a bug when nothing decided between them; two deliberate
+ * drags are two-handed play. Everything in this file goes on being about one
+ * gesture and knows nothing about the other, which is what keeps it testable.
  *
  * The second is that this is pure Kotlin in core, with the composable doing
  * nothing but translating pointer events into [TouchFrame] and handing the

@@ -291,20 +291,33 @@ only thing that has stopped being true is that a card must be inside one.
 Four rules the play stage would be broken without, each of which was a bug
 first:
 
-- **One gesture arbiter for the whole mat**, in core
-  (`core/mat/MatGestureMachine.kt`), driven by one `pointerInput`. Per-card
-  detectors let one finger start a drag on one card while a second starts a
-  separate drag on another, and consumption cannot fix that after the fact.
-- **Fingers on a card move the card; fingers on the felt move the camera.**
-  The whole control scheme, and it has to stay sayable in one line. The split
-  is made once, on the press, by `claimForCamera` when the hit test finds
-  nothing; from there the gesture cannot become a drag, a peek or a menu. One
-  finger orbits, two pan and pinch. The table has almost no affordances drawn on
-  it, so it has a guide — `core/input/MatGuide.kt`, data rather than prose,
-  rendered by the button on the bar and held to both-idioms-present by a test.
-  The one exception is the two shuffle marks (`core/layout/MatControls.kt`),
-  argued for there and in `docs/DESIGN.md` §10; a third needs its own argument
-  rather than their precedent.
+- **One arbiter for the whole mat**, in core, driven by one `pointerInput`.
+  Per-card detectors let one finger start a drag on one card while a second
+  starts a separate drag on another, and consumption cannot fix that after the
+  fact. It is now **two machines behind one router** — `core/mat/MatDesk.kt`
+  owns up to two `MatGestureMachine` lanes and decides, at the instant a finger
+  lands, which one it belongs to. That is kai's two-handed play, and it does not
+  retreat from the rule: two competing drags were a bug when nothing decided
+  between them; two deliberate drags are a feature because something does. The
+  rule is one sentence — *a finger that lands on something nothing else is
+  holding starts its own gesture; every other finger joins the gesture nearest
+  it* — and it settles the twist, the menu, the set, the steadying hand and the
+  pinch without a special case for any of them. Each machine still sees only its
+  own pointers and still knows nothing about the other.
+- **Fingers on a card move the card; fingers on the felt move the camera — when
+  the felt is switched on.** The whole control scheme, and it has to stay sayable
+  in one line. The split is made once, on the press, by `claimForCamera` when the
+  hit test finds nothing; from there the gesture cannot become a drag, a peek or
+  a menu. One finger orbits, two pan and pinch. **`UiPreferences.cameraTouch`
+  defaults to off**, on kai's report of too many accidental touches, and locking
+  it costs the table no other gesture — a felt press then dies in `PRESS`, where
+  a tap can still close an open fan. The mouse keeps the wheel and the
+  middle-drag either way; neither goes through the arbiter. The table has almost
+  no affordances drawn on it, so it has a guide — `core/input/MatGuide.kt`, data
+  rather than prose, rendered by the button on the bar and held to
+  both-idioms-present by a test. The one exception is the two shuffle marks
+  (`core/layout/MatControls.kt`), argued for there and in `docs/DESIGN.md` §10;
+  a third needs its own argument rather than their precedent.
 - **Both of its clocks report to `MatPilot`.** Pointer events and the frame
   loop each produce gesture events, and both must act on the same memory of
   what the press landed on. `onTick` called for its side effects, with its
@@ -314,6 +327,27 @@ first:
   instant that finger lifts — the second finger of a tap is a frame behind.
   It opens a grace window instead; a hand left resting on the mat loses the
   gesture when the window closes.
+- **A drag out of a pile or the hand is holding an index, and an index goes
+  stale.** With two hands, one release renumbers what the other is holding, and
+  it would then drop the card next door — correctly, silently, and wrong.
+  `PlayField.stillHolds` is checked at the release; a gesture whose board moved
+  under it puts its card back rather than guessing which card the user now means.
+
+**The gesture vocabulary, after kai's eight changes.** A tap on a card
+*declares* it (a name in the bar, a chime, a small bump) and no longer brings it
+to the front, which is in the menu; a tap on a pile or a stack still spreads it.
+Two fingers dragging a card **set** it face-down, and where it lands decides how
+it lies — `core/board/SetPosition.kt`, monster zones sideways, spell/trap zones
+upright, and off the zones the card's own category. The two-finger *pile* drag it
+replaced cost nothing: one finger has always moved a whole stack
+(`PlayField.moveOnMat` slides a card and its pile), so `DRAG_STACK`,
+`LiftedStack`, `stackModifier`, the shift-drag and `Carry.whole` are all gone
+with it. A hold opens the card reader (`ui/play/CardReader.kt`) and it stays up
+until dismissed. `DropIntent.Hand` carries a gap index, so a hand can be
+arranged. And `DropIntent.Cancel` is reachable at last: drop a card back on the
+gap it came out of and it goes back — aimed at that one slot rather than at the
+whole fan, because a spread covers `layout.field` and "inside the fan wins" would
+make the board undroppable while a pile is open.
 
 **Any pile can be searched.** Tap one and it spreads across the board —
 `core/layout/PileFan.kt` solves the geometry, and the cards never change size

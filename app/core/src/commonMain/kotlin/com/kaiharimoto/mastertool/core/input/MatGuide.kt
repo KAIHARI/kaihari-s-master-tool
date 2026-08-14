@@ -118,6 +118,12 @@ object MatGuide {
         ),
         Gesture(
             GestureGroup.MOVING,
+            what = "Move two cards at once",
+            touch = "A finger on each — two hands, two cards",
+            pointer = "One at a time; a mouse has one pointer",
+        ),
+        Gesture(
+            GestureGroup.MOVING,
             what = "Arrange your hand",
             touch = "Drag a card along the hand to where you want it",
             pointer = "Drag a card along the hand to where you want it",

@@ -35,7 +35,8 @@ import com.kaiharimoto.mastertool.core.layout.MatControls
 import com.kaiharimoto.mastertool.core.layout.PileFan
 import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.mat.MatEvent
-import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
+import com.kaiharimoto.mastertool.core.mat.LaneEvent
+import com.kaiharimoto.mastertool.core.mat.MatDesk
 import com.kaiharimoto.mastertool.core.mat.Touch
 import com.kaiharimoto.mastertool.core.mat.TouchFrame
 import com.kaiharimoto.mastertool.core.mat.TwoFinger
@@ -80,7 +81,6 @@ import kotlin.math.max
  */
 @Stable
 internal class MatPilot(
-    private val machine: MatGestureMachine,
     private val play: PlayState,
     private val feedback: Feedback,
     var layout: BoardLayout,
@@ -95,6 +95,25 @@ internal class MatPilot(
      */
     var tune: StageTuning = StageTuning.DEFAULT,
 ) {
+    /**
+     * The arbiter, and the hit test it routes by.
+     *
+     * Owned here rather than handed in, because the router has to ask *what is
+     * under this finger* the instant one lands — that is how it decides whether
+     * a second finger is a second hand or the second finger of one gesture —
+     * and the answer depends on the layout, the tuning and the camera, all three
+     * of which live on this object and all three of which are refreshed rather
+     * than captured. A desk built outside would have to be handed a lambda over
+     * values that go stale, which is the drift every `var` up there exists to
+     * avoid.
+     */
+    val desk = MatDesk<DragOrigin>({ at ->
+        whatIsUnder(
+            play.field, layout, at, play.fanned, tune.hand.stepFraction,
+            camera?.plane, fanLift,
+        )
+    })
+
     var onMenu: (DragOrigin) -> Unit = {}
 
     /**
@@ -148,18 +167,26 @@ internal class MatPilot(
      */
     var cameraTouch: Boolean = false
 
-    /** What the press landed on. The one thing that has to survive both clocks. */
-    private var grabbed: DragOrigin? = null
+    /**
+     * What each hand's press landed on. The thing that has to survive both clocks.
+     *
+     * A map keyed by lane, and everything below it is the same shape, because
+     * two hands means two of everything the host remembers about a gesture. The
+     * bug this shape exists to make impossible is one hand's press being
+     * answered with the other hand's card — which is not a crash, it is the
+     * wrong card going to the graveyard, and nothing would ever have told you.
+     */
+    private val grabbed = mutableMapOf<Int, DragOrigin>()
 
     /**
-     * The control the press landed on, if it landed on one rather than on a card.
+     * The control a press landed on, if it landed on one rather than on a card.
      *
      * A second thing to remember across the two clocks, and it is deliberately
      * *not* folded into [grabbed]: `DragOrigin` names a card in the domain, and
      * a shuffle mark is not a card. Widening a domain type so the input layer
      * can remember something is how a domain stops meaning anything.
      */
-    private var pressedControl: MatControl? = null
+    private val pressedControl = mutableMapOf<Int, MatControl>()
 
     /**
      * How far the hand has swept while the camera has had the gesture.
@@ -176,8 +203,8 @@ internal class MatPilot(
      */
     private var cameraTravel = 0f
 
-    /** Whether the carried card is going *under* what it is over, not on top. */
-    private var attaching = false
+    /** Whether each hand's carried card is going *under* what it is over. */
+    private val attaching = mutableSetOf<Int>()
 
     /** True while the secondary mouse button is down, so the menu opens once. */
     private var secondaryDown = false
@@ -213,12 +240,12 @@ internal class MatPilot(
 
     fun frame(frame: TouchFrame) {
         frameMillis = frame.timeMillis
-        carryOut(machine.onFrame(frame))
+        carryOut(desk.onFrame(frame))
     }
 
     fun tick(timeMillis: Long) {
         frameMillis = timeMillis
-        carryOut(machine.onTick(timeMillis))
+        carryOut(desk.onTick(timeMillis))
     }
 
     /**
@@ -258,7 +285,10 @@ internal class MatPilot(
      */
     fun panning(down: Boolean, delta: Vec2) {
         if (down && !panningDown) {
-            machine.cancel()
+            // Carried out rather than discarded. `Cancelled` is what puts a card
+            // in the air back where it came from, and throwing the events away —
+            // which this did — left a middle-drag able to strand one mid-flight.
+            carryOut(desk.cancel())
             camera?.rig?.halt()
         }
         panningDown = down
@@ -278,28 +308,30 @@ internal class MatPilot(
         secondaryDown = down
         if (!down) return
 
-        machine.cancel()
+        carryOut(desk.cancel())
         whatIsUnder(
             play.field, layout, at, play.fanned, tune.hand.stepFraction,
             camera?.plane, fanLift,
         )?.let(onMenu)
     }
 
-    private fun carryOut(events: List<MatEvent>) {
-        events.forEach { event ->
+    private fun carryOut(events: List<LaneEvent<DragOrigin>>) {
+        events.forEach { (lane, _, event) ->
             when (event) {
-                is MatEvent.Pressed, is MatEvent.Dropped -> attaching = false
-                is MatEvent.Dwelled -> attaching = true
+                is MatEvent.Pressed, is MatEvent.Dropped -> attaching -= lane
+                is MatEvent.Dwelled -> attaching += lane
                 // Only movement worth the name undoes it. A card held still is
                 // still being held still through the jitter of a real finger.
-                is MatEvent.Moved -> if (event.delta.length > ROUSE) attaching = false
+                is MatEvent.Moved -> if (event.delta.length > ROUSE) attaching -= lane
                 else -> Unit
             }
 
-            grabbed = handle(
-                event, grabbed, play, layout, feedback, onMenu, onRead, attaching,
-                tune.hand.stepFraction, camera?.plane, fanLift,
+            val was = grabbed[lane]
+            val now = handle(
+                lane, event, was, play, layout, feedback, onMenu, onRead,
+                lane in attaching, tune.hand.stepFraction, camera?.plane, fanLift,
             )
+            if (now == null) grabbed -= lane else grabbed[lane] = now
 
             // The press has been hit-tested by now — `handle` is what does it —
             // so this is the first moment anything knows whether the finger
@@ -329,10 +361,15 @@ internal class MatPilot(
                 yawRate = 0f
                 pitchRate = 0f
                 lastFlyMillis = frameMillis
-                pressedControl =
-                    if (grabbed == null) MatControls.at(layout, event.at.x, event.at.y) else null
-                if (cameraTouch && grabbed == null && pressedControl == null && !onFan(event.at)) {
-                    machine.claimForCamera()
+                val onCard = grabbed[lane]
+                val mark = if (onCard == null) {
+                    MatControls.at(layout, event.at.x, event.at.y)
+                } else {
+                    null
+                }
+                if (mark == null) pressedControl -= lane else pressedControl[lane] = mark
+                if (cameraTouch && onCard == null && mark == null && !onFan(event.at)) {
+                    desk.claimForCamera(lane)
                 }
             }
 
@@ -341,20 +378,20 @@ internal class MatPilot(
             // back up, which is the way out of a search you have changed your
             // mind about.
             if (event is MatEvent.Tapped) {
-                val control = pressedControl
+                val control = pressedControl[lane]
                 when {
                     control != null ->
                         if (play.shuffle(control.pile)) {
                             feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
                         }
-                    grabbed == null && play.fanned != null ->
+                    grabbed[lane] == null && play.fanned != null ->
                         if (play.closeFan()) {
                             feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
                         } else {
                             feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
                         }
                 }
-                pressedControl = null
+                pressedControl -= lane
             }
             if (event is MatEvent.CameraMoved) {
                 cameraTravel += screenDelta.length
@@ -599,7 +636,6 @@ internal class MatPilot(
 @Composable
 internal fun MatInput(
     pilot: MatPilot,
-    machine: MatGestureMachine,
     layout: BoardLayout,
     camera: StageCameraState,
 ) {
@@ -704,7 +740,10 @@ internal fun MatInput(
 
                         pilot.frame(frame)
 
-                        if (machine.phase.locked) {
+                        // Either hand owning its pointers is enough to consume:
+                        // a drag in the right hand must stop an ancestor pager
+                        // stealing the stream while the left is merely pressed.
+                        if (pilot.desk.locked) {
                             event.changes.forEach { it.consume() }
                         }
                     }
@@ -757,6 +796,8 @@ private const val STILL = 24f
  * acts on what was found there.
  */
 private fun handle(
+    /** Which hand this is. Every call into [PlayState] below is about one. */
+    lane: Int,
     event: MatEvent,
     grabbed: DragOrigin?,
     play: PlayState,
@@ -845,7 +886,7 @@ private fun handle(
         is MatEvent.LiftedCard -> {
             grabbed?.let {
                 play.lift(
-                    it, mat(event.at), layout,
+                    lane, it, mat(event.at), layout,
                     cameOutOf = fanSlotOf(play, layout, it, fanPlane, fanLift),
                 )
                 feedback.play(SoundEffect.LIFT, Haptic.LIFT)
@@ -861,7 +902,7 @@ private fun handle(
         is MatEvent.LiftedSet -> {
             grabbed?.let {
                 play.lift(
-                    it, mat(event.at), layout,
+                    lane, it, mat(event.at), layout,
                     cameOutOf = fanSlotOf(play, layout, it, fanPlane, fanLift),
                     faceDown = true,
                 )
@@ -869,15 +910,15 @@ private fun handle(
             }
         }
 
-        is MatEvent.Moved -> play.carryTo(mat(event.at), layout, attaching, handStep)
+        is MatEvent.Moved -> play.carryTo(lane, mat(event.at), layout, attaching, handStep)
 
         // The card has been held still over another one long enough to mean it
         // is going underneath. Re-resolving with the same point is what changes
         // the indicator from "stack" to "attach", so the user is told before
         // they let go rather than after.
         is MatEvent.Dwelled -> {
-            if (play.carry != null) {
-                play.carryTo(mat(event.at), layout, attaching = true, handStep = handStep)
+            if (play.carryIn(lane) != null) {
+                play.carryTo(lane, mat(event.at), layout, attaching = true, handStep = handStep)
                 feedback.play(SoundEffect.LIFT, Haptic.SLIDE)
             }
         }
@@ -886,16 +927,16 @@ private fun handle(
             // Asked before the release, because the release is what clears it.
             // Landing on another card is two surfaces meeting and the hand can
             // tell; landing on felt is one.
-            val onto = play.carry?.intent
+            val onto = play.carryIn(lane)?.intent
             val stacked = onto is DropIntent.Stack || onto is DropIntent.Attach
-            val from = play.carry?.from
+            val from = play.carryIn(lane)?.from
             // Put back in the gap it came out of. `release` runs anyway, because
             // it is what lets go of the card; it simply commits nothing, which
             // is what makes this the one drop that is exactly reversible. The
             // sound is the card sliding home rather than landing, and the fan
             // stays open, because nothing about the search has finished.
             if (onto == DropIntent.Cancel) feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
-            if (play.carry != null && play.release()) {
+            if (play.carryIn(lane) != null && play.release(lane)) {
                 feedback.play(SoundEffect.SNAP, HapticScore.landing(stacked))
                 // You searched, you found it, you are done — and the deck gets
                 // shuffled on the way out, which is what `closeFan` is for.
@@ -923,8 +964,8 @@ private fun handle(
                 // Mid-carry, the card turns in the air and lands set. Putting
                 // it down face-up and flipping it after would have shown the
                 // table the one card the player meant to hide.
-                play.carry != null ->
-                    if (play.turnCarry()) feedback.play(SoundEffect.SLIDE, Haptic.FLIP)
+                play.carryIn(lane) != null ->
+                    if (play.turnCarry(lane)) feedback.play(SoundEffect.SLIDE, Haptic.FLIP)
                 what is DragOrigin.Mat ->
                     if (play.move { it.flip(what.id) }) {
                         feedback.play(SoundEffect.SLIDE, Haptic.FLIP)
@@ -933,7 +974,7 @@ private fun handle(
             }
         }
 
-        is MatEvent.Twisting -> play.twistCarry(event.quarterTurns)
+        is MatEvent.Twisting -> play.twistCarry(lane, event.quarterTurns)
 
         // The one event with nothing to hear, because crossing a notch makes no
         // sound. It is also the sharpest thing the table can say, and a twist
@@ -942,8 +983,8 @@ private fun handle(
 
         is MatEvent.TwistCommitted -> {
             val what = grabbed
-            if (play.carry != null) {
-                play.release()
+            if (play.carryIn(lane) != null) {
+                play.release(lane)
             } else if (what is DragOrigin.Mat && event.quarterTurns % 2 != 0) {
                 if (play.move { it.rotate(what.id) }) {
                     feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
@@ -953,7 +994,7 @@ private fun handle(
 
         is MatEvent.MenuRequested -> grabbed?.let(onMenu)
 
-        MatEvent.Cancelled -> play.cancelCarry()
+        MatEvent.Cancelled -> play.cancelCarry(lane)
 
         // Looking, not moving: the card rises and turns toward the reader and
         // the field is untouched, which is what a held finger on a table means.
