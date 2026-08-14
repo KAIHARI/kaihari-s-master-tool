@@ -123,6 +123,64 @@ data class StagePlane(
      */
     val targetX: Float = width / 2f,
     val targetY: Float = height / 2f,
+    /**
+     * Where the optical axis meets the glass — the principal point, and the
+     * thing that lets this be a seat rather than a turntable.
+     *
+     * Named for the axis rather than for the screen because `unproject` and
+     * `unprojectAt` already take a screen x and a screen y, and a property that
+     * shadowed their parameters would be read by the compiler one way and by a
+     * person the other.
+     *
+     * ## The two jobs [centreX] was doing
+     *
+     * There were three points in this projection and only two names for them.
+     * [targetX] is the **mat** point everything is measured from — the pivot the
+     * spin and the tilt turn about, and the point the perspective divide is
+     * centred on. [centreX] was both the middle of the glass *and* the place
+     * that pivot lands. Splitting the second job out is a **lens shift**: the
+     * rise and fall a view camera has, and on this stage the difference between
+     * a table on a turntable and a desk in front of somebody.
+     *
+     * ## Why a person at a desk needs it
+     *
+     * Sit at a table and your eye level — the horizon — is *above* the middle of
+     * what you see, because you are looking down at the thing in front of you.
+     * With the pivot nailed to the middle of the glass the only way to bring the
+     * horizon onto the screen is to pitch the camera until [horizonY] walks down
+     * into frame, and by then the table is nearly edge-on and every card is a
+     * line. Those are two different wants and they were one number.
+     *
+     * It also decides what the room gets. `Scenery.ROOM_ABOVE` buys the wall and
+     * the window somewhere to be by making the *board* smaller, on every device
+     * at every seat, because aiming was not available. This is the other lever,
+     * and it costs no card size at all.
+     *
+     * ## Why it is cheap, where the pan it resembles was not
+     *
+     * It is a constant screen offset applied **after** the divide, so the inverse
+     * is one subtraction. [unprojectAt] keeps its closed form, and so therefore
+     * does [flatten] — which every pile edge, card thickness and airborne shadow
+     * on this stage is drawn through. `CameraPose`'s KDoc records a refusal of a
+     * pan on the grounds that a movable vanishing point needs an off-axis
+     * inverse; the vanishing point genuinely does move here, and the inverse
+     * genuinely is off axis, and it is still two lines, because moving the
+     * *image* is affine and moving the *eye* is not.
+     *
+     * It does not move [CameraEnvelope.minDistanceAt] either, and that is a
+     * result rather than an oversight: shifting the lens does not move the
+     * camera, so it cannot bring the table any closer to it. Exactly the
+     * cancellation `CameraPose.lens` gets, for exactly the same reason.
+     *
+     * ## Trailing and defaulted, which is load-bearing
+     *
+     * At the middle of the glass every byte of every projection is what it was,
+     * so this landed in a release ahead of anything that moves it and
+     * `GoldenStageTest` never noticed — the same move [targetX],
+     * `CameraPose.lens` and `CardSolid.slab`'s trailing `backScale` made.
+     */
+    val axisX: Float = width / 2f,
+    val axisY: Float = height / 2f,
 ) {
     private val theta = tiltDegrees * (PI.toFloat() / 180f)
     private val sinTilt = sin(theta)
@@ -132,6 +190,15 @@ data class StagePlane(
     private val sinYaw = sin(phi)
     private val cosYaw = cos(phi)
 
+    /**
+     * The middle of the glass, and **only** that.
+     *
+     * It used to be two things — the middle of the glass and the place the
+     * camera's target lands — and the projection read it for the second job.
+     * That is [axisX] now. Nothing in the projection reads these any more; they
+     * are here for callers that genuinely mean the centre of the surface, and a
+     * caller that means "where the camera is pointing" wants [axisX] instead.
+     */
     val centreX: Float get() = width / 2f
     val centreY: Float get() = height / 2f
 
@@ -147,7 +214,9 @@ data class StagePlane(
     /** Where a point on the plane lands, raised [z] along the plane's normal. */
     fun project(x: Float, y: Float, z: Float = 0f): Projected {
         // Measured from the point the camera is aimed at, and landed on the
-        // middle of the glass. The two are the same number until somebody pans.
+        // optical axis. Both are the middle until somebody pans or shifts, and
+        // they are two different middles: `targetX` is a point on the mat,
+        // `axisX` is a point on the glass.
         val atX = (x - targetX) * zoom
         val atY = (y - targetY) * zoom
         val up = z * zoom
@@ -158,8 +227,8 @@ data class StagePlane(
         val scale = cameraDistance / max(cameraDistance - depth, MIN_GAP)
 
         return Projected(
-            x = centreX + localX * scale,
-            y = centreY + flat * scale,
+            x = axisX + localX * scale,
+            y = axisY + flat * scale,
             scale = scale,
             depth = depth,
         )
@@ -279,8 +348,14 @@ data class StagePlane(
      * a caller asks *before* getting that answer, and the hit test now does.
      */
     fun unprojectAt(screenX: Float, screenY: Float, z: Float): Vec3 {
-        val localX = screenX - centreX
-        val localY = screenY - centreY
+        // Measured from the optical axis, which is where [project] put the
+        // pivot. This is the whole of the "off-axis inverse" a lens shift was
+        // said to cost: one subtraction, of the same two numbers projection
+        // added. It stays closed form because a shift moves the *image* and not
+        // the *eye* — the divide is still centred on the pivot, the pivot is
+        // still drawn at one known place, and only that place has moved.
+        val localX = screenX - axisX
+        val localY = screenY - axisY
         val up = z * zoom
         val near = cameraDistance - up * cosTilt
 
@@ -327,7 +402,7 @@ data class StagePlane(
     val horizonY: Float?
         get() {
             if (abs(sinTilt) < 1e-6f) return null
-            return centreY - cameraDistance * cosTilt / sinTilt
+            return axisY - cameraDistance * cosTilt / sinTilt
         }
 
     /**
@@ -339,7 +414,7 @@ data class StagePlane(
      */
     fun above(screenY: Float): Boolean {
         if (sinTilt <= 0f) return false
-        val divisor = cameraDistance * cosTilt + (screenY - centreY) * sinTilt
+        val divisor = cameraDistance * cosTilt + (screenY - axisY) * sinTilt
         return divisor < MIN_GAP
     }
 
@@ -373,7 +448,7 @@ data class StagePlane(
      */
     fun belowHorizon(screenY: Float): Float {
         if (sinTilt <= 0f) return screenY
-        val lowest = centreY + (MIN_GAP - cameraDistance * cosTilt) / sinTilt
+        val lowest = axisY + (MIN_GAP - cameraDistance * cosTilt) / sinTilt
         return max(screenY, lowest)
     }
 

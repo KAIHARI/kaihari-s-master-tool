@@ -109,8 +109,11 @@ data class CameraTune(
     /** Where the camera is aimed. See [CameraPose.panX]. */
     val panX: Float = StageSeat.TABLE.pose.panX,
     val panY: Float = StageSeat.TABLE.pose.panY,
+    /** And where that lands in the picture. See [CameraPose.shiftX]. */
+    val shiftX: Float = StageSeat.TABLE.pose.shiftX,
+    val shiftY: Float = StageSeat.TABLE.pose.shiftY,
 ) {
-    /** Named, not positional: [CameraPose] has grown a field twice now. */
+    /** Named, not positional: [CameraPose] has grown a field three times now. */
     fun pose(): CameraPose = CameraPose(
         yawDegrees = yawDegrees,
         pitchDegrees = pitchDegrees,
@@ -118,6 +121,8 @@ data class CameraTune(
         lens = lens,
         panX = panX,
         panY = panY,
+        shiftX = shiftX,
+        shiftY = shiftY,
     )
 
     /** The envelope this document asks for, which is the shipped one but closer. */
@@ -139,6 +144,8 @@ data class CameraTune(
         lens = pose.lens,
         panX = pose.panX,
         panY = pose.panY,
+        shiftX = pose.shiftX,
+        shiftY = pose.shiftY,
     )
 
     companion object {
@@ -397,6 +404,16 @@ object StageKnobs {
             { it.camera.panY }, { d, v -> d.copy(camera = d.camera.copy(panY = v)) },
         ),
         Knob(
+            CAMERA, "camera.shiftX", "Aim across", -CameraEnvelope().maxShift, CameraEnvelope().maxShift, 0.01f, "x",
+            "Where what the camera is aimed at lands in the picture, across the glass. A lens shift, not a pan: the camera does not move, so nothing about the light or how close you may sit changes.",
+            { it.camera.shiftX }, { d, v -> d.copy(camera = d.camera.copy(shiftX = v)) },
+        ),
+        Knob(
+            CAMERA, "camera.shiftY", "Aim up the glass", -CameraEnvelope().maxShift, CameraEnvelope().maxShift, 0.01f, "x",
+            "The same, down the glass. Positive slides the board down and gives the room the top of the picture — but the board already fills the stage, so what it costs is the hand along the bottom.",
+            { it.camera.shiftY }, { d, v -> d.copy(camera = d.camera.copy(shiftY = v)) },
+        ),
+        Knob(
             CAMERA, "camera.clearance", "Close limit",
             CameraEnvelope.MIN_CLEARANCE, CameraEnvelope.MAX_CLEARANCE, 0.01f, "",
             "How far toward the lens the near corner of the table may come, and the only limit left on this camera that is not taste. One is the corner touching the lens, where the projection stops being invertible, so it stops a hundredth short.",
@@ -572,4 +589,5 @@ data class EnvelopeReference(
     val maxLens: Float = CameraEnvelope().maxLens,
     val clearance: Float = CameraEnvelope().clearance,
     val maxPan: Float = CameraEnvelope().maxPan,
+    val maxShift: Float = CameraEnvelope().maxShift,
 )

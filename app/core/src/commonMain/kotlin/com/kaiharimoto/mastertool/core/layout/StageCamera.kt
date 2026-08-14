@@ -143,6 +143,63 @@ data class CameraPose(
      */
     val panX: Float = 0f,
     val panY: Float = 0f,
+    /**
+     * Where the lens is aimed on the glass, as an offset from its middle.
+     *
+     * ## The third pan, and the one that makes this a chair
+     *
+     * [panX] moves what the camera **looks at**. This moves where that lands in
+     * the **picture** — a view camera's rise and fall, and the thing a
+     * photographer reaches for when a building is taller than the frame.
+     *
+     * Sit at a desk and your eye level is above the middle of what you see: the
+     * table is in front of you and below you, and the wall behind it runs up out
+     * of frame. This stage could not say that. The point the camera was aimed at
+     * was drawn dead centre, so the only way to bring the horizon onto the glass
+     * was to pitch until [StagePlane.horizonY] walked down into frame, and by
+     * then the table is nearly edge-on and a card is a line. Two different wants
+     * on one number, and this is the second one.
+     *
+     * It is also the other way to give the room somewhere to be. `ROOM_ABOVE`
+     * buys the wall and the window their screen area by making the *board*
+     * smaller — a fifth of every card, on every device, at every seat, because
+     * aiming was not on the table. This costs no card size at all.
+     *
+     * ## What it does not do, twice
+     *
+     * It does not move the camera, so it does not move
+     * [CameraEnvelope.minDistanceAt] — the same cancellation [lens] gets, and
+     * for the same reason. And it does not move `StagePlane.eyePoint`, so no
+     * highlight, shadow or specular pool on this table shifts when you aim the
+     * lens. A shift is a fact about the picture and not about the room.
+     *
+     * What it *does* cost is framing, exactly as [lens] does: aim far enough and
+     * the board leaves the glass. `CameraFit` reads `project` so it sees this
+     * and dollies back, but only on the seat buttons.
+     *
+     * ## Units, and why they are these
+     *
+     * Multiples of the governing dimension, like [distance] and [panX], because
+     * "a tenth of a stage up" has to mean the same thing on a tablet and a
+     * monitor. Pixels would mean a saved pose framed one thing on the device it
+     * was saved on and something else everywhere else.
+     *
+     * ## Last, and defaulted to nothing, and that is load-bearing twice
+     *
+     * At zero every byte of every projection is what it was, so this landed in a
+     * release ahead of anything that moves it and `GoldenStageTest` never
+     * noticed — the same move [lens], [panX] and `CardSolid.slab`'s trailing
+     * `backScale` made.
+     *
+     * And it is last because [CameraRig.step], [CameraRig.nudge] and
+     * [CameraRig.glide] once built a pose *positionally*, and a field inserted
+     * before [distance] would have been a silent re-binding rather than a
+     * compile error — the lens reset to one on every frame the camera sprang for
+     * exactly that reason. All three use `copy` now; the ordering rule survives
+     * them because the next person will not know that.
+     */
+    val shiftX: Float = 0f,
+    val shiftY: Float = 0f,
 ) {
     companion object {
         /** The lens the stage has always used. See [StagePlane.forStage]. */
@@ -272,6 +329,22 @@ data class CameraEnvelope(
      * integrating for a few seconds into a number with an exponent on it.
      */
     val maxPan: Float = 2f,
+    /**
+     * And how far the lens may be aimed off the middle of the glass.
+     *
+     * A leash rather than a policy, like [maxPan], and a shorter one because a
+     * shift costs framing immediately: at 0.5 the point the camera is aimed at
+     * is half a stage-height off centre, which on a sixteen-by-ten stage puts it
+     * at the very edge of the picture and half the board past it. Nothing goes
+     * wrong out there — [StagePlane.project] and its inverse are as exact at a
+     * shift of ten as at nothing — you simply cannot see the table, and the way
+     * back is the seat buttons, which zero it.
+     *
+     * Six tenths, so there is somewhere past the useful range to stand and look
+     * at what is beyond it, and so a flick of a knob cannot integrate into a
+     * number with an exponent on it.
+     */
+    val maxShift: Float = 0.6f,
 ) {
     /**
      * The nearest pose inside the envelope. Yaw is free — a table turns all the way.
@@ -296,6 +369,14 @@ data class CameraEnvelope(
             lens = lens,
             panX = panX,
             panY = panY,
+            // Held after the floor rather than before it, and unlike the pan
+            // that is not an ordering that matters: a shift moves the picture
+            // and not the eye, so no corner of the mat gets any closer to the
+            // lens and the floor cannot be a function of it. Made finite by the
+            // same helper for the same reason — this one also arrives through
+            // stored JSON a person can edit.
+            shiftX = pose.shiftX.holdTo(maxShift),
+            shiftY = pose.shiftY.holdTo(maxShift),
         )
     }
 
@@ -626,7 +707,16 @@ object Turns {
                 // right the three angles are. A hundredth of a stage is a couple
                 // of pixels of slack for a float that has been through a spring.
                 abs(pose.panX - it.pose.panX) <= 0.01f &&
-                abs(pose.panY - it.pose.panY) <= 0.01f
+                abs(pose.panY - it.pose.panY) <= 0.01f &&
+                // And the shift is compared, on the pan's side of the line
+                // rather than the lens's. Where the lens is aimed is part of
+                // where you are sitting — a seat that put the horizon a third
+                // of the way down is not the seat you are in once you have
+                // aimed it back at the middle, however right the three angles
+                // are. The lens is the other kind of thing: you do not change
+                // focal length by sitting somewhere else.
+                abs(pose.shiftX - it.pose.shiftX) <= 0.01f &&
+                abs(pose.shiftY - it.pose.shiftY) <= 0.01f
             // [CameraPose.lens] is deliberately **not** compared. A seat is a
             // chair, not a chair and a lens: you do not change focal length by
             // sitting somewhere else, and a readout that refused to name the
@@ -693,6 +783,26 @@ class CameraRig(
     private var vYaw = 0f
     private var vPitch = 0f
     private var vDistance = 0f
+
+    /**
+     * And where the camera is aimed, which used to arrive all at once.
+     *
+     * [step] sprang three of the pose's fields and then, on the frame the three
+     * of them settled, assigned `pose = target` — which snapped the other three.
+     * Nobody saw it, because every [StageSeat] declares a pan of nothing and the
+     * pan is the only one of the three a gesture ever moved, so the jump was
+     * always from zero to zero.
+     *
+     * Giving a seat a **shift** ends that: flying from a seat that aims at the
+     * middle to one that aims above it would ease the three angles over half a
+     * second and then move the whole picture in one frame. So both pans spring
+     * now, and the settle test asks about all five. The lens still does not —
+     * it is not somewhere you travel to.
+     */
+    private var vPanX = 0f
+    private var vPanY = 0f
+    private var vShiftX = 0f
+    private var vShiftY = 0f
     private var parked = true
 
     /**
@@ -794,6 +904,10 @@ class CameraRig(
         vYaw = 0f
         vPitch = 0f
         vDistance = 0f
+        vPanX = 0f
+        vPanY = 0f
+        vShiftX = 0f
+        vShiftY = 0f
         coasting = false
         parked = true
     }
@@ -832,7 +946,14 @@ class CameraRig(
         val scale = if (speed > COAST_CEILING) COAST_CEILING / speed else 1f
         vYaw = yawPerSecond * scale
         vPitch = pitchPerSecond * scale
+        // A flick is a turn and nothing else. Every other velocity is cleared
+        // rather than left, so a coast begun from a spring that had not finished
+        // cannot smuggle the rest of that spring's momentum into it.
         vDistance = 0f
+        vPanX = 0f
+        vPanY = 0f
+        vShiftX = 0f
+        vShiftY = 0f
         coasting = true
         parked = false
     }
@@ -861,15 +982,31 @@ class CameraRig(
             dt,
         )
 
+        // And where it is aimed, both on the mat and on the glass. These are
+        // the four that used to arrive in one frame at the end of the travel;
+        // see [vPanX].
+        val panX = Springs.step(SpringValue(pose.panX, vPanX), target.panX, spec, dt)
+        val panY = Springs.step(SpringValue(pose.panY, vPanY), target.panY, spec, dt)
+        val shiftX = Springs.step(SpringValue(pose.shiftX, vShiftX), target.shiftX, spec, dt)
+        val shiftY = Springs.step(SpringValue(pose.shiftY, vShiftY), target.shiftY, spec, dt)
+
         vYaw = yaw.velocity
         vPitch = pitch.velocity
         vDistance = distance.velocity
-        // Three springs, four fields. The lens is not sprung — it is not
+        vPanX = panX.velocity
+        vPanY = panY.velocity
+        vShiftX = shiftX.velocity
+        vShiftY = shiftY.velocity
+        // Seven springs, eight fields. The lens is not sprung — it is not
         // somewhere you travel to — so it has to be carried rather than rebuilt.
         pose = pose.copy(
             yawDegrees = yaw.value,
             pitchDegrees = pitch.value,
             distance = distance.value,
+            panX = panX.value,
+            panY = panY.value,
+            shiftX = shiftX.value,
+            shiftY = shiftY.value,
         )
 
         val settled = Springs.settled(
@@ -889,17 +1026,31 @@ class CameraRig(
                 target.distance,
                 DISTANCE_TOLERANCE,
                 DISTANCE_TOLERANCE,
-            )
+            ) &&
+            // The same tolerance as the distance, because these are the same
+            // kind of number: multiples of the governing dimension, where the
+            // distance's thousandth is already a fraction of a pixel.
+            aimSettled(panX, target.panX) &&
+            aimSettled(panY, target.panY) &&
+            aimSettled(shiftX, target.shiftX) &&
+            aimSettled(shiftY, target.shiftY)
 
         if (settled) {
             pose = target
             vYaw = 0f
             vPitch = 0f
             vDistance = 0f
+            vPanX = 0f
+            vPanY = 0f
+            vShiftX = 0f
+            vShiftY = 0f
             parked = true
         }
         return true
     }
+
+    private fun aimSettled(value: SpringValue, target: Float): Boolean =
+        Springs.settled(value, target, DISTANCE_TOLERANCE, DISTANCE_TOLERANCE)
 
     /**
      * One frame of a flick running down. Returns whether anything moved.
@@ -1032,6 +1183,11 @@ fun CameraPose.planeFor(width: Float, height: Float): StagePlane {
         zoom = focal / max(distance * governing, MIN_REACH),
         targetX = width / 2f + panX * governing,
         targetY = height / 2f + panY * governing,
+        // And where that lands in the picture. The target is a point on the
+        // mat and this is a point on the glass; they were one number for as
+        // long as the camera had to be pointing at the middle of what it drew.
+        axisX = width / 2f + shiftX * governing,
+        axisY = height / 2f + shiftY * governing,
     )
 }
 

@@ -39,6 +39,7 @@ import com.kaiharimoto.mastertool.core.tune.StageTuning
 import com.kaiharimoto.mastertool.core.tune.TuningCodec
 import com.kaiharimoto.mastertool.core.tune.TuningSurface
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
@@ -347,6 +348,15 @@ private fun extraFor(knob: Knob, tuning: StageTuning, rig: CameraRig): String? =
             null
         }
     }
+    // What the shift is actually worth, in the only unit that means anything for
+    // it: how far down the glass the camera's own target has moved. A number in
+    // multiples of a governing dimension is unreadable; "a fifth of the way down
+    // from the middle" is a picture. Solved from the surface rather than the
+    // rig's live pose, for the reason "camera.distance" gives just above.
+    "camera.shiftY" ->
+        shiftReadout(tuning.camera.shiftY, rig.height, rig.width, rig.height, "down", "up")
+    "camera.shiftX" ->
+        shiftReadout(tuning.camera.shiftX, rig.width, rig.width, rig.height, "right", "left")
     "focus.strength" -> if (tuning.focus.strength <= 0f) "· off" else null
     // The coupling, said out loud on the slider that causes it. Two knobs add
     // into one distance, and a person moving the depth needs to see the wall
@@ -354,6 +364,33 @@ private fun extraFor(knob: Knob, tuning: StageTuning, rig: CameraRig): String? =
     "room.deskDepth", "room.wallBack" ->
         "· wall ${((Scenery.wallAt(tuning.room) * 100).roundToInt() / 100f)}"
     else -> null
+}
+
+/**
+ * A shift, as a share of the surface it moves across.
+ *
+ * The knob's own unit is multiples of the governing dimension — `max(height,
+ * width · 0.55)` — because that is what makes a saved pose mean the same thing
+ * on a tablet and a monitor. It is also completely unreadable, and on a wide
+ * stage it is not even the dimension the shift is moving along. This is the
+ * same number said as a percentage of the edge it slides down.
+ *
+ * Silent at nothing, like the distance's floor: a panel that prints "· 0% down"
+ * beside a slider sitting at zero is noise.
+ */
+private fun shiftReadout(
+    shift: Float,
+    along: Float,
+    surfaceWidth: Float,
+    surfaceHeight: Float,
+    positive: String,
+    negative: String,
+): String? {
+    if (shift == 0f || along <= 0f) return null
+    val governing = max(surfaceHeight, surfaceWidth * 0.55f)
+    val share = (shift * governing / along * 100f).roundToInt()
+    if (share == 0) return null
+    return if (share > 0) "· $share% $positive" else "· ${-share}% $negative"
 }
 
 /**

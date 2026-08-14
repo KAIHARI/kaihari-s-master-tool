@@ -16,13 +16,16 @@ import kotlin.test.assertTrue
  * What belongs *here* is the claim the repair rests on: that `Knob.set` applied
  * to the live document is a safe way to write one field, whichever knob it is
  * and whatever else has been moved. If that is not true then handing the panel a
- * `(Knob, Float)` fixes nothing, and a copy-and-paste in one of the twenty-seven
- * setter lambdas — `d.copy(room = d.room.copy(windowSill = v))` under the wrong
- * label — would reproduce the same symptom through an entirely different cause.
+ * `(Knob, Float)` fixes nothing, and a copy-and-paste in one of the setter
+ * lambdas — `d.copy(room = d.room.copy(windowSill = v))` under the wrong label —
+ * would reproduce the same symptom through an entirely different cause.
  *
- * These are cheap and they are quadratic on purpose. Twenty-seven squared is
- * seven hundred and twenty-nine writes, which is nothing, and the pairwise form
- * is what catches a setter that reads the right field and writes its neighbour.
+ * These are cheap and they are quadratic on purpose. The panel is thirty-one
+ * knobs now and its square is under a thousand writes, which is nothing, and the
+ * pairwise form is what catches a setter that reads the right field and writes
+ * its neighbour. The count is deliberately not asserted anywhere: a test that
+ * had to be edited every time a knob was added is a test people learn to edit
+ * without reading.
  */
 class StageKnobsIndependenceTest {
 

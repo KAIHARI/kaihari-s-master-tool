@@ -924,8 +924,17 @@ fun PlayScreen(
                                 plane.targetX / size.width,
                                 plane.targetY / size.height,
                             )
-                            translationX = plane.centreX - plane.targetX
-                            translationY = plane.centreY - plane.targetY
+                            // …to wherever the lens is aimed, which is the
+                            // middle of the glass until somebody shifts it.
+                            // `axisX` rather than `centreX` is the whole of the
+                            // lens shift on this side of the seam: Compose
+                            // applies the translation *outside* the pivoted
+                            // transform on both platforms, so moving it moves
+                            // where the pivot lands and nothing else — which is
+                            // exactly what `StagePlane.project` does with the
+                            // same two numbers.
+                            translationX = plane.axisX - plane.targetX
+                            translationY = plane.axisY - plane.targetY
                         }
                     },
             ) {

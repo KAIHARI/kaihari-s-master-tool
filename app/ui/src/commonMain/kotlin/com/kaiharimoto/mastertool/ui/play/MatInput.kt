@@ -511,9 +511,17 @@ internal class MatPilot(
      * wrong everywhere else, and wrong in the way that reads as the table
      * sliding out from under you.
      *
-     * `unproject` at the middle of the glass *is* the camera's target, exactly —
+     * `unproject` at the **optical axis** *is* the camera's target, exactly —
      * that is what a target means — so the second call is the honest way to say
      * "and where it was", and it costs four multiplications.
+     *
+     * The axis rather than the middle of the glass, because once the lens can be
+     * shifted those are two different points and only one of them is the target.
+     * At a shift of nothing they are the same and this line moves nothing; at a
+     * shift they differ, and reading the middle would hand `unproject` a row of
+     * the screen the target is not on, so a pan would be solved against a
+     * different depth than the one it is about and the table would creep as you
+     * dragged it.
      */
     private fun aimBy(delta: Vec2) {
         val state = camera ?: return
@@ -522,8 +530,8 @@ internal class MatPilot(
         val governing = max(state.rig.height, state.rig.width * 0.55f)
         if (governing <= 0f) return
 
-        val to = plane.unproject(plane.centreX + delta.x, plane.centreY + delta.y)
-        val from = plane.unproject(plane.centreX, plane.centreY)
+        val to = plane.unproject(plane.axisX + delta.x, plane.axisY + delta.y)
+        val from = plane.unproject(plane.axisX, plane.axisY)
         state.rig.nudge(
             deltaYaw = 0f,
             deltaPitch = 0f,
