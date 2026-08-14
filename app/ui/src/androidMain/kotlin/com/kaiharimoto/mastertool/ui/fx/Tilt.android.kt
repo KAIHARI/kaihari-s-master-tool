@@ -83,4 +83,5 @@ actual fun DeviceTilt(enabled: Boolean, onTilt: (HeadTilt) -> Unit) {
     }
 }
 
-private const val DEGREES = (180.0 / PI).toFloat()
+/** Written the way `Rot3.DEGREES` is, which is a shape known to be const-legal. */
+private const val DEGREES = 180f / PI.toFloat()
