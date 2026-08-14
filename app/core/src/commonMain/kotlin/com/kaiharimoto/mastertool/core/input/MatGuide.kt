@@ -109,6 +109,12 @@ object MatGuide {
         ),
         Gesture(
             GestureGroup.MOVING,
+            what = "Arrange your hand",
+            touch = "Drag a card along the hand to where you want it",
+            pointer = "Drag a card along the hand to where you want it",
+        ),
+        Gesture(
+            GestureGroup.MOVING,
             what = "Put a card underneath another one",
             touch = "Drag it over and hold still",
             pointer = "Drag it over and hold still",

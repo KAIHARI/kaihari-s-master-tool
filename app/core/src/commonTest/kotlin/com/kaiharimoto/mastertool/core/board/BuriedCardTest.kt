@@ -150,7 +150,7 @@ class BuriedCardTest {
         val from = DragOrigin.Buried(0, 3)
 
         listOf(
-            DropIntent.Hand to { f: PlayField -> f.hand.size },
+            DropIntent.Hand(0) to { f: PlayField -> f.hand.size },
             DropIntent.Graveyard to { f: PlayField -> f.graveyard.size },
             DropIntent.Banish to { f: PlayField -> f.banished.size },
             DropIntent.Deck to { f: PlayField -> f.deck.size },
@@ -191,7 +191,7 @@ class BuriedCardTest {
         field.fanOf(source).forEachIndexed { index, card ->
             val named = assertNotNull(source.fanCardAt(index))
             val taken = assertNotNull(
-                DropCommit.commit(field, named, DropIntent.Hand),
+                DropCommit.commit(field, named, DropIntent.Hand(0)),
                 "index $index should be reachable",
             )
             assertEquals(

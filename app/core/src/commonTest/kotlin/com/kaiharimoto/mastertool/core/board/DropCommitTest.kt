@@ -146,7 +146,7 @@ class DropCommitTest {
 
         assertEquals(1, commit(on, DragOrigin.Mat(id), DropIntent.Graveyard)!!.graveyard.size)
         assertEquals(1, commit(on, DragOrigin.Mat(id), DropIntent.Banish)!!.banished.size)
-        assertEquals(1, commit(on, DragOrigin.Mat(id), DropIntent.Hand)!!.hand.size)
+        assertEquals(1, commit(on, DragOrigin.Mat(id), DropIntent.Hand(0))!!.hand.size)
         assertEquals(40, commit(on, DragOrigin.Mat(id), DropIntent.Deck)!!.deck.size)
     }
 
@@ -160,8 +160,25 @@ class DropCommitTest {
     }
 
     @Test
-    fun aHandCardDroppedBackOnTheHandChangesNothing() {
-        assertNull(commit(withHand(2), DragOrigin.Hand(0), DropIntent.Hand))
+    fun aHandCardDroppedBackInItsOwnPlaceChangesNothing() {
+        // Both the gaps either side of a card are the card's own place: the one
+        // before it and the one after it describe the same hand. This used to be
+        // `null` for *every* hand-to-hand release, which said "a card in your
+        // hand cannot go to your hand" — true of the destination and false of
+        // the gesture.
+        assertNull(commit(withHand(2), DragOrigin.Hand(0), DropIntent.Hand(0)))
+        assertNull(commit(withHand(2), DragOrigin.Hand(0), DropIntent.Hand(1)))
+    }
+
+    @Test
+    fun aHandCardDroppedSomewhereElseInTheHandMoves() {
+        val on = withHand(3)
+        val order = on.hand.map { it.instanceId }
+
+        val done = assertNotNull(commit(on, DragOrigin.Hand(0), DropIntent.Hand(3)))
+
+        assertEquals(listOf(order[1], order[2], order[0]), done.hand.map { it.instanceId })
+        assertEquals(on.hand.size, done.hand.size)
     }
 
     // ---- pile to pile ---------------------------------------------------------
@@ -213,8 +230,8 @@ class DropCommitTest {
 
     @Test
     fun anIndexPastTheEndOfAPileIsNotAMove() {
-        assertNull(commit(field, DragOrigin.Pile(BoardSlot.Graveyard, 4), DropIntent.Hand))
-        assertNull(commit(field, DragOrigin.Pile(BoardSlot.Deck, 999), DropIntent.Hand))
+        assertNull(commit(field, DragOrigin.Pile(BoardSlot.Graveyard, 4), DropIntent.Hand(0)))
+        assertNull(commit(field, DragOrigin.Pile(BoardSlot.Deck, 999), DropIntent.Hand(0)))
     }
 
     @Test
@@ -223,7 +240,7 @@ class DropCommitTest {
             commit(
                 field,
                 DragOrigin.Pile(BoardSlot.Zone(FieldZone.Monster(0)), 0),
-                DropIntent.Hand,
+                DropIntent.Hand(0),
             ),
         )
     }
@@ -280,7 +297,7 @@ class DropCommitTest {
             DropIntent.Zone(BoardSlot.Zone(FieldZone.Monster(0)), MatPoint.Centre),
             DropIntent.Stack(id),
             DropIntent.Attach(id),
-            DropIntent.Hand,
+            DropIntent.Hand(0),
             DropIntent.Graveyard,
             DropIntent.Banish,
             DropIntent.Deck,

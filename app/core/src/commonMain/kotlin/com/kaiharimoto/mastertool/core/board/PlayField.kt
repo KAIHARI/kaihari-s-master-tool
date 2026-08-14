@@ -386,9 +386,17 @@ data class PlayField(
         return field.copy(banished = cards.map { it.copy(position = position) } + field.banished)
     }
 
-    fun toHand(id: Int): PlayField? {
+    /**
+     * Back to the hand, at [at] if the gesture named a place in it.
+     *
+     * Null means the end, which is what every caller that is not a drag wants:
+     * a card returned by a menu item has not been aimed anywhere.
+     */
+    fun toHand(id: Int, at: Int? = null): PlayField? {
         val (field, cards) = lift(id) ?: return null
-        return field.copy(hand = field.hand + cards.map { it.faceUp() })
+        val arriving = cards.map { it.faceUp() }
+        val where = (at ?: field.hand.size).coerceIn(0, field.hand.size)
+        return field.copy(hand = field.hand.take(where) + arriving + field.hand.drop(where))
     }
 
     fun toDeckTop(id: Int): PlayField? {
@@ -427,6 +435,36 @@ data class PlayField(
     fun handToBanish(index: Int): PlayField? {
         val card = hand.getOrNull(index) ?: return null
         return copy(hand = hand.remove(index), banished = listOf(card) + banished)
+    }
+
+    /**
+     * Moves the card at [from] to the gap at [to], so a hand can be arranged.
+     *
+     * [to] counts gaps in the hand *as it stands*, before the card leaves it —
+     * zero is before everything, `hand.size` after everything — which is what a
+     * finger is pointing at and what makes both no-ops fall out of the same
+     * comparison: dropping a card back in its own place, and dropping it in the
+     * gap immediately after itself, are the same hand.
+     *
+     * Arranging your hand is the most ordinary thing anybody does with one, and
+     * it was the one thing this table could not do at all. It is a real move and
+     * goes on the undo stack like any other, because it is a thing you can get
+     * wrong with a slip of a finger and want back.
+     */
+    fun reorderHand(from: Int, to: Int): PlayField? {
+        val card = hand.getOrNull(from) ?: return null
+        if (to !in 0..hand.size) return null
+        if (to == from || to == from + 1) return null
+
+        val without = hand.remove(from)
+        val at = if (to > from) to - 1 else to
+        return copy(hand = without.take(at) + card + without.drop(at))
+    }
+
+    /** Puts an arriving card into the hand at [at], which may be its end. */
+    internal fun handInsert(card: BoardCard, at: Int): PlayField {
+        val where = at.coerceIn(0, hand.size)
+        return copy(hand = hand.take(where) + card + hand.drop(where))
     }
 
     // ---- counters, life, phases ----------------------------------------------

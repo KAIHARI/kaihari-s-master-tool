@@ -57,11 +57,16 @@ object DropCommit {
         is DropIntent.Stack -> field.pileOnto(from, intent.onto, position)
         is DropIntent.Attach -> field.tuckUnder(from, intent.onto, position)
 
-        DropIntent.Hand -> when (from) {
-            is DragOrigin.Mat -> field.toHand(from.id)
-            is DragOrigin.Hand -> null
-            is DragOrigin.Pile -> field.movePile(from) { card -> copy(hand = hand + card) }
-            is DragOrigin.Buried -> field.moveBuried(from) { card -> copy(hand = hand + card) }
+        // The hand, at the place in it the finger was pointing at. Every branch
+        // takes the index, including the one from the hand itself — which used
+        // to be `null`, "a card in your hand cannot go to your hand", true of
+        // the destination and false of the gesture: moving a card *within* your
+        // hand is the commonest thing anybody does to one.
+        is DropIntent.Hand -> when (from) {
+            is DragOrigin.Mat -> field.toHand(from.id, intent.at)
+            is DragOrigin.Hand -> field.reorderHand(from.index, intent.at)
+            is DragOrigin.Pile -> field.movePile(from) { card -> handInsert(card, intent.at) }
+            is DragOrigin.Buried -> field.moveBuried(from) { card -> handInsert(card, intent.at) }
         }
 
         DropIntent.Graveyard -> when (from) {

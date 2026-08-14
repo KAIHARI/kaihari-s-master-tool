@@ -68,6 +68,7 @@ import com.kaiharimoto.mastertool.core.board.PlayField
 import com.kaiharimoto.mastertool.core.board.fanCardAt
 import com.kaiharimoto.mastertool.core.board.toPixels
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
+import com.kaiharimoto.mastertool.core.layout.HandFan
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.layout.Slot
@@ -187,7 +188,7 @@ import kotlin.random.Random
  * `(h/2)·sin θ` puts the near edge back on the felt exactly, for any lean and
  * any card size.
  *
- * The hand's hit target is its [handPointFor] centre at z = 0, so the drawn card
+ * The hand's hit target is its [HandFan.pointFor] centre at z = 0, so the drawn card
  * now sits a little higher on the glass than the box that grabs it. That is
  * deliberate and safe here: the hand is a horizontal fan, cards are chosen by
  * which one your finger is *across*, and the vertical offset is a fraction of a
@@ -922,7 +923,7 @@ fun PlayScreen(
                     drawFelt(layout, camera.plane, camera.eye, look, pool, weave)
                     drawScene(scenery.standing, camera.plane, camera.eye, look)
                     drawMatControls(layout, play.field)
-                    drawIndicator(play.carry?.intent, play.field, layout)
+                    drawIndicator(play.carry, play.field, layout, tune.hand.stepFraction)
                 }
 
                 // Then one card at a time, each drawing its own shadow, its own
@@ -1213,7 +1214,7 @@ private fun seatsFor(
     field.hand.forEachIndexed { index, card ->
         val carrying = carry?.from is DragOrigin.Hand &&
             (carry.from as DragOrigin.Hand).index == index
-        val at = handPointFor(layout, index, field.hand.size, tune.hand.stepFraction)
+        val at = HandFan.pointFor(layout, index, field.hand.size, tune.hand.stepFraction)
         // A card in hand is always face-up to its owner; one turned over on the
         // way out of it is being set.
         val faceUp = !(carrying && carry.faceDown)
@@ -1436,47 +1437,6 @@ private fun quantised(depth: Float, quantum: Float): Int =
     if (quantum <= 0f) 0 else (depth / quantum).toInt()
 
 /**
- * Where hand card [index] of [count] sits.
- *
- * A row that fans rather than an arc that curls: an arc is lovely at six cards
- * and unreadable at fourteen, and a combo line routinely holds fourteen. The
- * cards overlap only as far as they must, so the common case still bows.
- */
-internal fun handPointFor(
-    layout: BoardLayout,
-    index: Int,
-    count: Int,
-    /**
-     * How far apart they sit at their most spread out, in card widths.
-     *
-     * A parameter rather than a constant because it is one of the things a
-     * person tunes, and defaulted because this function has two independent
-     * readers — the pose in `seatsFor` and the hit box in `MatInput` — and a
-     * default is what makes adding the third reader a compile error rather than
-     * a card that is drawn in one place and grabbed in another.
-     */
-    stepFraction: Float = StageTuning.DEFAULT.hand.stepFraction,
-): MatPoint {
-    val band = layout.hand
-    val step = if (count <= 1) {
-        0f
-    } else {
-        min(layout.cardWidth * stepFraction, (band.width - layout.cardWidth) / (count - 1))
-    }
-    val spread = layout.cardWidth + step * (count - 1)
-    val x = band.left + (band.width - spread) / 2f + layout.cardWidth / 2f + index * step
-
-    return MatPoint(
-        x = if (layout.field.width > 0f) (x - layout.field.left) / layout.field.width else 0.5f,
-        y = if (layout.field.height > 0f) {
-            (band.centerY - layout.field.top) / layout.field.height
-        } else {
-            1f
-        },
-    )
-}
-
-/**
  * Where the card in the air is going to land, drawn on the mat under it.
  *
  * The indicator and the outcome are the same value — `DropTargets` decided it
@@ -1484,11 +1444,12 @@ internal fun handPointFor(
  * cannot promise one thing and do another.
  */
 private fun DrawScope.drawIndicator(
-    intent: DropIntent?,
+    carry: Carry?,
     field: PlayField,
     layout: BoardLayout,
+    handStep: Float,
 ) {
-    if (intent == null) return
+    val intent = carry?.intent ?: return
 
     val accent = MasterToolPalette.AccentBright
     fun ring(rect: Slot, alpha: Float, weight: Float = 0.035f) {
@@ -1522,7 +1483,29 @@ private fun DrawScope.drawIndicator(
         DropIntent.Banish -> layout[BoardSlot.Banished]?.let { ring(it, 0.85f) }
         DropIntent.Deck -> layout[BoardSlot.Deck]?.let { ring(it, 0.85f) }
         DropIntent.ExtraDeck -> layout[BoardSlot.ExtraDeck]?.let { ring(it, 0.85f) }
-        DropIntent.Hand -> ring(layout.hand, 0.6f)
+
+        // The hand says *where* in the hand, because it can now. A caret in the
+        // gap rather than a ring round the band: the band was the right drawing
+        // while the answer was "your hand" and is the wrong one now that the
+        // answer is "third from the left" — a highlight round the whole row
+        // cannot tell you which of fourteen gaps you are pointing at, and that
+        // is the only thing anybody arranging a hand wants to know.
+        is DropIntent.Hand -> {
+            val moving = (carry.from as? DragOrigin.Hand)?.index
+            val row = if (moving != null) field.hand.size - 1 else field.hand.size
+            // Back out of the full hand's numbering and into the row as drawn,
+            // the exact inverse of what `HandFan.insertAt` did on the way in.
+            val among = if (moving != null && intent.at > moving) intent.at - 1 else intent.at
+            val step = HandFan.step(layout.hand, layout.cardWidth, row, handStep)
+            val x = HandFan.centreOf(layout.hand, layout.cardWidth, among, row, handStep) -
+                step / 2f
+
+            drawRect(
+                color = accent.copy(alpha = 0.9f),
+                topLeft = Offset(x - layout.cardWidth * 0.018f, layout.hand.top),
+                size = Size(layout.cardWidth * 0.036f, layout.hand.height),
+            )
+        }
 
         // The freeform three, which are the only ones with no box already drawn
         // on the felt to light up. Stacking rings the card being landed on;
@@ -1533,7 +1516,12 @@ private fun DrawScope.drawIndicator(
         is DropIntent.Attach -> onCard(intent.onto, 0.7f, 0.012f)
         is DropIntent.Free -> ring(footprint(intent.at), 0.28f, 0.02f)
 
-        DropIntent.Cancel -> Unit
+        // Back into the gap it came out of. Drawn where the gap is rather than
+        // nowhere, which is what this used to be: "Cancel" was unreachable, so
+        // an indicator for it would have been an indicator for nothing. It is a
+        // destination now, and a destination the user cannot see is one they can
+        // only find by accident.
+        DropIntent.Cancel -> carry.cameOutOf?.let { ring(footprint(it), 0.55f, 0.02f) }
     }
 }
 

@@ -15,6 +15,7 @@ import com.kaiharimoto.mastertool.core.board.toMat
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.model.CardId
+import com.kaiharimoto.mastertool.core.tune.StageTuning
 import kotlin.random.Random
 
 /** A card in the air, and what will happen to it when the finger lets go. */
@@ -221,7 +222,12 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
     }
 
     /** Moves what is being carried, and re-decides what letting go would do. */
-    fun carryTo(at: MatPoint, layout: BoardLayout, attaching: Boolean = false) {
+    fun carryTo(
+        at: MatPoint,
+        layout: BoardLayout,
+        attaching: Boolean = false,
+        handStep: Float = StageTuning.DEFAULT.hand.stepFraction,
+    ) {
         val held = carry ?: return
         carry = held.copy(
             at = at,
@@ -234,6 +240,10 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
                 previous = held.intent,
                 attaching = attaching,
                 cameOutOf = held.cameOutOf,
+                // Which card of the hand is the one in the air, so the gaps are
+                // counted against the row the user can actually see.
+                fromHand = (held.from as? DragOrigin.Hand)?.index,
+                handStep = handStep,
             ),
         )
     }

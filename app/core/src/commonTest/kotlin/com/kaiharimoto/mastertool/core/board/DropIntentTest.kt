@@ -110,7 +110,7 @@ class DropIntentTest {
     fun droppingOverTheHandPutsItBackInTheHand() {
         val inHand = layout.toMat(layout.hand.centerX to layout.hand.centerY)
 
-        assertEquals(DropIntent.Hand, resolve(inHand))
+        assertIs<DropIntent.Hand>(resolve(inHand))
     }
 
     // ---- stacking ------------------------------------------------------------
@@ -245,10 +245,10 @@ class DropIntentTest {
         val edge = layout.toMat(layout.hand.centerX to (layout.hand.top - layout.cardWidth * 0.3f))
 
         val cold = resolve(edge)
-        val sticky = resolve(edge, previous = DropIntent.Hand)
+        val sticky = resolve(edge, previous = DropIntent.Hand(0))
 
-        assertTrue(cold != DropIntent.Hand)
-        assertEquals(DropIntent.Hand, sticky)
+        assertTrue(cold !is DropIntent.Hand)
+        assertIs<DropIntent.Hand>(sticky)
     }
 
     // ---- what the indicator says ---------------------------------------------
@@ -261,7 +261,7 @@ class DropIntentTest {
             DropIntent.Zone(BoardSlot.Deck, MatPoint.Centre),
             DropIntent.Stack(1),
             DropIntent.Attach(1),
-            DropIntent.Hand,
+            DropIntent.Hand(0),
             DropIntent.Graveyard,
             DropIntent.Banish,
             DropIntent.Deck,

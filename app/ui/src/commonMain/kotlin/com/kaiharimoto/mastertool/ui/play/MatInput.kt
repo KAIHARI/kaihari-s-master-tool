@@ -30,6 +30,7 @@ import com.kaiharimoto.mastertool.core.board.toPixels
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.layout.FanSpread
+import com.kaiharimoto.mastertool.core.layout.HandFan
 import com.kaiharimoto.mastertool.core.layout.MatControl
 import com.kaiharimoto.mastertool.core.layout.MatControls
 import com.kaiharimoto.mastertool.core.layout.PileFan
@@ -762,10 +763,11 @@ private fun handle(
     attaching: Boolean,
     /**
      * How far apart the hand's cards are, so the hit boxes land where they are
-     * drawn. `handPointFor` has two readers on purpose — the pose and this —
-     * because two readings of one pure function cannot drift and a value passed
-     * between them can. A tuning that reached one and not the other would be a
-     * card you can see and cannot pick up.
+     * drawn. `HandFan` has three readers on purpose — the pose, this, and the
+     * insert index a card dragged within the hand asks for — because three
+     * readings of one solved layout cannot drift and a value passed between them
+     * can. A tuning that reached one and not the others would be a card you can
+     * see and cannot pick up.
      */
     handStep: Float,
     /** Where an open fan floats, and through what — see [whatIsUnder]. */
@@ -841,7 +843,7 @@ private fun handle(
             }
         }
 
-        is MatEvent.Moved -> play.carryTo(mat(event.at), layout, attaching)
+        is MatEvent.Moved -> play.carryTo(mat(event.at), layout, attaching, handStep)
 
         // The card has been held still over another one long enough to mean it
         // is going underneath. Re-resolving with the same point is what changes
@@ -849,7 +851,7 @@ private fun handle(
         // they let go rather than after.
         is MatEvent.Dwelled -> {
             if (play.carry != null) {
-                play.carryTo(mat(event.at), layout, attaching = true)
+                play.carryTo(mat(event.at), layout, attaching = true, handStep = handStep)
                 feedback.play(SoundEffect.LIFT, Haptic.SLIDE)
             }
         }
@@ -1015,7 +1017,7 @@ private fun whatIsUnder(
     }
 
     field.hand.indices.reversed().forEach { index ->
-        val point = handPointFor(layout, index, field.hand.size, handStep)
+        val point = HandFan.pointFor(layout, index, field.hand.size, handStep)
         if (covers(layout.toPixels(point))) return DragOrigin.Hand(index)
     }
 
@@ -1114,7 +1116,11 @@ private fun fanPointFor(at: Vec2, plane: StagePlane?, lift: Float): Vec2 {
  * a pile.
  */
 private fun takeFromFan(play: PlayState, what: DragOrigin, feedback: Feedback) {
-    if (!play.move { field -> DropCommit.commit(field, what, DropIntent.Hand) }) return
+    // Onto the end of the hand, because a tap has not aimed anywhere. Naming a
+    // gap is what the *drag* is for, and a card fetched with one tap out of a
+    // spread deck has said nothing about where in the hand it should go.
+    val onto = play.field.hand.size
+    if (!play.move { field -> DropCommit.commit(field, what, DropIntent.Hand(onto)) }) return
     // Closing the deck's fan shuffles it, which is the point at which a search
     // is over — so the sound is whichever of the two actually happened.
     if (play.closeFan()) {

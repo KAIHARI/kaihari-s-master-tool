@@ -2,7 +2,9 @@ package com.kaiharimoto.mastertool.core.board
 
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
+import com.kaiharimoto.mastertool.core.layout.HandFan
 import com.kaiharimoto.mastertool.core.layout.Slot
+import com.kaiharimoto.mastertool.core.tune.StageTuning
 import kotlin.math.abs
 
 /**
@@ -27,7 +29,16 @@ sealed interface DropIntent {
     /** Tucked under the card already there, as Xyz material. */
     data class Attach(val onto: Int) : DropIntent
 
-    data object Hand : DropIntent
+    /**
+     * Into your hand, at a particular place in it.
+     *
+     * [at] is a *gap*, not a card: zero is before everything, `hand.size` is
+     * after everything. It used to be a `data object`, which said "the hand" and
+     * could only ever append — so the order of your hand was whatever order the
+     * cards happened to arrive in, and the one thing every player does with a
+     * hand, which is arrange it, was the one thing this table could not do.
+     */
+    data class Hand(val at: Int) : DropIntent
     data object Graveyard : DropIntent
     data object Banish : DropIntent
     data object Deck : DropIntent
@@ -43,7 +54,7 @@ sealed interface DropIntent {
             is Zone -> "Zone"
             is Stack -> "Stack"
             is Attach -> "Attach"
-            Hand -> "Hand"
+            is Hand -> "Hand"
             Graveyard -> "Graveyard"
             Banish -> "Banish"
             Deck -> "Deck"
@@ -149,6 +160,13 @@ object DropTargets {
      * @param cameOutOf where in an open spread this card was sitting before it
      *   was picked up, on the felt — null unless the drag started in the fan
      *   that is still open. Dropping it back there puts it back.
+     * @param fromHand which card of the hand is the one in the air, when the
+     *   drag started there. The hand is drawn one card shorter while one of its
+     *   cards is being carried, so the gap the finger is over has to be measured
+     *   against the row the user can actually see.
+     * @param handStep how far apart the hand's cards sit, in card widths — the
+     *   same tuning the pose and the hit box read, because a third reading that
+     *   disagreed would be a caret drawn in a gap the card does not go into.
      */
     fun resolve(
         point: MatPoint,
@@ -158,6 +176,8 @@ object DropTargets {
         previous: DropIntent? = null,
         attaching: Boolean = false,
         cameOutOf: MatPoint? = null,
+        fromHand: Int? = null,
+        handStep: Float = StageTuning.DEFAULT.hand.stepFraction,
     ): DropIntent {
         if (layout.cardWidth <= 0f) return DropIntent.Free(point)
 
@@ -178,7 +198,18 @@ object DropTargets {
 
         // 1. The piles and the hand: unambiguous places you had to travel to.
         pileAt(px, layout, previous)?.let { return it }
-        if (inHand(px, layout, previous)) return DropIntent.Hand
+        if (inHand(px, layout, previous)) {
+            return DropIntent.Hand(
+                HandFan.insertAt(
+                    band = layout.hand,
+                    cardWidth = cardWidth,
+                    count = field.hand.size,
+                    x = px.first,
+                    stepFraction = handStep,
+                    moving = fromHand,
+                ),
+            )
+        }
 
         // 2. A specific card. Nearest first, so a finger between two piles
         //    lands on the one it is actually closest to rather than whichever
@@ -263,7 +294,7 @@ object DropTargets {
 
     private fun inHand(px: Pair<Float, Float>, layout: BoardLayout, previous: DropIntent?): Boolean {
         val grow = layout.cardWidth * threshold(
-            sticky = previous == DropIntent.Hand,
+            sticky = previous is DropIntent.Hand,
             enter = 0.10f,
             leave = 0.45f,
         )
