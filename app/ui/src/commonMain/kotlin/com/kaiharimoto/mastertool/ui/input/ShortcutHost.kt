@@ -144,6 +144,7 @@ private fun Key.chordName(): String? = when (this) {
     Key.One -> "1"
     Key.Two -> "2"
     Key.Three -> "3"
+    Key.Four -> "4"
     Key.B -> "b"
     Key.C -> "c"
     Key.D -> "d"

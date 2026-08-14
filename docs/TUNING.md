@@ -1,6 +1,6 @@
 # Tuning the play stage
 
-Twenty-seven numbers, live, on the device they will be judged on — and a JSON
+Thirty-one numbers, live, on the device they will be judged on — and a JSON
 export that comes back here to become the default.
 
 **Long-press the life-point number** on the play stage. It is the one element in
@@ -54,7 +54,11 @@ the shipped value (`x`), or fractions of a card (`cards`). Never solved pixels
 | `camera.pitchDegrees` | how far it is laid back | 21° |
 | `camera.distance` | how far back you sit, in stage heights. **The perspective dial** | 1.45 |
 | `camera.lens` | **focal length** — pure magnification, perspective untouched | 1.0 |
-| `camera.clearance` | **how close you are allowed to sit.** The floor under `distance` | 0.68 |
+| `camera.panX` | what the camera is **aimed at**, across the table | 0 |
+| `camera.panY` | the same, up and down it | 0 |
+| `camera.shiftX` | where that lands in the **picture**, across the glass. A lens shift | 0 |
+| `camera.shiftY` | the same, down the glass. Positive gives the room the top of the frame | 0 |
+| `camera.clearance` | **how close you are allowed to sit.** The floor under `distance` | 0.9 |
 | `focus.strength` | the defocus falloff. **Off by default** | 0 |
 | `focus.depth` | where it is sharp, across the board's depth | 0 |
 | `focus.fNumber` | how fast it falls away | f/8 |
@@ -286,6 +290,90 @@ that the board is long gone; a seat button is the way back.
 
 ---
 
+## `camera.shiftX` / `camera.shiftY`: where that lands in the picture
+
+The **third** pan, and it is the one the KDoc above was actually refusing —
+"sliding the finished picture sideways", which does move the vanishing point off
+the middle of the glass. It turns out to cost one subtraction.
+
+There were three points in this projection and two names for them. `targetX` is
+the **mat** point the spin, the tilt and the perspective divide all turn about.
+`centreX` was doing two jobs: the middle of the glass, *and* the place that pivot
+gets drawn. Splitting the second out is `axisX`/`axisY` — the optical axis — and
+a photographer's name for moving it is a **lens shift**, the rise and fall on a
+view camera.
+
+The inverse stays closed form because a shift moves the *image* and not the
+*eye*: the divide is still centred on the pivot and the pivot is still drawn at
+one known place, and only that place has moved. So `unprojectAt` subtracts two
+different numbers and `flatten` is still exact.
+
+Two things it deliberately does **not** do, both pinned by tests:
+
+- **It does not move the distance floor.** Zooming cannot bring the table closer
+  to a camera that has not moved, and neither can aiming — the same cancellation
+  `lens` gets, for the same reason. `minDistanceAt` does not take it.
+- **It does not move a single highlight.** `StagePlane.eyePoint` is where every
+  specular pool, cast shadow and graze on the stage is solved from. A shift that
+  moved it would slide sixty highlights across the board when all that happened
+  was the picture being framed differently, which is the opposite of what a lens
+  shift means.
+
+The readout is a percentage of the edge it slides down, because the knob's own
+unit — multiples of the governing dimension — is not a picture anybody can hold.
+
+**What it is worth, honestly.** Less than it sounds at the three seats that
+shipped, and the measurement is the reason there is now a fourth. The board is
+solved to fill the stage vertically, so there is no slack to aim into: at the
+Seated seat the bottom of the hand band is already at 99.8% of the screen, and
+any downward shift pushes it off. Room does not come from aiming. It comes from
+sitting lower, and the shift is what makes sitting lower *fit*.
+
+---
+
+## The fourth seat, and why the other three were all the same seat
+
+`tiltDegrees` is measured off the table's **normal**, so the elevation above the
+felt is ninety minus it. Overhead looks down from eighty-five degrees, Table from
+sixty-nine, and Seated — whose own note calls it "the player's own chair" — from
+fifty-six. Nobody sits fifty-six degrees above a desk. All three are somebody
+standing over a table and differ only in how far over.
+
+`StageSeat.POV`, on **4**, is at fifty-eight degrees of tilt: thirty-two of
+elevation, which is a head at a desk. The horizon arrives just off the top of the
+glass instead of two stage-heights above it, and the room goes from a fifth of
+the picture to about half.
+
+Three numbers in it, and two of them were solved:
+
+- **Distance 1.33.** The keystone across the table is a function of the distance
+  as a multiple of `minDistanceAt`'s floor — and because that floor is *linear*
+  in `sin(pitch)`, it is the same multiple at every pitch. A low seat therefore
+  need not distort more than a high one; it has to step back proportionally. One
+  and a half times the floor at fifty-eight puts a card on the glass at exactly
+  the width Seated draws it, on the reference stage and on a Tab S11.
+- **Shift 0.13.** The most the hand can afford, measured against `layout.bounds`
+  rather than `layout.field` — `CameraFit` fits the field and the hand band is
+  deliberately not in it, so nothing but a test stops a seat putting your hand
+  off the bottom of the screen. The limit is 0.149 on a 16:10 stage and 0.139 on
+  a wide phone, where the governing dimension comes off the *width* and the whole
+  scale is different.
+- **Pitch 58** is the taste one, and what it costs is card *height*: a card lying
+  on a table is foreshortened by `cos(pitch)`, so it is drawn about a third
+  shorter than at Seated. That is not tunable and it is not a defect — it is what
+  looking at a table from a chair does. It is why this is a fourth seat and not a
+  change to the third, and kai's answer to it is that a hold already opens the
+  card at full size.
+
+One consequence worth knowing before it looks like a bug: **at the tightest close
+limit the POV seat is held out**. Depth goes as `sin(pitch)`, so a low seat sits
+far nearer the lens plane than the other three, and it is the first seat a
+tightened `clearance` can reach. The distance is clamped, not refused — pressing
+the button still sits you there, a little further back. The other three do not
+move even at 0.5.
+
+---
+
 ## Defocus is not depth of field, and calling it that would be a lie
 
 There is no blur on this stage. `BlurEffect` is API 31 against a `minSdk` of 26
@@ -408,7 +496,7 @@ starts that gesture coroutine once and never restarts it, and it keeps the
 lambda it captured the first time. The lambda closed over the *document*, so
 every drag wrote `documentAsItWasWhenThePanelOpened.copy(thisOneField)`. Move the
 focal length and the distance went back to 1.45; move the distance and the lens
-went back to 1. All twenty-seven, and the readout was innocent throughout —
+went back to 1. All of them, and the readout was innocent throughout —
 that is an ordinary composition read, so the numbers looked right up until the
 moment a second slider was touched.
 
@@ -420,7 +508,7 @@ inside the preferences transform where the live document is. A stale lambda
 cannot carry a stale document if it never carries a document at all.
 
 `StageKnobsIndependenceTest` is what guards the half of this that core can see:
-writing one knob moves exactly one knob, pairwise, across all twenty-seven. It
+writing one knob moves exactly one knob, pairwise, across every one of them. It
 would not have caught the capture — that is a Compose fact and there is no
 Compose test target here — but it catches the other way in, which is a
 copy-and-paste in a setter lambda.

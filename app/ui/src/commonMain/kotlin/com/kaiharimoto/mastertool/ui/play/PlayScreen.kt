@@ -507,6 +507,7 @@ fun PlayScreen(
                 ShortcutAction.PLAY_SEAT_OVERHEAD -> camera.sitAt(StageSeat.OVERHEAD)
                 ShortcutAction.PLAY_SEAT_TABLE -> camera.sitAt(StageSeat.TABLE)
                 ShortcutAction.PLAY_SEAT_SEATED -> camera.sitAt(StageSeat.SEATED)
+                ShortcutAction.PLAY_SEAT_POV -> camera.sitAt(StageSeat.POV)
                 ShortcutAction.PLAY_SCENE -> cycleScene()
                 ShortcutAction.PLAY_CAMERA_TOUCH ->
                     prefs.update { it.copy(cameraTouch = !it.cameraTouch) }
@@ -2151,7 +2152,13 @@ private fun PlayTopBar(
         Divider()
         // The seats, as the touch idiom for the camera. A drag on bare felt
         // turns the table and a key puts it back, but neither of those is
-        // discoverable, and a row of three words is.
+        // discoverable, and a row of four words is.
+        //
+        // Four rather than three since the POV chair, and the last of them is
+        // not like the other three: those are places to *read* the board from
+        // and it is a place to *be* at it. The bar does not say so — the row is
+        // in descending order of how far above the table you are, so it says it
+        // by where it sits.
         StageSeat.entries.forEach { seat ->
             BarButton(seat.label) { camera.sitAt(seat) }
         }

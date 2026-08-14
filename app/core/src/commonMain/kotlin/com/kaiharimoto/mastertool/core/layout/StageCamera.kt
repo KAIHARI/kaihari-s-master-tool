@@ -546,6 +546,65 @@ enum class StageSeat(val label: String, val pose: CameraPose) {
      * the board.
      */
     SEATED("Seated", CameraPose(yawDegrees = 0f, pitchDegrees = 34f, distance = 1.34f)),
+
+    /**
+     * Your own eye level, and the first seat here that is not a reading seat.
+     *
+     * ## What the other three have in common
+     *
+     * [tiltDegrees][StagePlane.tiltDegrees] is the angle off the table's
+     * *normal*, so the elevation above the felt is ninety minus it. [OVERHEAD]
+     * looks down at eighty-five degrees, [TABLE] at sixty-nine, and [SEATED] —
+     * whose own note calls it "from the player's own chair" — at fifty-six. A
+     * person sitting at a desk is nowhere near fifty-six degrees above it. All
+     * three are somebody standing over a table, and they differ in how far over.
+     *
+     * At fifty-eight the elevation is thirty-two, which is a head at a desk, and
+     * everything follows from that one number: the horizon arrives just off the
+     * top of the glass instead of two stage-heights above it, the wall stops
+     * being a strip, and the room goes from a fifth of the picture to about
+     * half.
+     *
+     * ## Why the distance is what it is, and it was solved
+     *
+     * The keystone across the table is a function of the distance as a multiple
+     * of [CameraEnvelope.minDistanceAt]'s floor, and — because that floor is
+     * linear in `sin(pitch)` — it is the *same* multiple at every pitch. So a
+     * low seat need not distort more than a high one; it has to step back
+     * proportionally. One and a half times the floor at fifty-eight degrees is
+     * 1.33, which puts a card on the glass at **exactly the width [SEATED]
+     * draws it**, measured on the reference stage and on a Tab S11.
+     *
+     * What it does not keep is the card's *height*. A card lying on a table is
+     * foreshortened by `cos(pitch)`, so at fifty-eight it is drawn about a third
+     * shorter than at thirty-four. That is not a defect and it is not tunable —
+     * it is what looking at a table from a chair does — and it is the reason
+     * this is a fourth seat rather than a change to the third. kai's answer to
+     * it is that a hold already opens the card at full size
+     * (`ui/play/CardReader.kt`), so the seat you *read* from and the seat you
+     * *sit* in do not have to be the same seat.
+     *
+     * ## And the shift, which is the only reason this seat fits at all
+     *
+     * A low seat draws the board high in the frame, and the room it is supposed
+     * to be showing you is above that. The shift is what puts the board back
+     * down, and how far it may go is **measured against `layout.bounds` rather
+     * than `layout.field`** — because a seat you play from with your hand off
+     * the bottom of the screen is not a seat, and `CameraFit` will not catch it:
+     * a seat press fits the field, and the hand band is deliberately not in it.
+     *
+     * The limit is 0.149 on a sixteen-by-ten stage and on a Tab S11, and 0.139
+     * on a wide phone — where the governing dimension comes off the *width*, so
+     * the whole scale is different and the answer had to be measured rather than
+     * assumed to follow. Thirteen hundredths is under all three.
+     * `CameraShiftTest.theHeadSeatIsAPlaceYouCanPlayFrom` sweeps them.
+     *
+     * A tall portrait stage does not fit at this distance at all, at any shift,
+     * and is left to `CameraFit`: the seat press dollies back and you get the
+     * chair from further away. This app is landscape and that is the graceful
+     * end of it, not a case worth moving the seat for.
+     */
+    POV("POV", CameraPose(yawDegrees = 0f, pitchDegrees = 58f, distance = 1.33f, shiftY = 0.13f)),
 }
 
 /**

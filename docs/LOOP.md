@@ -990,6 +990,75 @@ now, cell for cell — three of its twelve cells were wrong when first written o
 by hand. The lamp's height read "five to one" for two releases and measured
 2.92; this is the same failure caught before shipping instead of after.
 
+### Iteration 17 — three of the seats were the same seat
+
+Not a fidelity iteration, and the third in a row that began with kai asking for
+something the tool could not say: *"how can we change the way the camera works
+and how the view is presented in the fishbowl play mode to push it to the next
+level and feel like a true real life POV simulation?"*
+
+**The finding is a units one, and it had been sitting in plain sight since the
+first camera.** `StagePlane.tiltDegrees` is the angle off the table's *normal*,
+so the elevation above the felt is ninety minus it. Overhead is at eighty-five
+degrees of elevation, Table at sixty-nine, and Seated — whose own KDoc says "from
+the player's own chair" — at **fifty-six**. Nobody sits fifty-six degrees above a
+desk. All three seats were somebody standing over a table, and the only thing
+that distinguished them was how far over. The envelope has allowed eighty degrees
+of tilt since iteration 16 and no seat had ever followed it down.
+
+**And the reason none could is that the projection had two middles welded
+together.** `StagePlane` had three points in it and two names: `targetX` is the
+mat point the spin, the tilt and the divide all turn about, and `centreX` was
+both the middle of the glass *and* the place that pivot lands. So what the camera
+was aimed at was always drawn dead centre, and the only way to get the horizon
+onto the glass was to pitch until it walked down into frame — by which point the
+table is edge-on and a card is a line. Splitting the second job out is `axisX` /
+`axisY` and `CameraPose.shiftX` / `shiftY`, a photographer's **lens shift**.
+
+**It is one subtraction, and the KDoc that refused it was right about a different
+pan for the third time.** Iteration 16 found `CameraPose` refusing a pan on the
+grounds that a movable vanishing point needs an off-axis inverse, and found that
+half the paragraph described a *different* pan. This is that other pan — sliding
+the finished picture — and it moves the vanishing point exactly as the paragraph
+said it would, and the inverse is still closed form, because a shift moves the
+*image* and not the *eye*. The divide is still centred on the pivot and the pivot
+is still drawn at one known place; only that place has moved. `flatten` stays
+exact, which is what every pile edge and airborne shadow is drawn through.
+
+**The plan said the shift would buy the room its screen area for free. It does
+not, and a throwaway test said so in about a minute.** The board is solved to
+fill the stage vertically, so there is no slack to aim into: at the Seated seat
+the bottom of the hand band is already at 99.8% of the screen, and any downward
+shift pushes it off. Room comes from *sitting lower*. What the shift does is make
+sitting lower fit.
+
+Four things worth keeping:
+
+- **A number in a plan is a guess until a test prints it.** "Put eye level in the
+  upper third with a shift" was arithmetically impossible at a seated pitch — the
+  horizon is `d·cot(pitch)` above the axis, which is over two stage-heights at
+  thirty-four degrees. Fifteen minutes of scratch test replaced a paragraph of
+  confident prose, and then replaced the shift constant too when the phone came
+  out 0.139 against the tablet's 0.149.
+- **The keystone is a function of the distance as a multiple of the floor, and
+  the floor is linear in `sin(pitch)`, so that multiple is the same at every
+  pitch.** Which means a low seat need not distort more than a high one — it has
+  to step back proportionally. That is the whole reason `StageSeat.POV` can draw
+  a card at exactly the width Seated draws it.
+- **A bug was waiting for the first seat that declared a shift.** `CameraRig.step`
+  sprang three fields and then assigned `pose = target` on the frame those three
+  settled, which snapped the other four in one. Invisible for as long as every
+  seat declared a pan of nothing, because the jump was always zero to zero. Both
+  pans and both shifts spring now.
+- **Three tests went red and every one of them was a fact about the seats wearing
+  a claim's clothes.** "The centre of the mat is the one point that does not
+  move" meant the middle of the *surface*; it means the optical axis. "Every seat
+  is legal at every clearance" was true while every seat looked down from fifty
+  degrees; a low seat is nearer the lens plane and the tightest close limit now
+  holds it out, which is the knob working. And "the lamp's mirror is on the mat at
+  every seat" was true for the same reason — from a chair the reflection has slid
+  off the near edge, which is the *point* of the slide.
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find

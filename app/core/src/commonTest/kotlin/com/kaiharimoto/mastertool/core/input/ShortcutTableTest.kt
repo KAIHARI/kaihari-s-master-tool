@@ -221,7 +221,7 @@ class ShortcutTableTest {
         // key here and you must name it there too.
         val named = setOf(
             "escape", "slash", "space", "left", "right",
-            "1", "2", "3",
+            "1", "2", "3", "4",
             "b", "c", "d", "f", "g", "i", "n", "r", "s", "t", "z",
         )
         val used = ShortcutTable.all.map { it.chord.key }.toSet()

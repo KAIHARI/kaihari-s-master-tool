@@ -102,6 +102,13 @@ object MatGuide {
             pointer = "Overhead / Table / Seated on the bar",
             key = "1 · 2 · 3",
         ),
+        Gesture(
+            GestureGroup.CAMERA,
+            what = "Sit at the desk, at your own eye level",
+            touch = "POV on the bar",
+            pointer = "POV on the bar",
+            key = "4",
+        ),
 
         // ---- moving ----------------------------------------------------------
         Gesture(

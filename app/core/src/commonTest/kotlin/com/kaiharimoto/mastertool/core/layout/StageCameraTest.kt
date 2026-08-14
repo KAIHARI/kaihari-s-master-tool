@@ -71,12 +71,20 @@ class StageCameraTest {
 
     @Test
     fun theCentreOfTheMatIsStillTheOnePointThatDoesNotMove() {
-        // Whatever the table is turned to, it turns about its own middle.
+        // Whatever the table is turned to, it turns about its own middle — and
+        // that middle is drawn on the optical axis.
+        //
+        // This used to say `centreX`, and it was right for as long as those were
+        // the same number. They are two now: `targetX` is the mat point the spin,
+        // the tilt and the divide all turn about, and `axisX` is where that lands
+        // on the glass. A seat with a lens shift separates them, and a test that
+        // still asked about the middle of the *surface* would be asserting that
+        // nobody may aim the lens.
         poses.forEach { pose ->
             val stage = plane(pose)
-            val middle = stage.project(stage.centreX, stage.centreY)
-            assertClose(stage.centreX, middle.x, note = "x at $pose:")
-            assertClose(stage.centreY, middle.y, note = "y at $pose:")
+            val middle = stage.project(stage.targetX, stage.targetY)
+            assertClose(stage.axisX, middle.x, note = "x at $pose:")
+            assertClose(stage.axisY, middle.y, note = "y at $pose:")
             assertClose(1f, middle.scale, note = "scale at $pose:")
         }
     }
@@ -381,11 +389,11 @@ class StageCameraTest {
     }
 
     @Test
-    fun everySeatIsStillLegalAtEveryClearance() {
+    fun everySeatIsStillLegalAtTheClearanceItShipsAt() {
         // Raising it only lowers floors, so nothing that was a legal seat can
         // have stopped being one — but that is an argument, and this is the
-        // check. The three seats are what the keyboard and the bar put you at.
-        listOf(CameraEnvelope.MIN_CLEARANCE, 0.5f, 0.68f, CameraEnvelope.MAX_CLEARANCE).forEach { c ->
+        // check. The seats are what the keyboard and the bar put you at.
+        listOf(CameraEnvelope.DEFAULT_CLEARANCE, 0.95f, CameraEnvelope.MAX_CLEARANCE).forEach { c ->
             val at = CameraEnvelope(clearance = c)
             StageSeat.entries.forEach { seat ->
                 assertEquals(
@@ -395,6 +403,52 @@ class StageCameraTest {
                 )
             }
         }
+    }
+
+    /**
+     * And at the tightest one the low seat is held out rather than refused.
+     *
+     * This used to read "at every clearance", and it was true for as long as
+     * every seat looked down at the table from more than fifty degrees of
+     * elevation. [StageSeat.POV] is at thirty-two, and depth on this stage goes
+     * as `sin(pitch)`, so it sits far closer to the lens plane than the other
+     * three and is the first seat a tightened close limit can reach.
+     *
+     * Being reached is the knob working. `clearance` is three menus deep and its
+     * whole meaning is *hold me further out*; a seat that ignored it would be a
+     * limit with an exception in it. What must not happen — and what
+     * `CameraEnvelope.clearance`'s own note is about — is a seat becoming
+     * **unreachable**, and it does not: the distance is clamped, so pressing the
+     * button still sits you there, a little further back.
+     *
+     * The other three are unmoved even at the tightest, which is the half of the
+     * old claim that survives intact.
+     */
+    @Test
+    fun theTightestCloseLimitHoldsTheLowSeatOutRatherThanRefusingIt() {
+        val tight = CameraEnvelope(clearance = CameraEnvelope.MIN_CLEARANCE)
+        listOf(StageSeat.OVERHEAD, StageSeat.TABLE, StageSeat.SEATED).forEach { seat ->
+            assertEquals(
+                seat.pose,
+                tight.clamp(seat.pose, width, height),
+                "$seat moved at the tightest close limit",
+            )
+        }
+
+        val held = tight.clamp(StageSeat.POV.pose, width, height)
+        assertTrue(
+            held.distance > StageSeat.POV.pose.distance,
+            "the POV seat was not held out at all, so this test is measuring nothing",
+        )
+        // Everything else about the seat survives it: you are sitting where you
+        // asked to sit, looking where you asked to look, from further back.
+        assertEquals(StageSeat.POV.pose.pitchDegrees, held.pitchDegrees)
+        assertEquals(StageSeat.POV.pose.shiftY, held.shiftY)
+        assertEquals(
+            tight.minDistanceAt(StageSeat.POV.pose.pitchDegrees, width, height),
+            held.distance,
+            "and it is held at the solved floor, not at some other number",
+        )
     }
 
     @Test

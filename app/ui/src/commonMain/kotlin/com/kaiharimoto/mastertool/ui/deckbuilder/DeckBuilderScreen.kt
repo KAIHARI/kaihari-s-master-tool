@@ -170,6 +170,7 @@ fun DeckBuilderScreen(
             ShortcutAction.PLAY_SEAT_OVERHEAD,
             ShortcutAction.PLAY_SEAT_TABLE,
             ShortcutAction.PLAY_SEAT_SEATED,
+            ShortcutAction.PLAY_SEAT_POV,
             ShortcutAction.PLAY_GUIDE,
             -> Unit
         }

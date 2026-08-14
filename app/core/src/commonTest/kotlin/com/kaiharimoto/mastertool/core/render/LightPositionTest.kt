@@ -268,7 +268,27 @@ class LightPositionTest {
         }
         centres.forEach {
             assertTrue(it.x in mat.left..mat.right, "the highlight is off the mat: $it")
-            assertTrue(it.y in mat.top..mat.bottom, "the highlight is off the mat: $it")
+        }
+
+        // And it stays on the felt for as long as you are looking down at it.
+        //
+        // This used to say "every seat", and that was a fact about the seats
+        // rather than about the light: all three of them looked down at the
+        // table from more than fifty degrees of elevation, and a mirror image
+        // seen from up there lands inside the mat. `StageSeat.POV` is a head at
+        // a desk, and from there the lamp's reflection has slid off the near
+        // edge — which is the *point* of the slide, not a failure of it. A
+        // reflection is allowed to be past the end of the table; what is drawn
+        // is the half of the highlight that is still on it.
+        StageSeat.entries.zip(centres).forEach { (seat, centre) ->
+            if (seat == StageSeat.POV) {
+                assertTrue(
+                    centre.y > mat.bottom,
+                    "the reflection has not left the near edge at the POV seat: $centre",
+                )
+            } else {
+                assertTrue(centre.y in mat.top..mat.bottom, "the highlight is off the mat: $centre")
+            }
         }
     }
 

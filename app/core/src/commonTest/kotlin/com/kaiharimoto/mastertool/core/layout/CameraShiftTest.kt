@@ -87,15 +87,24 @@ class CameraShiftTest {
         }
     }
 
-    /** And the pose itself defaults to nothing, which is what makes the above true. */
+    /**
+     * The pose defaults to nothing, and the three seats that shipped keep it.
+     *
+     * [StageSeat.POV] is the exception and is the only one, which is the whole
+     * shape of this release: nothing anybody was already using moved. The
+     * tripwire is the *listing* rather than a loop over `entries`, so adding a
+     * fifth seat with a shift is a red build and a decision rather than a
+     * silent change to a seat somebody relies on.
+     */
     @Test
-    fun everySeatIsStillAimedAtTheMiddleOfTheGlass() {
-        StageSeat.entries.forEach { seat ->
+    fun theSeatsThatShippedAreStillAimedAtTheMiddleOfTheGlass() {
+        listOf(StageSeat.OVERHEAD, StageSeat.TABLE, StageSeat.SEATED).forEach { seat ->
             assertEquals(0f, seat.pose.shiftX, "${seat.name} shiftX")
             assertEquals(0f, seat.pose.shiftY, "${seat.name} shiftY")
         }
         assertEquals(0f, CameraPose().shiftX)
         assertEquals(0f, CameraPose().shiftY)
+        assertTrue(StageSeat.POV.pose.shiftY > 0f, "and the new one is aimed")
     }
 
     // ---- it aims the picture ------------------------------------------------------------
@@ -372,6 +381,91 @@ class CameraShiftTest {
         repeat(600) { rig.step(SpringSpec.Snappy, 1f / 120f) }
         assertClose(0f, rig.pose.shiftY, 0.001f, "a seat put it back:")
         assertClose(1.4f, rig.pose.lens, 0.001f, "and kept the lens:")
+    }
+
+    // ---- the seat the shift exists for ---------------------------------------------------
+
+    /**
+     * The POV seat is a place you can actually play from, on every stage shape.
+     *
+     * Three claims, and each of them is a number somebody would otherwise have
+     * chosen and never re-derived:
+     *
+     * 1. **The hand is on the glass.** A seat press fits `layout.field`, which
+     *    deliberately excludes the hand band — that exclusion is what lets the
+     *    camera come close, and it means `CameraFit` will happily seat you with
+     *    the hand off the bottom. So the shift has to be small enough that it
+     *    does not, and nothing but this test says so.
+     * 2. **A card is no narrower than it is at [StageSeat.SEATED].** That is
+     *    what "keep card size" meant, and it is what picked the distance.
+     * 3. **The room gets appreciably more of the picture**, which is the whole
+     *    reason the seat exists. Half the frame against a fifth.
+     *
+     * Swept over three real stage shapes rather than the one this file uses,
+     * because a seat is a constant and the board it has to fit is not: the
+     * layout is solved from the surface, and a phone's is a different shape.
+     */
+    @Test
+    fun theHeadSeatIsAPlaceYouCanPlayFrom() {
+        listOf(
+            Triple(1600f, 1000f, "the studio stage"),
+            Triple(2960f, 1848f, "a Tab S11"),
+            Triple(2340f, 1080f, "a small phone"),
+        ).forEach { (w, h, name) ->
+            val layout = BoardLayouter.solve(
+                width = w,
+                height = h,
+                aspectRatio = 59f / 86f,
+                roomAbove = com.kaiharimoto.mastertool.core.scene.Scenery.ROOM_ABOVE,
+                perspectiveGrowth = StageSeat.TABLE.pose.planeFor(w, h).perspectiveGrowth,
+            )
+            val pov = StageSeat.POV.pose.planeFor(w, h)
+            val seated = StageSeat.SEATED.pose.planeFor(w, h)
+
+            assertTrue(
+                CameraFit.holds(pov, layout.bounds),
+                "the hand runs off the glass at the POV seat on $name",
+            )
+
+            val midY = layout.field.top + layout.field.height / 2f
+            val povCard = layout.cardWidth * pov.zoom * pov.project(w / 2f, midY).scale
+            val seatedCard = layout.cardWidth * seated.zoom * seated.project(w / 2f, midY).scale
+            assertTrue(
+                povCard >= seatedCard * 0.97f,
+                "a card is $povCard wide at the POV seat and $seatedCard seated, on $name",
+            )
+
+            val povRoom = pov.project(w / 2f, layout.field.top).y / h
+            val seatedRoom = seated.project(w / 2f, layout.field.top).y / h
+            assertTrue(
+                povRoom > seatedRoom + 0.12f,
+                "the room got ${povRoom - seatedRoom} more of the picture on $name, " +
+                    "which is not enough to be worth a seat",
+            )
+            assertTrue(povRoom > 0.4f, "the room is only ${povRoom * 100}% of the picture on $name")
+        }
+    }
+
+    /**
+     * And it is genuinely a lower seat than the three that were there.
+     *
+     * `tiltDegrees` is measured off the table's normal, so this is the elevation
+     * above the felt. Thirty-two degrees is a head at a desk; the seat that
+     * calls itself the player's chair is at fifty-six, which is standing over
+     * one. Written as a claim rather than left in a KDoc, because a KDoc that
+     * says "a person at a desk" over a constant nobody re-derived is exactly the
+     * kind of prose this project has been burned by.
+     */
+    @Test
+    fun theHeadSeatIsTheOnlyOneAtSomethingLikeEyeLevel() {
+        val elevation = { seat: StageSeat -> 90f - seat.pose.pitchDegrees }
+        assertTrue(elevation(StageSeat.POV) < 35f, "the POV seat is at ${elevation(StageSeat.POV)}")
+        listOf(StageSeat.OVERHEAD, StageSeat.TABLE, StageSeat.SEATED).forEach {
+            assertTrue(
+                elevation(it) > 50f,
+                "${it.name} is at ${elevation(it)}, which is not a reading seat any more",
+            )
+        }
     }
 
     /**

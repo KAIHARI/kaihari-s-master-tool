@@ -388,11 +388,35 @@ authority; the short version:
   inverted, so `unproject` stops agreeing with it and every pile edge and
   airborne shadow tears. That one is not taste and is not going anywhere.
 - **`CameraFit` moved to the seat buttons.** Run on every release it *was* the
-  "locks me out" — pinch in, let go, and the table slides away. On `1 · 2 · 3`
+  "locks me out" — pinch in, let go, and the table slides away. On `1 · 2 · 3 · 4`
   (`StageCameraState.sitAt`) it is the way home from anywhere free flight can
   reach, and it is still handed `layout.field` rather than `layout.bounds`: the
   hand band along the bottom is the first thing a push-in costs, and treating
   that as a reason to refuse capped the camera at 1.47 against a floor of 1.05.
+  Which is also why a *seat* that aims low has to be measured against `bounds`
+  itself — the fitter will not catch a chair that puts your hand off the screen.
+- **The lens can be aimed as well as the camera, and that is a fourth seat.**
+  `StagePlane` had three points and two names: `targetX` is the mat point the
+  spin, the tilt and the divide all turn about, and `centreX` was both the middle
+  of the glass *and* where that pivot lands. Splitting the second out is
+  `axisX`/`axisY` — a view camera's **rise and fall** — and it costs one
+  subtraction, because a shift moves the *image* and not the *eye*: the divide is
+  still centred on the pivot, so `unprojectAt` and `flatten` stay closed form. It
+  moves neither `minDistanceAt` nor `eyePoint`, both pinned, so aiming changes
+  nothing about how close you may sit or where a single highlight lands.
+  It exists because **three of the seats were the same seat**. `tiltDegrees` is
+  measured off the table's normal, so elevation is ninety minus it: Overhead is
+  85° above the felt, Table 69°, and Seated — "the player's own chair" — **56°**,
+  which is standing over a table rather than sitting at one. `StageSeat.POV` on
+  `4` is at 32°, draws a card exactly as wide as Seated does, and gives the room
+  half the picture instead of a fifth. What it costs is card *height*
+  (`cos(pitch)`, about a third), which is what looking at a table from a chair
+  does and is why it is a fourth seat rather than a change to the third — the
+  hold-to-read card reader carries legibility instead.
+  A shift does **not** buy the room screen area on its own, and the plan that said
+  so was wrong: the board fills the stage vertically, the hand band's bottom edge
+  is already at 99.8% of the glass at Seated, and there is no slack to aim into.
+  Room comes from sitting lower; the shift is what makes sitting lower fit.
 - **The camera can be aimed.** `CameraPose.panX/panY` move the *target* rather
   than the picture, so the vanishing point stays in the middle of the glass and
   `unprojectAt` keeps its closed form — the KDoc that refused a pan was

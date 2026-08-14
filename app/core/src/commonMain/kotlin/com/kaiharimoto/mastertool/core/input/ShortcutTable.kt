@@ -68,6 +68,7 @@ enum class ShortcutAction {
     PLAY_SEAT_OVERHEAD,
     PLAY_SEAT_TABLE,
     PLAY_SEAT_SEATED,
+    PLAY_SEAT_POV,
     PLAY_GUIDE,
 }
 
@@ -311,7 +312,7 @@ object ShortcutTable {
             "Let the felt move the camera, or stop it",
         ),
 
-        // The three seats. Digits, reusing the builder's pane-focus muscle
+        // The four seats. Digits, reusing the builder's pane-focus muscle
         // memory — a chord means whatever the live scope says it means, which
         // is what scopes are for, and `d` and `s` already do it.
         Shortcut(
@@ -325,6 +326,10 @@ object ShortcutTable {
         Shortcut(
             KeyChord("3"), ShortcutAction.PLAY_SEAT_SEATED, ShortcutScope.PLAY,
             "Drop down into the player's chair",
+        ),
+        Shortcut(
+            KeyChord("4"), ShortcutAction.PLAY_SEAT_POV, ShortcutScope.PLAY,
+            "Sit at the desk, at your own eye level",
         ),
         // The same chord the builder's help uses, because it is the same
         // question asked on a different screen — and because a guide you have to
