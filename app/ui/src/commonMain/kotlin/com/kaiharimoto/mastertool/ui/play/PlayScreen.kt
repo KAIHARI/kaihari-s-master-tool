@@ -111,6 +111,7 @@ import com.kaiharimoto.mastertool.ui.deckbuilder.DeckLayoutState
 import com.kaiharimoto.mastertool.core.input.ShortcutAction
 import com.kaiharimoto.mastertool.core.input.ShortcutContext
 import com.kaiharimoto.mastertool.core.input.ShortcutLayer
+import com.kaiharimoto.mastertool.ui.fx.DeviceTilt
 import com.kaiharimoto.mastertool.ui.fx.LocalFeedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
 import com.kaiharimoto.mastertool.ui.fx.localHour
@@ -413,6 +414,18 @@ fun PlayScreen(
     // willing to be asked.
     val cameraTouch = prefs.preferences.cameraTouch
 
+    // And whether the tablet's own tilt moves the camera a degree or two.
+    // `DeviceTilt` unregisters the sensor when this is false, so an install
+    // that never turns it on never listens to anything.
+    val headSway = prefs.preferences.headSway
+    DeviceTilt(enabled = headSway) { camera.sway.onTilt(it) }
+    // Taking the posture the device is in *now* as the zero, every time it is
+    // switched on. Without it, turning it on while holding a tablet at the angle
+    // people actually hold tablets would swing the camera to its limit and leave
+    // it there, which reads as the feature being broken rather than as it being
+    // on. `HeadSway.restart` says the same thing at greater length.
+    LaunchedEffect(headSway) { camera.sway.restart() }
+
     // The hour, re-read on a slow timer rather than watched. This is not an
     // idle animation — it is a preference that happens to have a clock behind
     // it — and a room that stayed in daylight because the app was already open
@@ -508,6 +521,8 @@ fun PlayScreen(
                 ShortcutAction.PLAY_SEAT_TABLE -> camera.sitAt(StageSeat.TABLE)
                 ShortcutAction.PLAY_SEAT_SEATED -> camera.sitAt(StageSeat.SEATED)
                 ShortcutAction.PLAY_SEAT_POV -> camera.sitAt(StageSeat.POV)
+                ShortcutAction.PLAY_HEAD_SWAY ->
+                    prefs.update { it.copy(headSway = !it.headSway) }
                 ShortcutAction.PLAY_SCENE -> cycleScene()
                 ShortcutAction.PLAY_CAMERA_TOUCH ->
                     prefs.update { it.copy(cameraTouch = !it.cameraTouch) }
@@ -862,6 +877,16 @@ fun PlayScreen(
                             camera.sync(widthPx, heightPx)
                             moving++
                         }
+                        // And the tablet's own tilt, which is a third clock on
+                        // this stage and obeys the same rule as the other two:
+                        // it reports whether it moved, and a frame nothing moved
+                        // in writes no plane. A device lying still returns false
+                        // forever, which is what keeps "nothing idles" true of a
+                        // feature that is driven by a sensor.
+                        if (camera.sway.step(step)) {
+                            camera.sync(widthPx, heightPx)
+                            moving++
+                        }
                         probe.sample(now, moving)
                         if (readout) probeTick = now
                     }
@@ -1035,6 +1060,8 @@ fun PlayScreen(
             onRoom = cycleScene,
             cameraTouch = cameraTouch,
             onCameraTouch = { prefs.update { it.copy(cameraTouch = !it.cameraTouch) } },
+            headSway = headSway,
+            onHeadSway = { prefs.update { it.copy(headSway = !it.headSway) } },
         )
 
         if (readout) {
@@ -2046,6 +2073,8 @@ private fun PlayTopBar(
     /** Whether the felt currently answers a finger — see `UiPreferences.cameraTouch`. */
     cameraTouch: Boolean,
     onCameraTouch: () -> Unit,
+    headSway: Boolean,
+    onHeadSway: () -> Unit,
 ) {
     val feedback = LocalFeedback.current
 
@@ -2178,6 +2207,10 @@ private fun PlayTopBar(
         // two taps inside a dropdown. The glyph carries the state on its own —
         // ⦿ is an open eye's worth of "the felt is live", ⦻ is it crossed out.
         BarButton(if (cameraTouch) "Camera ⦿" else "Camera ⦻", onClick = onCameraTouch)
+        // And whether the tablet's own tilt does, beside it because they are the
+        // same kind of question — which of the two things that can move the
+        // camera without being asked is switched on. Both ship off.
+        BarButton(if (headSway) "Tilt ⦿" else "Tilt ⦻", onClick = onHeadSway)
         // Beside the seats, because choosing a room and choosing where to sit
         // are the same kind of act — neither is about a card — and because one
         // button that cycles is what the theme setting already does with three

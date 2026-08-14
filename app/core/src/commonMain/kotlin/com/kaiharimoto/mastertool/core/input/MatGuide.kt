@@ -109,6 +109,13 @@ object MatGuide {
             pointer = "POV on the bar",
             key = "4",
         ),
+        Gesture(
+            GestureGroup.CAMERA,
+            what = "Let the tablet's own tilt move the camera, or stop it",
+            touch = "Tilt on the bar",
+            pointer = "Tilt on the bar",
+            key = "H",
+        ),
 
         // ---- moving ----------------------------------------------------------
         Gesture(

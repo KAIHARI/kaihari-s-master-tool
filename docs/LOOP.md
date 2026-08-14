@@ -1104,6 +1104,55 @@ Three things worth keeping:
   range change with nothing wrong in it. It reads the knob's own `max` now, the
   way the two assertions above it already read the envelope's.
 
+### Iteration 19 — the tablet becomes a window
+
+`docs/AAA.md` #8, unbuilt since the list was written and the only head-parallax
+idea anywhere in the corpus: *"let the tablet's own tilt move it a degree or
+two… the cheapest three-dimensional tell that exists on a handheld."*
+
+**The obvious implementation is worthless, and iteration 17 is why it is
+obvious.** The lens shift that release built is exactly the term a parallax
+effect reaches for — and a shift moves every pixel by the same amount *by
+construction*, so near and far move together and there is no parallax at all. It
+is a picture being dragged. What makes a handheld screen read as a window is that
+things at different depths move by *different* amounts, and the only thing that
+does that is moving the eye. So `HeadSway` produces a small yaw and pitch, which
+is what #8 asked for in the first place.
+
+Four things it is built out of, and three are rules this loop already had:
+
+- **It is added beside the rig, never written into it.** In `CameraRig.pose` it
+  would fight every drag (a gesture assigns; a sway a frame later assigns over
+  it), cancel every coast, and — the quiet one — stop `Turns.seatAt` ever naming
+  a seat, so the readout and the detent would both go dead the moment a wrist
+  moved. It is also what keeps the panel's **Read camera** honest: it reads a
+  pose somebody chose, not that pose plus whatever angle the tablet was at.
+- **"Nothing idles" is satisfied by a latch rather than by an assertion.** A
+  rotation vector is never exactly still, so a naive version redraws sixty cards
+  forever because a tablet is a hundredth of a degree off level. `step` returns
+  false once the filter has arrived, which is how the frame loop knows not to
+  write the plane, and a deadband throws away anything under two degrees outright.
+- **The reference is the first sample, not level.** Nobody holds a tablet flat —
+  it is on a stand, on a lap, propped on a knee — and a sway measured against
+  level arrives pinned to its limit and stays there, which reads as the camera
+  being broken rather than as the feature being on.
+- **The desktop actual is empty rather than zero.** `:studio` draws the real
+  `PlayScreen` on that target and two runs being bit-identical is the loop's only
+  instrument. A seam that *could* report something would put that guarantee in a
+  runtime condition instead of in the type system.
+
+And one number the test caught immediately: `GAIN` was a sixth, its own KDoc
+claimed a wrist's twelve degrees reached the two-degree limit, and a sixth
+reaches 1.67. It is derived from the other two constants now
+(`LIMIT / (WRIST - DEADBAND)`), so the three cannot drift apart again. That is
+the third time this project has found a constant disagreeing with the paragraph
+above it, and the second time in three iterations.
+
+It ships **off**, beside `cameraTouch`, which is off for the same reason: it is
+the second thing on this stage that moves without anybody deciding to move it,
+and the first one had to be switched off after kai played on it. Whether this is
+the best thing here or a wobble cannot be settled from a contact sheet.
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find

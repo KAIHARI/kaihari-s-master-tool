@@ -222,7 +222,7 @@ class ShortcutTableTest {
         val named = setOf(
             "escape", "slash", "space", "left", "right",
             "1", "2", "3", "4",
-            "b", "c", "d", "f", "g", "i", "n", "r", "s", "t", "z",
+            "b", "c", "d", "f", "g", "h", "i", "n", "r", "s", "t", "z",
         )
         val used = ShortcutTable.all.map { it.chord.key }.toSet()
         assertEquals(emptySet(), used - named, "bound to a key the host cannot name")

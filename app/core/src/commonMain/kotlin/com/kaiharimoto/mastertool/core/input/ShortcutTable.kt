@@ -69,6 +69,7 @@ enum class ShortcutAction {
     PLAY_SEAT_TABLE,
     PLAY_SEAT_SEATED,
     PLAY_SEAT_POV,
+    PLAY_HEAD_SWAY,
     PLAY_GUIDE,
 }
 
@@ -330,6 +331,10 @@ object ShortcutTable {
         Shortcut(
             KeyChord("4"), ShortcutAction.PLAY_SEAT_POV, ShortcutScope.PLAY,
             "Sit at the desk, at your own eye level",
+        ),
+        Shortcut(
+            KeyChord("h"), ShortcutAction.PLAY_HEAD_SWAY, ShortcutScope.PLAY,
+            "Let the tablet's own tilt move the camera, or stop it",
         ),
         // The same chord the builder's help uses, because it is the same
         // question asked on a different screen — and because a guide you have to

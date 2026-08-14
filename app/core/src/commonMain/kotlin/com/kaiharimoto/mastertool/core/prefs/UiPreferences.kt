@@ -170,6 +170,25 @@ data class UiPreferences(
      */
     val cameraTouch: Boolean = false,
     /**
+     * Whether the tablet's own tilt moves the camera a degree or two.
+     *
+     * `docs/AAA.md` #8, and the strongest "this is a place rather than a
+     * picture" cue a handheld screen has: things at different depths move by
+     * different amounts when you tip the device, which is what a window does and
+     * what a photograph cannot.
+     *
+     * **Off, and for the same reason [cameraTouch] is off.** It is the second
+     * thing on this stage that moves without anybody deciding to move it, and
+     * the first one had to be switched off after kai played on it. A picture
+     * that answers a wrist is either the best thing here or a wobble, and which
+     * of those it is cannot be settled from a contact sheet — it wants a tablet
+     * in two hands over a real game. So it ships reachable and not chosen.
+     *
+     * It costs nothing while it is off: the sensor is not registered at all
+     * (`ui/fx/Tilt.kt`), rather than registered and ignored.
+     */
+    val headSway: Boolean = false,
+    /**
      * Sound and haptic feedback. Null means "the platform's default" — on for
      * a tablet in the hands, off at a desk — until the user says otherwise.
      */

@@ -11,6 +11,7 @@ import com.kaiharimoto.mastertool.core.layout.Slot
 import com.kaiharimoto.mastertool.core.layout.StagePlane
 import com.kaiharimoto.mastertool.core.layout.StageSeat
 import com.kaiharimoto.mastertool.core.layout.planeFor
+import com.kaiharimoto.mastertool.core.motion.HeadSway
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.StageRig
 
@@ -126,15 +127,53 @@ internal class StageCameraState(val rig: CameraRig) {
         )
     }
 
+    /**
+     * The tablet's own tilt, added on top of wherever the rig is.
+     *
+     * **Beside the rig rather than inside it, and that is the whole design.**
+     * Written into `CameraRig.pose` this would fight every gesture (a drag
+     * assigns, and a sway a frame later would assign over it), cancel every
+     * coast, and — the quiet one — stop `Turns.seatAt` ever naming a seat, so
+     * the readout and the detent would both go dead the moment a wrist moved.
+     * Added here it is invisible to all of that: the rig still holds exactly the
+     * pose the user put it in, and the *picture* is that pose plus a degree.
+     *
+     * It is also why the tuning panel's **Read camera** keeps meaning something.
+     * It reads `rig.pose`, which is a pose somebody chose, not a pose plus
+     * whatever angle the tablet happened to be at when they pressed the button.
+     */
+    val sway = HeadSway()
+
     /** Told the surface, and asked for the plane that goes with it. */
     fun sync(width: Float, height: Float) {
         rig.width = width
         rig.height = height
-        val next = rig.pose.planeFor(width, height)
+        val next = swayed(rig.pose).planeFor(width, height)
         if (next != plane) {
             plane = next
             eye = StageRig.eye(next.tiltDegrees, next.yawDegrees)
         }
+    }
+
+    /**
+     * [pose] with the sway on it, held inside the envelope.
+     *
+     * Through the clamp rather than added raw, because the rig's pose may
+     * already be resting exactly on a limit — the distance floor at a low seat,
+     * or the pitch ceiling — and two degrees past either of those is a
+     * projection that cannot be inverted. The clamp is cheap and it is the one
+     * place that question is answered for everything else on this stage.
+     */
+    private fun swayed(pose: CameraPose): CameraPose {
+        if (sway.yawDegrees == 0f && sway.pitchDegrees == 0f) return pose
+        return rig.envelope.clamp(
+            pose.copy(
+                yawDegrees = pose.yawDegrees + sway.yawDegrees,
+                pitchDegrees = pose.pitchDegrees + sway.pitchDegrees,
+            ),
+            rig.width,
+            rig.height,
+        )
     }
 
     /**
