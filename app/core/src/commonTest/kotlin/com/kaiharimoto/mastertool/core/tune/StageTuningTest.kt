@@ -242,7 +242,15 @@ class StageTuningTest {
 
         assertEquals(CameraEnvelope().maxPitch, read.camera.pitchDegrees)
         assertEquals(CameraEnvelope().minLens, read.camera.lens)
-        assertEquals(0.25f, read.focus.strength)
+        // Read off the knob rather than typed, like the two above it. The
+        // defocus ceiling moved from a quarter to a half when the falloff was
+        // re-derived against the board's own depth, and a literal here would
+        // have been a red test with nothing wrong — which is a test people
+        // learn to edit without reading.
+        assertEquals(
+            StageKnobs.ALL.first { it.path == "focus.strength" }.max,
+            read.focus.strength,
+        )
     }
 
     @Test

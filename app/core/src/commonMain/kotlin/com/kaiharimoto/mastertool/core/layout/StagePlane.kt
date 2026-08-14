@@ -638,6 +638,44 @@ data class StagePlane(
             return worst
         }
 
+    /**
+     * How deep the stage is, from the middle out, in units of [cameraDistance].
+     *
+     * The projection reporting on itself again, for the same reason
+     * [perspectiveGrowth] does: `Projected.depth` is measured against
+     * `cameraDistance` and nothing else on this stage knows how much of that
+     * range the *table* actually occupies. Which is fine until something has to
+     * be calibrated against it, and then a constant is a guess.
+     *
+     * `Defocus` was that guess. It put the focus plane anywhere within half the
+     * camera distance either way, and the board's own half-span is **0.027
+     * overhead, 0.124 at the table seat and 0.209 seated** on a sixteen-by-ten
+     * stage — so between three quarters and nineteen twentieths of the focus
+     * knob's travel moved a plane that was already past every card on the table,
+     * and the dial read as broken because it very nearly was. `docs/LOOP.md`:
+     * *a constraint nobody has re-derived is a constraint that has started
+     * guessing.*
+     *
+     * Every corner rather than the near edge, because once the table can turn
+     * there is no such thing as *the* far corner — at forty-five degrees of yaw
+     * it is a corner rather than an edge, and once it can be aimed the middle of
+     * the glass is not the middle of the mat either. At yaw zero and no pan the
+     * two answers agree, which is why this reads the corners and does not
+     * pretend to be `height · sin(tilt) / 2`.
+     */
+    val depthReach: Float
+        get() {
+            if (cameraDistance <= 0f) return 0f
+            var worst = 0f
+            for (x in 0..1) {
+                for (y in 0..1) {
+                    val at = abs(project(x * width, y * height).depth) / cameraDistance
+                    if (at > worst) worst = at
+                }
+            }
+            return worst
+        }
+
     companion object {
         /**
          * How far the table is laid back from the camera.

@@ -1059,6 +1059,51 @@ Four things worth keeping:
   every seat" was true for the same reason — from a chair the reflection has slid
   off the near edge, which is the *point* of the slide.
 
+### Iteration 18 — the defocus dial had been dead since it shipped
+
+kai, on the tuning panel: *"it's currently not working at all so you'll need to
+examine how it works and decide from there."* Three faults, and two of them the
+same mistake twice.
+
+**It is hard-zeroed on `Scene.MINIMAL`, which is the room the app opens in.**
+That zero is deliberate — a haze over `#060608` is a grey rectangle marking where
+the room ends — but nothing said so, and the default scene is the one where the
+slider does nothing wherever you put it. The note under the knob says it now.
+
+**And both of its constants were quoted against the camera distance when the
+thing they are about is the depth of the board.** `StagePlane.project` reports
+depth in units of `cameraDistance`; the board occupies 0.027 of that overhead,
+0.124 at the table seat, 0.209 seated and 0.319 at the new POV chair. The focus
+plane travelled ±0.5 — four to thirty-seven times the table — so most of that
+slider moved a plane already past every card. The falloff was a gradient pinned
+at f/8 and read off a far-edge fraction somebody chose, which came out at nine
+per cent of the dial at the table seat and **one and a half per cent** overhead.
+There was no setting of the three knobs at which the far edge was visibly softer
+than the near one.
+
+`StagePlane.depthReach` is the fix for both: the projection reporting on itself,
+exactly as `perspectiveGrowth` does. Everything divides by it, so ±1 on the plane
+dial is the far corner and the near one at every seat — and because the reach
+divides out, **the far corner reads identically at every seat**, across four
+seats whose depths differ by a factor of twelve.
+
+Three things worth keeping:
+
+- **Pin a scale at the end of its range, not in the middle of it.** The old
+  gradient was quoted at f/8, which meant it was really quoted at whatever
+  far-edge fraction the person choosing it had in mind — an unstated number, and
+  therefore an unstated *seat*. `Defocus.WIDE_F` is f/2 and just saturates at the
+  far corner; every longer stop follows by the reciprocal of the f-number, which
+  is what an f-number is.
+- **A range that cannot reach "obviously too much" hides its own right value.**
+  Strength went from a quarter to a half — not taste, arithmetic: full defocus
+  used to be past the end of the table, so the strongest thing the dial could put
+  on a card was a tenth of its own number.
+- **A literal in a test is a tripwire pointed at the wrong thing.**
+  `StageTuningTest` hard-coded 0.25 as the defocus ceiling and went red for a
+  range change with nothing wrong in it. It reads the knob's own `max` now, the
+  way the two assertions above it already read the envelope's.
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find

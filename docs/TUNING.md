@@ -403,15 +403,62 @@ makes it atmosphere rather than a dimmer, and it is the argument `docs/DESIGN.md
 not".
 
 **What it looks like:** the far half of the board loses its bite, whites come
-toward the felt, the frame lines around distant art go grey. Measured at
-strength 0.25, f/2: the hand's contrast falls 16%, the far deck's 11%, and the
-room and the felt are bit-identical.
+toward the felt, the frame lines around distant art go grey.
 
 **What it does not look like:** every edge stays razor sharp. No feathering of
 a near card over what is behind it, no bokeh. Both need a layer.
 
 It is **zero on `Scene.MINIMAL`** whatever the dial says — a haze over `#060608`
-is a grey rectangle marking where the room ends.
+is a grey rectangle marking where the room ends. That is a decision rather than
+an oversight, and since Minimal is also the room the app *opens* in, it is the
+most likely reason for a dial that appears dead: the note under the slider says
+so now.
+
+### Both of its numbers were quoted against the wrong thing, and it shipped dead
+
+kai's report was that defocus "is currently not working at all", and it was
+three faults at once — one of them the paragraph above, and two of them the same
+mistake twice.
+
+`StagePlane.project` reports a depth in units of `cameraDistance`. The **board**
+occupies only a sliver of that, and how thin a sliver depends entirely on where
+you are sitting:
+
+| seat | the board's half-depth, in camera distances |
+|---|---|
+| Overhead | 0.027 |
+| Table | 0.124 |
+| Seated | 0.209 |
+| POV | 0.319 |
+
+Both of the constants were quoted against the camera distance and neither
+against that. **The focus plane** travelled ±0.5 — between four and thirty-seven
+times the depth of the table — so somewhere between three quarters and nineteen
+twentieths of that slider moved a plane already past every card, and the usable
+part was too short to find. **The falloff** was a gradient pinned at f/8, read
+off a far-edge fraction somebody chose, and it put the far corner at nine per
+cent of the dial at the table seat and **one and a half per cent** overhead.
+There was no combination of the three knobs at which the far edge of the board
+was visibly softer than the near one.
+
+Both are solved against the projection now. `StagePlane.depthReach` is the
+board's own half-depth — the projection reporting on itself, the same move
+`perspectiveGrowth` makes — and everything is divided by it, so ±1 on the plane
+dial is the far corner and the near one at every seat. The falloff is pinned at
+the **wide** end instead of the middle: `Defocus.WIDE_F` is f/2 and it just
+saturates at the far corner, so every longer stop follows by the reciprocal of
+the f-number. f/4 reaches half, the shipped f/8 a quarter, f/22 a twelfth.
+
+Because the reach divides out, **the far corner of the board reads identically
+at every seat** — `DefocusTest.theFarCornerOfTheBoardReadsTheSameAtEverySeat`
+holds four seats whose depths differ by a factor of twelve to the same answer.
+That is the difference between an instrument and a number that looked right from
+the chair it was tuned in.
+
+The strength range went from a quarter to a half in the same change, and that is
+a consequence rather than a taste call: full defocus used to sit somewhere past
+the end of the table, so the strongest thing the dial could put on a card was
+about a tenth of its own number. It means what it says now.
 
 ---
 

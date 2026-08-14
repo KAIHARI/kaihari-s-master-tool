@@ -242,8 +242,13 @@ data class FocusTune(
     /**
      * How strong the falloff is at full defocus, as an alpha.
      *
-     * Zero is off and is the default. Past about 0.2 the far cards stop being
-     * readable, which is the thing this application exists to prevent.
+     * Zero is off and is the default. The range reaches half now rather than a
+     * quarter, and that is a consequence of the recalibration rather than a
+     * change of taste: full defocus used to be somewhere past the far end of the
+     * table, so the strongest thing the dial could actually put on a card was
+     * about a tenth of its own number. It means what it says now, and the top of
+     * the range is deliberately past useful — a knob you cannot push into
+     * "obviously too much" is a knob whose right value you cannot find.
      */
     val strength: Float = 0f,
 )
@@ -421,8 +426,8 @@ object StageKnobs {
         ),
 
         Knob(
-            FOCUS, "focus.strength", "Defocus", 0f, 0.25f, 0.005f, "",
-            "A contrast falloff with depth, not a blur. Zero is off. Past 0.2 far cards stop being readable.",
+            FOCUS, "focus.strength", "Defocus", 0f, 0.5f, 0.005f, "",
+            "A contrast falloff with depth, not a blur. Zero is off, and it is always off in the Minimal room. Past about 0.3 the far cards stop being readable.",
             { it.focus.strength }, { d, v -> d.copy(focus = d.focus.copy(strength = v)) },
         ),
         Knob(

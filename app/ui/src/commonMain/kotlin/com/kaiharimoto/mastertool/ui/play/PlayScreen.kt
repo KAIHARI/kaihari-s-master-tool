@@ -1912,6 +1912,13 @@ private fun CardFace(
                             Defocus.hazeAt(
                                 depth = camera.plane.project(motion.pose.position).depth,
                                 cameraDistance = camera.plane.cameraDistance,
+                                // The board's own half-depth, so the focus
+                                // plane spans the table rather than a fixed
+                                // fraction of the camera distance — which is
+                                // between four and thirty-seven times the
+                                // table, depending on the seat, and is why
+                                // this dial did nothing anybody could find.
+                                reach = camera.plane.depthReach,
                                 focus = focus.depth,
                                 fNumber = focus.fNumber,
                                 strength = focus.strength,
