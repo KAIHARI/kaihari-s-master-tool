@@ -11,6 +11,7 @@ import com.kaiharimoto.mastertool.core.board.DropTargets
 import com.kaiharimoto.mastertool.core.board.fanSource
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlayField
+import com.kaiharimoto.mastertool.core.board.SetPosition
 import com.kaiharimoto.mastertool.core.board.toMat
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
@@ -31,8 +32,17 @@ data class Carry(
     val quarterTurns: Int = 0,
     /** Turned over in the air, so it is *set* rather than flipped after landing. */
     val faceDown: Boolean = false,
-    /** Whether the whole pile is being carried rather than the top card. */
-    val whole: Boolean = false,
+    /**
+     * How the card will be lying when it lands.
+     *
+     * Solved by `SetPosition` every time anything about the carry changes, and
+     * held here for exactly the reason [intent] is: the pose in the air and the
+     * release both read it, so what you can see cannot disagree with what
+     * happens. A set monster turns sideways *while you are still holding it*,
+     * as it crosses into a monster zone, which is the honest way to say that the
+     * table knows what kind of card it is.
+     */
+    val position: CardPosition = CardPosition.FACE_UP_ATK,
     /**
      * Where this card was lying in the open spread it was taken out of, on the
      * felt — null unless it came out of a fan that is still open.
@@ -44,7 +54,11 @@ data class Carry(
      * unprojected onto before the two can be compared at all.
      */
     val cameOutOf: MatPoint? = null,
-)
+) {
+    /** Whether the card is lying sideways, for the pose that draws it. */
+    val turned: Boolean get() =
+        position == CardPosition.FACE_UP_DEF || position == CardPosition.FACE_DOWN_DEF
+}
 
 /**
  * A freeform table being played on.
@@ -54,7 +68,21 @@ data class Carry(
  * both of them pure and tested. This holds one field, the stack of fields
  * before it, and whatever is currently in the air.
  */
-class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
+class PlayState(
+    main: List<CardId>,
+    extra: List<CardId>,
+    seed: Long = 1L,
+    /**
+     * Whether a passcode names a monster, asked of whatever knows.
+     *
+     * A lambda rather than the card index itself, because the one question this
+     * class has about a card's *identity* is which way up a set copy of it lies,
+     * and handing a table the whole database to answer it would put the card
+     * database in the undo stack's line of sight. Defaulted to "no idea", which
+     * is what a test with no index has and a real answer in its own right.
+     */
+    private val isMonster: (CardId) -> Boolean? = { null },
+) {
 
     var field by mutableStateOf(dealt(main, extra, seed, OPENING_HAND))
         private set
@@ -198,8 +226,12 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
         from: DragOrigin,
         at: MatPoint,
         layout: BoardLayout,
-        whole: Boolean = false,
         cameOutOf: MatPoint? = null,
+        /**
+         * True when the gesture itself was a set — two fingers — so the card
+         * comes up already turned over rather than being flipped after landing.
+         */
+        faceDown: Boolean = false,
     ) {
         val id = when (from) {
             is DragOrigin.Mat -> from.id
@@ -213,12 +245,14 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
             // is still exactly where it came from, so passing it here would open
             // every drag out of a spread already reading "Put back".
             intent = DropTargets.resolve(at, id.takeIf { it != NO_CARD }, field, layout, null),
-            whole = whole,
-            // Picked up as it lay. A set card slid across the mat is still set
-            // when it lands, and only a deliberate turn changes that.
-            faceDown = from is DragOrigin.Mat && field.placed(from.id)?.faceUp == false,
+            // Picked up as it lay, unless the gesture itself said otherwise. A
+            // set card slid across the mat is still set when it lands, and only
+            // a deliberate turn — the two-finger tap, or the two-finger drag
+            // that started this — changes that.
+            faceDown = faceDown ||
+                (from is DragOrigin.Mat && field.placed(from.id)?.faceUp == false),
             cameOutOf = cameOutOf,
-        )
+        ).settled()
     }
 
     /** Moves what is being carried, and re-decides what letting go would do. */
@@ -245,11 +279,11 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
                 fromHand = (held.from as? DragOrigin.Hand)?.index,
                 handStep = handStep,
             ),
-        )
+        ).settled()
     }
 
     fun twistCarry(quarterTurns: Int) {
-        carry = carry?.copy(quarterTurns = quarterTurns)
+        carry = carry?.copy(quarterTurns = quarterTurns)?.settled()
     }
 
     /**
@@ -261,7 +295,7 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
      */
     fun turnCarry(): Boolean {
         val held = carry ?: return false
-        carry = held.copy(faceDown = !held.faceDown)
+        carry = held.copy(faceDown = !held.faceDown).settled()
         return true
     }
 
@@ -276,17 +310,44 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
         val held = carry ?: return false
         carry = null
 
-        val turned = held.quarterTurns % 2 != 0
-        val position = when {
-            held.faceDown && turned -> CardPosition.FACE_DOWN_DEF
-            held.faceDown -> CardPosition.FACE_DOWN_ATK
-            turned -> CardPosition.FACE_UP_DEF
-            else -> CardPosition.FACE_UP_ATK
-        }
-
-        val done = move { DropCommit.commit(it, held.from, held.intent, position) }
+        val done = move { DropCommit.commit(it, held.from, held.intent, held.position) }
         if (done && held.intent !is DropIntent.Free) announcement = held.intent.label
         return done
+    }
+
+    /**
+     * The carry with its landing position re-solved.
+     *
+     * Called after every change to one, so [Carry.position] is to which way up
+     * the card lands exactly what [Carry.intent] is to where it lands: decided
+     * continuously while it is in the air, drawn from the same value that
+     * commits it, and therefore unable to promise one thing and do another.
+     */
+    private fun Carry.settled(): Carry = copy(
+        position = SetPosition.of(
+            faceDown = faceDown,
+            turned = quarterTurns % 2 != 0,
+            intent = intent,
+            monster = monsterAt(this),
+        ),
+    )
+
+    /**
+     * Whether the card in the air is a monster, as far as anybody here knows.
+     *
+     * Null when the card is not in the index — a passcode the database has never
+     * heard of, which happens — and null is a real answer rather than a missing
+     * one: [SetPosition] sets an unknown card upright, the way it sets a spell,
+     * instead of guessing at a defence position for a card it cannot identify.
+     */
+    private fun monsterAt(held: Carry): Boolean? {
+        val card = when (val from = held.from) {
+            is DragOrigin.Mat -> field.placed(from.id)?.card
+            is DragOrigin.Hand -> field.hand.getOrNull(from.index)
+            is DragOrigin.Pile -> field.pile(from.pile).getOrNull(from.index)
+            is DragOrigin.Buried -> field.under(from.under).getOrNull(from.index)
+        }
+        return card?.let { isMonster(it.cardId) }
     }
 
     fun cancelCarry() {

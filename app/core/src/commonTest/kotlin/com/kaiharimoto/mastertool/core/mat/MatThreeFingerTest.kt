@@ -228,7 +228,7 @@ class MatThreeFingerTest {
         // an arrival window, which is also the entry condition for the phase
         // that will one day *mean* three fingers. Building that twice is waste,
         // so until it exists the mat reads this as its first two fingers
-        // panning and takes the pile. The phase that claims three fingers has
+        // panning and sets the card. The phase that claims three fingers has
         // to come here and change this test on purpose.
         val h = hand()
         h.frame(1L to at(100f, 100f), 2L to at(200f, 100f), 3L to at(300f, 100f))
@@ -236,7 +236,7 @@ class MatThreeFingerTest {
         h.frame(1L to at(100f, 300f), 2L to at(200f, 300f), 3L to at(300f, 300f))
         h.up()
 
-        assertTrue(h.has<MatEvent.LiftedStack>(), "three fingers swept and the pile stayed put")
+        assertTrue(h.has<MatEvent.LiftedSet>(), "three fingers swept and nothing moved")
         assertEquals(at(100f, 300f), h.last<MatEvent.Dropped>().at)
     }
 
@@ -324,69 +324,40 @@ class MatThreeFingerTest {
     }
 
     @Test
-    fun theFingerLeftCarryingThePileGoesOnCarryingIt() {
-        // The same lift out of the same three contacts, with a stack in the air
-        // instead of a card. A pile is held by the pan of both fingers, so
-        // either of them can go on carrying it — and the grace window, which is
-        // there to find out what an unfinished gesture meant, had nothing to
-        // find out and killed this one a seventh of a second in. Which of the
-        // two fingers happened to lift first was all that decided it.
+    fun aSetDragLandsWhenItsOwnFingerLiftsRatherThanChangingHands() {
+        // The same lift out of the same three contacts, with a card being *set*
+        // instead of carried by one finger. Two fingers that start together are
+        // a set now, and a set is a `DRAG_CARD` — so it obeys that phase's rule
+        // and lands where the primary finger let go.
+        //
+        // This test used to assert the opposite, because a two-finger pan was a
+        // pile drag: the pile was held by the pan of *both* fingers, so either
+        // could go on carrying it, and the grace window killed it a seventh of a
+        // second in. That exemption goes with the gesture. Handing a set over to
+        // the survivor would teleport the card by however far apart the two
+        // fingers are — a hundred mat pixels here — which is the exact hazard
+        // `DRAG_CARD` lands the card to avoid.
         val h = hand()
         h.frame(1L to at(100f, 200f))
         h.frame(1L to at(100f, 200f), 2L to at(200f, 200f))
         h.frame(1L to at(100f, 200f), 2L to at(200f, 200f), 3L to at(600f, 600f))
         h.frame(1L to at(100f, 260f), 2L to at(200f, 260f), 3L to at(600f, 600f))
-        assertEquals(MatPhase.DRAG_STACK, h.machine.phase)
+        assertEquals(MatPhase.DRAG_CARD, h.machine.phase)
+        assertTrue(h.has<MatEvent.LiftedSet>(), "two fingers panning did not set the card")
 
         h.frame(2L to at(200f, 320f), 3L to at(600f, 600f))
-        h.frame(2L to at(200f, 380f), 3L to at(600f, 600f), after = limits.releaseGraceMillis + 16L)
-        h.tick(limits.releaseGraceMillis + 16L)
-
-        assertFalse(h.has<MatEvent.Dropped>(), "the pile landed while a finger was still moving it")
-        assertEquals(MatPhase.DRAG_STACK, h.machine.phase)
-        assertEquals(at(100f, 380f), h.machine.focus, "the pile stopped following the finger")
-
-        // And it still lands where that finger let go of it, with the third
-        // contact left on the glass throughout.
-        h.frame(3L to at(600f, 600f))
-        assertEquals(at(100f, 380f), h.last<MatEvent.Dropped>().at)
-    }
-
-    @Test
-    fun aHandLandingMidDragCannotTakeThePileOffTheFingerCarryingIt() {
-        // The hole the rule above would otherwise leave open. A pile is allowed
-        // to outlive one of the two fingers that lifted it, on the understanding
-        // that whatever is left is the other one — and nothing was making that
-        // true. A hand coming down afterwards dropped into the empty slot, so
-        // when the last real finger lifted there was still a survivor and the
-        // drag went on: a pile following a motionless palm, with no window left
-        // open that could ever end it and the whole mat consuming pointers.
-        val h = hand()
-        h.frame(1L to at(100f, 200f))
-        h.frame(1L to at(100f, 200f), 2L to at(200f, 200f))
-        h.frame(1L to at(100f, 260f), 2L to at(200f, 260f))
-        assertEquals(MatPhase.DRAG_STACK, h.machine.phase)
-
-        // One of the two lifts, and the other keeps the pile. That much is right.
-        h.frame(1L to at(100f, 320f))
-        assertEquals(MatPhase.DRAG_STACK, h.machine.phase)
-
-        // Then a hand comes down. It is not the second finger of anything.
-        h.frame(1L to at(100f, 380f), 3L to at(600f, 600f))
-        h.frame(3L to at(600f, 600f))
-        h.tick(limits.releaseGraceMillis * 4L)
 
         assertEquals(
-            at(100f, 380f),
+            at(100f, 260f),
             h.last<MatEvent.Dropped>().at,
-            "the pile did not land where the finger carrying it let go",
+            "the card did not land where the finger holding it let go",
         )
         assertEquals(MatPhase.IDLE, h.machine.phase)
 
-        // And what is left on the glass owns nothing.
+        // And what is left on the glass owns nothing, third contact included.
         val settled = h.events.size
-        h.frame(3L to at(600f, 660f))
-        assertEquals(settled, h.events.size, "the hand left on the mat went on moving the pile")
+        h.frame(2L to at(200f, 380f), 3L to at(600f, 660f))
+        assertEquals(settled, h.events.size, "the hand left on the mat went on dragging")
     }
 
     @Test

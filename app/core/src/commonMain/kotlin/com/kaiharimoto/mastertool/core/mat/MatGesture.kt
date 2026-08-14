@@ -61,7 +61,6 @@ enum class MatPhase {
     PEEK,
     DRAG_CARD,
     TWO_UNDECIDED,
-    DRAG_STACK,
     TWIST,
     MENU,
 
@@ -100,7 +99,39 @@ sealed interface MatEvent {
     data object PeekEnded : MatEvent
 
     data class LiftedCard(val at: Vec2) : MatEvent
-    data class LiftedStack(val at: Vec2) : MatEvent
+
+    /**
+     * Picked up with two fingers, which means it is going down face-down.
+     *
+     * Setting a card is one motion in the hand — you turn it over on the way
+     * down rather than putting it down and flipping it — and this is that
+     * motion. It replaced the two-finger *pile* drag, at kai's word, and the
+     * trade is worth writing down: taking a whole stack with two fingers was a
+     * gesture for a thing that happens a few times a game, and setting is a
+     * thing that happens a few times a *turn*. The pile kept the pointer idiom
+     * it always had (shift and drag) and gained a menu item; setting had only
+     * the two-finger tap, which requires the card to already be in the air.
+     *
+     * Distinct from [LiftedCard] rather than a flag on it, because the host does
+     * two things with it and one of them is not about lifting at all: the card
+     * turns over in the air, and *how it lands* stops being a question about the
+     * gesture and becomes a question about where it is dropped.
+     *
+     * ## What it cost, which was nothing
+     *
+     * `LiftedStack` went with the phase behind it, and so did `stackModifier`
+     * and the shift-drag that set it. All three claimed to take the whole pile
+     * rather than the card on top, and all three were the same drag the table
+     * already did: `PlayField.moveOnMat` slides *a card and its pile*, so one
+     * finger has always moved a whole stack, and out of a real pile the commit
+     * takes the one card at the drag's index whatever the gesture said. The flag
+     * they set — `Carry.whole` — was written at three call sites and read at
+     * none. A third of the two-finger vocabulary was spent on a distinction that
+     * did not exist, which is why kai could trade it for the set and lose
+     * nothing at all.
+     */
+    data class LiftedSet(val at: Vec2) : MatEvent
+
     data class Moved(val at: Vec2, val delta: Vec2, val velocity: Vec2) : MatEvent
     data class Dropped(val at: Vec2, val velocity: Vec2) : MatEvent
 

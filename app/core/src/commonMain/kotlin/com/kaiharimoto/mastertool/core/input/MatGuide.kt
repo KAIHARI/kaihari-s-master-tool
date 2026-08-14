@@ -104,8 +104,8 @@ object MatGuide {
         Gesture(
             GestureGroup.MOVING,
             what = "Take a whole stack with you",
-            touch = "Two fingers, drag the stack",
-            pointer = "Shift and drag",
+            touch = "Drag the top card — what is under it comes too",
+            pointer = "Drag the top card — what is under it comes too",
         ),
         Gesture(
             GestureGroup.MOVING,
@@ -168,7 +168,19 @@ object MatGuide {
         // ---- turning ---------------------------------------------------------
         Gesture(
             GestureGroup.TURNING,
-            what = "Turn a card face-down, or set it on the way down",
+            what = "Set a card face-down",
+            touch = "Drag it with two fingers",
+            pointer = "Right-click it, then Turn over",
+        ),
+        Gesture(
+            GestureGroup.TURNING,
+            what = "Turn a card that is already in the air face-down",
+            touch = "Tap a second finger while you carry it",
+            pointer = "Right-click it, then Turn over",
+        ),
+        Gesture(
+            GestureGroup.TURNING,
+            what = "Turn a card face-down where it lies",
             touch = "Two-finger tap",
             pointer = "Right-click it, then Turn over",
         ),

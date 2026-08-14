@@ -12,7 +12,6 @@ import androidx.compose.ui.input.pointer.isAltPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isTertiaryPressed
-import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import com.kaiharimoto.mastertool.core.board.DragOrigin
 import com.kaiharimoto.mastertool.core.board.DropCommit
@@ -630,12 +629,6 @@ internal fun MatInput(
                             continue
                         }
 
-                        // Shift takes the whole pile rather than the top card:
-                        // the pointer idiom for the two-finger drag, and the one
-                        // the arbiter has always been able to act on and never
-                        // once been told about.
-                        machine.stackModifier = event.keyboardModifiers.isShiftPressed
-
                         fun onFelt(change: PointerInputChange): Touch {
                             // Held below the horizon on the way in. Past about
                             // seventy degrees of pitch the table's horizon is on
@@ -826,20 +819,27 @@ private fun handle(
         is MatEvent.LiftedCard -> {
             grabbed?.let {
                 play.lift(
-                    it, mat(event.at), layout, whole = false,
+                    it, mat(event.at), layout,
                     cameOutOf = fanSlotOf(play, layout, it, fanPlane, fanLift),
                 )
                 feedback.play(SoundEffect.LIFT, Haptic.LIFT)
             }
         }
 
-        is MatEvent.LiftedStack -> {
+        // Two fingers: the card comes up already turned over, and how it lands
+        // is decided by where it lands — sideways in a monster zone, upright in
+        // a spell/trap one, and by the card's own kind anywhere else. Turning it
+        // over *now* rather than after it lands is the whole point of setting
+        // being one motion: putting it down face-up first would show the table
+        // the one card the player meant to hide.
+        is MatEvent.LiftedSet -> {
             grabbed?.let {
                 play.lift(
-                    it, mat(event.at), layout, whole = true,
+                    it, mat(event.at), layout,
                     cameOutOf = fanSlotOf(play, layout, it, fanPlane, fanLift),
+                    faceDown = true,
                 )
-                feedback.play(SoundEffect.LIFT, Haptic.LIFT)
+                feedback.play(SoundEffect.SLIDE, Haptic.FLIP)
             }
         }
 

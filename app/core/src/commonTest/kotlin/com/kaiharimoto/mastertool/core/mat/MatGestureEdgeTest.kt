@@ -53,7 +53,15 @@ class MatGestureEdgeTest {
         h.frame(1L to at(100f, 190f), 2L to at(200f, 190f))
         h.frame(1L to at(100f, 240f), 2L to at(200f, 240f))
 
-        assertFalse(h.has<MatEvent.LiftedStack>(), "a carried drag became a stack drag")
+        // It must not become a *set* either, which is what two fingers mean
+        // when they start together. `carried` is the whole difference: a second
+        // finger arriving mid-carry came along to steady the tablet.
+        assertFalse(h.has<MatEvent.LiftedSet>(), "a carried drag turned the card over")
+        assertEquals(
+            1,
+            h.events.filterIsInstance<MatEvent.LiftedCard>().size,
+            "the card was picked up twice",
+        )
     }
 
     @Test

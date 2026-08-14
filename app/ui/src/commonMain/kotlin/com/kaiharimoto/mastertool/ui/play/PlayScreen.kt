@@ -80,6 +80,7 @@ import com.kaiharimoto.mastertool.core.layout.StageSeat
 import com.kaiharimoto.mastertool.core.layout.planeFor
 import com.kaiharimoto.mastertool.core.mat.MatGestureMachine
 import com.kaiharimoto.mastertool.core.model.Card
+import com.kaiharimoto.mastertool.core.model.CardCategory
 import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.Settle
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
@@ -331,7 +332,13 @@ fun PlayScreen(
 ) {
     val deck = state.deck
     val play = remember(deck.main, deck.extra, seed) {
-        PlayState(deck.main, deck.extra, seed ?: Random.nextLong())
+        PlayState(deck.main, deck.extra, seed ?: Random.nextLong()) { id ->
+            // The one question the table asks about a card's identity: which way
+            // up a set copy of it lies. Null for a passcode the index has never
+            // heard of, which `SetPosition` answers as a spell rather than by
+            // guessing at a defence position for a card it cannot name.
+            state.index.byId(id)?.category?.let { it == CardCategory.MONSTER }
+        }
     }
     val cards = remember(deck.main, deck.extra) { mutableMapOf<Int, StageCard>() }
     val machine = remember(deck.main, deck.extra) { MatGestureMachine() }
@@ -1183,7 +1190,10 @@ private fun seatsFor(
                 } else {
                     CardSolid.pileDepth(placed.depth, cardWidth)
                 },
-                turned = placed.turned || (carrying && carry.quarterTurns % 2 != 0),
+                // The carry's own solved position, not its raw twist: a card
+                // being *set* lies sideways because it is a monster going
+                // into a monster zone, and nobody twisted anything to say so.
+                turned = if (carrying) carry.turned else placed.turned,
                 faceUp = faceUp,
                 landing = if (carrying) {
                     Settle.Landing.Square
@@ -1230,7 +1240,7 @@ private fun seatsFor(
                 } else {
                     handLiftOf(cardHeight, CardSolid.pileDepth(1, cardWidth), tune.hand)
                 },
-                turned = carrying && carry.quarterTurns % 2 != 0,
+                turned = carrying && carry.turned,
                 faceUp = faceUp,
                 lean = if (carrying) 0f else tune.hand.leanDegrees,
                 landing = if (carrying) {
@@ -1316,7 +1326,7 @@ private fun seatsFor(
             seats += Seat(
                 id = card.instanceId,
                 card = card,
-                pose = poseAt(carry.at, cardHeight * carryLift, carry.quarterTurns % 2 != 0, faceUp),
+                pose = poseAt(carry.at, cardHeight * carryLift, carry.turned, faceUp),
                 faceUp = faceUp,
                 carried = true,
                 pinned = true,

@@ -80,8 +80,8 @@ class MatCameraGestureTest {
     @Test
     fun aSecondFingerDoesNotSendTheCameraOffToDecideBetweenATwistAndAPile() {
         // The bug this guards is silent rather than loud: without CAMERA on the
-        // hadTwo list the pinch would arrive as TWO_UNDECIDED, lock into a pile
-        // drag against a pile that does not exist, and the table would simply
+        // hadTwo list the pinch would arrive as TWO_UNDECIDED, lock into a set
+        // against a card that is not there, and the table would simply
         // stop responding to the second finger.
         val h = hand()
         h.pressOnFelt(at(400f, 400f))
@@ -89,7 +89,7 @@ class MatCameraGestureTest {
         h.frame(1L to at(340f, 400f), 2L to at(660f, 400f))
 
         assertEquals(MatPhase.CAMERA, h.machine.phase)
-        assertFalse(h.has<MatEvent.LiftedStack>())
+        assertFalse(h.has<MatEvent.LiftedSet>())
         assertFalse(h.has<MatEvent.Twisting>())
     }
 

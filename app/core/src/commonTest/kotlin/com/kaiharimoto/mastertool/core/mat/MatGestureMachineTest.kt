@@ -172,15 +172,39 @@ class MatGestureMachineTest {
     }
 
     @Test
-    fun twoFingersPanningTakesTheWholeStack() {
+    fun twoFingersPanningSetsTheCardFaceDown() {
+        // kai's trade, and it cost nothing. This used to take the whole pile —
+        // a gesture that did exactly what one finger already did, because
+        // `PlayField.moveOnMat` slides a card *and its pile*, and the flag it
+        // set was written at three call sites and read at none. Setting a card
+        // happens several times a turn; taking a stack somewhere a plain drag
+        // could not reach happens never.
         val h = hand()
         h.frame(1L to at(100f, 100f))
         h.frame(1L to at(100f, 100f), 2L to at(180f, 100f))
         val far = limits.touchSlop * limits.stackSlopFactor + 20f
         h.frame(1L to at(100f + far, 100f), 2L to at(180f + far, 100f))
 
-        assertTrue(h.has<MatEvent.LiftedStack>())
-        assertEquals(MatPhase.DRAG_STACK, h.machine.phase)
+        assertTrue(h.has<MatEvent.LiftedSet>())
+        assertEquals(MatPhase.DRAG_CARD, h.machine.phase)
+    }
+
+    @Test
+    fun aSetIsPickedUpOnceAndFollowsTheFingerThatStartedIt() {
+        // The lift is `LiftedSet` *instead of* `LiftedCard`, not as well as —
+        // two lifts would put the card in the air twice — and from the frame it
+        // locks the card sits under the primary finger. Left on the accumulated
+        // centroid it would jump by however far the two fingers had diverged,
+        // once, on the frame after the gesture locked.
+        val h = hand()
+        h.frame(1L to at(100f, 100f))
+        h.frame(1L to at(100f, 100f), 2L to at(180f, 100f))
+        val far = limits.touchSlop * limits.stackSlopFactor + 20f
+        h.frame(1L to at(100f + far, 100f), 2L to at(180f + far, 100f))
+
+        assertEquals(1, h.count<MatEvent.LiftedSet>())
+        assertEquals(0, h.count<MatEvent.LiftedCard>())
+        assertEquals(at(100f + far, 100f), h.machine.focus)
     }
 
     @Test
@@ -219,7 +243,7 @@ class MatGestureMachineTest {
         // Now drag both fingers a long way; it must stay a twist.
         h.frame(1L to at(400f, 400f), 2L to at(440f, 490f))
         assertEquals(MatPhase.TWIST, h.machine.phase)
-        assertFalse(h.has<MatEvent.LiftedStack>())
+        assertFalse(h.has<MatEvent.LiftedSet>())
     }
 
     @Test
@@ -302,7 +326,7 @@ class MatGestureMachineTest {
         h.frame(1L to at(100f, 100f), 2L to at(200f, 100f), 3L to at(20f, 20f))
 
         assertEquals(phase, h.machine.phase)
-        assertFalse(h.has<MatEvent.LiftedStack>())
+        assertFalse(h.has<MatEvent.LiftedSet>())
     }
 
     // ---- the shape of a gesture ------------------------------------------------
@@ -345,7 +369,6 @@ class MatGestureMachineTest {
         assertFalse(MatPhase.PRESS.locked)
         assertFalse(MatPhase.TWO_UNDECIDED.locked)
         assertTrue(MatPhase.DRAG_CARD.locked)
-        assertTrue(MatPhase.DRAG_STACK.locked)
         assertTrue(MatPhase.TWIST.locked)
     }
 
@@ -403,16 +426,6 @@ class MatGestureMachineTest {
         assertTrue(second.filterIsInstance<MatEvent.Detent>().isEmpty())
     }
 
-    @Test
-    fun shiftDragTakesTheStackTheWayTwoFingersDo() {
-        val h = hand()
-        h.machine.stackModifier = true
-        h.frame(1L to at(100f, 100f))
-        h.frame(1L to at(400f, 100f))
-
-        assertTrue(h.has<MatEvent.LiftedStack>())
-        assertFalse(h.has<MatEvent.LiftedCard>())
-    }
 
     // ---- velocity ------------------------------------------------------------------
 

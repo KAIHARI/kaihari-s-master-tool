@@ -48,10 +48,11 @@ private class VelocitySampler {
  *                  │                 │                        │        │
  *             hold │              up │                  twist │    pan │
  *                  ▼                 ▼                        ▼        ▼
- *                PEEK ──slop──▶ DRAG_CARD                  TWIST   DRAG_STACK
+ *                PEEK ──slop──▶ DRAG_CARD                  TWIST   DRAG_CARD
  *
  * PRESS ──2nd finger──▶ TWO_UNDECIDED ──held──▶ MENU
- *                              └──up before the hold──▶ Flipped
+ *                              │  └──up before the hold──▶ Flipped
+ *                              └──pan──▶ DRAG_CARD, and set face-down
  * ```
  */
 class MatGestureMachine(private val limits: GestureThresholds = GestureThresholds()) {
@@ -68,9 +69,6 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         private set
 
     val quarterTurns: Int get() = quarterTurnsOf(twist, limits.detentDegrees)
-
-    /** Set by the adapter from the keyboard modifiers: shift-drag takes the pile. */
-    var stackModifier: Boolean = false
 
     /**
      * The press landed on nothing, so this gesture belongs to the camera.
@@ -202,14 +200,13 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
             owned.isNotEmpty() && owned[0] !in here
         ) {
             when {
-                // The pile and the twist are held by both fingers together, so
-                // the survivor is already carrying them: it keeps them, and no
-                // window opens. The twist says so out loud a few lines below by
-                // committing the turn and handing the card over. A pinch is the
-                // same shape — both fingers are moving the camera, so either of
-                // them may go on doing it alone as an orbit.
-                phase == MatPhase.DRAG_STACK || phase == MatPhase.TWIST ||
-                    phase == MatPhase.CAMERA -> Unit
+                // The twist is held by both fingers together, so the survivor is
+                // already carrying it: it keeps it, and no window opens. It says
+                // so out loud a few lines below by committing the turn and
+                // handing the card over. A pinch is the same shape — both
+                // fingers are moving the camera, so either of them may go on
+                // doing it alone as an orbit.
+                phase == MatPhase.TWIST || phase == MatPhase.CAMERA -> Unit
                 // A carried card is held by the one finger that picked it up,
                 // and that finger has let go. The other came along to steady
                 // the tablet and never held the card, so handing over would
@@ -239,16 +236,16 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
             if (touch.id in owned) continue
             // A two-finger gesture that has already decided what it is keeps the
             // two fingers it decided with. This is the other half of the rule a
-            // few lines above, and without it that rule has a hole: the pile and
-            // the twist are exempt from the grace window *because* the survivor
-            // is one of the fingers that picked them up, and a hand landing
-            // afterwards would quietly become the other one. A pile then follows
-            // a resting palm with no timer left that can end it.
+            // few lines above, and without it that rule has a hole: the twist is
+            // exempt from the grace window *because* the survivor is one of the
+            // fingers that started it, and a hand landing afterwards would
+            // quietly become the other one. The twist would then follow a resting
+            // palm with no timer left that can end it.
             //
             // A carried card is deliberately not on this list. The second finger
-            // arriving mid-carry is the flip — it is how a card is set on the way
-            // down — so DRAG_CARD has to go on listening for one.
-            if (phase == MatPhase.DRAG_STACK || phase == MatPhase.TWIST) break
+            // arriving mid-carry is the flip — it is how a card already in the
+            // air is turned over — so DRAG_CARD has to go on listening for one.
+            if (phase == MatPhase.TWIST) break
             // A gesture only ever takes a finger that just landed. One already
             // resting when the last gesture ended is furniture — and so is one
             // resting through this one, which is what the guard used to miss by
@@ -279,8 +276,7 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         // thing it already is; without it the second finger of a pinch would
         // send the gesture off to decide between a twist and a pile drag.
         val hadTwo = phase == MatPhase.TWO_UNDECIDED || phase == MatPhase.TWIST ||
-            phase == MatPhase.DRAG_STACK || phase == MatPhase.MENU ||
-            phase == MatPhase.CAMERA
+            phase == MatPhase.MENU || phase == MatPhase.CAMERA
 
         if (phase == MatPhase.IDLE) {
             phase = MatPhase.PRESS
@@ -307,11 +303,7 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
                 if ((fingers[0] - pressPoint).length > limits.touchSlop) {
                     phase = MatPhase.DRAG_CARD
                     holdStill(focus, frame.timeMillis)
-                    events += if (stackModifier) {
-                        MatEvent.LiftedStack(focus)
-                    } else {
-                        MatEvent.LiftedCard(focus)
-                    }
+                    events += MatEvent.LiftedCard(focus)
                     events += MatEvent.Moved(focus, moved, speed.value)
                 }
             }
@@ -348,24 +340,24 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
                         events += MatEvent.Twisting(twist, detent)
                     }
                     pan.length > limits.touchSlop * limits.stackSlopFactor -> {
-                        if (carried) {
-                            // The second finger only came along to steady the
-                            // tablet. Carry on with the card that was already
-                            // in the air rather than grabbing the whole pile.
-                            phase = MatPhase.DRAG_CARD
-                            holdStill(focus, frame.timeMillis)
-                        } else {
-                            phase = MatPhase.DRAG_STACK
-                            events += MatEvent.LiftedStack(focus)
-                        }
+                        // Both branches end in DRAG_CARD now, and they still are
+                        // not the same thing. `carried` is a second finger that
+                        // arrived to steady the tablet **during** a drag, and it
+                        // must change nothing at all; two fingers that started
+                        // together are a set, and the card turns over in the air.
+                        //
+                        // Onto the primary finger on the way in, because that is
+                        // what DRAG_CARD will read from the next frame onward.
+                        // Left on the accumulated centroid it would jump by
+                        // however far the two fingers had diverged, once, on the
+                        // frame after the gesture locked.
+                        phase = MatPhase.DRAG_CARD
+                        focus = fingers[0]
+                        holdStill(focus, frame.timeMillis)
+                        if (!carried) events += MatEvent.LiftedSet(focus)
                         events += MatEvent.Moved(focus, moved, speed.value)
                     }
                 }
-            }
-
-            MatPhase.DRAG_STACK -> {
-                focus += moved
-                events += MatEvent.Moved(focus, moved, speed.value)
             }
 
             MatPhase.TWIST -> {
@@ -546,7 +538,7 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
             else -> emptyList()
         }
         MatPhase.PEEK -> listOf(MatEvent.PeekEnded)
-        MatPhase.DRAG_CARD, MatPhase.DRAG_STACK -> listOf(MatEvent.Dropped(focus, speed.value))
+        MatPhase.DRAG_CARD -> listOf(MatEvent.Dropped(focus, speed.value))
         MatPhase.TWO_UNDECIDED -> when {
             carried -> listOf(MatEvent.Dropped(focus, speed.value))
             complete && contacts == 2 -> listOf(MatEvent.Flipped(focus))
@@ -610,7 +602,6 @@ class MatGestureMachine(private val limits: GestureThresholds = GestureThreshold
         passingContacts = 0
         carried = false
         orphanedAt = 0L
-        stackModifier = false
         speed.reset()
     }
 
