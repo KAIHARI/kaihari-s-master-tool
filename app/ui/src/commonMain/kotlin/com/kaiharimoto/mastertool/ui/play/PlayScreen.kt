@@ -626,7 +626,10 @@ fun PlayScreen(
             // `tune` is in the key deliberately. A card knob that is not here does
             // nothing until the user next touches the board, which reads as the
             // slider being broken rather than as a missing key.
-            val seats = remember(play.field, layout, play.carry, play.peeking, play.fanned, tune) {
+            val seats = remember(
+                play.field, layout, play.carry, play.peeking, play.fanned,
+                play.declared, tune,
+            ) {
                 // The camera is read as a plain field, not as observable state:
                 // this must not re-run sixty times a second while the table is
                 // turning. The cost is that a card already held up does not
@@ -638,6 +641,7 @@ fun PlayScreen(
                     carry = play.carry,
                     peeking = play.peeking,
                     fanned = play.fanned,
+                    declared = play.declared?.id,
                     facingReader = Rot3.facingViewer(
                         camera.pose.pitchDegrees,
                         camera.pose.yawDegrees,
@@ -724,6 +728,19 @@ fun PlayScreen(
                 LaunchedEffect(said) {
                     delay(ANNOUNCEMENT_MILLIS)
                     if (play.announcement == said) play.announcement = null
+                }
+            }
+
+            // A declaration says the card's *name*, which is the whole content
+            // of "I am using this" and the one thing the sound cannot carry.
+            // Keyed on the count rather than on the card, so declaring the same
+            // card twice in a chain is two announcements — which is exactly what
+            // a chain is, and what a bare id could never have shown.
+            play.declared?.let { said ->
+                LaunchedEffect(said.count) {
+                    play.announcement = state.index.byId(said.cardId)?.name
+                    delay(DECLARE_MILLIS)
+                    if (play.declared?.count == said.count) play.clearDeclaration()
                 }
             }
 
@@ -1160,6 +1177,17 @@ private fun seatsFor(
     /** What has been spread out to be searched, if anything. */
     fanned: DragOrigin? = null,
     /**
+     * The instance whose effect was just declared, which rises a little.
+     *
+     * A bump rather than a glow, because the stage's poses are already springs:
+     * setting a card's z and taking it away again a third of a second later is
+     * a whole animation, costs one field, and reads as the card being picked out
+     * of the row the way a hand lifts the card it is talking about. A glow would
+     * be a decoration with a timer behind it, which is the handbook's first
+     * anti-pattern and a second clock to keep in step.
+     */
+    declared: Int? = null,
+    /**
      * The three angles that, inside the mat's own layer, come out square to the
      * viewer. Passed in rather than computed here because it is a fact about
      * where the camera is, and this function is about where the cards are.
@@ -1220,7 +1248,8 @@ private fun seatsFor(
                 z = if (carrying) {
                     cardHeight * carryLift
                 } else {
-                    CardSolid.pileDepth(placed.depth, cardWidth)
+                    CardSolid.pileDepth(placed.depth, cardWidth) +
+                        if (placed.id == declared) cardHeight * DECLARE_LIFT else 0f
                 },
                 // The carry's own solved position, not its raw twist: a card
                 // being *set* lies sideways because it is a monster going
@@ -1270,7 +1299,8 @@ private fun seatsFor(
                 z = if (carrying) {
                     cardHeight * handLift
                 } else {
-                    handLiftOf(cardHeight, CardSolid.pileDepth(1, cardWidth), tune.hand)
+                    handLiftOf(cardHeight, CardSolid.pileDepth(1, cardWidth), tune.hand) +
+                        if (card.instanceId == declared) cardHeight * DECLARE_LIFT else 0f
                 },
                 turned = carrying && carry.turned,
                 faceUp = faceUp,
@@ -1473,6 +1503,19 @@ private fun seatIdOf(field: PlayField, origin: DragOrigin): Int? = when (origin)
  * coarse a bucket as the one it replaced.
  */
 private const val DEPTH_QUANTUM = 0.006f
+
+/**
+ * How far a declared card rises, as a share of its own height.
+ *
+ * A fifth, which at the table seat is a few pixels of screen once `sin(tilt)`
+ * has taken its cut — the exchange rate every height on this stage pays. Enough
+ * that the card separates from the row and its shadow moves; not so much that a
+ * board of declarations looks like it is coming apart.
+ */
+private const val DECLARE_LIFT = 0.2f
+
+/** How long the card stays up. Long enough to see, short enough to keep tapping through. */
+private const val DECLARE_MILLIS = 420L
 
 /** Quantised so a small wobble cannot reshuffle the whole paint order. */
 private fun quantised(depth: Float, quantum: Float): Int =

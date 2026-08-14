@@ -40,10 +40,18 @@ class HapticsTest {
 
     @Test
     fun theDetentIsTheSharpestThingOnTheTable() {
-        // It is the only haptic reporting a boundary rather than a contact,
-        // and a boundary you can feel is what makes the twist doable blind.
+        // It reports a *boundary*, and a boundary you can feel is what makes the
+        // twist doable blind — which is the argument for it being the sharpest
+        // and shortest thing here, and the argument for holding it there.
+        //
+        // It is no longer the only non-contact: DECLARE is one too, and shares
+        // the reasoning for being crisp. It is deliberately kept under this one
+        // on both counts, because a declaration is something you did on purpose
+        // and are watching happen, where a detent is felt while you are looking
+        // somewhere else.
         assertEquals(Haptic.DETENT, Haptic.entries.maxBy { it.crispness })
         assertEquals(Haptic.DETENT, Haptic.entries.minBy { it.pattern.totalMillis })
+        assertTrue(Haptic.DECLARE.crispness < Haptic.DETENT.crispness)
     }
 
     @Test

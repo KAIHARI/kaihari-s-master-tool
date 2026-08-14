@@ -35,6 +35,15 @@ enum class GestureGroup(val heading: String) {
     CAMERA("Looking around"),
     MOVING("Moving cards"),
     TURNING("Turning cards"),
+    /**
+     * Saying things rather than moving things.
+     *
+     * One entry, and it earns a heading of its own rather than sitting under
+     * "Moving cards": declaring an effect is the only gesture on this table that
+     * changes nothing at all about where the cards are. Filed under moving, it
+     * would read as a move that had failed.
+     */
+    PLAYING("Playing"),
     READING("Reading the board"),
 }
 
@@ -122,8 +131,8 @@ object MatGuide {
         Gesture(
             GestureGroup.MOVING,
             what = "Bring a buried card back to the top",
-            touch = "Tap it",
-            pointer = "Click it",
+            touch = "Two fingers, hold, then Bring to front",
+            pointer = "Right-click it, then Bring to front",
         ),
         Gesture(
             GestureGroup.MOVING,
@@ -189,6 +198,14 @@ object MatGuide {
             what = "Turn a card to defence",
             touch = "Two fingers, twist",
             pointer = "Right-click it, then Rotate",
+        ),
+
+        // ---- saying things ---------------------------------------------------
+        Gesture(
+            GestureGroup.PLAYING,
+            what = "Declare a card's effect",
+            touch = "Tap it, on the field or in your hand",
+            pointer = "Click it, on the field or in your hand",
         ),
 
         // ---- reading ---------------------------------------------------------

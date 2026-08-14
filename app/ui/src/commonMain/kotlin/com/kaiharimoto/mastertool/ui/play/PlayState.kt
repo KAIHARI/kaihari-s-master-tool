@@ -61,6 +61,17 @@ data class Carry(
 }
 
 /**
+ * A card's effect being announced.
+ *
+ * [count] is a running number rather than a timestamp, and that is deliberate:
+ * a clock in state that the renderer keys off is a clock two runs of `:studio`
+ * disagree about, and the whole claim of that tool is that they do not. What the
+ * stage needs is only "is this a *new* declaration", and a counter answers that
+ * exactly, at no cost, from inside a pure value.
+ */
+data class Declaration(val id: Int, val cardId: CardId, val count: Int)
+
+/**
  * A freeform table being played on.
  *
  * All the rules about what is physically possible live in [PlayField], and all
@@ -105,6 +116,45 @@ class PlayState(
 
     fun peek(at: DragOrigin?) {
         peeking = at
+    }
+
+    /**
+     * The card whose effect was just declared, and when.
+     *
+     * "I am using this" — the thing you say out loud across a table, and the one
+     * thing this stage had no way to say at all. Not a [move]: nothing about the
+     * board changed, so it must not land on the undo stack, exactly as [peeking]
+     * and [fanned] do not. Undoing a declaration would be undoing having spoken.
+     *
+     * The stamp is what makes declaring the *same* card twice in a row visible.
+     * A declaration is a moment rather than a state, and combo lines are full of
+     * a card being used, chained to, and used again; without a counter the
+     * second one would set the same value, change nothing, and the table would
+     * silently answer only the first.
+     */
+    var declared by mutableStateOf<Declaration?>(null)
+        private set
+
+    /**
+     * Says a card's effect out loud, and whether there was a card to say it about.
+     *
+     * False when the origin names nothing — a gesture is a memory of what the
+     * press landed on and the board can change underneath it — so the caller
+     * knows whether to make a sound.
+     */
+    fun declare(what: DragOrigin): Boolean {
+        val card = field.cardAt(what) ?: return false
+        declared = Declaration(
+            id = card.instanceId,
+            cardId = card.cardId,
+            count = (declared?.count ?: 0) + 1,
+        )
+        return true
+    }
+
+    /** Puts the declared card back down, once the table has finished saying so. */
+    fun clearDeclaration() {
+        declared = null
     }
 
     /**

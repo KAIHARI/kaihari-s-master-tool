@@ -805,9 +805,16 @@ private fun handle(
 
                 // A card on the mat with anything under it is a stack, and a
                 // stack is searched exactly like a pile — which is the whole of
-                // what makes an Xyz monster's materials reachable. A card with
-                // nothing under it has nothing to spread, so it does the one
-                // thing a tap has always done to a card: comes to the top.
+                // what makes an Xyz monster's materials reachable.
+                //
+                // A card with nothing under it has nothing to spread, and it
+                // **declares** — "I am using this", the thing you say out loud
+                // across a table and the one thing this stage had no way to say
+                // at all. It used to bring the card to the front, which is a
+                // paint-order fix rather than a move and now lives in the menu
+                // where the other housekeeping is. Declaring is not a `move`:
+                // nothing about the board changed, so it must not land on the
+                // undo stack, for the same reason a peek and a search do not.
                 is DragOrigin.Mat ->
                     if (play.fanned == what) {
                         // Its own spread is open, and the card is still sitting
@@ -817,13 +824,21 @@ private fun handle(
                     } else if (play.field.under(what.id).size > 1) {
                         play.fan(what)
                         feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
-                    } else if (play.move { it.bringToFront(what.id) }) {
-                        feedback.play(SoundEffect.LIFT, Haptic.LIFT)
+                    } else if (play.declare(what)) {
+                        feedback.play(SoundEffect.DECLARE, Haptic.DECLARE)
                     }
+
+                // A card in your hand declares too — you activate out of hand
+                // constantly, and a tap there did nothing whatsoever before.
+                is DragOrigin.Hand ->
+                    if (play.declare(what)) feedback.play(SoundEffect.DECLARE, Haptic.DECLARE)
 
                 is DragOrigin.Buried -> takeFromFan(play, what, feedback)
 
-                else -> Unit
+                // Nothing under the finger. The felt's own tap — closing an open
+                // fan — is handled in `MatPilot`, which is where the shuffle
+                // marks are answered too.
+                null -> Unit
             }
         }
 

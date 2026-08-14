@@ -22,6 +22,18 @@ enum class SoundEffect(val path: String) {
     SLIDE("files/sounds/slide.wav"),
     SHUFFLE("files/sounds/shuffle.wav"),
     DEAL("files/sounds/deal.wav"),
+
+    /**
+     * A card's effect being announced — the one sound here that is not a contact.
+     *
+     * Every other effect on this table is something touching something: a card
+     * leaving a pile, a card landing, a deck riffled. A declaration is not; you
+     * said something. So it is the only one with a pitch relationship in it — a
+     * fifth struck with the root and decaying twice as fast, which is a bell's
+     * behaviour and what keeps two notes from reading as two events. See
+     * `tools/sounds/make_declare.py`.
+     */
+    DECLARE("files/sounds/declare.wav"),
 }
 
 interface SoundPlayer {

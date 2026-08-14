@@ -163,6 +163,28 @@ enum class Haptic(
         crispness = 0.15f,
         pattern = HapticPattern.single(0.28f, 24),
     ),
+
+    /**
+     * Announcing a card's effect.
+     *
+     * Sharp like [DETENT] and half its strength, because this is the second
+     * thing in the set that is not a contact — nothing touched anything, you
+     * said something — and the two share the argument for being crisp: what a
+     * non-contact needs to say is *that it happened*, exactly, and a soft buzz
+     * says "something is going on". Weak because it fires on every tap of every
+     * card in a combo line, and a combo line is twenty taps in fifteen seconds.
+     *
+     * Strictly *under* [DETENT] on both counts, and a test holds it there. The
+     * detent has to stay the sharpest and shortest thing on the table because it
+     * is what makes a twist doable without looking — a boundary you feel while
+     * your eyes are elsewhere. A declaration is something you did on purpose and
+     * are watching happen, so it can afford a millisecond and a little softness.
+     */
+    DECLARE(
+        strength = 0.26f,
+        crispness = 0.92f,
+        pattern = HapticPattern.single(0.26f, 10),
+    ),
 }
 
 /**
