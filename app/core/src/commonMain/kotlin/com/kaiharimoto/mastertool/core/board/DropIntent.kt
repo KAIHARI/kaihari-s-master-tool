@@ -48,7 +48,10 @@ sealed interface DropIntent {
             Banish -> "Banish"
             Deck -> "Deck"
             ExtraDeck -> "Extra deck"
-            Cancel -> "Cancel"
+            // Said as the thing it does rather than as the thing it declines to
+            // do. It is now reachable on purpose — put a card back in the spread
+            // you took it out of — and "Cancel" describes a gesture failing.
+            Cancel -> "Put back"
         }
 }
 
@@ -111,6 +114,29 @@ object DropTargets {
     private const val PILE_LEAVE = 1.00f
 
     /**
+     * How near the gap it came out of a card must be dropped to go back into it.
+     *
+     * Half a card to claim it, seven eighths to lose it — the tightest catchment
+     * on the board, and deliberately so.
+     *
+     * The obvious rule was "anywhere inside the open fan", and it cannot be used:
+     * a spread is laid out over `layout.field`, which *is* the seven-by-three
+     * grid, so its footprint covers every zone and every pile on the table.
+     * "Inside the fan outranks the board" would mean that while a pile is open
+     * you cannot put a card down on the board at all — and putting a searched
+     * card straight onto the field is the commonest thing anybody does after
+     * finding it.
+     *
+     * So the question is asked about the one place in the spread that means
+     * something: the slot the card was taken *out* of. Dropping it back there is
+     * unmistakably "put it back", it cannot be arrived at by accident on the way
+     * anywhere else, and it leaves the rest of the fan's footprint behaving
+     * exactly as the board it is drawn over.
+     */
+    private const val PUT_BACK_ENTER = 0.50f
+    private const val PUT_BACK_LEAVE = 0.88f
+
+    /**
      * Where a card would land, given where the finger is.
      *
      * @param point the dragged card's centre, in mat fractions
@@ -120,6 +146,9 @@ object DropTargets {
      *   one the geometry cannot tell you
      * @param previous what was decided last frame, which is what makes the
      *   thresholds sticky
+     * @param cameOutOf where in an open spread this card was sitting before it
+     *   was picked up, on the felt — null unless the drag started in the fan
+     *   that is still open. Dropping it back there puts it back.
      */
     fun resolve(
         point: MatPoint,
@@ -128,11 +157,24 @@ object DropTargets {
         layout: BoardLayout,
         previous: DropIntent? = null,
         attaching: Boolean = false,
+        cameOutOf: MatPoint? = null,
     ): DropIntent {
         if (layout.cardWidth <= 0f) return DropIntent.Free(point)
 
         val px = layout.toPixels(point)
         val cardWidth = layout.cardWidth
+
+        // 0. Back into the gap it came out of, which outranks everything because
+        //    it is the smallest target on the table and the only one that is
+        //    about the card's own history rather than about where it is.
+        if (cameOutOf != null) {
+            val reach = cardWidth * threshold(
+                sticky = previous == DropIntent.Cancel,
+                enter = PUT_BACK_ENTER,
+                leave = PUT_BACK_LEAVE,
+            )
+            if (distance(px, layout.toPixels(cameOutOf)) <= reach) return DropIntent.Cancel
+        }
 
         // 1. The piles and the hand: unambiguous places you had to travel to.
         pileAt(px, layout, previous)?.let { return it }

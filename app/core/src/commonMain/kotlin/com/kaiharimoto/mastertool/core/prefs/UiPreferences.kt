@@ -148,6 +148,28 @@ data class UiPreferences(
      */
     val deskLight: DeskLight = DeskLight.AUTO,
     /**
+     * Whether fingers on the felt move the camera.
+     *
+     * Off, which is the one default here chosen against the feature it governs.
+     * *Fingers on a card move the card, fingers on the felt move the camera* is
+     * still the control scheme and the felt is still most of the screen — which
+     * is the problem: on a tablet held in two hands over a table you are playing
+     * on, a great deal of what lands on the felt is not a request to walk round
+     * the room. kai's report was simply "too many accidental touches", and every
+     * one of them moves the whole board.
+     *
+     * The camera does not go away when this is off. The three seat buttons are
+     * the touch idiom and were always the discoverable one; a mouse keeps the
+     * wheel and the middle-drag, both of which reach the camera without going
+     * through the arbiter at all. What is switched off is the surface that
+     * cannot tell a gesture from a resting hand.
+     *
+     * Stored preferences do not have this key, so **existing installs get the
+     * new default too** — which is deliberate, since they are the ones with the
+     * complaint, and it is the kind of surprise that belongs in a release note.
+     */
+    val cameraTouch: Boolean = false,
+    /**
      * Sound and haptic feedback. Null means "the platform's default" — on for
      * a tablet in the hands, off at a desk — until the user says otherwise.
      */

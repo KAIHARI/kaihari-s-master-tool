@@ -32,6 +32,17 @@ data class Carry(
     val faceDown: Boolean = false,
     /** Whether the whole pile is being carried rather than the top card. */
     val whole: Boolean = false,
+    /**
+     * Where this card was lying in the open spread it was taken out of, on the
+     * felt — null unless it came out of a fan that is still open.
+     *
+     * Fixed at the lift and not touched again, because it is a fact about where
+     * the card *was*. The screen works it out, since it is the half of the
+     * question that is projection: a spread floats above the felt, so the slot's
+     * own coordinates have to be flattened back down to the plane the finger is
+     * unprojected onto before the two can be compared at all.
+     */
+    val cameOutOf: MatPoint? = null,
 )
 
 /**
@@ -182,7 +193,13 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
     // ---- carrying a card ------------------------------------------------------
 
     /** Picks something up. The intent is resolved immediately so the indicator is never blank. */
-    fun lift(from: DragOrigin, at: MatPoint, layout: BoardLayout, whole: Boolean = false) {
+    fun lift(
+        from: DragOrigin,
+        at: MatPoint,
+        layout: BoardLayout,
+        whole: Boolean = false,
+        cameOutOf: MatPoint? = null,
+    ) {
         val id = when (from) {
             is DragOrigin.Mat -> from.id
             else -> NO_CARD
@@ -191,11 +208,15 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
             from = from,
             id = id,
             at = at,
+            // Deliberately without [cameOutOf]: on the frame a card is lifted it
+            // is still exactly where it came from, so passing it here would open
+            // every drag out of a spread already reading "Put back".
             intent = DropTargets.resolve(at, id.takeIf { it != NO_CARD }, field, layout, null),
             whole = whole,
             // Picked up as it lay. A set card slid across the mat is still set
             // when it lands, and only a deliberate turn changes that.
             faceDown = from is DragOrigin.Mat && field.placed(from.id)?.faceUp == false,
+            cameOutOf = cameOutOf,
         )
     }
 
@@ -212,6 +233,7 @@ class PlayState(main: List<CardId>, extra: List<CardId>, seed: Long = 1L) {
                 layout = layout,
                 previous = held.intent,
                 attaching = attaching,
+                cameOutOf = held.cameOutOf,
             ),
         )
     }

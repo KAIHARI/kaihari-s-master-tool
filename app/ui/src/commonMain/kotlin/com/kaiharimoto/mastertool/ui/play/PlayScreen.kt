@@ -395,6 +395,12 @@ fun PlayScreen(
     val scene = prefs.preferences.scene
     val deskLight = prefs.preferences.deskLight
 
+    // Whether the felt answers a finger at all. Read the same plain way, and
+    // handed to the pilot below rather than to the arbiter: what is under a
+    // finger is a question about the board, and so is whether the board is
+    // willing to be asked.
+    val cameraTouch = prefs.preferences.cameraTouch
+
     // The hour, re-read on a slow timer rather than watched. This is not an
     // idle animation — it is a preference that happens to have a clock behind
     // it — and a room that stayed in daylight because the app was already open
@@ -490,6 +496,8 @@ fun PlayScreen(
                 ShortcutAction.PLAY_SEAT_TABLE -> camera.sitAt(StageSeat.TABLE)
                 ShortcutAction.PLAY_SEAT_SEATED -> camera.sitAt(StageSeat.SEATED)
                 ShortcutAction.PLAY_SCENE -> cycleScene()
+                ShortcutAction.PLAY_CAMERA_TOUCH ->
+                    prefs.update { it.copy(cameraTouch = !it.cameraTouch) }
                 ShortcutAction.PLAY_GUIDE -> guide = !guide
                 // Outward one layer at a time, and the guide is the outermost
                 // thing over the table: Esc with it open should close it, not
@@ -725,6 +733,10 @@ fun PlayScreen(
                 // done nothing at all.
                 pilot.onMenu = { if (hasMenu(it)) menuFor = it }
                 pilot.camera = camera
+                // Refreshed here rather than captured, for the reason above and
+                // for one more: it is a preference, so it changes under a live
+                // arbiter every time the button on the bar is pressed.
+                pilot.cameraTouch = cameraTouch
             }
 
             // Where a card the stage has never seen before comes from. Placing
@@ -956,6 +968,8 @@ fun PlayScreen(
             onTuner = { tuner = !tuner },
             room = roomLabel(scene, deskLight),
             onRoom = cycleScene,
+            cameraTouch = cameraTouch,
+            onCameraTouch = { prefs.update { it.copy(cameraTouch = !it.cameraTouch) } },
         )
 
         if (readout) {
@@ -1928,6 +1942,9 @@ private fun PlayTopBar(
     onTuner: () -> Unit,
     room: String,
     onRoom: () -> Unit,
+    /** Whether the felt currently answers a finger — see `UiPreferences.cameraTouch`. */
+    cameraTouch: Boolean,
+    onCameraTouch: () -> Unit,
 ) {
     val feedback = LocalFeedback.current
 
@@ -2045,6 +2062,15 @@ private fun PlayTopBar(
         StageSeat.entries.forEach { seat ->
             BarButton(seat.label) { camera.sitAt(seat) }
         }
+        // Whether the felt answers a finger, in the seat group because it is a
+        // fact about the camera and this is where the camera lives on the bar.
+        //
+        // A latch rather than a menu item: it is the one setting on this screen
+        // somebody flips *mid-game*, when a hand resting on the tablet has just
+        // swung the board, and a thing you reach for in that moment cannot be
+        // two taps inside a dropdown. The glyph carries the state on its own —
+        // ⦿ is an open eye's worth of "the felt is live", ⦻ is it crossed out.
+        BarButton(if (cameraTouch) "Camera ⦿" else "Camera ⦻", onClick = onCameraTouch)
         // Beside the seats, because choosing a room and choosing where to sit
         // are the same kind of act — neither is about a card — and because one
         // button that cycles is what the theme setting already does with three
@@ -2090,8 +2116,14 @@ private fun PlayTopBar(
  * costs somebody the New hand button.
  *
  * A tablet in landscape is far past it and takes the arrangement that shipped.
+ *
+ * Raised by 84dp when the camera latch joined the seat group: "Camera ⦻" is nine
+ * characters at 11sp plus this bar's 18dp of horizontal padding and its 6dp gap.
+ * Anything added to this row has to pay the same toll — the alternative is that
+ * the last button silently falls off a phone, which is what this constant exists
+ * to have caught once already.
  */
-private val BAR_FITS_AT = 1180.dp
+private val BAR_FITS_AT = 1264.dp
 
 @Composable
 private fun Divider() {

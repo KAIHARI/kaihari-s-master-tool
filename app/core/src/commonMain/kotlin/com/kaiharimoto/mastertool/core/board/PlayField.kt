@@ -523,3 +523,20 @@ val DragOrigin.fanSource: DragOrigin
         is DragOrigin.Buried -> DragOrigin.Mat(under)
         is DragOrigin.Hand -> this
     }
+
+/**
+ * Whether a card taken from here came out of the spread that is currently open.
+ *
+ * One line, and it exists because the version written inline at the call site was
+ * `from.pile == fan` — a `BoardSlot` compared against a `DragOrigin`. Nothing in
+ * either type makes that a compile error, both are sealed interfaces and a class
+ * could in principle implement both, so it compiled and was **always false**: for
+ * three releases you could search your deck, drag a card out of the spread onto
+ * the board, and the deck stayed fanned across the table behind it.
+ *
+ * A named function in core is the difference between that and a red build, which
+ * is the whole argument for [fanSource] existing in the first place — "so two
+ * names for it compare equal" is no use to anybody if the comparison is written
+ * out by hand somewhere else.
+ */
+fun DragOrigin.cameFrom(fan: DragOrigin?): Boolean = fan != null && fanSource == fan

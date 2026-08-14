@@ -17,6 +17,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import com.kaiharimoto.mastertool.core.board.DragOrigin
 import com.kaiharimoto.mastertool.core.board.DropCommit
 import com.kaiharimoto.mastertool.core.board.DropIntent
+import com.kaiharimoto.mastertool.core.board.cameFrom
 import com.kaiharimoto.mastertool.core.board.fanCardAt
 import com.kaiharimoto.mastertool.core.board.fanSource
 import com.kaiharimoto.mastertool.core.board.MatPoint
@@ -120,6 +121,22 @@ internal class MatPilot(
     var camera: StageCameraState? = null
     var screenDelta: Vec2 = Vec2.Zero
     var spanRatio: Float = 1f
+
+    /**
+     * Whether the felt is allowed to claim a gesture at all.
+     *
+     * Refreshed by the screen rather than captured, exactly as [layout] and
+     * [tune] are, and for the same reason: this outlives any one composition.
+     *
+     * Switched off, the claim below simply is not made, and that is the whole
+     * implementation. A press on felt then stays in `MatPhase.PRESS` and dies
+     * where it stands: `LiftedCard` and `Moved` with nothing grabbed are already
+     * no-ops, and the one thing a felt press still does — a tap beside an open
+     * fan squaring the pile back up — is handled off `Tapped`, which a press
+     * claimed for the camera could never reach. So locking the camera does not
+     * cost the table a single other gesture; it gives one back.
+     */
+    var cameraTouch: Boolean = false
 
     /** What the press landed on. The one thing that has to survive both clocks. */
     private var grabbed: DragOrigin? = null
@@ -304,7 +321,7 @@ internal class MatPilot(
                 lastFlyMillis = frameMillis
                 pressedControl =
                     if (grabbed == null) MatControls.at(layout, event.at.x, event.at.y) else null
-                if (grabbed == null && pressedControl == null && !onFan(event.at)) {
+                if (cameraTouch && grabbed == null && pressedControl == null && !onFan(event.at)) {
                     machine.claimForCamera()
                 }
             }
@@ -806,14 +823,20 @@ private fun handle(
 
         is MatEvent.LiftedCard -> {
             grabbed?.let {
-                play.lift(it, mat(event.at), layout, whole = false)
+                play.lift(
+                    it, mat(event.at), layout, whole = false,
+                    cameOutOf = fanSlotOf(play, layout, it, fanPlane, fanLift),
+                )
                 feedback.play(SoundEffect.LIFT, Haptic.LIFT)
             }
         }
 
         is MatEvent.LiftedStack -> {
             grabbed?.let {
-                play.lift(it, mat(event.at), layout, whole = true)
+                play.lift(
+                    it, mat(event.at), layout, whole = true,
+                    cameOutOf = fanSlotOf(play, layout, it, fanPlane, fanLift),
+                )
                 feedback.play(SoundEffect.LIFT, Haptic.LIFT)
             }
         }
@@ -838,12 +861,30 @@ private fun handle(
             val onto = play.carry?.intent
             val stacked = onto is DropIntent.Stack || onto is DropIntent.Attach
             val from = play.carry?.from
+            // Put back in the gap it came out of. `release` runs anyway, because
+            // it is what lets go of the card; it simply commits nothing, which
+            // is what makes this the one drop that is exactly reversible. The
+            // sound is the card sliding home rather than landing, and the fan
+            // stays open, because nothing about the search has finished.
+            if (onto == DropIntent.Cancel) feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
             if (play.carry != null && play.release()) {
                 feedback.play(SoundEffect.SNAP, HapticScore.landing(stacked))
                 // You searched, you found it, you are done — and the deck gets
                 // shuffled on the way out, which is what `closeFan` is for.
-                if (from is DragOrigin.Pile && from.pile == play.fanned) {
-                    if (play.closeFan()) feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+                //
+                // Through `cameFrom` rather than by hand. This read
+                // `from.pile == play.fanned`, a `BoardSlot` against a
+                // `DragOrigin`, which compiles and is always false: the fan
+                // never closed on a drop at all, and only the tap route
+                // (`takeFromFan`) ever squared a pile back up. It also only ever
+                // asked about `Pile`, so a card dragged out of a spread *stack*
+                // was never going to close one either.
+                if (from != null && from.cameFrom(play.fanned)) {
+                    if (play.closeFan()) {
+                        feedback.play(SoundEffect.SHUFFLE, Haptic.SHUFFLE)
+                    } else {
+                        feedback.play(SoundEffect.SLIDE, Haptic.SLIDE)
+                    }
                 }
             }
         }
@@ -1006,6 +1047,49 @@ private fun whatIsUnder(
  */
 private fun fanOf(field: PlayField, layout: BoardLayout, what: DragOrigin): FanSpread =
     PileFan.spread(field.fanOf(what).size, layout.field, layout.cardWidth, layout.cardHeight)
+
+/**
+ * Where the card being picked up was lying in the open spread, **on the felt**.
+ *
+ * The gap it came out of, which is what "put it back" means. Null unless the
+ * drag started in the fan that is still open, which is the whole of when the
+ * question has an answer.
+ *
+ * The flatten is the load-bearing half. A spread floats at [lift] above the
+ * felt, so `PileFan`'s coordinates are the fan's own plane, while the carried
+ * card's position is a finger unprojected onto the felt — the same two places
+ * `StagePlane.raise` exists to reconcile at the hit test. This is the other
+ * direction of that same reconciliation: exact for a flat thing at one height,
+ * which a fanned card is, and the identity when nothing is floating.
+ *
+ * The index arithmetic is `fanCardAt` run backwards, and it has to be: a stack's
+ * spread leaves the card on top out of it, so every card in one is `Buried` at
+ * one more than its place in the fan. The top card of an open stack has no slot
+ * in the spread at all and gets null — dragging it away takes the whole pile,
+ * and there is nothing to put back into.
+ */
+private fun fanSlotOf(
+    play: PlayState,
+    layout: BoardLayout,
+    what: DragOrigin,
+    plane: StagePlane?,
+    lift: Float,
+): MatPoint? {
+    val fanned = play.fanned ?: return null
+    if (!what.cameFrom(fanned)) return null
+
+    val index = when (what) {
+        is DragOrigin.Pile -> what.index
+        is DragOrigin.Buried -> what.index - 1
+        is DragOrigin.Mat, is DragOrigin.Hand -> return null
+    }
+
+    val card = fanOf(play.field, layout, fanned).cards.getOrNull(index) ?: return null
+    if (plane == null || lift == 0f) return layout.toMat(card.x to card.y)
+
+    val onFelt = plane.flatten(card.x, card.y, lift)
+    return layout.toMat(onFelt.x to onFelt.y)
+}
 
 /**
  * The finger, on the plane an open fan floats on.

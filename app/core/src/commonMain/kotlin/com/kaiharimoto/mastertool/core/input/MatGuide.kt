@@ -57,11 +57,22 @@ object MatGuide {
 
     val all: List<Gesture> = listOf(
         // ---- the camera ------------------------------------------------------
+        // First, because with the felt switched off — which is how the stage now
+        // opens — every line under it is about a gesture that does nothing, and
+        // somebody reading this guide to find out why the table will not turn
+        // should not have to reach the fourth entry to be told.
+        Gesture(
+            GestureGroup.CAMERA,
+            what = "Let the mat move the camera, or stop it",
+            touch = "Camera on the bar",
+            pointer = "Camera on the bar",
+            key = "C",
+        ),
         Gesture(
             GestureGroup.CAMERA,
             what = "Walk round the table",
-            touch = "Drag anywhere on the mat",
-            pointer = "Drag anywhere on the mat",
+            touch = "Drag anywhere on the mat, with Camera on",
+            pointer = "Drag anywhere on the mat, with Camera on",
         ),
         Gesture(
             GestureGroup.CAMERA,
@@ -127,6 +138,12 @@ object MatGuide {
             what = "Take a card out of a pile you are searching",
             touch = "Tap it for your hand, or drag it anywhere",
             pointer = "Click it for your hand, or drag it anywhere",
+        ),
+        Gesture(
+            GestureGroup.MOVING,
+            what = "Change your mind about a card you took out of a pile",
+            touch = "Drop it back on the gap it came out of",
+            pointer = "Drop it back on the gap it came out of",
         ),
         Gesture(
             GestureGroup.MOVING,

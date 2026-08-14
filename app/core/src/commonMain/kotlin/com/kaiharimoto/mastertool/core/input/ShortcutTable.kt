@@ -64,6 +64,7 @@ enum class ShortcutAction {
     PLAY_NEXT_PHASE,
     PLAY_END_TURN,
     PLAY_SCENE,
+    PLAY_CAMERA_TOUCH,
     PLAY_SEAT_OVERHEAD,
     PLAY_SEAT_TABLE,
     PLAY_SEAT_SEATED,
@@ -299,6 +300,15 @@ object ShortcutTable {
         Shortcut(
             KeyChord("r"), ShortcutAction.PLAY_SCENE, ShortcutScope.PLAY,
             "Change the room the table is in",
+        ),
+        // `c` for camera. It reads oddly on a desktop, where the felt is the
+        // least of the camera's idioms — the wheel and the middle-drag never go
+        // near the arbiter and are unaffected by this — but the setting is one
+        // document shared by both platforms, and a preference a keyboard cannot
+        // reach is half a feature.
+        Shortcut(
+            KeyChord("c"), ShortcutAction.PLAY_CAMERA_TOUCH, ShortcutScope.PLAY,
+            "Let the felt move the camera, or stop it",
         ),
 
         // The three seats. Digits, reusing the builder's pane-focus muscle
