@@ -22,10 +22,33 @@ class StageTuningTest {
     // ---- the default is what shipped ---------------------------------------------------
 
     @Test
-    fun theDefaultCameraIsTheSeatTheStageAlreadyOpenedAt() {
-        // The whole reason this can land in a release before the panel does.
-        assertEquals(StageSeat.TABLE.pose, StageTuning.DEFAULT.camera.pose())
+    fun theDefaultCameraIsAPoseOfItsOwnAndNoLongerASeat() {
+        // It *was* `StageSeat.TABLE.pose`, which is what let the document land
+        // in a release before the panel did. It is now kai's own opening pose,
+        // and the two are deliberately separate objects: the seats are where the
+        // `1 · 2 · 3 · 4` buttons take you and `BoardLayouter` is solved against
+        // TABLE, so re-posing that seat to make this one derive from it would
+        // cost about a sixth of every card's size on every device.
+        //
+        // What is still asserted is the part that matters — the opening pose is
+        // a seat's *shape*, a legal `CameraPose`, and it is inside the envelope
+        // its own close limit asks for.
+        val pose = StageTuning.DEFAULT.camera.pose()
         assertTrue(StageTuning.DEFAULT.isDefault)
+        assertTrue(pose != StageSeat.TABLE.pose, "decoupled in name only")
+        // On the surface it was tuned on. A pose is only legal against a stage:
+        // `minDistanceAt` solves the floor from the corner of the mat furthest
+        // from where the camera is aimed, so a narrower stage has a further
+        // floor. kai's 1.145 is legal on his 2960x1848 tablet and three per cent
+        // inside the floor on a 16:9 stage, where `CameraRig` opens at 1.179
+        // instead. That is the envelope doing its job rather than a bad default,
+        // and it is the reason this is asserted somewhere real rather than at
+        // the zero-by-zero surface the clamp also accepts.
+        assertEquals(
+            pose,
+            StageTuning.DEFAULT.camera.envelope().clamp(pose, 2960f, 1848f),
+            "the stage opens at a pose its own envelope would move",
+        )
     }
 
     @Test
@@ -48,22 +71,47 @@ class StageTuningTest {
     }
 
     @Test
-    fun theDefaultIsTheNumbersTheConstantsHad() {
+    fun theDefaultIsTheRoomKaiTuned() {
         // Typed out rather than derived, deliberately: this test is the record
-        // of what the play stage shipped with, and a version of it that read the
-        // same constants the document does would agree with itself and with
-        // nothing else.
+        // of the stage the app opens at, and a version of it that read the same
+        // fields the document does would agree with itself and with nothing
+        // else. It used to be the record of what the *constants* had; those
+        // constants were a second copy of the room that nothing compiled
+        // against, and they are gone — so this is now the only place the numbers
+        // are written twice, which is the whole job of the test.
         val d = StageTuning.DEFAULT
-        assertEquals(-24f, d.hand.leanDegrees)
-        assertEquals(1f, d.hand.liftFactor)
-        assertEquals(0.62f, d.hand.stepFraction)
-        assertEquals(1.6f, d.hand.liftRatio)
+        assertEquals(-32f, d.hand.leanDegrees)
+        assertEquals(1.6f, d.hand.liftFactor)
+        assertEquals(0.74f, d.hand.stepFraction)
+        assertEquals(2.18f, d.hand.liftRatio)
         assertEquals(0.55f, d.cards.carryLift)
-        assertEquals(0.85f, d.cards.fanLiftRatio)
-        assertEquals(1.35f, d.cards.peekLift)
-        assertEquals(1.9f, d.cards.peekScale)
+        assertEquals(0.79f, d.cards.fanLiftRatio)
+        assertEquals(1.36f, d.cards.peekLift)
+        assertEquals(1.88f, d.cards.peekScale)
+        assertEquals(0f, d.camera.yawDegrees)
+        assertEquals(41.5f, d.camera.pitchDegrees)
+        assertEquals(1.1445942f, d.camera.distance)
+        assertEquals(1f, d.camera.lens)
+        assertEquals(0.59f, d.camera.clearance)
+        assertEquals(0.01f, d.camera.panX)
+        assertEquals(0.02f, d.camera.panY)
+        assertEquals(0f, d.camera.shiftX)
+        assertEquals(-0.05f, d.camera.shiftY)
+        assertEquals(0.05f, d.room.deskDepth)
+        assertEquals(1.4f, d.room.deskSpan)
+        assertEquals(2f, d.room.wallBack)
+        assertEquals(-3.55f, d.room.lampOut)
+        assertEquals(0.12f, d.room.lampAlong)
+        assertEquals(2.02f, d.room.lampScale)
+        assertEquals(2.94f, d.room.lampMast)
+        assertEquals(6.35f, d.room.windowSpan)
+        assertEquals(0.21f, d.room.windowAt)
+        assertEquals(0.68f, d.room.windowSill)
+        assertEquals(3.2f, d.room.windowHead)
         // And the one thing that must be off, or the tool changes the picture
-        // before anybody has touched it.
+        // before anybody has touched it. kai left it there on purpose after
+        // seeing it work: defocus is a photographic effect on a stage whose
+        // whole job is that you can read the cards.
         assertEquals(0f, d.focus.strength)
     }
 

@@ -81,14 +81,25 @@ class RoomLightTest {
     }
 
     @Test
-    fun theNightRoomIsDarkWhereTheLampIsNotAndBrighterWhereItIs() {
+    fun theNightRoomIsDarkWhereTheLampIsNotAndKeepsItsLightWhereItIs() {
         // Two claims that only make sense together, and the first version of
         // this asserted the wrong half. Away from the lamp the night room has to
         // be *much* darker than the day room — that is the defect, and a fall
-        // that only shows in the far corner is the one that shipped. But right
-        // beside the lamp night is legitimately **brighter** than day: a bulb a
-        // hand's width from a wall is the brightest thing that ever happens to
-        // that wall, and asserting a uniform dimming would forbid it.
+        // that only shows in the far corner is the one that shipped. But beside
+        // the lamp night must keep most of what it had, or the whole thing is a
+        // dimmer switch and the room has not fallen away at all.
+        //
+        // Stated as the *ratio between the two ends* rather than as night
+        // out-shining day at one point, which is what it said before. That
+        // crossing was a fact about where the lamp stood: it sat a quarter of
+        // the way down the mat, so its light met this patch of wall nearly
+        // square on. kai's stands an eighth of the way down and much further
+        // out, and the same patch now sees it at fifty-five degrees off the
+        // normal — so night beside the lamp is 0.76 against day's 0.87 and the
+        // old assertion failed while nothing about the seam it guards had
+        // changed. What it guards is that night is not a colour grade, and a
+        // near end that keeps six times the fraction the far end keeps says so
+        // without pinning the lamp to one corner of the desk.
         val away = Vec3.Toward
         val overThere = wallAt(lamp.x - 1400f)
         val beside = wallAt(lamp.x)
@@ -99,10 +110,13 @@ class RoomLightTest {
             "the far wall at night is ${StageRig.room(overThere, away, night).amount} " +
                 "against ${StageRig.room(overThere, away, day).amount} by day",
         )
+        val farKeeps = StageRig.room(overThere, away, night).amount /
+            StageRig.room(overThere, away, day).amount
+        val nearKeeps = StageRig.room(beside, away, night).amount /
+            StageRig.room(beside, away, day).amount
         assertTrue(
-            StageRig.room(beside, away, night).amount >
-                StageRig.room(beside, away, day).amount,
-            "the wall beside the lamp is no brighter at night",
+            nearKeeps > farKeeps * 3f,
+            "night dimmed the room uniformly: the near wall kept $nearKeeps and the far $farKeeps",
         )
     }
 

@@ -344,31 +344,18 @@ object Scenery {
         mat(layout).inflated(layout.cardWidth * TABLE_MARGIN)
 
     // ---- the desk -----------------------------------------------------------------
-
-    /**
-     * How far the desk reaches past the mat toward the player, in card widths.
-     *
-     * What this buys is that there is never a void below the felt, at any seat.
-     * What it does **not** buy — and the first draft of this comment claimed it
-     * did — is a visible near edge. Measured on a 1600x856 stage, the desk's
-     * near edge projects to y = 1005 at the table seat and y = 1075 seated,
-     * against a screen 856 tall, and dollying all the way out only brings it to
-     * about 950: the term that puts it there is `flat`, which the camera's
-     * distance does not scale. The board fills the stage vertically, so there is
-     * simply no room below it for an edge to appear in.
-     *
-     * `docs/AAA.md` #61 is still answered, but by the *other* three sides.
-     * `BoardLayouter` centres a seven-column field in whatever it is given, and
-     * on a landscape tablet that leaves a third of the width as bare desk down
-     * each side, plus a strip above the mat before the wall starts. That is
-     * where the felt stops and the wood starts, and it is on screen at every
-     * seat. The near edge is geometry the camera cannot currently reach, and it
-     * would take a smaller board or a wider envelope to show it.
-     */
-    const val DESK_NEAR = 0.9f
-
-    /** And how far it reaches the other way, to where the wall starts. */
-    const val DESK_FAR = 0.5f
+    //
+    // **The room's own numbers are `RoomTune`'s defaults and nowhere else.**
+    // Eight constants used to sit here — the desk's depth and span, the window's
+    // four, and the lamp's two — as "the record of what shipped", read by
+    // nothing. They were a second copy of the room, and a copy nobody compiles
+    // against is a copy that goes quietly wrong: by the time kai's tuning became
+    // the default, every one of them disagreed with the room the app actually
+    // draws, and one of them carried a *measurement* — that a window on this
+    // wall is either low or invisible — which had stopped being true when the
+    // board learned to decline a fifth of the stage (`ROOM_ABOVE`). What is
+    // still here is what the code reads: thicknesses, overhangs, ceilings, and
+    // the lamp's own profile.
 
     /**
      * How far past the mat the wall stands, once a person has moved things.
@@ -421,16 +408,6 @@ object Scenery {
      */
     const val ROOM_ABOVE = 0.20f
 
-    /**
-     * How wide the desk is, as a share of the stage it is drawn on.
-     *
-     * Wider than the screen on purpose. A desk with both ends in frame is a
-     * table in a void with more steps; a desk that runs out of both sides of the
-     * picture is a desk in a room, and the two cost the same because it is one
-     * box either way.
-     */
-    const val DESK_SPAN = 1.6f
-
     /** How thick the desk top is, in card widths. Furniture, not a lip. */
     const val DESK_THICKNESS = 0.5f
 
@@ -442,10 +419,21 @@ object Scenery {
      * `StagePlane.project`, whose scale is `distance / (distance - depth)` — so
      * height does not merely grow, it grows *faster* the taller it gets, and a
      * wall tall enough to reach the camera's own plane would divide by nothing.
-     * Three and a bit card heights is comfortably inside that everywhere in
+     * Four card heights is comfortably inside that everywhere in
      * `CameraEnvelope`; [WALL_CEILING] is where a test stops it.
+     *
+     * **It was 3.2 until the POV seat.** The wall's job is to be the back of the
+     * picture, and how much picture there is above the mat is a function of how
+     * low you are sitting: from the three seats that look *down* at the table
+     * the wall's top edge is off the top of the glass by a hundred pixels or
+     * more, and from POV — 32 degrees above the felt — it landed at y = 29 on an
+     * 856-pixel stage, leaving a strip of void along the top of the screen.
+     * `theRoomFillsThePictureFromEverySeat` did not catch it for two releases
+     * because its own layout was solved without [ROOM_ABOVE]: a board that does
+     * not decline a fifth of the stage has bigger cards, and a wall measured in
+     * card heights was a fifth taller in the test than in the app.
      */
-    const val WALL_HEIGHT = 3.2f
+    const val WALL_HEIGHT = 3.9f
 
     /** The tallest a piece of this room may stand, in card heights. */
     const val WALL_CEILING = 4f
@@ -468,30 +456,6 @@ object Scenery {
     const val FLOOR_MARGIN = 8.0f
 
     // ---- the window ------------------------------------------------------------------
-
-    /**
-     * How wide the opening in the wall is, in card widths, and where its centre
-     * sits as a fraction of the mat's width from the mat's left edge.
-     *
-     * Off to the left, opposite the lamp, so that the two fixtures are never
-     * both on the same side of the table and the room has a direction whichever
-     * hour it is.
-     */
-    const val WINDOW_SPAN = 3.4f
-    const val WINDOW_AT = 0.12f
-
-    /**
-     * How high the sill and the head are, in card *heights* above the desk.
-     *
-     * Low, and this is measured rather than chosen. At the wall's plane the
-     * largest z that lands anywhere on the glass is 94 pixels from overhead, 86
-     * at the table seat and 128 seated — half a card height. So a window on this
-     * wall is either low or invisible, and one at a realistic sill height would
-     * be a piece of geometry nobody could ever see, lighting a room through a
-     * hole above the frame.
-     */
-    const val WINDOW_SILL = 0.24f
-    const val WINDOW_HEAD = 2.05f
 
     /**
      * How big the sky is, and how far off, in card widths.
@@ -553,32 +517,28 @@ object Scenery {
     // ---- the lamp --------------------------------------------------------------------
 
     /**
-     * Where the lamp stands: past the mat's right edge in card widths, and down
-     * the mat's depth as a fraction of it.
+     * How big the **source** is, in card widths: a 14cm shade.
      *
-     * Beyond the felt, because nothing in this room may stand over the mat, and
-     * on the far right because that is where a right-handed player's lamp is and
-     * where it shadows *away* from the hand.
+     * **Not scaled by [RoomTune.lampScale], and that is the whole of it.** It
+     * was, for exactly as long as the room had knobs, on the reasonable-sounding
+     * ground that a lamp drawn twice as big is twice as big. But the drawn lamp
+     * is already dishonest on purpose — [lampHeight] solves where its light
+     * comes from and `RoomTune.lampMast` decides how tall a thing you can see
+     * standing under it, at about two-fifths of that — so `lampScale` is a
+     * decision about the picture, and this is a fact about the physics. Letting
+     * the first set the second meant kai's stouter lamp cast *daylight*: at
+     * `lampScale` 2.02 the source's angular radius reached 1.48 times the
+     * window's own instead of a third of it, and `CardShadowTest`'s two claims
+     * about a night that is a room rather than a colour grade both went red.
+     *
+     * If night should ever have softer shadows, that is its own knob, and the
+     * honest one to put on the panel is this number.
      */
-    const val LAMP_OUT = 1.15f
-    const val LAMP_ALONG = 0.26f
-
-    /** How big the bulb is, in card widths: a 14cm shade. */
     const val LAMP_RADIUS = 1.2f
 
     /**
-     * How high the lamp's **shade** is drawn, in card widths — which is not how
-     * high its light is, and is no longer the top of the object either: the
-     * finial stands above it, by [LAMP_FINIAL]. It keeps its name because
-     * `SceneryTest.theLampStandsWhereItsLightComesFrom` pins the compression
-     * against exactly this number, and the shade is the part the light comes
-     * out of. See [lampHeight].
-     */
-    const val LAMP_DRAWN = 2.2f
-
-    /**
      * The shade, as a lathe turns one: how wide it is at the rim, how wide at
-     * the opening it leaves for the finial, and how far down from [LAMP_DRAWN]
+     * the opening it leaves for the finial, and how far down from `RoomTune.lampMast`
      * its underside sits.
      *
      * A cone rather than a cuboid, and the numbers are a shade's rather than a
@@ -618,7 +578,7 @@ object Scenery {
 
     /**
      * The finial: the bead that screws down over the harp and holds the shade
-     * on, standing above [LAMP_DRAWN].
+     * on, standing above `RoomTune.lampMast`.
      *
      * It is four pixels of brass and it is worth its piece, because it is the
      * only thing in the lamp's silhouette that is not a body of the lamp — a
@@ -661,10 +621,17 @@ object Scenery {
      *
      * The clamp is by its own widest radius and toward whichever side of the mat
      * it was already nearer, so pulling the slider left past the board sets it
-     * down on the left of the desk rather than sliding it across the table. It
-     * does not fire at the shipped numbers — 1.15 card widths out against a
-     * shade 0.62 wide — which is why every other test in this file is looking at
-     * the lamp that always shipped.
+     * down on the left of the desk rather than sliding it across the table.
+     *
+     * **And it may not stand in the wall**, which is the same rule pointing the
+     * other way and arrived later. The lamp is placed as a fraction of the mat's
+     * depth from its far edge, so a shade wide enough reaches *behind* that edge
+     * — kai's is 1.3 card widths deep and reaches 0.42 of one past it — while
+     * the wall may come as close to that edge as [WALL_MIN_BACK], which is 0.12.
+     * The two ranges overlap, and where they do the wall and the shade share a
+     * volume, which is the one thing `ScenePainter` has no correct answer for.
+     * Furniture yields to the room rather than the other way about: the wall
+     * stands where the knobs put it and the lamp steps forward off it.
      */
     fun lampFoot(layout: BoardLayout, room: RoomTune = RoomTune()): Vec2 {
         val mat = mat(layout)
@@ -686,8 +653,16 @@ object Scenery {
             wanted - mat.left < mat.right - wanted -> mat.left - reach
             else -> mat.right + reach
         }
-        return Vec2(x = x, y = mat.top + mat.height * room.lampAlong)
+        // A hair in front of the wall's own face rather than flush against it,
+        // because the two sides of that equality are reached by different
+        // arithmetic — `y - reach` against `face` — and one ulp of disagreement
+        // is a shared volume. Furniture does not touch the wall anyway.
+        val clear = (mat.top - card * wallAt(room)) + reach + card * LAMP_OFF_WALL
+        return Vec2(x = x, y = max(mat.top + mat.height * room.lampAlong, clear))
     }
+
+    /** How far in front of the wall the lamp stands at the closest, in card widths. */
+    const val LAMP_OFF_WALL = 0.01f
 
     /**
      * How high the lamp's light is, in mat pixels.
@@ -1239,7 +1214,7 @@ object Scenery {
                             intensity = rig.key.intensity,
                             warmth = rig.key.warmth,
                             ambient = rig.key.ambient,
-                            radius = layout.cardWidth * LAMP_RADIUS * room.lampScale,
+                            radius = layout.cardWidth * LAMP_RADIUS,
                         ),
                     )
                 }

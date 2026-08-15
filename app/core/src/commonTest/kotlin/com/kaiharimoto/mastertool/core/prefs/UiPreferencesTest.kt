@@ -197,7 +197,12 @@ class UiPreferencesTest {
             .decodeFromString<UiPreferences>(stored)
             .sanitised()
 
-        assertEquals(CameraEnvelope().clearance, read.stageTuning.camera.clearance)
+        // Against the document's own default rather than `CameraEnvelope`'s.
+        // The two were the same number while the tuning document was a copy of
+        // what shipped; they parted when kai's export became the default, and
+        // the claim here has always been about *this* field having a default
+        // that survives a load — not about which of two objects it agrees with.
+        assertEquals(StageTuning.DEFAULT.camera.clearance, read.stageTuning.camera.clearance)
         assertEquals(40f, read.stageTuning.camera.pitchDegrees)
         assertEquals(1.2f, read.stageTuning.camera.distance)
     }

@@ -76,12 +76,20 @@ class HandFanTest {
         val count = 5
         val moving = 0
 
-        // The middle of the drawn row of four is the boundary between its second
-        // and third cards; in the full hand's numbering that is gap 3, because
-        // everything past the card in the air shifted down when it left.
-        val betweenSecondAndThird = (centre(1, 4) + centre(2, 4)) / 2f
+        // Just past the boundary between the drawn row's second and third cards;
+        // in the full hand's numbering that is gap 3, because everything past
+        // the card in the air shifted down when it left.
+        //
+        // Six tenths of the way rather than the midpoint, and that is not
+        // fussiness. The midpoint is the rounding boundary itself, so which side
+        // of it `roundToInt` lands on is decided by the last bit of a float — and
+        // when the hand's default step went from 0.62 of a card to 0.74 the
+        // arithmetic came out at 1.4999999 instead of 1.5 and this test failed
+        // without anything about the hand having changed. A probe on a tie is a
+        // test of the FPU.
+        val pastTheSecondCard = centre(1, 4) * 0.4f + centre(2, 4) * 0.6f
 
-        assertEquals(3, insert(betweenSecondAndThird, count, moving))
+        assertEquals(3, insert(pastTheSecondCard, count, moving))
     }
 
     @Test

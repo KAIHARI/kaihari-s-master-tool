@@ -21,11 +21,20 @@ import kotlinx.serialization.Serializable
  *
  * ## The three rules that make it safe
  *
- * **[DEFAULT] is what shipped, to the bit.** Not "close to" — the same numbers
- * the constants had, which `StageTuningTest` pins. That is what lets this land
- * in a release before the panel does, lets a document stored by an older build
- * read back sensibly, and makes an export a *diff* rather than a snapshot of
- * somebody's afternoon.
+ * **[DEFAULT] is one room somebody chose, written down.** It began as "what
+ * shipped, to the bit" — the same numbers the constants beside the code had —
+ * which is what let the document land in a release before the panel did. It is
+ * now kai's own tuning, exported off the tablet and pasted in whole, and the
+ * constants it shadowed have been deleted rather than left to disagree with it.
+ * `StageTuningTest` still pins every number, for the same reason: an export is
+ * only a *diff* if there is one agreed document to diff against.
+ *
+ * Two things follow from a default that moves, and both are in the release
+ * notes rather than only here. `PreferencesRepository` serialises with
+ * `encodeDefaults = true`, so anybody who has ever opened the panel has every
+ * field explicitly on disk and **nothing about their stage changes**. What
+ * changes is a fresh install — and the panel's own **Reset**, which now returns
+ * to this room rather than to the one the app was born in.
  *
  * **Nothing in here re-solves a layout.** Every field is read either at draw
  * time, by the seat solver, or by the *scene* — and none of those three is the
@@ -92,11 +101,11 @@ data class StageTuning(
  */
 @Serializable
 data class CameraTune(
-    val yawDegrees: Float = StageSeat.TABLE.pose.yawDegrees,
-    val pitchDegrees: Float = StageSeat.TABLE.pose.pitchDegrees,
-    val distance: Float = StageSeat.TABLE.pose.distance,
+    val yawDegrees: Float = 0f,
+    val pitchDegrees: Float = 41.5f,
+    val distance: Float = 1.1445942f,
     /** See [CameraPose.lens]: a focal length, with the subject pinned. */
-    val lens: Float = StageSeat.TABLE.pose.lens,
+    val lens: Float = 1f,
     /**
      * How close the camera may sit. See [CameraEnvelope.clearance].
      *
@@ -105,13 +114,13 @@ data class CameraTune(
      * on the panel: [distance] was reported as a slider that stops working, and
      * what it stops at is this.
      */
-    val clearance: Float = CameraEnvelope().clearance,
+    val clearance: Float = 0.59f,
     /** Where the camera is aimed. See [CameraPose.panX]. */
-    val panX: Float = StageSeat.TABLE.pose.panX,
-    val panY: Float = StageSeat.TABLE.pose.panY,
+    val panX: Float = 0.01f,
+    val panY: Float = 0.02f,
     /** And where that lands in the picture. See [CameraPose.shiftX]. */
-    val shiftX: Float = StageSeat.TABLE.pose.shiftX,
-    val shiftY: Float = StageSeat.TABLE.pose.shiftY,
+    val shiftX: Float = 0f,
+    val shiftY: Float = -0.05f,
 ) {
     /** Named, not positional: [CameraPose] has grown a field three times now. */
     fun pose(): CameraPose = CameraPose(
@@ -167,13 +176,13 @@ data class CameraTune(
 @Serializable
 data class HandTune(
     /** How far a hand card leans back. Negative leans away from the viewer. */
-    val leanDegrees: Float = -24f,
+    val leanDegrees: Float = -32f,
     /** A multiplier on the lift the lean solves for. Never below one. */
-    val liftFactor: Float = 1f,
+    val liftFactor: Float = 1.6f,
     /** The gap between hand cards, as a fraction of a card's width. */
-    val stepFraction: Float = 0.62f,
+    val stepFraction: Float = 0.74f,
     /** How far a card raised to be read comes up, as a ratio of [CardTune.carryLift]. */
-    val liftRatio: Float = 1.6f,
+    val liftRatio: Float = 2.18f,
 )
 
 /** How far things come off the felt, and how big they get when they do. */
@@ -188,11 +197,11 @@ data class CardTune(
      */
     val carryLift: Float = 0.55f,
     /** A spread pile, as a ratio of [carryLift]: over the board, under a hand. */
-    val fanLiftRatio: Float = 0.85f,
+    val fanLiftRatio: Float = 0.79f,
     /** A card held up to be read, in card heights. Further than one being slid. */
-    val peekLift: Float = 1.35f,
+    val peekLift: Float = 1.36f,
     /** And how much bigger it gets while it is up there. */
-    val peekScale: Float = 1.9f,
+    val peekScale: Float = 1.88f,
 )
 
 /**
@@ -231,14 +240,14 @@ data class FocusTune(
      * reading seat and the seated one, so a focus distance in pixels would mean
      * a different thing at every seat.
      */
-    val depth: Float = 0f,
+    val depth: Float = -1f,
     /**
      * The aperture, as a label. Smaller is shallower.
      *
      * Exported *beside* the gradient it maps to, so that changing the mapping
      * later can never silently retune a saved preset.
      */
-    val fNumber: Float = 8f,
+    val fNumber: Float = 2f,
     /**
      * How strong the falloff is at full defocus, as an alpha.
      *
@@ -286,20 +295,20 @@ data class FocusTune(
 @Serializable
 data class RoomTune(
     /** How far the desk reaches toward the player, in card widths. Pushes the wall. */
-    val deskDepth: Float = 0.9f,
+    val deskDepth: Float = 0.05f,
     /** How wide the desk is, as a share of the stage. Over one runs off both sides. */
-    val deskSpan: Float = 1.6f,
+    val deskSpan: Float = 1.4f,
     /** How far past the mat the wall stands, in card widths, before [deskDepth]. */
-    val wallBack: Float = 0.5f,
+    val wallBack: Float = 2f,
     /** How far right of the mat the lamp stands, in card widths. */
-    val lampOut: Float = 1.15f,
+    val lampOut: Float = -3.55f,
     /** And how far down it, as a fraction of the mat's height from the top. */
-    val lampAlong: Float = 0.26f,
+    val lampAlong: Float = 0.12f,
     /**
      * How stout the lamp is: a multiplier on every radius and on the base's own
      * height. Not on [lampMast], which is the other half of the shape.
      */
-    val lampScale: Float = 1f,
+    val lampScale: Float = 2.02f,
     /**
      * How tall the lamp is drawn, in card widths, to the top of its shade.
      *
@@ -308,14 +317,14 @@ data class RoomTune(
      * matter of taste (see `Scenery.lampHeight`). An honest desk lamp is off the
      * top of the picture; this is the compressed one you can see.
      */
-    val lampMast: Float = 2.2f,
+    val lampMast: Float = 2.94f,
     /** How wide the opening in the wall is, in card widths. */
-    val windowSpan: Float = 3.4f,
+    val windowSpan: Float = 6.35f,
     /** Where its centre is, as a fraction of the mat's width from the mat's left. */
-    val windowAt: Float = 0.12f,
+    val windowAt: Float = 0.21f,
     /** How high its sill and its head are, in card *heights* above the desk. */
-    val windowSill: Float = 0.24f,
-    val windowHead: Float = 2.05f,
+    val windowSill: Float = 0.68f,
+    val windowHead: Float = 3.2f,
 )
 
 /**

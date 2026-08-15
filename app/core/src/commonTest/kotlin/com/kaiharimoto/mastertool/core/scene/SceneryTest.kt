@@ -37,11 +37,26 @@ class SceneryTest {
     /** A landscape tablet, which is the surface this app is built for. */
     private val surfaceWidth = 1600f
     private val surfaceHeight = 856f
+
+    /**
+     * Solved the way the desk scenes are actually solved, [Scenery.ROOM_ABOVE]
+     * included.
+     *
+     * It was not, for as long as the room has existed, and that was a fixture
+     * bug rather than a simplification: a board that does *not* decline a fifth
+     * of the stage fills it, and a room asked whether it is visible on a stage
+     * that gave it no space is being asked the wrong question. It answered
+     * "yes" anyway while the window sat a quarter of a card height off the desk.
+     * kai's window has its head three and a fifth card heights up, and on the
+     * fictitious layout every corner of it projects above the top of the glass
+     * at three of the four seats — on the real one it is on screen at all four.
+     */
     private val layout: BoardLayout = BoardLayouter.solve(
         width = surfaceWidth,
         height = surfaceHeight,
         aspectRatio = 59f / 86f,
         perspectiveGrowth = 1.2f,
+        roomAbove = Scenery.ROOM_ABOVE,
     )
 
     private val mat get() = Scenery.mat(layout)
@@ -320,7 +335,7 @@ class SceneryTest {
         //
         // The near edge is deliberately not asserted: it is off the bottom of
         // the glass at every seat in `CameraEnvelope` and cannot be brought back
-        // by dollying. See `Scenery.DESK_NEAR`.
+        // by dollying, whatever `RoomTune.deskDepth` is set to.
         val desk = piece("desk").box
         assertTrue(mat.left - desk.min.x > layout.cardWidth, "no desk to the left of the mat")
         assertTrue(desk.max.x - mat.right > layout.cardWidth, "no desk to the right of the mat")
@@ -376,21 +391,85 @@ class SceneryTest {
 
     @Test
     fun theLampStandsWhereItsLightComesFrom() {
-        // The compression, pinned. The shade is drawn at a fifth of the height
-        // its light actually comes from, because an honest desk lamp on this
-        // stage is off the top of the picture — but the foot and the light are
+        // The compression, pinned. The shade is drawn well below the height its
+        // light actually comes from — about two-fifths of it at kai's mast,
+        // where it used to be under a third — because an honest desk lamp on
+        // this stage is off the top of the picture. The foot and the light are
         // exact, and nobody can measure a mast.
+        //
+        // Against `RoomTune().lampMast` rather than a `Scenery` constant of its
+        // own. There was one, and it was the last of eight numbers in `Scenery`
+        // shadowing this document; it is the only one anything read, which is
+        // how it survived long enough to disagree with the room by three
+        // quarters of a card.
         val shade = piece("lamp shade").box
         val lamp = Scenery.lamp(layout)
         assertEquals(shade.centre.x, lamp.x, 1e-3f, "the lamp does not stand under its light")
         assertEquals(shade.centre.y, lamp.y, 1e-3f, "the lamp does not stand under its light")
         assertEquals(
-            Scenery.lampHeight(layout) / (layout.cardWidth * Scenery.LAMP_DRAWN),
+            Scenery.lampHeight(layout) / (layout.cardWidth * RoomTune().lampMast),
             lamp.z / shade.max.z,
             1e-3f,
             "the compression has drifted",
         )
         assertTrue(lamp.z > shade.max.z, "the light is not above the shade")
+    }
+
+    @Test
+    fun howBigTheLampIsDrawnDoesNotChangeHowHardItsShadowsAre() {
+        // The coupling that looked obvious and was wrong. `lampScale` is on the
+        // panel and multiplies every radius in the lamp's profile; the source's
+        // own radius used to be multiplied by it too, on the ground that a lamp
+        // drawn twice as big is twice as big. But the lamp is drawn dishonestly
+        // on purpose — `theLampStandsWhereItsLightComesFrom` measures by how
+        // much — so its drawn size is a decision about the picture, and this is
+        // physics. At kai's 2.02 the coupling took the source's angular radius
+        // past the *window's*, and the night room stopped being a room and
+        // became a colour grade. `CardShadowTest` is where that shows.
+        listOf(0.5f, 1f, 2.02f, 3f).forEach { scale ->
+            val rig = Scenery.lightingFor(
+                Scene.DESK,
+                TimeOfDay.NIGHT,
+                layout,
+                RoomTune(lampScale = scale),
+            )
+            assertEquals(
+                layout.cardWidth * Scenery.LAMP_RADIUS,
+                rig.key.radius,
+                1e-3f,
+                "a lampScale of $scale moved the source",
+            )
+        }
+    }
+
+    @Test
+    fun theLampStepsForwardRatherThanStandingInTheWall() {
+        // The other half of "nothing in this room may share a volume", and the
+        // half that arrived late. The lamp is placed as a fraction of the mat's
+        // depth from its far edge and the wall may come within
+        // `WALL_MIN_BACK` of that same edge, so a shade wide enough reaches
+        // through it — which `everyRoomKnobAtEitherEndStillLeavesARoom` found
+        // the moment kai's 2.02-scale shade met a `wallBack` at its minimum.
+        listOf(0.1f, 0.5f, 2f, 6f).forEach { back ->
+            val room = RoomTune(wallBack = back)
+            val model = Scenery.desk(TimeOfDay.NIGHT, layout, surfaceWidth, surfaceHeight, room)
+            val shade = model.pieces.first { it.name == "lamp shade" }.box
+            val wall = model.pieces.first { it.name == "wall right" }.box
+            assertTrue(
+                shade.min.y > wall.max.y,
+                "at wallBack $back the shade reaches back to ${shade.min.y}, " +
+                    "through a wall whose face is at ${wall.max.y}",
+            )
+        }
+        // And it does not fire at the room as tuned: kai's lamp stands where he
+        // put it, not where a clamp shuffled it to.
+        val foot = Scenery.lampFoot(layout)
+        assertEquals(
+            mat.top + mat.height * RoomTune().lampAlong,
+            foot.y,
+            1e-3f,
+            "the wall clamp moved the shipped lamp",
+        )
     }
 
     @Test
