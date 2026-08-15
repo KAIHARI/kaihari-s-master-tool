@@ -54,15 +54,24 @@ writes `local.properties` itself.
 **`docs/TUNING.md` is the in-app tuning panel.** Long-press the life-point
 number on the play stage: twenty-nine numbers — camera angle, focal length, where
 it is aimed, how close you may sit, the defocus falloff, the hand, the card lifts,
-and the room's own furniture — live, persisted, and exported as JSON that maps
-one-to-one onto
-named constants. `tools/shoot.sh --tune=x.json` replays one headlessly. Read it
-before changing any of those constants by hand, and before adding a knob:
+and the room's own furniture — live, persisted, and exported as JSON. Read it
+before changing any of those numbers by hand, and before adding a knob:
 **nothing that re-solves the board may go on the panel.** The room is on it and
 does not break that rule — the desk, the wall, the window and the lamp are read
 inside `Scenery.of`, which is remembered against the *already solved* layout, so
 moving them cannot re-key `pointerInput(layout)` under a live gesture.
 `ROOM_ABOVE`, which really does re-solve, stays off it.
+
+**`StageTuning.DEFAULT` is kai's own export, and there is no second copy of it.**
+The document used to mirror a set of named constants, and `Scenery` carried eight
+of them for the room — a record of what shipped that nothing read, so by the time
+the defaults moved every one disagreed with the room the app draws. They are
+deleted; `RoomTune`'s defaults are the room, and `StageTuningTest` is the one
+place the numbers are written twice, which is that test's whole job.
+`tools/shoot.sh --tune=x.json` still replays any export headlessly. Because
+preferences serialise with `encodeDefaults = true`, changing a default changes
+nothing on a device that has ever opened the panel — what it changes is a fresh
+install and the panel's **Reset**.
 
 **A knob hands back a knob and a number, never a document.** A slider's track is
 a `pointerInput`, its gesture coroutine outlives the composition that installed
@@ -288,17 +297,17 @@ because the zones did not go anywhere: `core/layout/BoardLayout.kt` still solves
 all ten of them, the play stage still draws them and still snaps to them, and the
 only thing that has stopped being true is that a card must be inside one.
 
-Four rules the play stage would be broken without, each of which was a bug
+Five rules the play stage would be broken without, each of which was a bug
 first:
 
 - **One arbiter for the whole mat**, in core, driven by one `pointerInput`.
   Per-card detectors let one finger start a drag on one card while a second
   starts a separate drag on another, and consumption cannot fix that after the
-  fact. It is now **two machines behind one router** — `core/mat/MatDesk.kt`
-  owns up to two `MatGestureMachine` lanes and decides, at the instant a finger
+  fact. It is now **ten machines behind one router** — `core/mat/MatDesk.kt`
+  owns up to ten `MatGestureMachine` lanes and decides, at the instant a finger
   lands, which one it belongs to. That is kai's two-handed play, and it does not
   retreat from the rule: two competing drags were a bug when nothing decided
-  between them; two deliberate drags are a feature because something does. The
+  between them; ten deliberate drags are a feature because something does. The
   rule is one sentence — *a finger that lands on something nothing else is
   holding starts its own gesture; every other finger joins the gesture nearest
   it* — and it settles the twist, the menu, the set, the steadying hand and the
@@ -332,6 +341,20 @@ first:
   it would then drop the card next door — correctly, silently, and wrong.
   `PlayField.stillHolds` is checked at the release; a gesture whose board moved
   under it puts its card back rather than guessing which card the user now means.
+- **The finger is on the felt and the card is in the air, and those are two
+  different places.** Everything with a height reaches the screen through
+  `StagePlane`, so a lifted or leaned card is *drawn* up-table of the mat point
+  it occupies — 29% of a card for one slid across the board and **71%** for one
+  out of the hand, at kai's tuning. A finger unprojects at z = 0, where that
+  offset is nothing. So a hand card is hit-tested against the quad it is
+  **drawn** as (`MatInput.handQuad`, the same `CardSolid.face` expression
+  `StagedCard` builds its homography from — a leaned card is a quad at two
+  heights, which is why `StagePlane.raise` cannot fix that one), and a drop
+  lands where the card is **drawn** rather than under the finger
+  (`core/board/CarryHeight.kt`, and `Carry.landing` beside `Carry.at`). That one
+  offset was three separate bug reports: a hand whose top half would not
+  respond, drops landing a third of a card short, and a monster set into the
+  spell/trap row — where `SetPosition` then correctly answered *upright*.
 
 **The gesture vocabulary, after kai's eight changes.** A tap on a card
 *declares* it (a name in the bar, a chime, a small bump) and no longer brings it
@@ -457,11 +480,15 @@ Four things about it are load-bearing, and three of them were bugs first:
 - **The lamp's height is solved, not chosen.** The shipped night key's
   horizontal-to-vertical ratio *is* how long a night shadow is per unit of
   height, so the lamp stands where the ray to the middle of the table has
-  exactly that ratio. The lamp is then *drawn* at about a third of that height —
-  2.92 to one, measured — because an honest desk lamp is off the top of the
-  picture. The foot and the light are exact and `SceneryTest` pins the
-  compression; nobody can measure a stem. (This read "five to one" until it was
-  measured, which is what a number in prose with no test under it is worth.)
+  exactly that ratio. The lamp is then *drawn* at about two-fifths of that
+  height — 2.40 to one, measured, against kai's mast — because an honest desk
+  lamp is off the top of the picture. The foot and the light are exact and
+  `SceneryTest` pins the compression against `RoomTune().lampMast`; nobody can
+  measure a stem. (This read "five to one" until it was measured, which is what a
+  number in prose with no test under it is worth. The `Scenery` constant it used
+  to be pinned against is gone — see below.) **The lamp's own scale does not
+  touch its light.** `lampScale` is how big the fixture is *drawn*, and coupling
+  the source's angular radius to it made a stouter lamp cast daylight.
 - **Paint order is a topological sort over a separating axis.** Sorting boxes
   by nearest-corner depth puts a 511px wall after a 241px lamp and paints it
   over the top. `ScenePainter` finds an axis that separates each pair — and

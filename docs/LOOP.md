@@ -1153,6 +1153,105 @@ the second thing on this stage that moves without anybody deciding to move it,
 and the first one had to be switched off after kai played on it. Whether this is
 the best thing here or a wobble cannot be settled from a contact sheet.
 
+### Iteration 20 — the table hit-tests on the felt and draws in the air
+
+Four defects from the tablet, and **one cause behind three of them**. The stage
+projects everything with a height through `StagePlane`, so a card that is lifted
+or leaned is *drawn* up-table of the mat coordinate it occupies — while a finger
+arrives on the glass and unprojects onto the felt, at z = 0, where that offset is
+zero. `StagePlane.raise` exists to close exactly that gap and was called in one
+place, for a spread pile. The hand and every carried card were left on the felt,
+and kai's tuning — lean −24° → −32°, lift ×1.0 → ×1.6, hand lift ratio 1.6 →
+2.18 — roughly doubled the error, which is why it went from imprecise to
+unusable.
+
+Measured at his camera (2960×1848, 41.5°, distance 1.145):
+
+| | lift | drawn up-table by | what it cost |
+|---|---|---|---|
+| hand card at rest | 124 mat px | 63 px, 23% of a card | **28% of the card dead to touch**, live band 76 screen px below what you see |
+| carried board card | 151 px | 78 px, 29% | drops land a third of a card nearer you |
+| **carried hand card** | 330 px | **195 px, 71%** | drops land a whole row nearer you |
+
+That last row **is** "a set monster lands in attack position". You aim the card
+you can see at a monster zone; the drop resolves in the spell/trap row;
+`SetPosition` correctly answers *upright* for a spell/trap zone. Nothing in the
+set logic was ever wrong, and the second-order cause — `DropCommit` throwing the
+solved position away for a card already on the mat — had been cancelling against
+a carry that started at zero quarter turns, so fixing either alone would have
+stood every defence monster up when it was nudged.
+
+Three fixes, and the shape of each is the same: **ask the geometry rather than a
+comment.**
+
+- **The hand is hit-tested against the quad it is drawn as** — `CardSolid.face`
+  through `StagePlane.flatten`, which is literally the expression `StagedCard`
+  already builds its homography from. A leaned card is a quad at *two* heights,
+  so `raise` cannot fix it and the KDoc that said the offset "still lies well
+  inside its own footprint" could not have been fixed either. It was true at the
+  shipped lean and false at kai's. A comment is not a guard.
+- **A drop lands where the card is drawn.** `CarryHeight` is the one place the
+  three lifts are worked out and the one place the offset is applied; `Carry`
+  gained a `landing` beside its `at`, so the finger stays where it has always
+  been drawn — a little below the card, which is the only reason a card being
+  dragged on a touchscreen is not under a thumb.
+- **The `cards` map is pruned.** Tapping the deck gives forty cards a seat at a
+  `PileFan` coordinate centred on the middle of the board; closing the fan takes
+  the seats away and left forty `StageCard`s parked there, stepped every frame,
+  so the next appearance sprang from mid-board. kai's "it may be doing it from an
+  invisible fan" was exact.
+
+And the fourth report cost one line: `MatDesk.MAX_LANES` 2 → 10. Everything under
+it was already collection-shaped, and **the existing routing already is the palm
+rejection** — a lane only opens for a finger that lands on a token, so a palm on
+the felt still joins the nearest gesture at any cap. What it did cost is the
+three-finger guards, which only ever fired because a third contact was *forced*
+into a full lane; `MatThreeFingerTest`'s sixteen tests stay green while the app
+changes, because they drive the machine directly and never see a lane. Said out
+loud here rather than discovered later.
+
+### Iteration 21 — kai's room becomes the room
+
+The twenty-six numbers he exported become the defaults, and five invariants went
+red against them. Four were real, and the fifth is a lesson about tests.
+
+- **The lamp's source no longer scales with the lamp.** `lampScale` multiplied
+  the light's angular radius as well as every radius in the profile, on the
+  reasonable ground that a bigger lamp is bigger. But the lamp is drawn
+  dishonestly on purpose — its light is solved and its mast is chosen, at about
+  two-fifths of it — so that number is a decision about the picture. At 2.02 the
+  coupling took the night key past the *window's* own angular size, and
+  `CardShadowTest`'s two claims about night being a room rather than a colour
+  grade both failed. The night room's shadows are the thing that makes it a
+  room.
+- **The lamp steps forward off the wall.** It is placed as a fraction of the
+  mat's depth from the far edge, and the wall may come within `WALL_MIN_BACK` of
+  that same edge; a shade 1.3 card widths deep reaches through it. Furniture
+  yields to the room.
+- **The wall stands 3.9 card heights rather than 3.2.** From the POV seat — 32°
+  above the felt, which is new — its top edge landed at y = 29 on an 856-pixel
+  stage, leaving a strip of void along the top of the picture.
+- **`SceneryTest` was solving its layout without `ROOM_ABOVE`.** A board that
+  does not decline a fifth of the stage fills it, so cards are a fifth bigger and
+  so is everything measured in card heights. That fixture is why the wall's hole
+  was invisible, and why a window at kai's head height read as *off* the glass at
+  three seats when on the real layout it is on at all four. A test fixture that
+  is not the configuration the app ships is a test of a different app.
+
+The fifth: `HandFanTest` probed the exact midpoint between two hand slots, which
+is the rounding boundary. Moving the default step from 0.62 of a card to 0.74
+took the arithmetic from 1.5 to 1.4999999 and the test failed without anything
+about the hand having changed. A probe on a tie is a test of the FPU.
+
+Eight `Scenery` constants were deleted rather than updated. They were the
+"record of what shipped" and nothing read them, so by the time the defaults moved
+every one disagreed with the room the app draws — and one carried a
+*measurement*, that a window on this wall is either low or invisible, which had
+stopped being true when the board learned to decline a fifth of the stage.
+`RoomTune`'s defaults are the room now, and `StageTuningTest` is the only place
+the numbers are written twice, which is that test's whole job.
+
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find

@@ -36,12 +36,23 @@ private class VelocitySampler {
  * of event consumption fixes it, because by then there are already two gesture
  * loops that each believe they are in charge.
  *
- * There may now be **two** of these, and that is not a retreat from the rule
+ * There may now be **ten** of these, and that is not a retreat from the rule
  * above: `MatDesk` owns them, decides at the instant a finger lands which one it
  * belongs to, and hands each a frame containing only its own pointers. Two
- * competing drags were a bug when nothing decided between them; two deliberate
+ * competing drags were a bug when nothing decided between them; ten deliberate
  * drags are two-handed play. Everything in this file goes on being about one
- * gesture and knows nothing about the other, which is what keeps it testable.
+ * gesture and knows nothing about the others, which is what keeps it testable.
+ *
+ * One cost of raising that cap is paid here rather than there, and it is worth
+ * knowing before chasing it. The `landedFingers >= 3` rules below only ever fire
+ * because `MatDesk` delivered a third contact into a lane that already had two —
+ * which it does for bare felt at any cap, and no longer does for a finger that
+ * lands on a *card* nothing else is holding. A flat hand across several cards
+ * now opens several one-finger gestures instead of one three-finger one. The
+ * sixteen tests in `MatThreeFingerTest` all stay green either way, because they
+ * drive this machine directly and never see a lane; if the behaviour ever needs
+ * to come back, the missing piece already has a name in
+ * `aThreeFingerSweepStillTakesTheStack` — an arrival window.
  *
  * The second is that this is pure Kotlin in core, with the composable doing
  * nothing but translating pointer events into [TouchFrame] and handing the

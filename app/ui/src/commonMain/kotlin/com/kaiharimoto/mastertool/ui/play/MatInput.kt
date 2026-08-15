@@ -13,6 +13,7 @@ import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import com.kaiharimoto.mastertool.core.board.CarryHeight
 import com.kaiharimoto.mastertool.core.board.DragOrigin
 import com.kaiharimoto.mastertool.core.board.DropCommit
 import com.kaiharimoto.mastertool.core.board.DropIntent
@@ -335,7 +336,7 @@ internal class MatPilot(
             val was = grabbed[lane]
             val now = handle(
                 lane, event, was, play, layout, feedback, onMenu, onRead,
-                lane in attaching, tune.hand, camera?.plane, fanLift,
+                lane in attaching, tune.hand, camera?.plane, fanLift, tune,
             )
             if (now == null) grabbed -= lane else grabbed[lane] = now
 
@@ -461,7 +462,7 @@ internal class MatPilot(
      * would be a fan you can see and cannot touch, one slider later.
      */
     private val fanLift: Float
-        get() = layout.cardHeight * tune.cards.carryLift * tune.cards.fanLiftRatio
+        get() = CarryHeight.fan(layout.cardHeight, tune)
 
     /**
      * One finger orbits. Two pan, and also pinch.
@@ -832,8 +833,28 @@ private fun handle(
     /** Where an open fan floats, and through what — see [whatIsUnder]. */
     fanPlane: StagePlane?,
     fanLift: Float,
+    /**
+     * The whole document, because a *carry* needs more of it than a hit test
+     * does: how far a card comes off the felt is what decides where letting go
+     * puts it. See [CarryHeight].
+     */
+    tune: StageTuning,
 ): DragOrigin? {
     fun mat(at: Vec2): MatPoint = layout.toMat(at.x to at.y)
+
+    /**
+     * Where a card carried out of [from] would land if it were let go at [at].
+     *
+     * Not [mat]. The finger unprojects onto the felt and the card it is holding
+     * is drawn above it, so the two are different points on this table — most of
+     * a card apart for one coming out of the hand at kai's tuning. Resolving at
+     * the finger is what put a set monster in the spell/trap row.
+     */
+    fun landing(at: Vec2, from: DragOrigin?): MatPoint {
+        val lift = from?.let { CarryHeight.of(it, layout.cardHeight, tune) } ?: 0f
+        val point = CarryHeight.landing(at.x, at.y, lift, fanPlane)
+        return layout.toMat(point.x to point.y)
+    }
 
     when (event) {
         is MatEvent.Pressed ->
@@ -901,6 +922,7 @@ private fun handle(
             grabbed?.let {
                 play.lift(
                     lane, it, mat(event.at), layout,
+                    landing = landing(event.at, it),
                     cameOutOf = fanSlotOf(play, layout, it, fanPlane, fanLift),
                 )
                 feedback.play(SoundEffect.LIFT, Haptic.LIFT)
@@ -917,6 +939,7 @@ private fun handle(
             grabbed?.let {
                 play.lift(
                     lane, it, mat(event.at), layout,
+                    landing = landing(event.at, it),
                     cameOutOf = fanSlotOf(play, layout, it, fanPlane, fanLift),
                     faceDown = true,
                 )
@@ -924,15 +947,29 @@ private fun handle(
             }
         }
 
-        is MatEvent.Moved -> play.carryTo(lane, mat(event.at), layout, attaching, hand.stepFraction)
+        is MatEvent.Moved -> play.carryTo(
+            lane = lane,
+            at = mat(event.at),
+            layout = layout,
+            landing = landing(event.at, play.carryIn(lane)?.from),
+            attaching = attaching,
+            handStep = hand.stepFraction,
+        )
 
         // The card has been held still over another one long enough to mean it
         // is going underneath. Re-resolving with the same point is what changes
         // the indicator from "stack" to "attach", so the user is told before
         // they let go rather than after.
         is MatEvent.Dwelled -> {
-            if (play.carryIn(lane) != null) {
-                play.carryTo(lane, mat(event.at), layout, attaching = true, handStep = hand.stepFraction)
+            play.carryIn(lane)?.let { held ->
+                play.carryTo(
+                    lane = lane,
+                    at = mat(event.at),
+                    layout = layout,
+                    landing = landing(event.at, held.from),
+                    attaching = true,
+                    handStep = hand.stepFraction,
+                )
                 feedback.play(SoundEffect.LIFT, Haptic.SLIDE)
             }
         }

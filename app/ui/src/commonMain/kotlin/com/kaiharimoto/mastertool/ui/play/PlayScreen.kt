@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import coil3.compose.AsyncImage
 import com.kaiharimoto.mastertool.core.board.BoardCard
+import com.kaiharimoto.mastertool.core.board.CarryHeight
 import com.kaiharimoto.mastertool.core.board.CardPosition
 import com.kaiharimoto.mastertool.core.board.DragOrigin
 import com.kaiharimoto.mastertool.core.board.DropIntent
@@ -189,12 +190,18 @@ import kotlin.random.Random
  * `(h/2)·sin θ` puts the near edge back on the felt exactly, for any lean and
  * any card size.
  *
- * The hand's hit target is its [HandFan.pointFor] centre at z = 0, so the drawn card
- * now sits a little higher on the glass than the box that grabs it. That is
- * deliberate and safe here: the hand is a horizontal fan, cards are chosen by
- * which one your finger is *across*, and the vertical offset is a fraction of a
- * card that still lies well inside its own footprint. It would not be safe on
- * the mat, where cards are anywhere.
+ * This used to carry a paragraph saying the drawn card sits a little higher on
+ * the glass than the box that grabs it, and that the offset "still lies well
+ * inside its own footprint". It was true at the lean and lift the app shipped
+ * with and false at kai's — minus 32 degrees against minus 24, and a lift
+ * multiplier of 1.6 — where the offset reached 23 per cent of a card and made
+ * the top of every hand card dead to touch, with the live band 76 screen pixels
+ * *below* what you could see. A comment is not a guard, and a slider can
+ * invalidate one without touching the file it is in.
+ *
+ * The hit test no longer takes anybody's word for it: `MatInput.handQuad` builds
+ * the same four corners the renderer draws and asks whether the finger is inside
+ * them. The geometry answers for itself, at any lean.
  */
 internal fun handLiftOf(
     cardHeight: Float,
@@ -1271,9 +1278,15 @@ private fun seatsFor(
     val seats = mutableListOf<Seat>()
     val cardWidth = layout.cardWidth
     val cardHeight = layout.cardHeight
-    val carryLift = tune.cards.carryLift
-    val handLift = carryLift * tune.hand.liftRatio
-    val fanLift = carryLift * tune.cards.fanLiftRatio
+    // In mat pixels, and from `CarryHeight` rather than multiplied out here.
+    // These are the numbers the *input* side needs too — a drop lands where the
+    // card is drawn, so the offset between the finger and the card is a function
+    // of exactly these — and two files each doing their own arithmetic on the
+    // same two knobs is the drift `MatPilot.fanLift`'s KDoc already warned about
+    // for the one of the three they happened to share.
+    val carryLift = CarryHeight.mat(cardHeight, tune)
+    val handLift = CarryHeight.hand(cardHeight, tune)
+    val fanLift = CarryHeight.fan(cardHeight, tune)
 
     fun poseAt(
         at: MatPoint,
@@ -1316,7 +1329,7 @@ private fun seatsFor(
                 // rest of the stack: a card on a pile of four is four cards
                 // off the felt, and its shadow is cast from up there.
                 z = if (carry != null) {
-                    cardHeight * carryLift
+                    carryLift
                 } else {
                     CardSolid.pileDepth(placed.depth, cardWidth) +
                         if (placed.id == declared) cardHeight * DECLARE_LIFT else 0f
@@ -1367,7 +1380,7 @@ private fun seatsFor(
                 // Not zero. A leaned card pivots on its bottom edge, and this
                 // is what buys that — see [handLiftOf].
                 z = if (carry != null) {
-                    cardHeight * handLift
+                    handLift
                 } else {
                     handLiftOf(cardHeight, CardSolid.pileDepth(1, cardWidth), tune.hand) +
                         if (card.instanceId == declared) cardHeight * DECLARE_LIFT else 0f
@@ -1467,7 +1480,7 @@ private fun seatsFor(
         seats += Seat(
             id = held.instanceId,
             card = held,
-            pose = poseAt(carry.at, cardHeight * carryLift, carry.turned, faceUp),
+            pose = poseAt(carry.at, carryLift, carry.turned, faceUp),
             faceUp = faceUp,
             carried = true,
             pinned = true,
@@ -1504,7 +1517,7 @@ private fun seatsFor(
             seats += Seat(
                 id = card.instanceId,
                 card = card,
-                pose = Pose3(position = Vec3(fan.x, fan.y, cardHeight * fanLift)),
+                pose = Pose3(position = Vec3(fan.x, fan.y, fanLift)),
                 faceUp = true,
                 carried = false,
                 pinned = false,

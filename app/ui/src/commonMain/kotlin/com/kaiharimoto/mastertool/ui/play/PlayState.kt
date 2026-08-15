@@ -59,10 +59,29 @@ data class Carry(
      * Fixed at the lift and not touched again, because it is a fact about where
      * the card *was*. The screen works it out, since it is the half of the
      * question that is projection: a spread floats above the felt, so the slot's
-     * own coordinates have to be flattened back down to the plane the finger is
-     * unprojected onto before the two can be compared at all.
+     * own coordinates are flattened back down to the felt before anything is
+     * compared to them.
+     *
+     * That is the same space [landing] is in — the footprint of a thing that is
+     * drawn in the air — which is what keeps "put it back" aimed at the gap you
+     * can see rather than at the finger under it.
      */
     val cameOutOf: MatPoint? = null,
+    /**
+     * Where this card would land if it were let go now, which is **not** [at].
+     *
+     * [at] is where the finger is and where the card is posed from; a card in
+     * the air is drawn up-table of that by the perspective divide, because it is
+     * a card in the air. `CarryHeight` has the measurement — most of a card
+     * height for one coming out of the hand — and the whole of kai's "a set
+     * monster lands in attack position" was that the drop was resolved at the
+     * finger while the card he was aiming was drawn here.
+     *
+     * Stored rather than derived at the release for the reason [intent] is
+     * stored: the indicator he is reading and the move he gets have to be the
+     * same answer, and an answer computed twice is two answers.
+     */
+    val landing: MatPoint = at,
 ) {
     /** Whether the card is lying sideways, for the pose that draws it. */
     val turned: Boolean get() =
@@ -112,13 +131,14 @@ class PlayState(
      *
      * A map rather than one card, because kai's table is played with two hands:
      * *"I should be able to use one finger on two cards to simultaneously drag
-     * both."* The key is `MatDesk`'s lane — the gesture, not the finger — so a
-     * two-finger twist is still one entry and two one-finger drags are two.
+     * both"*, and then *"let's expand it to 10 fingers"*. The key is `MatDesk`'s
+     * lane — the gesture, not the finger — so a two-finger twist is still one
+     * entry and two one-finger drags are two.
      *
-     * Deliberately small and deliberately a map: at two lanes an array would be
-     * two nullable slots and every reader would have to remember which of them
-     * are live. The one thing every reader actually wants is [carried], and it
-     * is a list.
+     * A map rather than an array of ten nullable slots, which is what the shape
+     * would be if the cap were the thing it was sized against. It is not: the
+     * cap is `MatDesk.MAX_LANES` and nothing here knows it. The one thing every
+     * reader actually wants is [carried], and it is a list.
      */
     var carries by mutableStateOf<Map<Int, Carry>>(emptyMap())
         private set
@@ -313,6 +333,12 @@ class PlayState(
         from: DragOrigin,
         at: MatPoint,
         layout: BoardLayout,
+        /**
+         * Where letting go here would put it. See [Carry.landing]; it defaults
+         * to [at] so a caller with no camera — every test in this file, and the
+         * keyboard — gets the flat table it always had.
+         */
+        landing: MatPoint = at,
         cameOutOf: MatPoint? = null,
         /**
          * True when the gesture itself was a set — two fingers — so the card
@@ -329,10 +355,11 @@ class PlayState(
             id = id,
             holding = field.cardAt(from)?.instanceId ?: NO_CARD,
             at = at,
+            landing = landing,
             // Deliberately without [cameOutOf]: on the frame a card is lifted it
             // is still exactly where it came from, so passing it here would open
             // every drag out of a spread already reading "Put back".
-            intent = DropTargets.resolve(at, id.takeIf { it != NO_CARD }, field, layout, null),
+            intent = DropTargets.resolve(landing, id.takeIf { it != NO_CARD }, field, layout, null),
             // Picked up as it lay, unless the gesture itself said otherwise. A
             // set card slid across the mat is still set when it lands, and only
             // a deliberate turn — the two-finger tap, or the two-finger drag
@@ -359,15 +386,18 @@ class PlayState(
         lane: Int,
         at: MatPoint,
         layout: BoardLayout,
+        /** Where letting go here would put it. See [Carry.landing]. */
+        landing: MatPoint = at,
         attaching: Boolean = false,
         handStep: Float = StageTuning.DEFAULT.hand.stepFraction,
     ) {
         val held = carries[lane] ?: return
         carries = carries + (lane to held.copy(
             at = at,
+            landing = landing,
             attaching = attaching,
             intent = DropTargets.resolve(
-                point = at,
+                point = landing,
                 dragged = held.id.takeIf { it != NO_CARD },
                 field = field,
                 layout = layout,

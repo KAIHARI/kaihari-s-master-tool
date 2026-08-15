@@ -137,6 +137,19 @@ camera you can switch off, because the felt is most of the screen; a card put
 back into the gap it came out of; and the fan actually closing when you drag a
 card out of it, which had never worked at all.
 
+**And four more since**, on kai's report from the tablet. Two-handed play is now
+**ten**-handed — *"let's expand it to 10 fingers"* — which cost one line
+(`MatDesk.MAX_LANES`) because everything under it was already collection-shaped,
+and cost the three-finger guards, which now only fire on bare felt. A hand card
+is grabbable over the whole shape it is *drawn* as rather than over a rectangle
+on the felt, which at his tuning had left 28 per cent of every hand card dead to
+touch. A drop lands where the card is drawn rather than under the finger holding
+it — which is what "a set monster lands in attack position" turned out to be,
+because a card out of the hand is drawn most of a card up-table of the finger and
+the drop was resolving a whole row nearer the player. And closing a spread no
+longer leaves forty cards parked invisibly in the middle of the board, which is
+why the top of the deck used to fly to the graveyard from nowhere.
+
 1. **Tokens.** A real functional gap — a large share of modern combos put tokens
    on the board and they are currently unrepresentable. Conjure one onto the mat;
    it behaves as a card with no back.
