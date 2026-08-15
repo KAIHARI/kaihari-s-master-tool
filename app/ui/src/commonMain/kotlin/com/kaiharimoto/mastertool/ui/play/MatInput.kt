@@ -21,7 +21,6 @@ import com.kaiharimoto.mastertool.core.board.cameFrom
 import com.kaiharimoto.mastertool.core.board.fanCardAt
 import com.kaiharimoto.mastertool.core.board.fanSource
 import com.kaiharimoto.mastertool.core.board.MatPoint
-import com.kaiharimoto.mastertool.core.board.PlayField
 import com.kaiharimoto.mastertool.core.tune.HandTune
 import com.kaiharimoto.mastertool.core.tune.StageTuning
 import com.kaiharimoto.mastertool.core.haptics.Haptic
@@ -116,7 +115,7 @@ internal class MatPilot(
      */
     val desk = MatDesk<DragOrigin>({ at ->
         whatIsUnder(
-            play.field, layout, at, play.fanned, tune.hand,
+            play, layout, at, tune.hand,
             camera?.plane, fanLift,
         )
     })
@@ -317,7 +316,7 @@ internal class MatPilot(
 
         carryOut(desk.cancel())
         whatIsUnder(
-            play.field, layout, at, play.fanned, tune.hand,
+            play, layout, at, tune.hand,
             camera?.plane, fanLift,
         )?.let(onMenu)
     }
@@ -450,7 +449,7 @@ internal class MatPilot(
     private fun onFan(at: Vec2): Boolean {
         val slot = play.fanned ?: return false
         val onFan = fanPointFor(at, camera?.plane, fanLift)
-        return fanOf(play.field, layout, slot).bounds.contains(onFan.x, onFan.y)
+        return fanOf(play, layout, slot).bounds.contains(onFan.x, onFan.y)
     }
 
     /**
@@ -858,9 +857,7 @@ private fun handle(
 
     when (event) {
         is MatEvent.Pressed ->
-            return whatIsUnder(
-                play.field, layout, event.at, play.fanned, hand, fanPlane, fanLift,
-            )
+            return whatIsUnder(play, layout, event.at, hand, fanPlane, fanLift)
 
         is MatEvent.Tapped -> {
             when (val what = grabbed) {
@@ -1089,10 +1086,9 @@ private fun handle(
  * sitting on it, which is right: the card you can see is the card you meant.
  */
 private fun whatIsUnder(
-    field: PlayField,
+    play: PlayState,
     layout: BoardLayout,
     at: Vec2,
-    fanned: DragOrigin? = null,
     hand: HandTune = StageTuning.DEFAULT.hand,
     /**
      * The camera's plane, and how far a spread pile floats above the felt.
@@ -1125,8 +1121,10 @@ private fun whatIsUnder(
     // `DropCommit` dispatches it straight to `playFromDeck(index, …)`, and the
     // only reason nothing in this app could ask for a card that was not on top
     // of a pile is that this function returned a hard-coded zero.
+    val field = play.field
+    val fanned = play.fanned
     if (fanned != null) {
-        val spread = fanOf(field, layout, fanned)
+        val spread = fanOf(play, layout, fanned)
         val onFan = fanPointFor(at, fanPlane, fanLift)
         val index = PileFan.cardAt(spread, onFan.x, onFan.y, layout.cardWidth, layout.cardHeight)
         if (index != null) return fanned.fanCardAt(index)
@@ -1142,12 +1140,15 @@ private fun whatIsUnder(
 
     // The hand is asked against the shape it is *drawn* as, not against a
     // rectangle at the point it nominally occupies. See [handQuad].
-    field.hand.indices.reversed().forEach { index ->
-        val quad = handQuad(layout, field, index, hand, fanPlane)
+    val row = play.handRow
+    row.places.indices.reversed().forEach { place ->
+        val index = row.places[place] ?: return@forEach
+        val held = field.hand.getOrNull(index) ?: return@forEach
+        val quad = handQuad(layout, place, row.size, held.instanceId, hand, fanPlane)
         val hit = if (quad != null) {
             Quad.contains(quad, at.x, at.y)
         } else {
-            covers(layout.toPixels(HandFan.pointFor(layout, index, field.hand.size, hand.stepFraction)))
+            covers(layout.toPixels(HandFan.pointFor(layout, place, row.size, hand.stepFraction)))
         }
         if (hit) return DragOrigin.Hand(index)
     }
@@ -1176,10 +1177,61 @@ private fun whatIsUnder(
  * `PileFan` is pure and cheap, so both the hit test and `seatsFor` call it
  * rather than one of them being handed the other's answer. Two readings of one
  * function cannot drift; a value passed between them can, and the thing that
- * would drift is *which card you are pointing at*.
+ * would drift is *which card you are pointing at* — which now includes *after
+ * the spread has moved aside*, because it does that continuously.
  */
-private fun fanOf(field: PlayField, layout: BoardLayout, what: DragOrigin): FanSpread =
-    PileFan.spread(field.fanOf(what).size, layout.field, layout.cardWidth, layout.cardHeight)
+internal fun fanOf(play: PlayState, layout: BoardLayout, what: DragOrigin): FanSpread {
+    val count = play.field.fanOf(what).size
+    fun solve(parting: FanParting?) =
+        PileFan.spread(count, layout.field, layout.cardWidth, layout.cardHeight, parting)
+
+    val plain = solve(null)
+    return solve(partingFor(play, layout, what, plain) ?: return plain)
+}
+
+/**
+ * Which card being carried the spread should make room for, if any.
+ *
+ * Deterministic, and it has to be: with ten lanes there can be several cards
+ * over one spread, two holes in one row leave a middle group that cannot move
+ * both ways, and a spread that picked a different card each frame would shake.
+ * So there is an order — **the card that came out of this spread wins**, because
+ * that gesture is unambiguously about the spread; otherwise the first one whose
+ * landing is actually inside it.
+ *
+ * Measured against the *unparted* spread, so the choice cannot chase its own
+ * tail: a card near the edge that is only inside the footprint because the
+ * spread moved would open a window, close it, and open it again.
+ */
+private fun partingFor(
+    play: PlayState,
+    layout: BoardLayout,
+    what: DragOrigin,
+    plain: FanSpread,
+): FanParting? {
+    if (play.carried.isEmpty()) return null
+
+    fun slotOf(from: DragOrigin): Int? = when {
+        !from.cameFrom(what) -> null
+        from is DragOrigin.Pile -> from.index
+        from is DragOrigin.Buried -> from.index - 1
+        else -> null
+    }
+
+    val ours = play.carried.firstNotNullOfOrNull { held ->
+        slotOf(held.from)?.let { held to it }
+    }
+    val (carry, slot) = ours ?: run {
+        val inside = play.carried.firstOrNull {
+            val (x, y) = layout.toPixels(it.landing)
+            plain.bounds.contains(x, y)
+        } ?: return null
+        inside to null
+    }
+
+    val (x, y) = layout.toPixels(carry.landing)
+    return FanParting(x, y, holding = slot)
+}
 
 /**
  * Where the card being picked up was lying in the open spread, **on the felt**.
@@ -1217,7 +1269,14 @@ private fun fanSlotOf(
         is DragOrigin.Mat, is DragOrigin.Hand -> return null
     }
 
-    val card = fanOf(play.field, layout, fanned).cards.getOrNull(index) ?: return null
+    // The **unparted** spread. `FanHome` writes this down once, at the lift, so
+    // that the hole a card came out of does not walk away as the card comes
+    // back — and `FanParting.holding` keeps that slot still for the same reason.
+    // Asking the parted spread here would make the two agree by accident on the
+    // first frame and disagree on every one after it.
+    val card = PileFan
+        .spread(play.field.fanOf(fanned).size, layout.field, layout.cardWidth, layout.cardHeight)
+        .cards.getOrNull(index) ?: return null
     if (plane == null || lift == 0f) return layout.toMat(card.x to card.y)
 
     val onFelt = plane.flatten(card.x, card.y, lift)
@@ -1264,19 +1323,20 @@ private fun fanSlotOf(
  */
 private fun handQuad(
     layout: BoardLayout,
-    field: PlayField,
-    index: Int,
+    /** Where in the drawn row it sits, which is not its index in the hand. */
+    place: Int,
+    places: Int,
+    instanceId: Int,
     hand: HandTune,
     plane: StagePlane?,
 ): List<Vec2>? {
     if (plane == null) return null
-    val card = field.hand.getOrNull(index) ?: return null
 
-    val at = HandFan.pointFor(layout, index, field.hand.size, hand.stepFraction)
+    val at = HandFan.pointFor(layout, place, places, hand.stepFraction)
     val (x, y) = layout.toPixels(at)
     // The same settle the pose uses, from the same instance id, so a card that
     // has landed a degree off square is grabbed a degree off square.
-    val landing = Settle.of(card.instanceId, Settle.Care.PLACED)
+    val landing = Settle.of(instanceId, Settle.Care.PLACED)
     val pose = Pose3(
         position = Vec3(
             x + landing.slipX * layout.cardWidth,

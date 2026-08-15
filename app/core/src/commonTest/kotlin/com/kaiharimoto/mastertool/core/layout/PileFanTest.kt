@@ -258,4 +258,164 @@ class PileFanTest {
             )
         }
     }
+
+    // ---- and it makes room for a card being carried over it -------------------------
+
+    @Test
+    fun aRowPartsWhereTheCardIsGoingAndLeavesItACardOfClearFelt() {
+        // kai's first report, second half: *"the fan needs to dynamically move
+        // and make space for wherever the hovered card is going."* A six-card
+        // graveyard has three card widths of slack, so the window opens on
+        // slack alone and nothing is squeezed.
+        val plain = spread(6)
+        val at = plain.cards[2].x + 30f
+        val parted = PileFan.spread(6, field, cardWidth, cardHeight, FanParting(at, plain.cards[2].y))
+
+        val left = parted.cards.filter { it.x <= at }.maxOf { it.x }
+        val right = parted.cards.filter { it.x > at }.minOf { it.x }
+        assertTrue(at - left >= cardWidth * 0.6f, "the left side did not move: ${at - left}")
+        assertTrue(right - at >= cardWidth * 0.6f, "the right side did not move: ${right - at}")
+    }
+
+    @Test
+    fun aRowWithNoSlackOpensItsWindowBySqueezingInstead() {
+        // The case that needs it most and can afford it least. A board exactly
+        // wide enough for ten cards has nothing to slide into, so the side gives
+        // up its own overlap instead — which is what a hand does to a fanned
+        // pile, and is the whole reason the window is paid for in two
+        // currencies rather than one.
+        val narrow = Slot(left = 100f, top = 60f, width = 800f, height = 620f)
+        val plain = PileFan.spread(40, narrow, cardWidth, cardHeight)
+        val row = plain.cards.filter { it.row == 1 }
+        assertEquals(
+            narrow.width,
+            row.maxOf { it.x } - row.minOf { it.x } + cardWidth,
+            1f,
+            "the fixture has slack after all, so it is testing the other currency",
+        )
+
+        val at = row[4].x + plain.step / 2f
+        val parted = PileFan.spread(40, narrow, cardWidth, cardHeight, FanParting(at, row[4].y))
+        val partedRow = parted.cards.filter { it.row == 1 }
+
+        val left = partedRow.filter { it.x <= at }.maxOf { it.x }
+        val right = partedRow.filter { it.x > at }.minOf { it.x }
+        assertTrue(right - left > cardWidth, "the window is ${right - left}, under a card")
+        assertTrue(
+            partedRow.maxOf { it.x } - partedRow.minOf { it.x } <=
+                row.maxOf { it.x } - row.minOf { it.x } + 1f,
+            "with no slack the row still got wider",
+        )
+    }
+
+    @Test
+    fun aPartedRowNeverLeavesTheAreaItWasSpreadOver() {
+        // The invariant under both currencies. Slack is spent first and it is
+        // measured against this rectangle, so a window can never push a card off
+        // the table however hard it is asked to open.
+        listOf(6, 15, 40, 60).forEach { count ->
+            listOf(field, Slot(100f, 60f, 800f, 620f)).forEach { over ->
+                val plain = PileFan.spread(count, over, cardWidth, cardHeight)
+                plain.cards.forEach { probe ->
+                    val parted = PileFan.spread(
+                        count, over, cardWidth, cardHeight,
+                        FanParting(probe.x, probe.y, holding = probe.index),
+                    )
+                    parted.cards.forEach {
+                        assertTrue(
+                            it.x - cardWidth / 2f >= over.left - 1f &&
+                                it.x + cardWidth / 2f <= over.right + 1f,
+                            "$count over ${over.width}: card ${it.index} ran off at ${it.x}",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun apartedRowKeepsItsOrderAndKeepsEveryCardFindable() {
+        // Two claims that are really one: `cardAt` answers with the *last* card
+        // whose footprint covers the point, so a row that reordered itself would
+        // hand back the wrong index — silently, and only while something is
+        // being carried.
+        listOf(6, 15, 40, 60).forEach { count ->
+            val plain = spread(count)
+            plain.cards.forEach { probe ->
+                val parted = PileFan.spread(
+                    count, field, cardWidth, cardHeight,
+                    FanParting(probe.x + 20f, probe.y, holding = probe.index),
+                )
+                parted.cards.groupBy { it.row }.forEach { (row, cards) ->
+                    cards.zipWithNext { a, b ->
+                        assertTrue(
+                            b.x > a.x,
+                            "$count cards, row $row: ${a.index} at ${a.x} and ${b.index} at ${b.x}",
+                        )
+                    }
+                }
+                parted.cards.forEach { card ->
+                    assertEquals(
+                        card.index,
+                        PileFan.cardAt(parted, card.x, card.y, cardWidth, cardHeight),
+                        "$count cards: card ${card.index} is not found at its own centre",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun theSlotTheCardCameOutOfDoesNotMove() {
+        // Because `FanHome` wrote its position down at the lift, on purpose: a
+        // put-back target that walked away as you approached it would not be a
+        // target. It is also the card in your hand, so it is not drawn and
+        // nothing is lost by leaving it be.
+        listOf(6, 15, 40).forEach { count ->
+            val plain = spread(count)
+            plain.cards.forEach { held ->
+                val parted = PileFan.spread(
+                    count, field, cardWidth, cardHeight,
+                    FanParting(held.x + cardWidth * 0.3f, held.y, holding = held.index),
+                )
+                assertEquals(
+                    held.x,
+                    parted.cards[held.index].x,
+                    1e-3f,
+                    "$count cards: slot ${held.index} was pushed aside",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun aRowTheCardIsNowhereNearDoesNotMoveAtAll() {
+        val plain = spread(40)
+        val far = plain.cards.first { it.row == 0 }
+        val parted = PileFan.spread(40, field, cardWidth, cardHeight, FanParting(far.x, far.y))
+
+        parted.cards.filter { it.row >= 2 }.forEach {
+            assertEquals(plain.cards[it.index].x, it.x, 1e-3f, "row ${it.row} moved")
+        }
+    }
+
+    @Test
+    fun theFootprintIsTheOneTheFanHasWhenNothingIsOverIt() {
+        // `bounds` is what says where the fan stops and the table starts. A
+        // footprint that breathed as the spread got out of the way would let go
+        // of the gesture that was making it move.
+        val plain = spread(40)
+        val parted = PileFan.spread(
+            40, field, cardWidth, cardHeight,
+            FanParting(plain.cards[15].x, plain.cards[15].y),
+        )
+        assertEquals(plain.bounds, parted.bounds)
+    }
+
+    @Test
+    fun withNothingCarriedOverItTheSpreadIsExactlyWhatItAlwaysWas() {
+        listOf(1, 6, 15, 40, 60).forEach { count ->
+            assertEquals(spread(count), PileFan.spread(count, field, cardWidth, cardHeight, null))
+        }
+    }
 }

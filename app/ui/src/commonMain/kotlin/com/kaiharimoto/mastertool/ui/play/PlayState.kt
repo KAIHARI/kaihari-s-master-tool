@@ -16,6 +16,8 @@ import com.kaiharimoto.mastertool.core.board.SetPosition
 import com.kaiharimoto.mastertool.core.board.toMat
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
+import com.kaiharimoto.mastertool.core.layout.HandFan
+import com.kaiharimoto.mastertool.core.layout.HandRow
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.tune.StageTuning
 import kotlin.random.Random
@@ -148,6 +150,29 @@ class PlayState(
 
     /** Everything in the air, for the poses and the drop indicators. */
     val carried: List<Carry> get() = carries.values.toList()
+
+    /**
+     * The hand exactly as the stage draws it: cards in the air have no place,
+     * and one place is held open wherever a card is about to land.
+     *
+     * Here rather than at the four sites that need it — the pose, the hit box,
+     * the insert index and the indicator — because those four *were* rebuilding
+     * it separately, and two of them disagreed. The renderer drew a place for
+     * the card in the air; the resolver measured as though the row had closed up
+     * behind it. Half a step apart, every time, which is 0.37 of a card width at
+     * the shipped tuning and most of the width of the gap being pointed at.
+     *
+     * Read by identity rather than by `Carry.from`, for the same reason the
+     * release rebases: an index into the hand is a memory of the board at the
+     * lift, and with ten lanes the board moves under it.
+     */
+    val handRow: HandRow get() = HandFan.row(
+        count = field.hand.size,
+        lifted = carries.values.mapNotNullTo(mutableSetOf()) { held ->
+            field.hand.indexOfFirst { it.instanceId == held.holding }.takeIf { it >= 0 }
+        },
+        opening = carries.values.mapNotNull { (it.intent as? DropIntent.Hand)?.at },
+    )
 
     fun carryIn(lane: Int): Carry? = carries[lane]
 
@@ -415,9 +440,10 @@ class PlayState(
                 previous = held.intent,
                 attaching = attaching,
                 home = home,
-                // Which card of the hand is the one in the air, so the gaps are
-                // counted against the row the user can actually see.
-                fromHand = (held.from as? DragOrigin.Hand)?.index,
+                // The row the user can actually see, so the gap the finger is
+                // over is counted against it rather than against a row of
+                // evenly spaced cards that is never drawn.
+                hand = handRow,
                 handStep = handStep,
             ),
         ).settled())

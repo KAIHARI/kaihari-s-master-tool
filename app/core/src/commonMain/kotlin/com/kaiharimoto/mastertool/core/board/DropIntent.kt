@@ -3,6 +3,7 @@ package com.kaiharimoto.mastertool.core.board
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.layout.HandFan
+import com.kaiharimoto.mastertool.core.layout.HandRow
 import com.kaiharimoto.mastertool.core.layout.Slot
 import com.kaiharimoto.mastertool.core.tune.StageTuning
 import kotlin.math.abs
@@ -237,10 +238,11 @@ object DropTargets {
      *   picked up, and whether it has left — null unless the drag started in the
      *   fan that is still open. Dropping it back there puts it back, once it has
      *   been somewhere else first. See [FanHome].
-     * @param fromHand which card of the hand is the one in the air, when the
-     *   drag started there. The hand is drawn one card shorter while one of its
-     *   cards is being carried, so the gap the finger is over has to be measured
-     *   against the row the user can actually see.
+     * @param hand the hand **as it is drawn** — which cards are in the air and
+     *   which place is being held open — so the gap the finger is over is
+     *   measured against the row the user can actually see. It used to be one
+     *   index and a `count - 1` correction, which describes a row of evenly
+     *   spaced cards and is not the row the screen draws.
      * @param handStep how far apart the hand's cards sit, in card widths — the
      *   same tuning the pose and the hit box read, because a third reading that
      *   disagreed would be a caret drawn in a gap the card does not go into.
@@ -253,7 +255,7 @@ object DropTargets {
         previous: DropIntent? = null,
         attaching: Boolean = false,
         home: FanHome? = null,
-        fromHand: Int? = null,
+        hand: HandRow = HandRow.of(field.hand.size),
         handStep: Float = StageTuning.DEFAULT.hand.stepFraction,
     ): DropIntent {
         if (layout.cardWidth <= 0f) return DropIntent.Free(point)
@@ -288,10 +290,10 @@ object DropTargets {
                 HandFan.insertAt(
                     band = layout.hand,
                     cardWidth = cardWidth,
+                    row = hand,
                     count = field.hand.size,
                     x = px.first,
                     stepFraction = handStep,
-                    moving = fromHand,
                 ),
             )
         }

@@ -3,6 +3,7 @@ package com.kaiharimoto.mastertool.core.layout
 import com.kaiharimoto.mastertool.core.tune.StageTuning
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -24,8 +25,19 @@ class HandFanTest {
     private fun centre(index: Int, count: Int) =
         HandFan.centreOf(band, card, index, count, step)
 
-    private fun insert(x: Float, count: Int, moving: Int? = null) =
-        HandFan.insertAt(band, card, count, x, step, moving)
+    /**
+     * The drawn row for a hand of [count] with [moving] in the air, and the
+     * gap that a finger at [x] is asking for.
+     *
+     * A card in the air no longer leaves its place standing: the row closes up
+     * behind it, which is what a hand does and what the measurement always
+     * assumed. What changed is that the *drawing* now agrees.
+     */
+    private fun insert(x: Float, count: Int, moving: Int? = null) = HandFan.insertAt(
+        band, card,
+        HandFan.row(count, lifted = setOfNotNull(moving)),
+        count, x, step,
+    )
 
     // ---- the inverse ----------------------------------------------------------
 
@@ -131,7 +143,7 @@ class HandFanTest {
     @Test
     fun aBoardWithNoRoomStillAnswers() {
         val flat = BoardLayouter.solve(0f, 0f, 59f / 86f)
-        assertEquals(0, HandFan.insertAt(flat.hand, flat.cardWidth, 5, 0f, step))
+        assertEquals(0, HandFan.insertAt(flat.hand, flat.cardWidth, HandRow.of(5), 5, 0f, step))
     }
 
     // ---- the pose, which is the reading that already shipped -------------------
@@ -150,5 +162,132 @@ class HandFanTest {
     fun aSmallHandIsCentredRatherThanCrowdedToOneEnd() {
         val xs = (0 until 3).map { centre(it, 3) }
         assertEquals(band.centerX, (xs.first() + xs.last()) / 2f, 0.01f)
+    }
+
+    // ---- the row a hand is actually drawn as ----------------------------------
+
+    @Test
+    fun aCardInTheAirLeavesNoPlaceStandingAndTheRestCloseUp() {
+        val row = HandFan.row(5, lifted = setOf(2))
+        assertEquals(listOf(0, 1, 3, 4), row.places)
+        assertEquals(4, row.size)
+        assertEquals(null, row.placeOf(2))
+        assertEquals(2, row.placeOf(3))
+    }
+
+    @Test
+    fun aPlaceIsHeldOpenWhereTheCardIsGoing() {
+        // The whole of kai's fourth report. A caret painted in a gap says where
+        // a card will go; a gap that is really there shows you.
+        val row = HandFan.row(5, lifted = setOf(0), opening = listOf(3))
+        assertEquals(listOf(1, 2, null, 3, 4), row.places)
+        assertEquals(listOf(2), row.open)
+        assertEquals(2, row.openingFor(3, 5))
+    }
+
+    @Test
+    fun tenHandsCanHoldTenPlacesOpen() {
+        // Nothing here is written against there being one carry: the table has
+        // ten lanes and a hand of fourteen can legally have several of its cards
+        // in the air at once, each with a place waiting for it.
+        val row = HandFan.row(6, lifted = setOf(0, 5), opening = listOf(2, 4))
+        assertEquals(listOf(1, null, 2, 3, null, 4), row.places)
+        assertEquals(listOf(1, 4), row.open)
+    }
+
+    @Test
+    fun aGapPastTheEndIsAPlaceOnTheEnd() {
+        val row = HandFan.row(3, lifted = setOf(1), opening = listOf(3))
+        assertEquals(listOf(0, 2, null), row.places)
+        assertEquals(3, row.gapAfter(2, 3))
+    }
+
+    @Test
+    fun theRowASettledCarryAsksForIsTheRowItIsAlreadyDrawnAs() {
+        // The property the whole arrangement rests on, and the one that could
+        // have made it oscillate: the gap `insertAt` names is fed back in as the
+        // place the row holds open, which moves every card after it. If that
+        // were not a fixed point the hand would flicker between two layouts at
+        // sixty frames a second.
+        //
+        // Swept over every hand size the band lays out differently, every card
+        // that could be in the air, and four hundred positions across the whole
+        // band and well past both ends.
+        listOf(1, 2, 3, 5, 9, 10, 14).forEach { count ->
+            (0 until count).forEach { moving ->
+                var x = band.left - card * 2f
+                while (x <= band.right + card * 2f) {
+                    val lifted = setOf(moving)
+                    // One step of feedback, then it must not move again. The
+                    // first answer is read off a row with nothing open in it, so
+                    // it is allowed to differ by a spelling — with the only card
+                    // of a hand in the air, "before it" and "after it" are the
+                    // same empty row.
+                    val opened = HandFan.insertAt(
+                        band, card, HandFan.row(count, lifted), count, x, step,
+                    )
+                    var asked = HandFan.insertAt(
+                        band, card, HandFan.row(count, lifted, listOf(opened)), count, x, step,
+                    )
+                    repeat(4) {
+                        val row = HandFan.row(count, lifted, opening = listOf(asked))
+                        val again = HandFan.insertAt(band, card, row, count, x, step)
+                        assertEquals(
+                            asked, again,
+                            "hand $count, card $moving in the air, finger at $x: " +
+                                "the row asked for gap $asked and then for $again",
+                        )
+                        asked = again
+                    }
+                    x += card / 8f
+                }
+            }
+        }
+    }
+
+    @Test
+    fun anOpenPlaceIsWhereTheCardWillActuallyBe() {
+        // `openingFor` is the inverse of the row: the place held open for a gap
+        // has to be the place the card lands in when the row closes over it.
+        // Otherwise the hole is one slot from the card that fills it, which is
+        // worse than no hole at all.
+        listOf(3, 5, 9, 14).forEach { count ->
+            (0 until count).forEach { moving ->
+                (0..count).forEach { at ->
+                    val row = HandFan.row(count, setOf(moving), listOf(at))
+                    val place = row.openingFor(at, count)
+                    assertNotNull(place, "hand $count, card $moving, gap $at has no place")
+                    // Round-tripped rather than compared to `at` directly,
+                    // because two gap numbers can name one physical place: with
+                    // card 0 in the air, gaps 0 and 1 are both the front of the
+                    // row and `reorderHand` refuses both as no move at all. What
+                    // has to be true is that the hole you can see is the hole a
+                    // finger over it asks for.
+                    val asked = HandFan.insertAt(
+                        band, card, row, count,
+                        HandFan.centreOf(band, card, place, row.size, step),
+                        step,
+                    )
+                    assertEquals(
+                        place,
+                        row.openingFor(asked, count),
+                        "hand $count, card $moving: the place held open for gap $at is not it",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aRowWithNothingInTheAirIsTheRowThatAlwaysShipped() {
+        // Every value bit-identical to the old arithmetic when nothing is being
+        // carried, which is the state the hand is in almost all of the time.
+        listOf(1, 5, 14).forEach { count ->
+            val row = HandRow.of(count)
+            assertEquals((0 until count).toList(), row.places)
+            (0 until count).forEach {
+                assertEquals(centre(it, count), HandFan.centreOf(band, card, it, row.size, step))
+            }
+        }
     }
 }

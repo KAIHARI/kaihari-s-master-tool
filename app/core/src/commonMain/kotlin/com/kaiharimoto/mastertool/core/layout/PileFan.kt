@@ -1,5 +1,6 @@
 package com.kaiharimoto.mastertool.core.layout
 
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -29,6 +30,35 @@ data class FanSpread(
     /** How far apart two neighbours sit, in mat pixels. */
     val step: Float,
     val bounds: Slot,
+)
+
+/**
+ * A card being carried over an open spread, so the spread can make room for it.
+ *
+ * kai's first report ends *"the fan needs to dynamically move and make space for
+ * wherever the hovered card is going"*, and the reason is legibility rather than
+ * arithmetic: a spread is laid out over `layout.field`, which is the seven-by-
+ * three grid, so up to forty cards are drawn over the zone you are aiming at.
+ * The resolver knows perfectly well which zone that is; you cannot see it.
+ *
+ * [x] and [y] are where the card will **land**, in mat pixels — not where the
+ * finger is. A carried card is drawn up-table of the finger holding it, so a
+ * window opened under the finger would open under the wrong thing.
+ */
+data class FanParting(
+    val x: Float,
+    val y: Float,
+    /**
+     * The slot this card came out of, which does not move.
+     *
+     * The hole a card leaves is what "put it back" is aimed at, and `FanHome`
+     * fixes that target at the lift — deliberately, because a target that walks
+     * away as you approach it is not a target. So the one slot the parting must
+     * not slide is the one whose position something else has already written
+     * down. It is not drawn either, being the card in your hand, so nothing is
+     * lost by leaving it where it was.
+     */
+    val holding: Int? = null,
 )
 
 /**
@@ -116,6 +146,15 @@ object PileFan {
     private const val ROW_STEP = 0.58f
 
     /**
+     * How much clear felt a parted window leaves round the card, as a share of
+     * one — so a window is a card and a bit rather than exactly a card.
+     */
+    private const val PART_MARGIN = 0.12f
+
+    /** How far in y a row has to be before it stops caring, in card heights. */
+    private const val PART_ROW = 0.75f
+
+    /**
      * [count] cards, laid out to fill [over] without leaving it.
      *
      * Two rules, in this order. **Ten to a row, four rows at most** — so a
@@ -128,7 +167,13 @@ object PileFan {
      * The cards stay in the order they were given, which for the deck is the
      * order it is actually in.
      */
-    fun spread(count: Int, over: Slot, cardWidth: Float, cardHeight: Float): FanSpread {
+    fun spread(
+        count: Int,
+        over: Slot,
+        cardWidth: Float,
+        cardHeight: Float,
+        parting: FanParting? = null,
+    ): FanSpread {
         if (count <= 0 || cardWidth <= 0f || cardHeight <= 0f) {
             return FanSpread(emptyList(), 0, 0, 0f, Slot(over.centerX, over.centerY, 0f, 0f))
         }
@@ -173,12 +218,18 @@ object PileFan {
             FanCard(index, left + place * step, firstRowY + row * rowStep, row)
         }
 
+        val parted = parting?.let { part(cards, it, over, cardWidth, cardHeight, step) } ?: cards
+
         val widest = (0 until rowsUsed).maxOf { widthOf(it) }
         return FanSpread(
-            cards = cards,
+            cards = parted,
             rows = rowsUsed,
             perRow = perRow,
             step = step,
+            // The **unparted** extent, on purpose. This is what says where the
+            // fan stops and the table starts, and a footprint that breathed
+            // every time a card moved over it would let go of a gesture the
+            // moment the spread got out of that gesture's way.
             bounds = Slot(
                 left = over.centerX - widest / 2f,
                 top = firstRowY - cardHeight / 2f,
@@ -186,6 +237,81 @@ object PileFan {
                 height = block,
             ),
         )
+    }
+
+    /**
+     * The same cards, with a window opened where one is about to land.
+     *
+     * Row by row, and only for rows the carried card is actually over. Within a
+     * row the cards split into the ones left of the window and the ones right of
+     * it, and each side moves outward by the least that clears the window —
+     * which it pays for in two currencies, in this order:
+     *
+     * 1. **Slack.** A row is centred in [over] and usually narrower than it, so
+     *    there is room to slide before anything runs off the table. For a
+     *    six-card graveyard that is three whole card widths and the window opens
+     *    without anything else happening.
+     * 2. **Overlap.** A full deck's rows fill the width and have almost no slack
+     *    — a forty-card spread leaves 0.18 of a card — so the side squeezes its
+     *    own cards closer together instead, down to [MIN_STEP]. That is what a
+     *    hand does to a fanned pile, and it is why the window opens at all on
+     *    the case that needs it most.
+     *
+     * Nothing here can reorder a row: both currencies only ever move a side
+     * *away* from the window, and the compression is applied from the outer end
+     * inward, so the order and the row's own extent are preserved.
+     */
+    private fun part(
+        cards: List<FanCard>,
+        parting: FanParting,
+        over: Slot,
+        cardWidth: Float,
+        cardHeight: Float,
+        step: Float,
+    ): List<FanCard> {
+        val half = cardWidth * (0.5f + PART_MARGIN)
+        val minStep = cardWidth * MIN_STEP
+        val moved = cards.toMutableList()
+
+        cards.groupBy { it.row }.forEach { (_, row) ->
+            if (row.isEmpty()) return@forEach
+            if (abs(row.first().y - parting.y) > cardHeight * PART_ROW) return@forEach
+
+            val movable = row.filter { it.index != parting.holding }
+            if (movable.isEmpty()) return@forEach
+
+            val rowLeft = row.minOf { it.x }
+            val rowRight = row.maxOf { it.x }
+            val slack = max(0f, (over.width - (rowRight - rowLeft) - cardWidth) / 2f)
+
+            // Both sides are one piece of arithmetic read in a mirror: [dir] is
+            // the way this side moves, and every comparison is written through
+            // it so neither half can be fixed without the other.
+            listOf(-1f, 1f).forEach { dir ->
+                val side = movable.filter { if (dir < 0f) it.x <= parting.x else it.x > parting.x }
+                if (side.isEmpty()) return@forEach
+
+                // The card of this side nearest the window, and how far inside
+                // the window it currently sits.
+                val innerX = if (dir < 0f) side.maxOf { it.x } else side.minOf { it.x }
+                val need = max(0f, half - dir * (innerX - parting.x))
+                if (need <= 0f) return@forEach
+
+                val shift = min(need, slack)
+                val steps = (side.size - 1).coerceAtLeast(1)
+                val closer = min(max(0f, need - shift) / steps, max(0f, step - minStep))
+
+                // Outermost first, so the rank counts inward from the end that
+                // takes the whole shift and none of the squeeze. The row's outer
+                // edge therefore moves by exactly the slack it was allowed and
+                // no further, and the spacing never falls below [MIN_STEP], so
+                // no pair of cards can change places.
+                side.sortedBy { -dir * it.x }.forEachIndexed { rank, card ->
+                    moved[card.index] = card.copy(x = card.x + dir * (shift + rank * closer))
+                }
+            }
+        }
+        return moved
     }
 
     /**

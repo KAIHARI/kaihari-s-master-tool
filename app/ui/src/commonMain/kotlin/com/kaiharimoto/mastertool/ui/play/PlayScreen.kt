@@ -68,7 +68,9 @@ import com.kaiharimoto.mastertool.core.board.PlacedCard
 import com.kaiharimoto.mastertool.core.board.PlayField
 import com.kaiharimoto.mastertool.core.board.toPixels
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
+import com.kaiharimoto.mastertool.core.layout.FanSpread
 import com.kaiharimoto.mastertool.core.layout.HandFan
+import com.kaiharimoto.mastertool.core.layout.HandRow
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.layout.Slot
@@ -667,6 +669,8 @@ fun PlayScreen(
                         camera.pose.yawDegrees,
                     ),
                     tune = tune,
+                    hand = play.handRow,
+                    spread = play.fanned?.let { fanOf(play, layout, it) },
                 )
             }
 
@@ -1026,7 +1030,9 @@ fun PlayScreen(
                     drawFelt(layout, camera.plane, camera.eye, look, pool, weave)
                     drawScene(scenery.standing, camera.plane, camera.eye, look)
                     drawMatControls(layout, play.field)
-                    play.carried.forEach { drawIndicator(it, play.field, layout, tune.hand.stepFraction) }
+                    play.carried.forEach {
+                        drawIndicator(it, play.field, layout, tune.hand.stepFraction, play.handRow)
+                    }
                 }
 
                 // Then one card at a time, each drawing its own shadow, its own
@@ -1290,6 +1296,20 @@ private fun seatsFor(
      * caller that has no opinion gets the stage it always had.
      */
     tune: StageTuning = StageTuning.DEFAULT,
+    /**
+     * The hand as a row of *places*: no place for a card in the air, one held
+     * open where a card is landing. `PlayState.handRow` is the one that is real;
+     * the default here is a plain hand, for a caller with nothing in the air.
+     */
+    hand: HandRow = HandRow.of(field.hand.size),
+    /**
+     * The open spread, already parted for whatever is being carried over it.
+     *
+     * Passed in rather than solved here, because the hit test has to get the
+     * identical answer and `MatInput.fanOf` is where that answer lives. Null
+     * when nothing is spread out.
+     */
+    spread: FanSpread? = null,
 ): List<Seat> {
     val seats = mutableListOf<Seat>()
     val cardWidth = layout.cardWidth
@@ -1388,11 +1408,24 @@ private fun seatsFor(
     // were even appended: those went in last, in a hard-coded order, and the
     // graveyard therefore painted over the deck standing in front of it.
 
-    // The hand, fanned along the band the solver set aside.
+    // The hand, fanned along the band the solver set aside — as a *row of
+    // places* rather than as a list of cards, so that the card in the air has no
+    // place and the place a card is landing in is really open. See `HandRow`:
+    // the row was drawn one way and measured another, and the gap the caret
+    // named was half a step from the gap the card went into.
     field.hand.forEachIndexed { index, card ->
         val carry = carries.firstOrNull { it.holding == card.instanceId }
         val carrying = carry != null
-        val at = HandFan.pointFor(layout, index, field.hand.size, tune.hand.stepFraction)
+        val place = hand.placeOf(index)
+        val at = HandFan.pointFor(
+            layout,
+            // A carried card keeps its own place for the pose it is *leaving*,
+            // which nothing reads — `carry.at` wins below — but a place must be
+            // a number, and the row no longer has one for it.
+            place ?: 0,
+            hand.size.coerceAtLeast(1),
+            tune.hand.stepFraction,
+        )
         // A card in hand is always face-up to its owner; one turned over on the
         // way out of it is being set.
         val faceUp = carry?.faceDown != true
@@ -1431,7 +1464,7 @@ private fun seatsFor(
             // default is the *instance* id, which for a freshly dealt hand is
             // the shuffle — which is why the third card was sitting on top of
             // the fourth for no reason anybody could see.
-            order = index,
+            order = place ?: index,
         )
     }
 
@@ -1547,8 +1580,13 @@ private fun seatsFor(
     // closing the deck's fan shuffles it again.
     if (fanned != null) {
         val cards = field.fanOf(fanned)
-        val spread = PileFan.spread(cards.size, layout.field, cardWidth, cardHeight)
-        spread.cards.forEach { fan ->
+        // Parted for whatever is being carried over it — kai's *"the fan needs
+        // to dynamically move and make space for wherever the hovered card is
+        // going"*. Solved by the same `MatInput.fanOf` the hit test calls, so
+        // which card you are pointing at cannot disagree with which card you can
+        // see, however far the spread has moved aside.
+        val laid = spread ?: PileFan.spread(cards.size, layout.field, cardWidth, cardHeight)
+        laid.cards.forEach { fan ->
             val card = cards.getOrNull(fan.index) ?: return@forEach
             // Any hand holding it, not only the first: with two hands in a
             // spread, checking one carry would draw the other's card twice —
@@ -1667,6 +1705,8 @@ private fun DrawScope.drawIndicator(
     field: PlayField,
     layout: BoardLayout,
     handStep: Float,
+    /** The hand as it is drawn, so the opening this points at is the real one. */
+    hand: HandRow,
 ) {
     val intent = carry?.intent ?: return
 
@@ -1703,27 +1743,35 @@ private fun DrawScope.drawIndicator(
         DropIntent.Deck -> layout[BoardSlot.Deck]?.let { ring(it, 0.85f) }
         DropIntent.ExtraDeck -> layout[BoardSlot.ExtraDeck]?.let { ring(it, 0.85f) }
 
-        // The hand says *where* in the hand, because it can now. A caret in the
-        // gap rather than a ring round the band: the band was the right drawing
-        // while the answer was "your hand" and is the wrong one now that the
-        // answer is "third from the left" — a highlight round the whole row
-        // cannot tell you which of fourteen gaps you are pointing at, and that
-        // is the only thing anybody arranging a hand wants to know.
+        // The hand says *where* in the hand, and it now says it by being open
+        // there. The row holds a real place for the card — `HandRow` — so the
+        // honest drawing is the footprint of that place rather than a caret
+        // pointing between two cards that never moved.
+        //
+        // It used to be a caret, and the caret had to reconstruct which place it
+        // meant: back out of the full hand's numbering, into a row of
+        // `count - 1`, minus half a step. Three reconstructions of a row that
+        // the renderer was drawing differently, which is exactly how it came to
+        // sit half a step from the gap the card went into.
         is DropIntent.Hand -> {
-            val moving = (carry.from as? DragOrigin.Hand)?.index
-            val row = if (moving != null) field.hand.size - 1 else field.hand.size
-            // Back out of the full hand's numbering and into the row as drawn,
-            // the exact inverse of what `HandFan.insertAt` did on the way in.
-            val among = if (moving != null && intent.at > moving) intent.at - 1 else intent.at
-            val step = HandFan.step(layout.hand, layout.cardWidth, row, handStep)
-            val x = HandFan.centreOf(layout.hand, layout.cardWidth, among, row, handStep) -
-                step / 2f
-
-            drawRect(
-                color = accent.copy(alpha = 0.9f),
-                topLeft = Offset(x - layout.cardWidth * 0.018f, layout.hand.top),
-                size = Size(layout.cardWidth * 0.036f, layout.hand.height),
-            )
+            val place = hand.openingFor(intent.at, field.hand.size)
+            if (place != null) {
+                val x = HandFan.centreOf(layout.hand, layout.cardWidth, place, hand.size, handStep)
+                ring(
+                    Slot(
+                        left = x - layout.cardWidth / 2f,
+                        top = layout.hand.centerY - layout.cardHeight / 2f,
+                        width = layout.cardWidth,
+                        height = layout.cardHeight,
+                    ),
+                    0.85f,
+                )
+            } else {
+                // No place held open — the row has not caught up with the intent
+                // yet, which is one frame at most. A band-wide hint beats
+                // nothing at all and beats a caret drawn in the wrong gap.
+                ring(layout.hand, 0.35f, 0.02f)
+            }
         }
 
         // The freeform three, which are the only ones with no box already drawn
