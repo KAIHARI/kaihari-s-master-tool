@@ -339,6 +339,17 @@ class PlayState(
             // that started this — changes that.
             faceDown = faceDown ||
                 (from is DragOrigin.Mat && field.placed(from.id)?.faceUp == false),
+            // And picked up lying the way it was lying, which is the other half
+            // of the same sentence and was missing.
+            //
+            // `SetPosition` solves the landing from `faceDown` and `turned`
+            // alone, so a carry that started at zero quarter turns says "upright"
+            // about a card that has been sideways since it was summoned. That
+            // did not matter for as long as `DropCommit` threw the answer away
+            // for a card already on the mat — the two bugs cancelled, and fixing
+            // either one alone would have made a monster in defence stand up
+            // every time it was nudged.
+            quarterTurns = if (from is DragOrigin.Mat && field.placed(from.id)?.turned == true) 1 else 0,
             cameOutOf = cameOutOf,
         ).settled())
     }
@@ -438,6 +449,36 @@ class PlayState(
      */
     private fun monsterAt(held: Carry): Boolean? =
         field.cardAt(held.from)?.let { isMonster(it.cardId) }
+
+    /**
+     * Set a card that is already lying on the field, where it lies.
+     *
+     * The **pointer idiom for setting**, and it did not exist. `MatGuide` has
+     * advertised *"Set a card face-down → right-click it, then Turn over"* since
+     * the set gesture shipped, and "Turn over" is `PlayField.flip`, which
+     * deliberately keeps a card upright — so on a mouse, setting a monster
+     * produced a face-down card standing up, every time, by design. The touch
+     * idiom (two fingers) had a different bug with the same symptom; fixing that
+     * one alone would have left this one looking like it.
+     *
+     * The zone decides, exactly as it does for the gesture: the card's own point
+     * is resolved through the same `DropTargets` the drag uses, so a card in a
+     * monster zone lies down and one in a spell/trap zone stands up, and neither
+     * answer is written twice.
+     */
+    fun setDown(id: Int, layout: BoardLayout) {
+        val placed = field.placed(id) ?: return
+        val position = SetPosition.of(
+            faceDown = true,
+            // Not the card's current rotation: "set" is a statement about how it
+            // should end up, and the zone is what says so. A monster already
+            // sideways and face up is being *set*, not merely turned over.
+            turned = false,
+            intent = DropTargets.resolve(placed.at, id, field, layout, null),
+            monster = isMonster(placed.card.cardId),
+        )
+        move { it.setPosition(id, position) }
+    }
 
     fun cancelCarry(lane: Int) {
         carries = carries - lane

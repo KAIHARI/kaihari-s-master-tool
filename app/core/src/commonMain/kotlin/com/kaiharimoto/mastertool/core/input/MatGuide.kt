@@ -199,7 +199,12 @@ object MatGuide {
             GestureGroup.TURNING,
             what = "Set a card face-down",
             touch = "Drag it with two fingers",
-            pointer = "Right-click it, then Turn over",
+            // "Set", not "Turn over", and the difference is the whole entry.
+            // This line said "Turn over" for as long as setting has existed, and
+            // `PlayField.flip` deliberately keeps a card upright — so on a mouse
+            // the documented way to set a monster produced a face-down card
+            // standing in attack position, which is exactly what it looks like.
+            pointer = "Right-click it, then Set",
         ),
         Gesture(
             GestureGroup.TURNING,

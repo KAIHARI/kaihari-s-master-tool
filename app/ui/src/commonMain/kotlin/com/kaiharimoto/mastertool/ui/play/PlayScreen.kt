@@ -196,7 +196,7 @@ import kotlin.random.Random
  * card that still lies well inside its own footprint. It would not be safe on
  * the mat, where cards are anywhere.
  */
-private fun handLiftOf(
+internal fun handLiftOf(
     cardHeight: Float,
     bodyDepth: Float,
     hand: HandTune = StageTuning.DEFAULT.hand,
@@ -1026,7 +1026,7 @@ fun PlayScreen(
             MatInput(pilot = pilot, layout = layout, camera = camera)
 
             menuFor?.let { origin ->
-                CardActions(play, origin, onDismiss = { menuFor = null })
+                CardActions(play, origin, layout, onDismiss = { menuFor = null })
             }
         }
 
@@ -2331,7 +2331,12 @@ private fun hasMenu(origin: DragOrigin): Boolean = when (origin) {
  * keyboard one is the shortcut table — three producers, one menu.
  */
 @Composable
-private fun CardActions(play: PlayState, origin: DragOrigin, onDismiss: () -> Unit) {
+private fun CardActions(
+    play: PlayState,
+    origin: DragOrigin,
+    layout: BoardLayout,
+    onDismiss: () -> Unit,
+) {
     val id = (origin as? DragOrigin.Mat)?.id
 
     androidx.compose.material3.DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
@@ -2347,6 +2352,12 @@ private fun CardActions(play: PlayState, origin: DragOrigin, onDismiss: () -> Un
 
         if (id != null) {
             val placed = play.field.placed(id)
+            // "Set" above "Turn over", because it is the one people reach for
+            // and because the guide has been pointing at the wrong one of the
+            // two since the set gesture shipped. They are different verbs: this
+            // asks the zone how the card should end up, that one turns it over
+            // exactly where it lies.
+            item("Set") { play.setDown(id, layout) }
             item("Turn over") { play.move { it.flip(id) } }
             item("Rotate") { play.move { it.rotate(id) } }
             item("Bring to front") { play.move { it.bringToFront(id) } }

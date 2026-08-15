@@ -21,6 +21,7 @@ import com.kaiharimoto.mastertool.core.board.fanCardAt
 import com.kaiharimoto.mastertool.core.board.fanSource
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlayField
+import com.kaiharimoto.mastertool.core.tune.HandTune
 import com.kaiharimoto.mastertool.core.tune.StageTuning
 import com.kaiharimoto.mastertool.core.haptics.Haptic
 import com.kaiharimoto.mastertool.core.haptics.HapticScore
@@ -40,7 +41,12 @@ import com.kaiharimoto.mastertool.core.mat.MatDesk
 import com.kaiharimoto.mastertool.core.mat.Touch
 import com.kaiharimoto.mastertool.core.mat.TouchFrame
 import com.kaiharimoto.mastertool.core.mat.TwoFinger
+import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.Vec2
+import com.kaiharimoto.mastertool.core.motion.Vec3
+import com.kaiharimoto.mastertool.core.motion.Settle
+import com.kaiharimoto.mastertool.core.render.CardSolid
+import com.kaiharimoto.mastertool.core.render.Quad
 import com.kaiharimoto.mastertool.ui.fx.Feedback
 import com.kaiharimoto.mastertool.ui.fx.SoundEffect
 import kotlin.math.abs
@@ -109,7 +115,7 @@ internal class MatPilot(
      */
     val desk = MatDesk<DragOrigin>({ at ->
         whatIsUnder(
-            play.field, layout, at, play.fanned, tune.hand.stepFraction,
+            play.field, layout, at, play.fanned, tune.hand,
             camera?.plane, fanLift,
         )
     })
@@ -310,7 +316,7 @@ internal class MatPilot(
 
         carryOut(desk.cancel())
         whatIsUnder(
-            play.field, layout, at, play.fanned, tune.hand.stepFraction,
+            play.field, layout, at, play.fanned, tune.hand,
             camera?.plane, fanLift,
         )?.let(onMenu)
     }
@@ -329,7 +335,7 @@ internal class MatPilot(
             val was = grabbed[lane]
             val now = handle(
                 lane, event, was, play, layout, feedback, onMenu, onRead,
-                lane in attaching, tune.hand.stepFraction, camera?.plane, fanLift,
+                lane in attaching, tune.hand, camera?.plane, fanLift,
             )
             if (now == null) grabbed -= lane else grabbed[lane] = now
 
@@ -822,7 +828,7 @@ private fun handle(
      * can. A tuning that reached one and not the others would be a card you can
      * see and cannot pick up.
      */
-    handStep: Float,
+    hand: HandTune,
     /** Where an open fan floats, and through what — see [whatIsUnder]. */
     fanPlane: StagePlane?,
     fanLift: Float,
@@ -832,7 +838,7 @@ private fun handle(
     when (event) {
         is MatEvent.Pressed ->
             return whatIsUnder(
-                play.field, layout, event.at, play.fanned, handStep, fanPlane, fanLift,
+                play.field, layout, event.at, play.fanned, hand, fanPlane, fanLift,
             )
 
         is MatEvent.Tapped -> {
@@ -918,7 +924,7 @@ private fun handle(
             }
         }
 
-        is MatEvent.Moved -> play.carryTo(lane, mat(event.at), layout, attaching, handStep)
+        is MatEvent.Moved -> play.carryTo(lane, mat(event.at), layout, attaching, hand.stepFraction)
 
         // The card has been held still over another one long enough to mean it
         // is going underneath. Re-resolving with the same point is what changes
@@ -926,7 +932,7 @@ private fun handle(
         // they let go rather than after.
         is MatEvent.Dwelled -> {
             if (play.carryIn(lane) != null) {
-                play.carryTo(lane, mat(event.at), layout, attaching = true, handStep = handStep)
+                play.carryTo(lane, mat(event.at), layout, attaching = true, handStep = hand.stepFraction)
                 feedback.play(SoundEffect.LIFT, Haptic.SLIDE)
             }
         }
@@ -1050,7 +1056,7 @@ private fun whatIsUnder(
     layout: BoardLayout,
     at: Vec2,
     fanned: DragOrigin? = null,
-    handStep: Float = StageTuning.DEFAULT.hand.stepFraction,
+    hand: HandTune = StageTuning.DEFAULT.hand,
     /**
      * The camera's plane, and how far a spread pile floats above the felt.
      *
@@ -1097,9 +1103,16 @@ private fun whatIsUnder(
         if (covers(layout.toPixels(placed.at))) return DragOrigin.Mat(placed.id)
     }
 
+    // The hand is asked against the shape it is *drawn* as, not against a
+    // rectangle at the point it nominally occupies. See [handQuad].
     field.hand.indices.reversed().forEach { index ->
-        val point = HandFan.pointFor(layout, index, field.hand.size, handStep)
-        if (covers(layout.toPixels(point))) return DragOrigin.Hand(index)
+        val quad = handQuad(layout, field, index, hand, fanPlane)
+        val hit = if (quad != null) {
+            Quad.contains(quad, at.x, at.y)
+        } else {
+            covers(layout.toPixels(HandFan.pointFor(layout, index, field.hand.size, hand.stepFraction)))
+        }
+        if (hit) return DragOrigin.Hand(index)
     }
 
     listOf(
@@ -1172,6 +1185,75 @@ private fun fanSlotOf(
 
     val onFelt = plane.flatten(card.x, card.y, lift)
     return layout.toMat(onFelt.x to onFelt.y)
+}
+
+/**
+ * A hand card's footprint on the felt: the shape it is drawn as, not the shape
+ * it nominally occupies.
+ *
+ * ## The bug this exists for
+ *
+ * A hand card leans back on its bottom edge and floats. What the renderer draws
+ * is `CardSolid.face(pose)` with every corner through `StagePlane.flatten` —
+ * four points, from two different heights, arriving on the felt as a **quad**
+ * that is shifted up-table and shorter than the card. The finger arrives on the
+ * felt at z = 0. The hit test compared it against an axis-aligned
+ * `cardWidth × cardHeight` rectangle at the card's own mat point, so the two
+ * overlapped only near the pivot: **at the shipped −24° and a lift of one, about
+ * a sixth of the card was dead; at kai's −32° and 1.6 it is over a quarter, and
+ * the live band sits below the card you can see.** That is the whole of "I can
+ * only drag the bottom half".
+ *
+ * `StagePlane.raise` — which fixes exactly this for a spread pile — cannot fix
+ * it here, and says so in its own KDoc: it is exact for something flat at one
+ * height, and a leaned card is a quad at two.
+ *
+ * ## Why it is built from the same expression the renderer uses
+ *
+ * Because the alternative is two descriptions of one shape, and the KDoc that
+ * used to justify the rectangle — *"the vertical offset is a fraction of a card
+ * that still lies well inside its own footprint"* — was **true when it was
+ * written and made false by a slider**. A tuning that can move the picture and
+ * not the hit box is a tuning that can invalidate a comment. This reads the same
+ * `HandTune` the pose does, so it cannot.
+ *
+ * Returns null with no camera — the frame between the first composition and the
+ * `SideEffect` that hands one over — and the caller falls back to the rectangle,
+ * which is what shipped.
+ *
+ * The declare bump (`DECLARE_LIFT`) is deliberately *not* included: it lasts a
+ * third of a second and moving the hit box with it would make a card hardest to
+ * grab at the moment you have just pointed at it.
+ */
+private fun handQuad(
+    layout: BoardLayout,
+    field: PlayField,
+    index: Int,
+    hand: HandTune,
+    plane: StagePlane?,
+): List<Vec2>? {
+    if (plane == null) return null
+    val card = field.hand.getOrNull(index) ?: return null
+
+    val at = HandFan.pointFor(layout, index, field.hand.size, hand.stepFraction)
+    val (x, y) = layout.toPixels(at)
+    // The same settle the pose uses, from the same instance id, so a card that
+    // has landed a degree off square is grabbed a degree off square.
+    val landing = Settle.of(card.instanceId, Settle.Care.PLACED)
+    val pose = Pose3(
+        position = Vec3(
+            x + landing.slipX * layout.cardWidth,
+            y + landing.slipY * layout.cardWidth,
+            handLiftOf(layout.cardHeight, CardSolid.pileDepth(1, layout.cardWidth), hand),
+        ),
+        rotX = hand.leanDegrees,
+        rotZ = landing.turnDegrees,
+    )
+
+    return CardSolid.face(pose, layout.cardWidth, layout.cardHeight).map {
+        val flat = plane.flatten(it)
+        Vec2(flat.x, flat.y)
+    }
 }
 
 /**

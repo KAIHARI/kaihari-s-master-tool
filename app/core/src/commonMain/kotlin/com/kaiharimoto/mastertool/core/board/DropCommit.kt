@@ -123,7 +123,12 @@ object DropCommit {
         position: CardPosition,
     ): PlayField? = when (from) {
         is DragOrigin.Hand -> playFromHand(from.index, at, position)
-        is DragOrigin.Mat -> moveOnMat(from.id, at)
+        // The position is carried here too, and it was not for two releases.
+        // Every other branch took it; this one moved the card and dropped the
+        // answer, so a two-finger set of a card *already on the field* turned it
+        // over in the air and then put it back exactly as it was. See
+        // `PlayField.moveOnMat`.
+        is DragOrigin.Mat -> moveOnMat(from.id, at, position)
         is DragOrigin.Pile -> when (from.pile) {
             BoardSlot.Deck -> playFromDeck(from.index, at, position)
             BoardSlot.ExtraDeck -> playFromExtra(from.index, at, position)
@@ -147,7 +152,7 @@ object DropCommit {
         position: CardPosition,
     ): PlayField? {
         val target = placed(onto) ?: return null
-        if (from is DragOrigin.Mat) return stackOnto(from.id, onto)
+        if (from is DragOrigin.Mat) return stackOnto(from.id, onto, position)
 
         val arrived = land(from, target.at, position) ?: return null
         val landed = arrived.mat.lastOrNull()?.id ?: return null

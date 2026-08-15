@@ -74,6 +74,54 @@ class DropCommitTest {
 
         assertEquals(1, done.mat.size)
         assertTrue(done.placed(id)!!.at.near(MatPoint(0.8f, 0.2f)))
+        // And it is still lying the way it was, because nothing said otherwise.
+        assertEquals(CardPosition.FACE_UP_ATK, done.placed(id)!!.card.position)
+    }
+
+    /**
+     * A card already on the field can be set, and this is the whole of kai's
+     * *"it sets it in vertical attack position instead of face down defence"*.
+     *
+     * `SetPosition` was right, the carry was right, and the card genuinely
+     * turned over and lay down **in the air** where you could watch it. Then
+     * `DropCommit.land` reached `moveOnMat`, which took an id and a point and
+     * had nowhere to put the answer — so the card landed exactly as it had been
+     * picked up. Every other origin took the position, which is why setting
+     * worked from the hand and from a pile and looked intermittent rather than
+     * broken.
+     */
+    @Test
+    fun aCardAlreadyOnTheFieldCanStillBeSet() {
+        val (on, id) = withCardOut()
+        val done = commit(
+            on,
+            DragOrigin.Mat(id),
+            DropIntent.Free(MatPoint(0.5f, 0.4f)),
+            CardPosition.FACE_DOWN_DEF,
+        )!!
+
+        val landed = done.placed(id)!!
+        assertTrue(!landed.faceUp, "it landed face up")
+        assertTrue(landed.turned, "it landed upright")
+    }
+
+    /** And the same when it is set onto another card rather than onto felt. */
+    @Test
+    fun aCardSetOntoAnotherCardLandsTheWayItWasSet() {
+        val (on, first) = withCardOut()
+        val second = on.draw()!!.playFromHand(0, MatPoint(0.2f, 0.2f), CardPosition.FACE_UP_ATK)!!
+        val moving = second.mat.first { it.id != first }.id
+
+        val done = commit(
+            second,
+            DragOrigin.Mat(moving),
+            DropIntent.Stack(first),
+            CardPosition.FACE_DOWN_DEF,
+        )!!
+
+        val landed = done.placed(moving)!!
+        assertEquals(2, landed.depth, "it did not stack")
+        assertTrue(!landed.faceUp && landed.turned, "it landed as ${landed.card.position}")
     }
 
     // ---- stacking ------------------------------------------------------------

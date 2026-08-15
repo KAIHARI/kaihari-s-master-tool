@@ -321,10 +321,25 @@ data class PlayField(
 
     // ---- moving what is already there ---------------------------------------
 
-    /** Slides a card — and its pile — to a new point, and brings it to the front. */
-    fun moveOnMat(id: Int, to: MatPoint): PlayField? {
+    /**
+     * Slides a card — and its pile — to a new point, and brings it to the front.
+     *
+     * [position] is how it is lying when it gets there, and **null means "the way
+     * it already was"**, which is what a plain slide across the felt is. Trailing
+     * and defaulted, so every caller that has no opinion keeps the behaviour this
+     * had before it could be told one.
+     *
+     * It could not be told one for two releases, and that is the whole of *"a
+     * card set onto the field comes out vertical"*: `SetPosition` solved the
+     * landing correctly, the card turned over and lay down in the air where you
+     * could see it, and then `DropCommit` called this — which moved the card and
+     * silently dropped the answer. Setting worked from the hand and from a pile,
+     * which is why it looked intermittent rather than broken.
+     */
+    fun moveOnMat(id: Int, to: MatPoint, position: CardPosition? = null): PlayField? {
         val card = placed(id) ?: return null
-        return copy(mat = mat.without(id) + card.copy(at = to.clamped()))
+        val landed = if (position == null) card.card else card.card.copy(position = position)
+        return copy(mat = mat.without(id) + card.copy(at = to.clamped(), card = landed))
     }
 
     /**
@@ -334,14 +349,21 @@ data class PlayField(
      * because that is what happens when you put a pile down on a pile. Dropping
      * a card onto itself, or onto a card already in its own pile, is not a move.
      */
-    fun stackOnto(id: Int, onto: Int): PlayField? {
+    fun stackOnto(id: Int, onto: Int, position: CardPosition? = null): PlayField? {
         if (id == onto) return null
         val moving = placed(id) ?: return null
         val target = placed(onto) ?: return null
+        // Null is "as it was", exactly as in [moveOnMat] — and for the same
+        // reason: a card set face-down onto another card is still being set.
+        val landed = if (position == null) moving.card else moving.card.copy(position = position)
 
         return copy(
             mat = mat.without(id).without(onto) +
-                moving.copy(at = target.at, beneath = moving.beneath + target.pile),
+                moving.copy(
+                    at = target.at,
+                    card = landed,
+                    beneath = moving.beneath + target.pile,
+                ),
         )
     }
 
