@@ -177,8 +177,8 @@ object MatGuide {
         Gesture(
             GestureGroup.MOVING,
             what = "Change your mind about a card you took out of a pile",
-            touch = "Drop it back on the gap it came out of",
-            pointer = "Drop it back on the gap it came out of",
+            touch = "Take it away, then drop it back on the gap it left",
+            pointer = "Take it away, then drop it back on the gap it left",
         ),
         Gesture(
             GestureGroup.MOVING,

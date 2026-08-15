@@ -1252,6 +1252,88 @@ stopped being true when the board learned to decline a fifth of the stage.
 the numbers are written twice, which is that test's whole job.
 
 
+### Iteration 22 — two targets on top of each other, and a row drawn one way and measured another
+
+Four reports off the tablet, and no two of them had the same cause.
+
+**A searched card could not reach the board.** `PileFan` spreads a pile over
+`layout.field`, which *is* the seven-by-three grid, and every fan card is drawn
+lifted — so the felt footprint of the slot a card came out of lands 34 mat
+pixels, a fifth of a card, from a monster zone's centre. Rank 0 of
+`DropTargets.resolve` is "put it back where it came from" with a half-card enter
+disc, whose own KDoc called it *"the tightest catchment on the board, and
+deliberately so"*. Measured, it is 94 pixels against the 104-pixel zone disc it
+outranks — 91% of it. The hysteresis then made it terminal: once "Put back"
+latched, every point inside the zone was still within the 166-pixel sticky
+radius, so nudging the finger could never escape. Every card of a six-card
+graveyard search lost the entire monster row.
+
+Size cannot separate two targets that sit on top of each other, and the fix is
+that neither of the two new gates is about size. `FanHome` adds **history** — a
+put-back is a change of mind, and a change of mind needs a mind that changed, so
+the gap is not a target until the card has been carried 1.1 card widths clear of
+it. Rank 0 then also asks whether a **zone is pulling harder**, through the same
+`nearestZone` rank 3 uses so the two cannot answer differently. Either gate alone
+leaves aims lost, and the two failures are different: the latch alone fixes a
+straight aim and leaves a drag that wanders before it aims failing at exactly the
+old rate, and the comparison alone fixes the zones and leaves the piles, because
+a slot at the end of a row is nearer the graveyard than any zone is.
+
+The test that shipped the bug is the more useful finding. `PutBackTest` asserted
+"a fan is open and the board still takes cards" about **one hand-picked
+`MatPoint`** — and that point was not even clear of the board: it sat an eighth
+of a card from a monster zone's centre, so the file's own guard was a claim about
+a coincidence. It now drives real `PileFan` output through the real projection,
+over every slot of a 40-, 15- and 6-card spread, against every zone and every
+pile, along a straight aim and along a path that wanders first.
+
+**A pile left the table when its top card did.** Mine, from iteration 20: a pile
+is drawn as *one* seat, its top card's face at `pile.size` thick, so the line
+added to settle a duplicate-seat collision — skip the pile seat while its top
+card is carried — took the whole graveyard off the board for the length of the
+drag. It draws the pile *minus what is in the air* now, which has an instance id
+of its own and so cannot collide. `Seat.bornAt` stops the newly revealed card
+flying in from the deck's square to a place it never left.
+
+**Two hands out of one deck, and letting one go put the other back.** The
+`stillHolds` guard, working exactly as designed and as documented — *"the honest
+answer to 'the board moved under this gesture' is to put the card back, not to
+guess which card the user now means"*. It was a false dichotomy: the gesture was
+already carrying the card's own identity, so it does not have to guess and it
+does not have to refuse. `PlayField.rebase` asks where the held instance is now,
+within the place it came from and never across one, and still refuses when the
+card has genuinely left. Four render sites that also indexed by position now ask
+by identity — without that, a carried card visibly becomes a *different card* the
+instant the other hand commits.
+
+**And the hand was drawn one way and measured another.** Three independent
+designs found this without being told: `seatsFor` drew `hand.size` places while
+`HandFan.insertAt` measured `count - 1` and corrected for the card in the air.
+Both defensible, not the same row, and 0.5 of a step apart — 0.37 of a card
+width, which is most of the width of the gap the caret was pointing at.
+`HandRow` is the row itself, one entry per place, and the four readers read it.
+`insertAt` counts drawn cards rather than dividing by a step, which is the only
+form that inverts a row with a hole in it, and the gap it names is the gap the
+row is already holding open. That fixed point is swept over every hand size, every
+card that could be in the air and four hundred finger positions, because a row
+that re-asked and got a different answer would flicker at sixty frames a second.
+
+The affordance follows from it: the hole is *there* rather than drawn beside a row
+that never moved. The spread does the same through `FanParting`, paying for its
+window out of the row's slack first and out of its own overlap when there is
+none — a forty-card deck leaves 0.18 of a card, which is why the second currency
+exists at all.
+
+**What the workflow was worth, since this was the first design run of the loop.**
+Three designs, two judges, and both judges independently implemented the
+proposals and *simulated the drag frame by frame* rather than reading them. That
+is what caught the thing no design's own test list would have: the arming latch
+on its own, which every design's proposed tests would have shipped green, fails
+at today's exact rate on a drag that wanders before it aims — because those tests
+all walked straight from the slot to the target, which is the one path arming
+fixes. The second gate exists because a judge measured 40 lost aims out of 728
+on the path a player actually makes.
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find

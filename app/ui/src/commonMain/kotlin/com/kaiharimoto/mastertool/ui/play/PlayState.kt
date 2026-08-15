@@ -166,13 +166,21 @@ class PlayState(
      * release rebases: an index into the hand is a memory of the board at the
      * lift, and with ten lanes the board moves under it.
      */
-    val handRow: HandRow get() = HandFan.row(
-        count = field.hand.size,
-        lifted = carries.values.mapNotNullTo(mutableSetOf()) { held ->
-            field.hand.indexOfFirst { it.instanceId == held.holding }.takeIf { it >= 0 }
-        },
-        opening = carries.values.mapNotNull { (it.intent as? DropIntent.Hand)?.at },
-    )
+    val handRow: HandRow get() {
+        // `this.field` rather than `field`, and the qualifier is load-bearing:
+        // inside a property accessor `field` is Kotlin's backing-field keyword,
+        // so the unqualified name resolves to a backing field this computed
+        // property does not have. It is the one place in this class where the
+        // board cannot be named the way it is named everywhere else.
+        val hand = this.field.hand
+        return HandFan.row(
+            count = hand.size,
+            lifted = carries.values.mapNotNullTo(mutableSetOf()) { held ->
+                hand.indexOfFirst { it.instanceId == held.holding }.takeIf { it >= 0 }
+            },
+            opening = carries.values.mapNotNull { (it.intent as? DropIntent.Hand)?.at },
+        )
+    }
 
     fun carryIn(lane: Int): Carry? = carries[lane]
 

@@ -150,6 +150,16 @@ the drop was resolving a whole row nearer the player. And closing a spread no
 longer leaves forty cards parked invisibly in the middle of the board, which is
 why the top of the deck used to fly to the graveyard from nowhere.
 
+**And four more after that**, all from one session on the tablet. A card taken
+out of a spread can reach the board underneath it: "put back" is not a target
+until the card has actually left its slot, and even then it only wins while no
+zone is pulling harder. A pile stays on the table while its top card is in the
+air — it is drawn one card thinner rather than not at all. Two hands out of one
+deck both land their own card, because the release asks where the held card is
+*now* instead of refusing when the index it remembered went stale. And the hand
+and the open spread both make a real gap where the card is going, rather than
+drawing a caret beside a row that never moves.
+
 1. **Tokens.** A real functional gap — a large share of modern combos put tokens
    on the board and they are currently unrepresentable. Conjure one onto the mat;
    it behaves as a card with no back.

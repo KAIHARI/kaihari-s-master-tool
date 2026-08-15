@@ -297,7 +297,7 @@ because the zones did not go anywhere: `core/layout/BoardLayout.kt` still solves
 all ten of them, the play stage still draws them and still snaps to them, and the
 only thing that has stopped being true is that a card must be inside one.
 
-Five rules the play stage would be broken without, each of which was a bug
+Six rules the play stage would be broken without, each of which was a bug
 first:
 
 - **One arbiter for the whole mat**, in core, driven by one `pointerInput`.
@@ -355,6 +355,27 @@ first:
   offset was three separate bug reports: a hand whose top half would not
   respond, drops landing a third of a card short, and a monster set into the
   spell/trap row — where `SetPosition` then correctly answered *upright*.
+- **A gesture holds a card, not a place, and a place goes stale.** A
+  `DragOrigin` into a pile or the hand is an index; one release renumbers it, and
+  the guard that caught that turned it into a *refusal* — the card left the air
+  and nothing happened, which is exactly what "I take two cards out of the deck
+  and letting one go puts the other back" is. `PlayField.rebase` asks where the
+  held instance is **now**, within the place it came from and never across one,
+  and still answers null when the card has genuinely left. Four render sites that
+  also indexed by position ask by identity, or a carried card visibly becomes a
+  different card the instant the other hand commits.
+- **Two targets that sit on top of each other cannot be separated by size.** A
+  spread is laid out over `layout.field` — the seven-by-three grid itself — and
+  its cards are drawn lifted, so the felt footprint of the slot a card came out
+  of lands a fifth of a card from a monster zone's centre. "Put back" outranked
+  everything with a half-card catchment, which is 91% of the zone catchment it
+  was outranking, so a searched card could not reach the board and the hysteresis
+  made it terminal. `FanHome` separates them by **history** — a put-back is a
+  change of mind, so the gap is not a target until the card has been carried
+  clear of it — and rank 0 separates them again by asking whether a zone is
+  pulling harder. Either alone leaves aims lost. `PutBackTest` drives real
+  `PileFan` output through the real projection over every slot of three spreads
+  rather than asserting anything about one hand-picked point.
 
 **The gesture vocabulary, after kai's eight changes.** A tap on a card
 *declares* it (a name in the bar, a chime, a small bump) and no longer brings it
@@ -371,6 +392,28 @@ arranged. And `DropIntent.Cancel` is reachable at last: drop a card back on the
 gap it came out of and it goes back — aimed at that one slot rather than at the
 whole fan, because a spread covers `layout.field` and "inside the fan wins" would
 make the board undroppable while a pile is open.
+
+**The hand and the spread open where a card is going.** `core/layout/HandFan.kt`
+holds a `HandRow` — one entry per drawn place, a hand index or null for a place
+held open — and the pose, the hit box, the insert index and the indicator are
+four readings of it rather than four reconstructions. They *were* four
+reconstructions, and two of them disagreed: the hand was drawn with a place
+standing for the card in the air and measured as though the row had closed up,
+so every gap the caret named was 0.37 of a card width from the gap the card went
+into. `insertAt` counts drawn cards rather than dividing by a step, which is the
+only form that inverts a row with a hole in it, and the gap it names is the gap
+the row is already holding open — a fixed point, swept in `HandFanTest`, because
+a row that re-asked and got a different answer would flicker every frame.
+
+`PileFan.spread` takes a `FanParting` and opens a window where the carried card
+will land, paid for first out of the row's slack inside `layout.field` and then,
+when there is none — a forty-card deck leaves 0.18 of a card — out of the row's
+own overlap down to `MIN_STEP`. Two things stay still on purpose: the slot the
+card came out of, because `FanHome` wrote its position down at the lift, and
+`FanSpread.bounds`, because it decides whether a press belongs to the fan or to
+the camera and a footprint that breathed would drop the gesture that was making
+it move. `MatInput.fanOf` is the one place a spread is solved and the renderer is
+handed its answer.
 
 **Any pile can be searched.** Tap one and it spreads across the board —
 `core/layout/PileFan.kt` solves the geometry, and the cards never change size

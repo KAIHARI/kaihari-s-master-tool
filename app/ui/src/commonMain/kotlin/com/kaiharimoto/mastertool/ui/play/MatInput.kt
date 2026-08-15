@@ -29,6 +29,7 @@ import com.kaiharimoto.mastertool.core.board.toMat
 import com.kaiharimoto.mastertool.core.board.toPixels
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
+import com.kaiharimoto.mastertool.core.layout.FanParting
 import com.kaiharimoto.mastertool.core.layout.FanSpread
 import com.kaiharimoto.mastertool.core.layout.HandFan
 import com.kaiharimoto.mastertool.core.layout.MatControl
