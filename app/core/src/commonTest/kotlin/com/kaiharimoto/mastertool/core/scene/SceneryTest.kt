@@ -443,6 +443,31 @@ class SceneryTest {
     }
 
     @Test
+    fun theLampCanActuallyBeSetDownOnEitherSideOfTheBoard() {
+        // "Negative puts it on the other side" is what the slider says, and for
+        // as long as the room has had knobs it could not do it: `lampOut` is
+        // measured from the mat's *right* edge, so reaching the left means
+        // crossing the whole board — about nine card widths — against a range
+        // that stopped at four. kai's -3.55 reads as "well to the left" and is a
+        // lamp clamped to the right of the mat, because `lampFoot` will not let
+        // it stand over the felt.
+        //
+        // Swept over surfaces rather than asserted on one, because the number of
+        // card widths the mat is across is a fact about the board and not about
+        // the knob — which is the whole reason this is a clamp and a range
+        // rather than a range alone.
+        val knob = StageKnobs.ALL.first { it.path == "room.lampOut" }
+        listOf(1600f to 856f, 2960f to 1848f, 1280f to 800f, 960f to 540f).forEach { (w, h) ->
+            val board = BoardLayouter.solve(w, h, 59f / 86f, 1.2f, roomAbove = Scenery.ROOM_ABOVE)
+            val felt = Scenery.mat(board)
+            val left = Scenery.lampFoot(board, RoomTune(lampOut = knob.min))
+            val right = Scenery.lampFoot(board, RoomTune(lampOut = knob.max))
+            assertTrue(left.x < felt.left, "at ${w}x$h the slider's left end is at ${left.x}")
+            assertTrue(right.x > felt.right, "at ${w}x$h the slider's right end is at ${right.x}")
+        }
+    }
+
+    @Test
     fun theLampStepsForwardRatherThanStandingInTheWall() {
         // The other half of "nothing in this room may share a volume", and the
         // half that arrived late. The lamp is placed as a fraction of the mat's

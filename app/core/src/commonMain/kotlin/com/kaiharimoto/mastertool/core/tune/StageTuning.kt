@@ -533,8 +533,17 @@ object StageKnobs {
             { it.room.windowHead }, { d, v -> d.copy(room = d.room.copy(windowHead = v)) },
         ),
         Knob(
-            ROOM, "room.lampOut", "Lamp across", -4f, 6f, 0.05f, "cards",
-            "How far right of the mat the lamp stands. Negative puts it on the other side.",
+            // Measured from the mat's *right* edge, so reaching the left means
+            // crossing the whole board: about nine card widths on a landscape
+            // tablet, and more on a taller stage. The range was -4 to 6, which
+            // could not express the thing its own note promised — kai's -3.55 is
+            // a value that reads as "well to the left" and lands, clamped, on the
+            // right of the mat, because `lampFoot` will not let it stand over the
+            // felt. Widened rather than re-centred on the nearer edge: that would
+            // be a better axis and it would also move every stored value,
+            // including his, on the next launch.
+            ROOM, "room.lampOut", "Lamp across", -14f, 6f, 0.05f, "cards",
+            "How far right of the mat the lamp stands. Past about -9 it crosses to the left.",
             { it.room.lampOut }, { d, v -> d.copy(room = d.room.copy(lampOut = v)) },
         ),
         Knob(
