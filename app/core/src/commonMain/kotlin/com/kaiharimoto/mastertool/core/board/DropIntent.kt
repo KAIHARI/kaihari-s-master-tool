@@ -6,6 +6,7 @@ import com.kaiharimoto.mastertool.core.layout.HandFan
 import com.kaiharimoto.mastertool.core.layout.Slot
 import com.kaiharimoto.mastertool.core.tune.StageTuning
 import kotlin.math.abs
+import kotlin.math.hypot
 
 /**
  * What letting go right now would do.
@@ -64,6 +65,66 @@ sealed interface DropIntent {
             // you took it out of — and "Cancel" describes a gesture failing.
             Cancel -> "Put back"
         }
+}
+
+/**
+ * The gap in an open spread a card came out of, and whether it has ever left it.
+ *
+ * [at] alone is what the table used to carry, and [at] alone is not enough to
+ * mean "put it back". A spread is laid out over `layout.field` — the seven-by-
+ * three grid itself — and its cards are drawn lifted, so the felt footprint of
+ * the slot a card came out of sits a fifth of a card from a monster zone's
+ * centre. A rule that says "near where it started means put it back" therefore
+ * also says "near that monster zone means put it back", and the search that was
+ * supposed to end with the card on the board ends with it back in the deck.
+ *
+ * [departed] is the missing half. A put-back is a *change of mind*: the card has
+ * to have been taken somewhere before bringing it back can mean anything. Once
+ * the card's landing point has been [DEPARTURE] card widths clear of its own
+ * slot, the latch is set and stays set — a card brought back and taken out again
+ * is still a card that has left, and a latch that could un-arm would flicker
+ * exactly where the two catchments overlap, which is where all of this happens.
+ *
+ * It is a value rather than a flag on the carry so that the arithmetic lives
+ * beside the thresholds it has to clear, and so `DropTargets` never has to be
+ * told twice about the same slot.
+ */
+data class FanHome(
+    /** Where the slot is, on the felt, in the mat's own fractions. */
+    val at: MatPoint,
+    /** True once the card has really been taken out of it. */
+    val departed: Boolean = false,
+) {
+    /**
+     * This home, having seen the card at [landing]. Idempotent once armed.
+     *
+     * Measured against the *landing* rather than the finger, because the landing
+     * is what the resolver compares — and the two are most of a card apart for a
+     * card out of the hand. It is also why [DEPARTURE] has headroom: merely
+     * lifting a card out of a spread moves its landing point about a fifth of a
+     * card up-table with nobody's hand moving, because a spread floats lower
+     * than a carried card does.
+     */
+    fun seeing(landing: MatPoint, layout: BoardLayout): FanHome {
+        if (departed || layout.cardWidth <= 0f) return this
+        val (hx, hy) = layout.toPixels(at)
+        val (lx, ly) = layout.toPixels(landing)
+        val gone = hypot(lx - hx, ly - hy) > layout.cardWidth * DEPARTURE
+        return if (gone) copy(departed = true) else this
+    }
+
+    companion object {
+        /**
+         * How far clear of its own slot a card must get before dropping it back
+         * there means "put it back" rather than "I have not moved it yet", in
+         * card widths.
+         *
+         * Above `PUT_BACK_LEAVE` (0.88), so the latch cannot arm while the slot
+         * still claims the card — otherwise the two would fight on the boundary.
+         * Well above the fifth of a card the landing jumps on a bare lift.
+         */
+        const val DEPARTURE = 1.10f
+    }
 }
 
 /**
@@ -127,8 +188,7 @@ object DropTargets {
     /**
      * How near the gap it came out of a card must be dropped to go back into it.
      *
-     * Half a card to claim it, seven eighths to lose it — the tightest catchment
-     * on the board, and deliberately so.
+     * Half a card to claim it, seven eighths to lose it.
      *
      * The obvious rule was "anywhere inside the open fan", and it cannot be used:
      * a spread is laid out over `layout.field`, which *is* the seven-by-three
@@ -139,10 +199,26 @@ object DropTargets {
      * finding it.
      *
      * So the question is asked about the one place in the spread that means
-     * something: the slot the card was taken *out* of. Dropping it back there is
-     * unmistakably "put it back", it cannot be arrived at by accident on the way
-     * anywhere else, and it leaves the rest of the fan's footprint behaving
-     * exactly as the board it is drawn over.
+     * something: the slot the card was taken *out* of.
+     *
+     * **And that used to be the whole argument, which said this was "the
+     * tightest catchment on the board, and deliberately so". It is not, and the
+     * numbers are the report.** A slot of a spread is laid out over the same
+     * grid the zones are in, and every fan card is *drawn* lifted, so the slot's
+     * footprint on the felt lands a fifth of a card from a monster zone's
+     * centre — 34 mat pixels on the shipped stage, against a 94-pixel enter disc
+     * that outranks a 104-pixel zone disc. Half a card is 91% of the catchment
+     * it was outranking, which is not a tighter target, it is the same target
+     * standing in front of another one. Every card of a graveyard search lost
+     * the entire monster row, and the hysteresis made it terminal: once "Put
+     * back" latched, no point inside the zone was far enough out of the sticky
+     * disc to escape.
+     *
+     * Size cannot separate these two. [FanHome] separates them by **history** —
+     * a put-back is a change of mind, and a change of mind needs a mind that
+     * changed — and rank 0 below separates them a second way, by asking whether
+     * a zone is pulling harder. Either alone leaves aims lost; both together
+     * leave none.
      */
     private const val PUT_BACK_ENTER = 0.50f
     private const val PUT_BACK_LEAVE = 0.88f
@@ -157,9 +233,10 @@ object DropTargets {
      *   one the geometry cannot tell you
      * @param previous what was decided last frame, which is what makes the
      *   thresholds sticky
-     * @param cameOutOf where in an open spread this card was sitting before it
-     *   was picked up, on the felt — null unless the drag started in the fan
-     *   that is still open. Dropping it back there puts it back.
+     * @param home where in an open spread this card was sitting before it was
+     *   picked up, and whether it has left — null unless the drag started in the
+     *   fan that is still open. Dropping it back there puts it back, once it has
+     *   been somewhere else first. See [FanHome].
      * @param fromHand which card of the hand is the one in the air, when the
      *   drag started there. The hand is drawn one card shorter while one of its
      *   cards is being carried, so the gap the finger is over has to be measured
@@ -175,7 +252,7 @@ object DropTargets {
         layout: BoardLayout,
         previous: DropIntent? = null,
         attaching: Boolean = false,
-        cameOutOf: MatPoint? = null,
+        home: FanHome? = null,
         fromHand: Int? = null,
         handStep: Float = StageTuning.DEFAULT.hand.stepFraction,
     ): DropIntent {
@@ -184,16 +261,24 @@ object DropTargets {
         val px = layout.toPixels(point)
         val cardWidth = layout.cardWidth
 
-        // 0. Back into the gap it came out of, which outranks everything because
-        //    it is the smallest target on the table and the only one that is
-        //    about the card's own history rather than about where it is.
-        if (cameOutOf != null) {
-            val reach = cardWidth * threshold(
-                sticky = previous == DropIntent.Cancel,
-                enter = PUT_BACK_ENTER,
-                leave = PUT_BACK_LEAVE,
-            )
-            if (distance(px, layout.toPixels(cameOutOf)) <= reach) return DropIntent.Cancel
+        // 0. Back into the gap it came out of — once the card has really been
+        //    taken out of it, and only while no zone is pulling harder.
+        //
+        //    Both halves are load-bearing and neither is enough on its own. The
+        //    latch alone fixes an aim made straight from the slot and leaves a
+        //    drag that wanders before it aims failing at exactly today's rate,
+        //    because by then it has armed and the rule is the old rule. The
+        //    comparison alone fixes the zones and leaves the piles, because a
+        //    slot at the end of a row is nearer the graveyard than any zone.
+        //    Together they leave nothing, which `PutBackTest` measures over
+        //    every slot of a real spread rather than over a hand-picked point.
+        if (home != null && home.departed) {
+            val sticky = previous == DropIntent.Cancel
+            val toHome = distance(px, layout.toPixels(home.at)) -
+                if (sticky) cardWidth * INCUMBENT_BIAS else 0f
+            val reach = cardWidth * threshold(sticky, PUT_BACK_ENTER, PUT_BACK_LEAVE)
+            val pull = nearestZone(px, layout, previous)
+            if (toHome <= reach && (pull == null || toHome <= pull.biased)) return DropIntent.Cancel
         }
 
         // 1. The piles and the hand: unambiguous places you had to travel to.
@@ -238,28 +323,49 @@ object DropTargets {
 
         // 3. A zone's pull. Only the field zones — the piles were handled above
         //    and have their own, larger, catchment.
-        val incumbent = (previous as? DropIntent.Zone)?.slot
-
-        val zone = layout.slots.entries
-            .filter { it.key is BoardSlot.Zone }
-            .minByOrNull {
-                distance(px, centre(it.value)) -
-                    if (it.key == incumbent) it.value.width * INCUMBENT_BIAS else 0f
-            }
+        val zone = nearestZone(px, layout, previous)
 
         if (zone != null) {
-            val reach = zone.value.width * threshold(
-                sticky = previous is DropIntent.Zone && previous.slot == zone.key,
+            val reach = zone.rect.width * threshold(
+                sticky = previous is DropIntent.Zone && previous.slot == zone.slot,
                 enter = ZONE_ENTER,
                 leave = ZONE_LEAVE,
             )
-            if (distance(px, centre(zone.value)) <= reach) {
-                return DropIntent.Zone(zone.key, layout.toMat(centre(zone.value)))
+            if (distance(px, centre(zone.rect)) <= reach) {
+                return DropIntent.Zone(zone.slot, layout.toMat(centre(zone.rect)))
             }
         }
 
         // 4. The mat itself, which is always a valid answer.
         return DropIntent.Free(point)
+    }
+
+    /** Which zone is pulling, and how hard once its incumbency is paid for. */
+    private data class Pull(val slot: BoardSlot, val rect: Slot, val biased: Float)
+
+    /**
+     * The zone nearest [px], with the incumbent's bias already subtracted.
+     *
+     * Extracted because rank 0 now asks it too, and two independent searches
+     * over the same map with the same bias are two answers waiting to disagree
+     * — which on this table would read as the put-back winning against a zone
+     * the highlight says is not the one being aimed at.
+     */
+    private fun nearestZone(
+        px: Pair<Float, Float>,
+        layout: BoardLayout,
+        previous: DropIntent?,
+    ): Pull? {
+        val incumbent = (previous as? DropIntent.Zone)?.slot
+        fun biased(slot: BoardSlot, rect: Slot) = distance(px, centre(rect)) -
+            if (slot == incumbent) rect.width * INCUMBENT_BIAS else 0f
+
+        val nearest = layout.slots.entries
+            .filter { it.key is BoardSlot.Zone }
+            .minByOrNull { biased(it.key, it.value) }
+            ?: return null
+
+        return Pull(nearest.key, nearest.value, biased(nearest.key, nearest.value))
     }
 
     /**

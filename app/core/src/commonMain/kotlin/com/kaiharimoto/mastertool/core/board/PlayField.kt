@@ -215,7 +215,7 @@ data class PlayField(
     }
 
     /**
-     * Whether an origin still names the card it named when it was picked up.
+     * The origin that names [instanceId] *now*, given one that named it before.
      *
      * A `DragOrigin` into the hand or a pile is an **index**, and an index is
      * only true of the board it was taken from. One hand releasing a card
@@ -223,15 +223,49 @@ data class PlayField(
      * second gesture is holding a memory that has quietly come to mean the card
      * next door — and it would drop *that* one, correctly, silently, and wrong.
      *
-     * The failure is not hypothetical and not confined to two hands: taking a
-     * card out of a spread by tapping it while another is being dragged out of
-     * the same spread does the same thing. It simply could not happen before,
-     * because there was only ever one gesture at a time to be wrong.
+     * This used to be `stillHolds`, a boolean, and the release turned `false`
+     * into a refusal: the card left the air, nothing was committed, and it was
+     * drawn back where it started. That is safe and it is also the whole of
+     * kai's third report — *"I'm trying to take 2+ cards out of the deck at the
+     * same time and the hold works but when I let one go the other card I'm
+     * holding goes back into the deck."* Refusing was never the only safe
+     * answer, because the card's own identity was already being carried: a
+     * gesture that knows **which card** it is holding does not need the index to
+     * have survived, it needs to be told where that card is now.
      *
-     * Checked at the release rather than repaired continuously, because the
-     * honest answer to "the board moved under this gesture" is to put the card
-     * back, not to guess which card the user now means.
+     * Rebased **within the same place**, never across one. A card looked for in
+     * the pile it came out of and not found has genuinely left — the other hand
+     * drew it, milled it, played it — and there is no honest repair for that, so
+     * this still answers null and the release still puts the card back. Widening
+     * the search to the whole table would turn "play this card off my deck" into
+     * "play this card out of my hand", which is the same piece of cardboard and
+     * a different move.
+     *
+     * The four places are four coordinate systems and each is rebased in its own:
+     *
+     * - **Mat** carries the instance id outright, so there is nothing to
+     *   re-number. It answers null only when the card has stopped being a *top*
+     *   card, which means the other hand stacked something on it — and dragging
+     *   it then is no longer the move the user started, because the top of a
+     *   stack takes the stack with it.
+     * - **Hand** and **Pile** are plain lookups in the list they name.
+     * - **Buried** is a lookup in [under], and that is exactly right without a
+     *   special case: `under` is the top card, then what is beneath it, then its
+     *   materials, in that order, and `liftFromUnder` branches on the same
+     *   boundary. So an index found by identity always lands on the side the
+     *   card is on *now*, which is the side it should come off.
      */
+    fun rebase(what: DragOrigin, instanceId: Int): DragOrigin? = when (what) {
+        is DragOrigin.Mat -> what.takeIf { placed(it.id)?.card?.instanceId == instanceId }
+        is DragOrigin.Hand -> hand.indexOfFirst { it.instanceId == instanceId }
+            .takeIf { it >= 0 }?.let { DragOrigin.Hand(it) }
+        is DragOrigin.Pile -> pile(what.pile).indexOfFirst { it.instanceId == instanceId }
+            .takeIf { it >= 0 }?.let { DragOrigin.Pile(what.pile, it) }
+        is DragOrigin.Buried -> under(what.under).indexOfFirst { it.instanceId == instanceId }
+            .takeIf { it >= 0 }?.let { DragOrigin.Buried(what.under, it) }
+    }
+
+    /** Whether an origin still names the card it named when it was picked up. */
     fun stillHolds(what: DragOrigin, instanceId: Int): Boolean =
         cardAt(what)?.instanceId == instanceId
 

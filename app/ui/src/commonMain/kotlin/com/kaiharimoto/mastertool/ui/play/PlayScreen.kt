@@ -66,7 +66,6 @@ import com.kaiharimoto.mastertool.core.board.DropIntent
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlacedCard
 import com.kaiharimoto.mastertool.core.board.PlayField
-import com.kaiharimoto.mastertool.core.board.fanCardAt
 import com.kaiharimoto.mastertool.core.board.toPixels
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
 import com.kaiharimoto.mastertool.core.layout.HandFan
@@ -858,7 +857,9 @@ fun PlayScreen(
             // Aim every card at where it now belongs. Done outside the frame
             // loop because it only changes when the board does.
             seats.forEach { seat ->
-                val card = cards.getOrPut(seat.id) { StageCard(seat.id).also { it.placeAt(dealFrom) } }
+                val card = cards.getOrPut(seat.id) {
+                    StageCard(seat.id).also { it.placeAt(seat.bornAt ?: dealFrom) }
+                }
                 card.pinned = seat.pinned
                 card.cardWidth = seat.width
                 card.aimAt(seat.pose)
@@ -1186,6 +1187,21 @@ private data class Seat(
      * in the spread, so the overlap reads left to right whatever the camera does.
      */
     val order: Int = id,
+    /**
+     * Where a card the stage has never seen before should *start*, when it
+     * should simply be there rather than fly in from `dealFrom`.
+     *
+     * Null for everything that is genuinely arriving — a card dealt, a card
+     * revealed out of a spread — because travelling from the deck is the right
+     * animation for those and is the whole reason `dealFrom` exists.
+     *
+     * Set on the pile seats, which are the one place a card can be *revealed
+     * without moving*: lift the top card off the graveyard and the card under it
+     * gets a seat for the first time, standing exactly where it already was. Let
+     * it spring from `dealFrom` and lifting one card makes the graveyard's next
+     * card fly in from the deck's square.
+     */
+    val bornAt: Pose3? = null,
 ) {
 
     /**
@@ -1284,6 +1300,14 @@ private fun seatsFor(
     // of exactly these — and two files each doing their own arithmetic on the
     // same two knobs is the drift `MatPilot.fanLift`'s KDoc already warned about
     // for the one of the three they happened to share.
+    // Which physical cards are off the table right now, by identity. Every
+    // reader below that used to ask "is this seat's *index* the one being
+    // carried" asks this instead: an index is a memory of the board at the lift
+    // and the board moves under it, so with two hands the answers drifted apart
+    // — a pile drawing the wrong card, a hand hiding the wrong slot.
+    val airborne = carries.mapNotNullTo(mutableSetOf()) {
+        it.holding.takeIf { held -> held != PlayState.NO_CARD }
+    }
     val carryLift = CarryHeight.mat(cardHeight, tune)
     val handLift = CarryHeight.hand(cardHeight, tune)
     val fanLift = CarryHeight.fan(cardHeight, tune)
@@ -1366,7 +1390,7 @@ private fun seatsFor(
 
     // The hand, fanned along the band the solver set aside.
     field.hand.forEachIndexed { index, card ->
-        val carry = carries.firstOrNull { (it.from as? DragOrigin.Hand)?.index == index }
+        val carry = carries.firstOrNull { it.holding == card.instanceId }
         val carrying = carry != null
         val at = HandFan.pointFor(layout, index, field.hand.size, tune.hand.stepFraction)
         // A card in hand is always face-up to its owner; one turned over on the
@@ -1421,15 +1445,21 @@ private fun seatsFor(
         BoardSlot.Banished to field.banished,
     ).forEach { (slot, pile) ->
         if (fanned == DragOrigin.Pile(slot, 0)) return@forEach
-        val top = pile.firstOrNull() ?: return@forEach
-        // …unless a hand is already holding it. Nothing commits until the
-        // release, so the field still has this card in the pile while it is in
-        // the air — and the carry block below gives it a seat of its own. Both
-        // ran, so dragging the top card off any pile built **two seats with one
-        // instance id**: one lying on the mat as a `pile.size`-thick solid, one
-        // in the air. `seats.forEach` is last-wins so the pose came out right,
-        // but `ordered` held both and `StagedCard` composed the same card twice.
-        if (carries.any { it.holding == top.instanceId }) return@forEach
+        // The pile **minus whatever is in the air**. Nothing commits until the
+        // release, so the field still holds a carried card in its pile — and the
+        // carry block below gives that card a seat of its own. Both ran, so
+        // dragging the top card off any pile built two seats with one instance
+        // id: one lying on the mat as a `pile.size`-thick solid, one in the air.
+        // `ordered` held both and `StagedCard` composed the same card twice.
+        //
+        // Skipping the pile outright was how that collision was settled first,
+        // and it is kai's second report: *a pile is its top card's seat*, drawn
+        // `pile.size` thick, so not drawing it takes the whole graveyard off the
+        // table for the length of the drag. What is drawn instead is the rest of
+        // the pile — the next card's face, one card thinner — which has an
+        // instance id of its own and so cannot collide with anything.
+        val resting = if (airborne.isEmpty()) pile else pile.filterNot { it.instanceId in airborne }
+        val top = resting.firstOrNull() ?: return@forEach
         val rect = layout[slot] ?: return@forEach
         val faceUp = slot == BoardSlot.Graveyard || slot == BoardSlot.Banished
         // A deck is tapped square against the table and a graveyard is swept
@@ -1440,23 +1470,29 @@ private fun seatsFor(
             top.instanceId,
             if (faceUp) Settle.Care.THROWN else Settle.Care.SQUARED,
         )
+        val pose = Pose3(
+            // On top of its own pile, which is the whole reason a deck looks
+            // like a deck rather than like a card with a number.
+            position = Vec3(
+                rect.centerX + landing.slipX * cardWidth,
+                rect.centerY + landing.slipY * cardWidth,
+                CardSolid.pileDepth(resting.size, cardWidth),
+            ),
+            rotY = if (faceUp) 0f else 180f,
+            rotZ = landing.turnDegrees,
+        )
         seats += Seat(
             id = top.instanceId,
             card = top,
-            pose = Pose3(
-                // On top of its own pile, which is the whole reason a deck
-                // looks like a deck rather than like a card with a number.
-                position = Vec3(
-                    rect.centerX + landing.slipX * cardWidth,
-                    rect.centerY + landing.slipY * cardWidth,
-                    CardSolid.pileDepth(pile.size, cardWidth),
-                ),
-                rotY = if (faceUp) 0f else 180f,
-                rotZ = landing.turnDegrees,
-            ),
+            pose = pose,
+            // Born where it stands. Lifting the top card off the graveyard gives
+            // the card under it a seat for the first time, and it was already
+            // lying there — without this it would be minted at `dealFrom` and
+            // fly in from the deck's square to a place it never left.
+            bornAt = pose,
             faceUp = faceUp,
             carried = false,
-            depth = pile.size,
+            depth = resting.size,
             materials = 0,
             counters = 0,
             width = cardWidth,
@@ -1470,11 +1506,15 @@ private fun seatsFor(
     carries.forEach { carry ->
         val from = carry.from
         if (from !is DragOrigin.Pile && from !is DragOrigin.Buried) return@forEach
+        // By identity rather than by `from.index`. The index is a memory of the
+        // board at the lift, so the instant the other hand commits, this card
+        // would visibly *become a different card* in mid-air — the rendering
+        // half of the same staleness `PlayField.rebase` answers at the release.
         val held = when (from) {
-            is DragOrigin.Pile -> field.pile(from.pile).getOrNull(from.index)
-            is DragOrigin.Buried -> field.under(from.under).getOrNull(from.index)
+            is DragOrigin.Pile -> field.pile(from.pile)
+            is DragOrigin.Buried -> field.under(from.under)
             else -> null
-        } ?: return@forEach
+        }?.firstOrNull { it.instanceId == carry.holding } ?: return@forEach
 
         val faceUp = !carry.faceDown
         seats += Seat(
@@ -1513,7 +1553,7 @@ private fun seatsFor(
             // Any hand holding it, not only the first: with two hands in a
             // spread, checking one carry would draw the other's card twice —
             // once floating under the finger and once still lying in the fan.
-            if (carries.any { it.from == fanned.fanCardAt(fan.index) }) return@forEach
+            if (carries.any { it.holding == card.instanceId }) return@forEach
             seats += Seat(
                 id = card.instanceId,
                 card = card,
@@ -1700,7 +1740,7 @@ private fun DrawScope.drawIndicator(
         // an indicator for it would have been an indicator for nothing. It is a
         // destination now, and a destination the user cannot see is one they can
         // only find by accident.
-        DropIntent.Cancel -> carry.cameOutOf?.let { ring(footprint(it), 0.55f, 0.02f) }
+        DropIntent.Cancel -> carry.home?.let { ring(footprint(it.at), 0.55f, 0.02f) }
     }
 }
 

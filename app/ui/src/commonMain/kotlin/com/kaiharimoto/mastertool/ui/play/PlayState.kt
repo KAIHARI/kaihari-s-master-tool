@@ -8,6 +8,7 @@ import com.kaiharimoto.mastertool.core.board.DragOrigin
 import com.kaiharimoto.mastertool.core.board.DropCommit
 import com.kaiharimoto.mastertool.core.board.DropIntent
 import com.kaiharimoto.mastertool.core.board.DropTargets
+import com.kaiharimoto.mastertool.core.board.FanHome
 import com.kaiharimoto.mastertool.core.board.fanSource
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.PlayField
@@ -29,8 +30,8 @@ data class Carry(
      *
      * [id] is the mat's instance and is [PlayState.NO_CARD] for anything that
      * was not already on the mat; this is the card itself, and it is what makes
-     * the release able to check that the origin still means what it meant. See
-     * `PlayField.stillHolds` for why that check exists at all.
+     * the release able to find the card again when the board has moved under
+     * this gesture. See `PlayField.rebase` for why that matters at all.
      */
     val holding: Int = PlayState.NO_CARD,
     val at: MatPoint,
@@ -53,20 +54,22 @@ data class Carry(
      */
     val position: CardPosition = CardPosition.FACE_UP_ATK,
     /**
-     * Where this card was lying in the open spread it was taken out of, on the
-     * felt — null unless it came out of a fan that is still open.
+     * Where this card was lying in the open spread it was taken out of, and
+     * whether it has left — null unless it came out of a fan that is still open.
      *
-     * Fixed at the lift and not touched again, because it is a fact about where
-     * the card *was*. The screen works it out, since it is the half of the
-     * question that is projection: a spread floats above the felt, so the slot's
-     * own coordinates are flattened back down to the felt before anything is
-     * compared to them.
+     * The *place* is fixed at the lift, because it is a fact about where the
+     * card was. The screen works it out, since that half of the question is
+     * projection: a spread floats above the felt, so the slot's own coordinates
+     * are flattened back down to the felt before anything is compared to them.
+     * That is the same space [landing] is in — the footprint of a thing drawn in
+     * the air — which is what keeps "put it back" aimed at the gap you can see
+     * rather than at the finger under it.
      *
-     * That is the same space [landing] is in — the footprint of a thing that is
-     * drawn in the air — which is what keeps "put it back" aimed at the gap you
-     * can see rather than at the finger under it.
+     * The *latch* is not fixed: [FanHome.seeing] is fed every landing, so the
+     * gap only becomes a target once the card has actually been taken out of it.
+     * See [FanHome] for why a slot alone could not mean "put it back".
      */
-    val cameOutOf: MatPoint? = null,
+    val home: FanHome? = null,
     /**
      * Where this card would land if it were let go now, which is **not** [at].
      *
@@ -356,9 +359,11 @@ class PlayState(
             holding = field.cardAt(from)?.instanceId ?: NO_CARD,
             at = at,
             landing = landing,
-            // Deliberately without [cameOutOf]: on the frame a card is lifted it
-            // is still exactly where it came from, so passing it here would open
-            // every drag out of a spread already reading "Put back".
+            // Deliberately without the home: on the frame a card is lifted it is
+            // still exactly where it came from. That used to be the only thing
+            // stopping every drag out of a spread opening on "Put back", and it
+            // is now belt and braces — `FanHome` is not armed until the card has
+            // been carried a card's width clear of the slot.
             intent = DropTargets.resolve(landing, id.takeIf { it != NO_CARD }, field, layout, null),
             // Picked up as it lay, unless the gesture itself said otherwise. A
             // set card slid across the mat is still set when it lands, and only
@@ -377,7 +382,7 @@ class PlayState(
             // either one alone would have made a monster in defence stand up
             // every time it was nudged.
             quarterTurns = if (from is DragOrigin.Mat && field.placed(from.id)?.turned == true) 1 else 0,
-            cameOutOf = cameOutOf,
+            home = cameOutOf?.let { FanHome(it) },
         ).settled())
     }
 
@@ -392,10 +397,16 @@ class PlayState(
         handStep: Float = StageTuning.DEFAULT.hand.stepFraction,
     ) {
         val held = carries[lane] ?: return
+        // Fed the landing before it is resolved against, so the frame the card
+        // first gets clear of its own slot is the frame "Put back" becomes
+        // reachable — rather than one frame later, which is a target that
+        // appears behind you.
+        val home = held.home?.seeing(landing, layout)
         carries = carries + (lane to held.copy(
             at = at,
             landing = landing,
             attaching = attaching,
+            home = home,
             intent = DropTargets.resolve(
                 point = landing,
                 dragged = held.id.takeIf { it != NO_CARD },
@@ -403,7 +414,7 @@ class PlayState(
                 layout = layout,
                 previous = held.intent,
                 attaching = attaching,
-                cameOutOf = held.cameOutOf,
+                home = home,
                 // Which card of the hand is the one in the air, so the gaps are
                 // counted against the row the user can actually see.
                 fromHand = (held.from as? DragOrigin.Hand)?.index,
@@ -442,12 +453,18 @@ class PlayState(
         carries = carries - lane
 
         // The other hand may have renumbered the pile this one is holding an
-        // index into. Putting the card back is the only safe answer: dropping
-        // whatever is at that index now would be moving a card nobody touched,
-        // and it would look exactly like the table working.
-        if (held.holding != NO_CARD && !field.stillHolds(held.from, held.holding)) return false
+        // index into, so the origin is asked where its card is *now* rather than
+        // taken at its word. `PlayField.rebase` answers null only when the card
+        // has genuinely left the place it came from, and then putting it back is
+        // still the only safe answer — dropping whatever is at that index now
+        // would be moving a card nobody touched.
+        val from = if (held.holding == NO_CARD) {
+            held.from
+        } else {
+            field.rebase(held.from, held.holding) ?: return false
+        }
 
-        val done = move { DropCommit.commit(it, held.from, held.intent, held.position) }
+        val done = move { DropCommit.commit(it, from, held.intent, held.position) }
         if (done && held.intent !is DropIntent.Free) announcement = held.intent.label
         return done
     }
