@@ -177,7 +177,7 @@ internal class MatPilot(
      * What each hand's press landed on. The thing that has to survive both clocks.
      *
      * A map keyed by lane, and everything below it is the same shape, because
-     * two hands means two of everything the host remembers about a gesture. The
+     * ten fingers mean ten of everything the host remembers about a gesture. The
      * bug this shape exists to make impossible is one hand's press being
      * answered with the other hand's card — which is not a crash, it is the
      * wrong card going to the graveyard, and nothing would ever have told you.

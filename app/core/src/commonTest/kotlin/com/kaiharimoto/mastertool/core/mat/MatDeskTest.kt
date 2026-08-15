@@ -174,16 +174,100 @@ class MatDeskTest {
     }
 
     @Test
-    fun aThirdFingerJoinsAGestureRatherThanOpeningOne() {
-        // Three fingers is a hand being put down, and every rule about that
-        // lives inside the machine. The router's job is only to make sure the
-        // third contact reaches one, so that it can be ignored there.
+    fun aThirdFingerOnBareFeltJoinsAGestureRatherThanOpeningOne() {
+        // A contact that lands on *nothing* can never open a lane, at any cap.
+        // That is the whole of the palm rejection here, and it is why the cap
+        // could be raised to ten without a heuristic: a hand put down flat is
+        // mostly felt, and every one of those contacts joins.
+        //
+        // This test used to be called `aThirdFingerJoinsAGestureRatherThanOpeningOne`
+        // and was read, for two releases, as the thing pinning `MAX_LANES = 2`.
+        // It never did: (300, 600) is bare felt, so it takes the join-the-nearest
+        // branch and the cap is not consulted. The name said one thing and the
+        // coordinates said another, which is why the cap turned out to be
+        // completely unpinned. See the test below for the claim this one looked
+        // like it was making.
         val d = desk()
         d.frame(1L to at(100f, 100f))
         d.frame(1L to at(100f, 100f), 2L to at(500f, 100f))
         d.frame(1L to at(100f, 100f), 2L to at(500f, 100f), 3L to at(300f, 600f))
 
         assertEquals(MatPhase.IDLE, d.desk.phaseOf(2), "a third lane opened")
+    }
+
+    /**
+     * A third finger on a third *card* opens a third gesture.
+     *
+     * The claim the cap is actually about, and the one no test made while the
+     * cap was two — so raising it to ten turned nothing red and nothing green.
+     * kai asked for ten simultaneous actions; this is what that means at the
+     * router, and it is the difference between a finger landing on something and
+     * a finger landing on nothing.
+     */
+    @Test
+    fun aThirdFingerOnAThirdCardOpensItsOwnGesture() {
+        val threeCards: (Vec2) -> String? = { at ->
+            when {
+                (at - Vec2(100f, 100f)).length < 40f -> "A"
+                (at - Vec2(500f, 100f)).length < 40f -> "B"
+                (at - Vec2(900f, 100f)).length < 40f -> "C"
+                else -> null
+            }
+        }
+        val d = Desk(threeCards, limits)
+        d.frame(1L to at(100f, 100f))
+        d.frame(1L to at(100f, 100f), 2L to at(500f, 100f))
+        d.frame(1L to at(100f, 100f), 2L to at(500f, 100f), 3L to at(900f, 100f))
+
+        // Past the slop, so all three become drags and each says which card.
+        d.frame(1L to at(160f, 160f), 2L to at(560f, 160f), 3L to at(960f, 160f))
+
+        val lifted = d.events.filter { it.event is MatEvent.LiftedCard }
+        assertEquals(listOf(0, 1, 2), lifted.map { it.lane }.sorted(), "three lanes did not open")
+        assertEquals(listOf("A", "B", "C"), lifted.mapNotNull { it.token }.sorted())
+    }
+
+    /**
+     * And ten of them, which is the number kai asked for.
+     *
+     * Ten cards, ten fingers, ten independent drags. The cap is the hands
+     * rather than a limit anybody reaches, so the useful claim is that the tenth
+     * finger is not special.
+     */
+    @Test
+    fun tenFingersOnTenCardsAreTenGestures() {
+        val many: (Vec2) -> String? = { at ->
+            (0 until 10).firstOrNull { (at - Vec2(100f + it * 150f, 100f)).length < 40f }
+                ?.let { "card$it" }
+        }
+        val d = Desk(many, limits)
+        (0 until 10).forEach { n ->
+            d.frame(*(0..n).map { (it + 1).toLong() to at(100f + it * 150f, 100f) }.toTypedArray())
+        }
+        d.frame(*(0 until 10).map { (it + 1).toLong() to at(160f + it * 150f, 160f) }.toTypedArray())
+
+        val lifted = d.events.filter { it.event is MatEvent.LiftedCard }
+        assertEquals((0..9).toList(), lifted.map { it.lane }.distinct().sorted(), "not ten lanes")
+        assertEquals(10, lifted.mapNotNull { it.token }.distinct().size, "not ten cards")
+    }
+
+    /**
+     * A whole hand laid on the felt beside a gesture is still furniture.
+     *
+     * The palm claim, at the new cap. Five contacts on bare felt, none of which
+     * may open a lane however many slots are free.
+     */
+    @Test
+    fun aHandLaidOnTheFeltOpensNothingHoweverManyLanesAreFree() {
+        val d = desk()
+        d.frame(1L to at(100f, 100f))
+        d.frame(
+            1L to at(100f, 100f),
+            2L to at(300f, 600f), 3L to at(360f, 610f),
+            4L to at(420f, 620f), 5L to at(480f, 630f), 6L to at(540f, 640f),
+        )
+
+        (1..9).forEach { assertEquals(MatPhase.IDLE, d.desk.phaseOf(it), "lane $it opened") }
     }
 
     // ---- the one-handed table, unchanged ---------------------------------------

@@ -823,6 +823,31 @@ fun PlayScreen(
                 )
             }
 
+            // Forget every card that no longer has a seat, and that is a bug fix
+            // rather than housekeeping.
+            //
+            // `cards` had no removal of any kind, so a `StageCard` outlived
+            // every seat it ever had. Tap the deck and all forty of its cards
+            // get a seat at a `PileFan` coordinate — and a fan is by
+            // construction a cloud of poses centred on `layout.field`, the
+            // middle of the board. Close it and thirty-nine of them lose their
+            // seat: not drawn any more, but still in this map, still stepped
+            // every frame, **still parked in the middle of the board**. The next
+            // time one of them reappears — revealed as the new top of the deck,
+            // sent to the graveyard, played to the mat — `getOrPut` finds the
+            // stale object, `dealFrom` is never consulted, and the card springs
+            // in from the centre of the screen. kai's word for it was "an
+            // invisible fan", and that is exactly what it was.
+            //
+            // Pruning is safe precisely because a seatless card is not drawn
+            // (`StagedCard` returns early on a missing entry), so removing one
+            // mid-flight cannot be seen. What it buys is that the next
+            // appearance is built fresh at `dealFrom` — which with no fan open
+            // is the deck, so a revealed top card simply *is* there and a card
+            // sent to the graveyard travels from the deck, which is where it
+            // came from.
+            cards.keys.retainAll(seats.mapTo(mutableSetOf()) { it.id })
+
             // Aim every card at where it now belongs. Done outside the frame
             // loop because it only changes when the board does.
             seats.forEach { seat ->
@@ -1208,7 +1233,7 @@ private fun seatsFor(
     field: PlayField,
     layout: BoardLayout,
     /**
-     * Everything in the air, which on a two-handed table is up to two cards.
+     * Everything in the air, which is up to ten cards — one per finger.
      *
      * A list rather than one card, and every reader below asks it *which* carry
      * is about the seat it is building rather than assuming there is one. The
@@ -1384,6 +1409,14 @@ private fun seatsFor(
     ).forEach { (slot, pile) ->
         if (fanned == DragOrigin.Pile(slot, 0)) return@forEach
         val top = pile.firstOrNull() ?: return@forEach
+        // …unless a hand is already holding it. Nothing commits until the
+        // release, so the field still has this card in the pile while it is in
+        // the air — and the carry block below gives it a seat of its own. Both
+        // ran, so dragging the top card off any pile built **two seats with one
+        // instance id**: one lying on the mat as a `pile.size`-thick solid, one
+        // in the air. `seats.forEach` is last-wins so the pose came out right,
+        // but `ordered` held both and `StagedCard` composed the same card twice.
+        if (carries.any { it.holding == top.instanceId }) return@forEach
         val rect = layout[slot] ?: return@forEach
         val faceUp = slot == BoardSlot.Graveyard || slot == BoardSlot.Banished
         // A deck is tapped square against the table and a graveyard is swept

@@ -12,7 +12,7 @@ data class LaneEvent<T>(
 )
 
 /**
- * Two hands on one table.
+ * Ten hands on one table.
  *
  * ## What this changes, and what it deliberately does not
  *
@@ -52,11 +52,34 @@ data class LaneEvent<T>(
  * live camera lane rather than opening a second — and there is no arrangement
  * where two independent cameras would mean anything.
  *
- * And three fingers. A third contact joins the nearest lane rather than opening
- * a third, which is what keeps every "three fingers is a hand being put down"
- * rule inside `MatGestureMachine` doing its job: the machine still counts what
- * landed on *it*, and a palm arriving beside a two-handed gesture is furniture
- * to whichever lane it lands nearest, not a third player.
+ * And **bare felt**, at any number of hands. A contact that lands on nothing
+ * joins the nearest live gesture and can never open its own, which is the whole
+ * of the palm rejection here and the reason the cap could be raised at all: a
+ * hand put down flat on the mat is mostly felt, and every one of those contacts
+ * is furniture to whichever gesture it lands nearest.
+ *
+ * ## What raising the cap cost, said out loud
+ *
+ * The cap was two, and its argument was that *"three fingers is a hand being put
+ * down, which every rule in `MatGestureMachine` is built to ignore"* — true, and
+ * those rules are reached only because `nearest` delivers a third contact into a
+ * lane that already holds two. At ten, a flat hand landing across several
+ * *cards* opens several one-finger gestures instead, and every
+ * `landedFingers < 3` guard in the machine sees one.
+ *
+ * **`MatThreeFingerTest`'s sixteen claims all stay green and none of them covers
+ * this**, because they drive `MatGestureMachine` directly and never see a lane.
+ * The suite will not tell you. If it bites, the repair already has a name in
+ * this repo: the *arrival window* that
+ * `MatThreeFingerTest.aThreeFingerSweepStillTakesTheStack` names as the missing
+ * piece — how soon after the second finger the third one landed.
+ *
+ * The second cost is quieter. `frameOut`'s `extras` is credited only when there
+ * is exactly one lane, because an unattributable contact cannot be told from the
+ * other hand's; at ten lanes that gate is false more often, so the fully-batched
+ * two-finger tap resolves to a flip less often than it did. Two tests cover that
+ * behaviour and both stay green while the table gets worse, which is exactly why
+ * it is written here.
  */
 class MatDesk<T>(
     /**
@@ -279,14 +302,26 @@ class MatDesk<T>(
 
     private companion object {
         /**
-         * Two hands, and no more.
+         * Ten fingers, which is all of them.
          *
-         * Not an arbitrary cap. Three lanes would need a third meaning for a
-         * third contact, and the table already has one: three fingers is a hand
-         * being put down, which every rule in `MatGestureMachine` is built to
-         * ignore. A third finger joins the nearest gesture and becomes that
-         * gesture's problem, which is where the existing answers live.
+         * kai asked for it in those words — *"expand it to 10 fingers, meaning
+         * you can make actions 10 times simultaneously"* — and the number is
+         * the hands rather than a limit anybody will reach: a lane costs a
+         * `MatGestureMachine` and about seven short-lived objects a frame, so
+         * ten idle slots cost nothing and ten live ones cost less than one card
+         * being drawn.
+         *
+         * **It is the only number that moved.** The routing did not, and that is
+         * deliberate: only a finger that lands on a *token* can open a lane, so
+         * bare felt still joins the nearest gesture however many are live. That
+         * is the palm rejection, it is structural rather than heuristic, and it
+         * is why ten fingers on ten overlapping hand cards each get their own
+         * gesture while a hand laid on the felt still gets none.
+         *
+         * What it did cost is in the class KDoc above, under *what raising the
+         * cap cost* — the three-finger guards stop being *reached* on a board
+         * full of cards, and no test in this repo can see that happen.
          */
-        const val MAX_LANES = 2
+        const val MAX_LANES = 10
     }
 }

@@ -132,8 +132,8 @@ object MatGuide {
         ),
         Gesture(
             GestureGroup.MOVING,
-            what = "Move two cards at once",
-            touch = "A finger on each — two hands, two cards",
+            what = "Move several cards at once",
+            touch = "A finger on each — up to ten, two hands",
             pointer = "One at a time; a mouse has one pointer",
         ),
         Gesture(
