@@ -399,10 +399,55 @@ private object NoUpdates : AppUpdater {
 
 // ---- options -----------------------------------------------------------------------
 
-/** Which of the three seats a shot is taken from, and the digit that reaches it. */
-private enum class Seat(val digit: Key) { OVERHEAD(Key.One), TABLE(Key.Two), SEATED(Key.Three) }
+/**
+ * Which of the four seats a shot is taken from, and the digit that reaches it.
+ *
+ * [POV] is the one that matters most and was the one the eye could not reach:
+ * `docs/LOOP.md` §6 recorded that every unparameterised shot came back at five,
+ * twenty-one or thirty-four degrees, so the seat a head at a desk actually sits
+ * at had never been in a contact sheet. It is the seat the stage opens at now.
+ */
+private enum class Seat(val digit: Key) {
+    OVERHEAD(Key.One), TABLE(Key.Two), SEATED(Key.Three), POV(Key.Four)
+}
 
 private class Shot(val name: String, val scene: Scene, val light: DeskLight, val seat: Seat)
+
+/**
+ * `--pitch=80`, `--yaw=45`: aim the whole run, rather than one shot.
+ *
+ * The envelope runs to eighty degrees of pitch and can be spun all the way
+ * round, and `docs/LOOP.md` §6 records that neither has ever been in a contact
+ * sheet — eighty in particular, because it is where a procedural surface
+ * aliases worst *and* where the table's horizon comes onto the glass. Before
+ * this the only way there was to write a tuning file by hand.
+ *
+ * **A run, not a shot, and that is not laziness.** Writing a tuning per shot
+ * next to the room is the bug the settle comment above `prefs.update` records:
+ * a preferences write is a coroutine, the tuned camera is placed by a
+ * `SideEffect` on the composition that write causes, and the seat press is sent
+ * from here, so which landed first depended on the dispatcher and two runs of
+ * one tuning came back with the camera in two places. This folds into
+ * `opts.tuning` at parse time instead, where it goes in once and the settle
+ * absorbs it — and it then trips the existing rule that a tuning carrying a
+ * camera *is* the camera, so the seat in every shot name is ignored for that
+ * run. Which is right: `--pitch=80` means eighty, not eighty-then-whatever-the
+ * -name-said.
+ *
+ * Clamped by the envelope like any other tuning, so a number outside it comes
+ * back as the nearest legal one rather than as a picture of nothing.
+ */
+private fun StageTuning.aimedBy(map: Map<String, String>): StageTuning {
+    val pitch = map["pitch"]?.toFloatOrNull()
+    val yaw = map["yaw"]?.toFloatOrNull()
+    if (pitch == null && yaw == null) return this
+    return copy(
+        camera = camera.copy(
+            pitchDegrees = pitch ?: camera.pitchDegrees,
+            yawDegrees = yaw ?: camera.yawDegrees,
+        ),
+    ).sanitised()
+}
 
 private class Options(
     val out: File,
@@ -429,9 +474,18 @@ private class Options(
     val shots: List<Shot>,
 ) {
     companion object {
-        /** The default contact sheet: both rooms, both hours, and every seat once. */
+        /**
+         * The default contact sheet: both rooms, both hours, and every seat once.
+         *
+         * `desk-night-pov` is the newest and is the one to read first — it is
+         * the seat the stage opens at, so it is the picture kai actually gets.
+         * The other three are the room seen from above it, which is what the
+         * sheet was entirely made of while `docs/LOOP.md` §6 was complaining
+         * that the eye could only reach three seats by digit.
+         */
         private val CONTACT = listOf(
-            "desk-day-table", "desk-night-seated", "desk-day-overhead", "minimal-day-table",
+            "desk-day-table", "desk-night-seated", "desk-day-overhead",
+            "desk-night-pov", "minimal-day-table",
         )
 
         fun parse(args: Array<String>): Options {
@@ -468,12 +522,14 @@ private class Options(
                 // A tuning exported off the tablet, replayed here. The whole
                 // point of the round trip: a number kai moved with his thumb
                 // becomes a picture the loop can diff, without a release.
-                tuning = map["tune"]?.let { path ->
-                    val file = File(path).absoluteFile
-                    require(file.isFile) { "no tuning at $file" }
-                    TuningCodec.parse(file.readText())
-                        ?: error("$file is not a tuning export")
-                } ?: StageTuning.DEFAULT,
+                tuning = (
+                    map["tune"]?.let { path ->
+                        val file = File(path).absoluteFile
+                        require(file.isFile) { "no tuning at $file" }
+                        TuningCodec.parse(file.readText())
+                            ?: error("$file is not a tuning export")
+                    } ?: StageTuning.DEFAULT
+                    ).aimedBy(map),
                 shots = names.map(::shotOf),
             )
         }
@@ -495,6 +551,7 @@ private class Options(
                 seat = when {
                     has("overhead") -> Seat.OVERHEAD
                     has("seated") -> Seat.SEATED
+                    has("pov", "head", "chair") -> Seat.POV
                     else -> Seat.TABLE
                 },
             )

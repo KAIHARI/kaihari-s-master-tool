@@ -40,6 +40,7 @@ internal object Keys {
         '1' -> Key.One
         '2' -> Key.Two
         '3' -> Key.Three
+        '4' -> Key.Four
         'b' -> Key.B
         'c' -> Key.C
         'd' -> Key.D

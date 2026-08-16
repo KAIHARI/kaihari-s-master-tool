@@ -1391,14 +1391,26 @@ what the eye has caught and the hand has not reached.
   picture. Coil serves a lower-resolution decode until the art lands, and the
   shot that comes first in a cold run gets it. Warm the cache with a throwaway
   shot before recording a before.
-- **The eye can only reach three seats by digit, and the envelope is much
-  larger than it was.** `tools/shoot.sh` selects a seat by pressing its digit,
-  so every unparameterised shot is one of 5°, 21° or 34°. `--tune=x.json`
-  reaches anywhere — a non-default `camera` block skips the seat press — which
-  is how iteration 16 photographed a distance of 0.5 and one of 4.0. But the
-  envelope now runs to **eighty** degrees of pitch and can be **panned**, and
-  neither of those is in the contact sheet. Eighty is where a procedural surface
-  aliases worst *and* where the table's horizon comes onto the glass; it should
-  be a standing shot, not something remembered. Driving a real orbit (a pointer
-  drag on the felt, which `MatInput` already understands) is still the cheapest
-  remaining upgrade to the loop's own perception.
+- ~~**The eye can only reach three seats by digit.**~~ **Fixed.** Every
+  unparameterised shot used to be one of 5°, 21° or 34° — all of them somebody
+  standing over the table, and none of them the seat the stage now opens at.
+  `Seat.POV` is on `4`, `pov` (or `head`, or `chair`) names it in a shot, and
+  `desk-night-pov` is in the contact sheet. **And the envelope is aimable:**
+  `--pitch=` and `--yaw=` move the whole run, so eighty degrees — where a
+  procedural surface aliases worst and where the table's horizon comes onto the
+  glass — is one flag rather than a hand-written tuning file. It is a *run*
+  rather than a shot on purpose: writing a tuning per shot beside the room is
+  the race iteration 10 recorded, where the seat press and the preferences
+  write landed in an order the dispatcher chose. An aimed run then ignores the
+  seat in every name, by the rule that already existed — a tuning carrying a
+  camera *is* the camera.
+- **Driving a real orbit** — a pointer drag on the felt, which `MatInput`
+  already understands — is now the cheapest remaining upgrade to the loop's own
+  perception. Everything above is still a still.
+- **And the studio runs in a Claude session now.** It needs the Android SDK
+  because `:ui` has an `androidTarget`, and that used to be the end of it. Both
+  `dl.google.com` and Google's Maven are reachable from the sandbox: install
+  `cmdline-tools` plus `platforms;android-36`, `pip install pillow`, write
+  `app/local.properties`, and `tools/shoot.sh`, `compare.py` and `crop.py` all
+  work. *"Never ship a picture you have not looked at"* stopped being a rule
+  that had to be taken on trust.
