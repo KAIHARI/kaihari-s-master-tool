@@ -83,8 +83,19 @@ pins the half of that core can see. The same Compose fact is written on
 `ui/dnd/DragSource.kt` and has now cost two debugging rounds.
 
 **`docs/LOOP.md` is the autonomous loop that uses it**: six steps an iteration
-takes, four gates a change passes, and a ledger of what has been tried. Read it
+takes, five gates a change passes, and a ledger of what has been tried. Read it
 before doing fidelity work on the play stage.
+
+**`docs/PHOTOREAL.md` is the road, and it is now phased.** Nine stages of
+engineering toward a photographic table, and — since kai asked for the play stage
+to reach a AAA first-person game — eleven **phases** that ship them, in
+§"The phases those stages are shipped in". One phase is one session and at least
+one signed release. The three questions the document used to end on are answered
+in the section above that table, along with a fourth it asked back: the POV seat
+becomes the seat the stage opens at, the Desk scenes may be graded like a
+photograph, the room gets built and gets shadows, and **`AAA.md` #34 is refused**
+— the card's printed picture stays a 168×246 thumbnail and every bit of the
+fidelity is bought in the object around it.
 
 ## Development Workflow — read this before changing anything
 

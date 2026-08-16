@@ -693,4 +693,84 @@ FIDELITY was written for a canvas-only renderer. Most of it survives; some of it
 | 7 | A1 canvas, vignette, dither, grain, AgX?, bloom, DoF | mixed — DoF reaches **API 31** | grain, CA, bloom; keeps vignette + dither | ToneTest, not the golden |
 | 8 | foil grating | yes | the hue sweep | Foil `spec` lines only |
 
+### The phases those stages are shipped in
+
+Written when the three questions above were answered. The stages are still the
+engineering; **the phases are the releases**, ordered for how much of the difference a
+person can name per session rather than for how the arithmetic stacks. One phase is one
+session and at least one signed release. A session picking this up cold starts at the
+first phase that is not marked done and reads that stage in full before writing anything.
+
+| Phase | The sentence that will be true of the picture afterwards | Is | Needs |
+|---|---|---|---|
+| 0 | *(nothing visible — ships folded into 1)* | stage 0, plus the studio learning the POV seat | — |
+| 1 | "I am sitting at the desk, and the room is around me." | `CameraTune` → `StageSeat.POV`; the room closed at the sides and above | 0 |
+| 2 | "Every faint white arrives at the brightness it was tuned for." | stage 2 | — |
+| 3 | "Cards stop being stickers laid on a picture of a desk." | stage 3, **plus stage 1's pile ruling** | 2 |
+| 4 | "It stops looking like a diagram of a table and starts looking like a photograph of one." | stage 7 **minus the tonemap** | 0 |
+| 5 | "Cards stop being sixty copies of one sprite." | stage 4, **and then the AgX stage 4 unblocks** | 2, 4 |
+| 6 | "The wall is plaster, the glass is glass, and daylight lands on the desk." | stage 5, and AAA #64 | 2 |
+| 7 | "Everything in the room is standing on the floor." | AAA #61d, as a set | 6 |
+| 8 | "It is a bedroom with a desk in it, not a desk with a wall behind it." | AAA #92 + #93, then the furniture | 1, 7 |
+| 9 | "The card near the window shows the window; the one across the table doesn't." | stage 6 | 5, 8 |
+| 10 | "Foil is foil, the desk has a near edge, and I can photograph the board." | stage 8, AAA #66, #61's last corner, #69 | 9 |
+
+Three of those orderings are deliberate and each was argued rather than assumed.
+
+- **Stage 7 is split, and its bigger half comes fourth.** The vignette, the grain, the
+  chromatic aberration, the bloom and the depth of field are the single largest
+  cheap-versus-photographed lever on this list and **none of them needs `Tone.veil`
+  dead** — only the tonemap does. So they ship as soon as the `RenderEffect` seam exists,
+  and AgX waits for N2 in phase 5, which is where §"The tonemap" already puts it.
+- **Stage 1's weave band-limit is already shipped** (LOOP.md iteration 6); what is left of
+  that stage is the pile's ruled side, and it belongs with the shadows because it is the
+  same complaint — *the biggest object on the table is the most obviously wrong thing in
+  the frame*.
+- **The room is built before it is reflected.** Stage 6 bakes a probe of `SceneModel`'s
+  own boxes, and a probe of an empty room is a flat wash on sixty cards. Building the
+  furniture first is also what makes the golden re-record that stage costs worth paying
+  once.
+
 Three things must be answered by kai before the stages that depend on them start, and none of them is a code question: **the room's framing** (LOOP.md iteration 1 — blocks anything about the wall or the window), **whether the felt may move from code 10 to code 19** (blocks AgX), and **whether the Desk scenes may claim a camera at all** (blocks lens dirt, which I recommend never building — it is the one item that can make the stage worse in a way that is obvious and permanent, and a version number once published is spent forever).
+
+---
+
+## All three are answered, and a fourth was asked back
+
+*Added when kai asked for the play stage to reach a AAA first-person game.*
+
+**The room's framing — answered by moving the seat, not the room.** `StageSeat.POV`
+now becomes the seat the stage opens at: thirty-two degrees of elevation, where the
+room is about half the picture rather than the fifth `ROOM_ABOVE` bought it. That
+retires the ceiling this document's last table describes as *"a 6 px hairline"* and
+with it the reason the wall and the window were parked. It costs a card about a third
+of its drawn height to `cos(pitch)`, which is what looking at a table from a chair
+does; the hold-to-read card reader carries legibility instead.
+
+**The felt may move from code 10 to code 19 — the whole grade is authorised.** AgX
+with the +2 EV and the 1.2 post-power, the cos⁴ vignette at its honest full stop in
+the corner, tone-enveloped grain, the sub-pixel lateral CA, bloom and depth of field.
+`Scene.MINIMAL` is untouched and stays the control. So stage 7's three obstructions
+are now engineering rather than permission: `Tone.shade`'s `amount >= 1f` cliff,
+`Tone.veil` going negative at every light in the app's range, and this document's own
+amendment to FIDELITY's Dropped table.
+
+**The Desk scenes may claim a camera** — and the recommendation against **lens dirt**
+stands unchanged and unasked. It is refused here rather than scheduled.
+
+**And the fourth, asked back, because no survey had weighted it:** the hero asset. Given
+the choice between fetching the full-size art, fetching it *and* rendering each face to a
+texture, or leaving it alone, kai chose to leave it alone and spend the effort on the
+stock, the foil, the sleeve, the cut edge, the shadow and the light. So the last row of
+the ceiling table is now a **decision**: `AAA.md` #34 is refused, `AAA.md` #25 and #26 and
+the whole of stage 4 are where a card gets better, and F5's `FilterQuality.Medium` is the
+end of what happens to the picture itself.
+
+One thing this document did not anticipate follows from the first answer. It assumed the
+room stayed at eighteen pieces, and kai has asked for the rest of it — a bed, a
+bookshelf with books in it, a ceiling, side walls, clutter on the desk, and shadows in
+the room as a set. That is not a stage here; it is `AAA.md` #92 and #93 first, because
+`ScenePainter.order` is quadratic twice over and run every draw, and because
+`docs/DESIGN.md` §11 forbids anything standing over the mat until they exist. The
+stages below are still the right order for the *surfaces*; the room's own build sits
+after stage 5 and before stage 6, since a probe of an empty room is a flat wash.

@@ -47,11 +47,14 @@ against but *"the bookshelf exists and has books in it"* is.
 | Sun outside | not possible through this window — iteration 8 has the numbers |
 | Floor | a flat plane, barely in frame |
 | Wall | **a fifth of the screen**, and painted rather than void |
+| Side walls | do not exist. The room is open at both sides |
+| Ceiling | does not exist. The room is open above |
 | Millennium Puzzle | **deleted** — see iteration 13. Nothing stands on the left of the desk |
 | Lamp | **a turned lamp**: brass foot, tapered stem, a shade that is a shell and is lit from inside |
+| Desk clutter | does not exist. `DESIGN.md` §11 forbids it until `AAA.md` #92 and #93 exist |
 | Bed | does not exist |
 | Bookshelf | does not exist |
-| Room shadows | nothing in the room casts one (`AAA.md` #61d) |
+| Room shadows | nothing in the room casts one — **and kai has now asked for them.** `AAA.md` #61d |
 | Night | **the room falls away from the lamp**; the table does not |
 
 That obstacle is gone. It was the first real one — **the board filled the stage
@@ -59,6 +62,35 @@ vertically**, so there were six pixels of wall at the table seat and no room for
 anything behind the desk — and iterations 7 and 8 cleared it. `roomAbove` keeps
 a fifth of the stage's height for the room, at a cost of a fifth of the card,
 and everything left on the list is now somewhere a camera can look.
+
+### And the framing question iteration 1 left open is answered
+
+Iteration 1 ended on the one thing the loop could not decide for itself: *"a room
+whose back wall is a 6px hairline cannot hold a window, a lit patch, or anything
+else #61c and #62 want, and giving it more means re-framing a stage he has
+tuned."* kai has now given it more, in four answers:
+
+- **The POV seat becomes the seat the stage opens at.** Thirty-two degrees of
+  elevation — a head at a desk — where the room is about half the picture rather
+  than a fifth. `StageSeat.POV` already exists and is already tested; what
+  changes is `CameraTune`'s defaults.
+- **The Desk scenes may be graded like a photograph.** AgX and an exposure, a
+  cos⁴ vignette, tone-enveloped grain, a little lateral chromatic aberration,
+  bloom and depth of field. `Scene.MINIMAL` is untouched, as always.
+- **The room gets built.** Bed, bookshelf with books in it, a ceiling, side
+  walls, more floor, clutter on the desk — and room shadows **as a set**, which
+  is the decision `AAA.md` #61d was holding open.
+- **The card art stays as it is.** A 168×246 thumbnail is the hero surface and
+  it is not going to be replaced; the fidelity is bought in the stock, the foil,
+  the sleeve, the cut edge, the shadow and the light instead. That refuses
+  `AAA.md` #34 rather than deferring it.
+
+Two of those cost something and the cost is accepted rather than hidden. The low
+seat draws a card about a third shorter — `cos(pitch)` — and the hold-to-read
+card reader carries legibility instead. And the room at sixty to a hundred
+pieces is past what `ScenePainter` sorts and past what
+`SceneryTest.theRoomIsAHandfulOfObjectsRatherThanAScene` allows, so the
+furniture is downstream of `AAA.md` #92 and #93 rather than beside them.
 
 This document is the loop. It says what one iteration is, what it may not do,
 and what it has already done. An agent picking this up cold should be able to
