@@ -1,10 +1,18 @@
 package com.kaiharimoto.mastertool.ui.gpu
 
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.asComposeShader
+import androidx.compose.ui.graphics.asSkiaBitmap
+import org.jetbrains.skia.FilterTileMode
+import org.jetbrains.skia.Image
+import org.jetbrains.skia.ImageFilter
 import org.jetbrains.skia.RuntimeEffect
 import org.jetbrains.skia.RuntimeShaderBuilder
+import org.jetbrains.skia.SamplingMode
 
 /**
  * The desktop half of the seam.
@@ -37,6 +45,25 @@ actual fun StageShader.brush(uniforms: ShaderUniforms.() -> Unit): Brush {
     return ShaderBrush(builder.makeShader().asComposeShader())
 }
 
+actual val runtimeShadersAvailable: Boolean get() = true
+
+actual class StageEffect internal constructor(internal val builder: RuntimeShaderBuilder)
+
+actual fun compileStageEffect(sksl: String): StageEffect? =
+    runCatching { StageEffect(RuntimeShaderBuilder(RuntimeEffect.makeForShader(sksl))) }
+        .getOrNull()
+
+actual fun StageEffect.effect(uniforms: ShaderUniforms.() -> Unit): RenderEffect? {
+    DesktopUniforms(builder).uniforms()
+    // `"content"` rather than a name of our own choosing: Android's
+    // `createRuntimeShaderEffect` fixes it, and one shader string has to compile
+    // on both. The null crop means "the whole thing", which is what a
+    // full-screen finishing pass wants.
+    return runCatching {
+        ImageFilter.makeRuntimeShader(builder, "content", null).asComposeRenderEffect()
+    }.getOrNull()
+}
+
 private class DesktopUniforms(private val builder: RuntimeShaderBuilder) : ShaderUniforms {
     override fun float(name: String, value: Float) = builder.uniform(name, value)
     override fun float2(name: String, x: Float, y: Float) = builder.uniform(name, x, y)
@@ -44,4 +71,32 @@ private class DesktopUniforms(private val builder: RuntimeShaderBuilder) : Shade
         builder.uniform(name, x, y, z)
     override fun float4(name: String, x: Float, y: Float, z: Float, w: Float) =
         builder.uniform(name, x, y, z, w)
+
+    // No `setColorUniform` equivalent here, so the four floats go in as they
+    // are. That is also the honest description of what Android's does once the
+    // destination transform is the identity, which it is for every surface this
+    // app draws.
+    override fun colour(name: String, red: Float, green: Float, blue: Float, alpha: Float) =
+        builder.uniform(name, red, green, blue, alpha)
+
+    // The `FloatArray` overload rather than the `Matrix33` one, and deliberately.
+    // `Matrix33` documents itself as row-major and an SkSL `mat3` is
+    // column-major, so going through it means asserting which side transposes —
+    // a question whose wrong answer is a shader that works and is silently
+    // transposed, which no compile and no null check would catch. Nine floats
+    // straight through is the same expression Android's `setFloatUniforms`
+    // takes, so both platforms agree by construction instead of by argument.
+    override fun matrix3(name: String, columnMajor: FloatArray) {
+        require(columnMajor.size == 9) { "a mat3 is nine floats, not ${columnMajor.size}" }
+        builder.uniform(name, columnMajor)
+    }
+
+    override fun image(name: String, bitmap: ImageBitmap, repeat: Boolean) {
+        val tile = if (repeat) FilterTileMode.REPEAT else FilterTileMode.CLAMP
+        builder.child(
+            name,
+            Image.makeFromBitmap(bitmap.asSkiaBitmap())
+                .makeShader(tile, tile, SamplingMode.LINEAR, null),
+        )
+    }
 }

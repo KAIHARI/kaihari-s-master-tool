@@ -331,4 +331,77 @@ class HomographyTest {
             assertClose(want.y, got.y, 1e-2f, "y at $at:")
         }
     }
+
+    // ---- and the map that undoes it -------------------------------------------------
+
+    @Test
+    fun theInverseTakesAMatPixelBackToTheCardItLandedOn() {
+        // The claim the pile's ruled side rests on: a shader handed a point in
+        // the mat's frame can say which part of the card is under it. Swept over
+        // the interior rather than the corners, because a projective map is
+        // *most* nonlinear away from the points that defined it.
+        listOf(handPose, Pose3(position = Vec3(700f, 500f, 0f))).forEach { pose ->
+            val map = mapOf(pose)
+            val back = assertNotNull(map.inverse(), "a card in view has an inverse")
+
+            for (i in 0..4) {
+                for (j in 0..4) {
+                    val at = Vec2(cardWidth * i / 4f, cardHeight * j / 4f)
+                    val there = map.map(at)
+                    val home = back.map(there)
+                    assertClose(at.x, home.x, 1e-2f, "u at $at on $pose:")
+                    assertClose(at.y, home.y, 1e-2f, "v at $at on $pose:")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun theInverseIsAMapRatherThanNineNumbersAndSoIgnoresItsOwnScale() {
+        // A projective map is defined up to scale, which is the whole reason the
+        // adjugate is returned without dividing by the determinant. If that is
+        // wrong the round trip above still passes — det is a constant factor and
+        // `map` divides it out — so this is the claim that actually pins it, and
+        // it also pins that nobody may "fix" the missing division later.
+        val map = mapOf(handPose)
+        val scaled = Homography(
+            map.m00 * 8f, map.m01 * 8f, map.m02 * 8f,
+            map.m10 * 8f, map.m11 * 8f, map.m12 * 8f,
+            map.m20 * 8f, map.m21 * 8f, map.m22 * 8f,
+        )
+
+        val a = assertNotNull(map.inverse())
+        val b = assertNotNull(scaled.inverse())
+
+        listOf(Vec2(400f, 300f), Vec2(900f, 620f), Vec2(1210f, 88f)).forEach { at ->
+            assertClose(a.map(at).x, b.map(at).x, 1e-2f, "x at $at:")
+            assertClose(a.map(at).y, b.map(at).y, 1e-2f, "y at $at:")
+        }
+    }
+
+    @Test
+    fun aCardSeenExactlyEdgeOnHasNoInverseEither() {
+        // `squareToQuad` already refuses an edge-on card, so the only way to
+        // reach a singular matrix through the front door is to build one. Every
+        // card passes through this twice per flip, and the answer has to be null
+        // rather than nine infinities: a NaN is not a coordinate — it survives
+        // every clamp downstream and draws nothing at all.
+        val flattened = Homography(
+            1f, 2f, 3f,
+            2f, 4f, 6f,
+            0f, 0f, 1f,
+        )
+        assertNull(flattened.inverse(), "two proportional rows are not a map")
+
+        assertNull(Homography(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f).inverse(), "nor is nothing")
+    }
+
+    @Test
+    fun theIdentityUndoesToItself() {
+        val back = assertNotNull(Homography.Identity.inverse())
+        listOf(Vec2(0f, 0f), Vec2(37f, 512f)).forEach { at ->
+            assertClose(at.x, back.map(at).x, 1e-4f, "x at $at:")
+            assertClose(at.y, back.map(at).y, 1e-4f, "y at $at:")
+        }
+    }
 }

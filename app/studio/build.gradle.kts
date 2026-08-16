@@ -45,6 +45,23 @@ tasks.register<JavaExec>("spikeShader") {
     )
 }
 
+tasks.register<JavaExec>("spikeSeam") {
+    group = "verification"
+    description = "Asks the three questions docs/PHOTOREAL.md's widened seam rests on."
+    dependsOn("jvmMainClasses")
+    mainClass.set("com.kaiharimoto.mastertool.studio.SeamSpikeKt")
+    classpath = kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles +
+        kotlin.jvm().compilations.getByName("main").output.allOutputs
+    workingDir = rootProject.projectDir
+    jvmArgs("-Djava.awt.headless=true", "-Dskiko.renderApi=SOFTWARE")
+    argumentProviders.add(
+        CommandLineArgumentProvider {
+            providers.gradleProperty("shot.args").orNull?.split(" ")?.filter { it.isNotBlank() }
+                ?: emptyList()
+        }
+    )
+}
+
 // A plain JVM entry point rather than `compose.desktop.application`: the studio
 // never opens a window, and the packaging DSL would drag installer tooling into
 // a module whose only output is PNG files.

@@ -3,6 +3,7 @@ package com.kaiharimoto.mastertool.core.render
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.sqrt
 
 /**
  * The map that takes a card's own rectangle to the four corners it really has.
@@ -61,6 +62,87 @@ data class Homography(
     }
 
     fun map(point: Vec2): Vec2 = map(point.x, point.y)
+
+    /**
+     * The map that undoes this one, or null where there is none.
+     *
+     * ## Why a shader needs it and nothing else does
+     *
+     * Everything drawn *through* a homography gets its own rectangle for free:
+     * a card's picture is drawn inside `withTransform { transform(matrix) }`, so
+     * Skia composes the local matrix with the CTM and inverts the total per
+     * pixel, and `main(float2 p)` receives card-local coordinates with the
+     * divide already done.
+     *
+     * A pile's ruled side is the exception, and it is the one that matters. It
+     * is drawn as a *path in the mat's frame*, because that is where
+     * `StagePlane.flatten` puts a face with a height — so a shader colouring it
+     * is handed mat pixels and has to recover which card it is standing on. That
+     * is this, folded to three `float3` uniforms and eleven instructions:
+     *
+     * ```
+     * float3 q  = uM0 * p.x + uM1 * p.y + uM2;
+     * float2 uv = q.xy / q.z;
+     * ```
+     *
+     * ## The adjugate, and why there is no division by the determinant
+     *
+     * A projective map is defined only up to scale — `map` divides by `w`, so
+     * multiplying all nine numbers by a constant changes nothing it returns.
+     * The adjugate *is* the inverse times the determinant, so it is already the
+     * answer, and dividing by `det` would spend nine divisions to reach a matrix
+     * that maps every point to the same place.
+     *
+     * What the determinant is still needed for is the refusal. Null rather than
+     * nine infinities, for the same reason [squareToQuad] hands back null: a
+     * caller that has to check `isFinite()` on nine floats will one day forget
+     * one, and a NaN is not a coordinate — it passes every clamp and draws
+     * nothing.
+     *
+     * ## The threshold, and the one that looked right and was not
+     *
+     * It has to be relative: a map built by [rectToQuad] carries screen
+     * coordinates around a thousand in its last column and reciprocals of a
+     * card's width — a hundredth — in its first two, so the determinant runs
+     * over orders of magnitude with the card size and an absolute epsilon is a
+     * different tolerance on every stage.
+     *
+     * The obvious relative measure is the largest element cubed, on the argument
+     * that a determinant is a sum of triple products. **It rejects every real
+     * card.** That measure is only a scale when the nine numbers share one, and
+     * here they emphatically do not: the largest element is the translation, a
+     * thousand, so the threshold comes out at `1e-6 · 1e9` = 1000 while the true
+     * determinant of a perfectly good card is far below it. Every card in view
+     * came back null.
+     *
+     * Hadamard's inequality is the honest one — `|det| <= ||c0||·||c1||·||c2||`
+     * over the columns — so that product is the largest determinant these three
+     * columns could possibly have, the ratio is a true fraction in `[0, 1]`, and
+     * it is invariant to each column being scaled on its own. Which is exactly
+     * what [rectToQuad] does to two of them.
+     */
+    fun inverse(): Homography? {
+        // The adjugate: each entry is the cofactor of the *transposed* position,
+        // which is what makes this the inverse rather than the cofactor matrix.
+        val a00 = m11 * m22 - m12 * m21
+        val a01 = m02 * m21 - m01 * m22
+        val a02 = m01 * m12 - m02 * m11
+        val a10 = m12 * m20 - m10 * m22
+        val a11 = m00 * m22 - m02 * m20
+        val a12 = m02 * m10 - m00 * m12
+        val a20 = m10 * m21 - m11 * m20
+        val a21 = m01 * m20 - m00 * m21
+        val a22 = m00 * m11 - m01 * m10
+
+        val det = m00 * a00 + m01 * a10 + m02 * a20
+        val hadamard =
+            sqrt(m00 * m00 + m10 * m10 + m20 * m20) *
+                sqrt(m01 * m01 + m11 * m11 + m21 * m21) *
+                sqrt(m02 * m02 + m12 * m12 + m22 * m22)
+        if (hadamard == 0f || abs(det) <= DEGENERATE * hadamard) return null
+
+        return Homography(a00, a01, a02, a10, a11, a12, a20, a21, a22)
+    }
 
     /**
      * These nine numbers, written into the sixteen a Compose `Matrix` holds.
