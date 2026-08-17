@@ -38,6 +38,26 @@ data class CardMaterial(
     val iridescence: Float,
     /** How much the grazing-angle rim lights up, 0..1. */
     val rim: Float,
+    /**
+     * How directional the finish is: 0 is an even polish, 1 is a grating.
+     *
+     * Foil is not a shinier card, it is a *combed* one — a holographic stock is
+     * ruled with parallel grooves, and a ruled surface answers the light with a
+     * **streak across the grooves** rather than with a round pool. That is the
+     * whole read, and `docs/AAA.md` #21 calls it the single change that would
+     * make foils look like foil. Two cards with the same `shininess` and the
+     * same `specular` and different values here are two materials; today they
+     * were two copies of one.
+     *
+     * It changes the highlight's *shape* and deliberately not its brightness —
+     * `docs/DESIGN.md` §7 is that the pool moves rather than brightens, and an
+     * anisotropic lobe that also got brighter would be the anti-pattern wearing
+     * a physics argument. [Shade.streak] carries the shape out.
+     *
+     * Trailing and zero by default, so every existing material is unchanged to
+     * the bit and `GoldenStageTest` does not move.
+     */
+    val anisotropy: Float = 0f,
 ) {
     companion object {
         /** Sleeved card stock: the default, and most of the table. */
@@ -56,6 +76,10 @@ data class CardMaterial(
             specular = 0.52f,
             iridescence = 0.8f,
             rim = 0.75f,
+            // Ruled stock. Against a shininess of 44 this gives a lobe about
+            // three times longer than it is wide — see `Shading.of`, where the
+            // number comes from the exponents rather than from taste.
+            anisotropy = 0.8f,
         )
 
         /** The back of a sleeve, which is the quietest surface on the table. */

@@ -1468,9 +1468,19 @@ what the eye has caught and the hand has not reached.
   write landed in an order the dispatcher chose. An aimed run then ignores the
   seat in every name, by the rule that already existed — a tuning carrying a
   camera *is* the camera.
+- **The eye cannot see a foil, and that is now the biggest hole in it.**
+  `CardStock.of` gives `CardMaterial.Foil` to face-up **extra-deck** cards only,
+  and nothing in the play stage's shortcut table opens the extra deck — `f`
+  searches the main deck, and spreading a pile is a tap. So the studio cannot
+  photograph the anisotropic streak (`AAA.md` #21, built and unphotographed),
+  the prismatic ramp on a foil, or anything stage 8's diffraction grating will
+  do. `Keys.kt` refuses to name keys the app does not bind, which is the right
+  rule and rules out a fake shortcut; the fix is either a pointer tap the
+  studio can send, or a real shortcut the players are arguably missing too.
 - **Driving a real orbit** — a pointer drag on the felt, which `MatInput`
   already understands — is now the cheapest remaining upgrade to the loop's own
-  perception. Everything above is still a still.
+  perception, and it is the same mechanism the entry above needs. Everything
+  here is still a still.
 - ~~**Moving `CameraTune`'s defaults to the POV seat is two lines and one real
   regression.**~~ **Done — iteration 23.** Kept below because the measurement is
   the useful part and the next person to move a threshold on this table should

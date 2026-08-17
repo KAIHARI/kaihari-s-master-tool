@@ -11,6 +11,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.layout.BoardLayout
@@ -545,19 +547,35 @@ internal fun DrawScope.drawCardSurface(
         // on this table the rig's white ambient washes most of it back out.
         val lamp = Color.White.shaded(shade.lamp)
 
-        drawRoundRect(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    lamp.copy(alpha = shade.specular),
-                    lamp.copy(alpha = shade.specular * 0.3f),
-                    Color.Transparent,
-                ),
-                center = hotspot,
-                radius = size.maxDimension * 0.8f,
+        val pool = Brush.radialGradient(
+            colors = listOf(
+                lamp.copy(alpha = shade.specular),
+                lamp.copy(alpha = shade.specular * 0.3f),
+                Color.Transparent,
             ),
-            cornerRadius = radius,
-            blendMode = BlendMode.Plus,
+            center = hotspot,
+            radius = size.maxDimension * 0.8f,
         )
+
+        // A round pool everywhere but foil, and on foil an ellipse — which is
+        // the whole of `docs/AAA.md` #21 at the drawing end. The stretch is
+        // along the draw scope's own x, and that is already the card's width,
+        // because this runs inside the homography the card is drawn through:
+        // the card's rotation reaches the screen out there, so nothing in here
+        // needs an angle and none is carried.
+        //
+        // Scaling about the hotspot rather than about the card means the pool
+        // stretches where it *is* instead of sliding as it grows. The rounded
+        // rect goes wide with it and off the card, which costs nothing: the
+        // gradient's last stop is transparent, and transparent under Plus is
+        // exactly nothing.
+        if (shade.streak > 1.001f) {
+            withTransform({ scale(shade.streak, 1f, pivot = hotspot) }) {
+                drawRoundRect(brush = pool, cornerRadius = radius, blendMode = BlendMode.Plus)
+            }
+        } else {
+            drawRoundRect(brush = pool, cornerRadius = radius, blendMode = BlendMode.Plus)
+        }
 
         // Foil. The ramp is thrown along the axis the pool is travelling on,
         // centred on the pool itself, so the colour sweeps with the tilt and

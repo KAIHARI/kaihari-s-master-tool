@@ -346,6 +346,21 @@ data class Shade(
     val hotspot: Vec2,
     /** Positive when the printed face is toward the eye, negative when the back is. */
     val facing: Float,
+    /**
+     * How many times longer the highlight is than it is wide, along the card's
+     * own **x** axis. One is a round pool, which is every material but foil.
+     *
+     * The grooves of a ruled stock run across the card, and a ruled surface
+     * answers with a streak across them — so the renderer draws the same pool
+     * scaled by this about [hotspot], in the card's local frame, where x is
+     * already the card's width. No angle is needed and none is carried: the
+     * card's own rotation reaches the screen through the homography that is
+     * already wrapped around the draw.
+     *
+     * Trailing and one by default. `GoldenStageTest` records `diff`, `spec`,
+     * `rim` and `hot` and none of those moves for this.
+     */
+    val streak: Float = 1f,
 )
 
 object Shading {
@@ -360,6 +375,16 @@ object Shading {
      */
     private const val SPREAD = 1.15f
     private const val MIN_FACING = 0.32f
+
+    /**
+     * The longest a streak may be drawn, as a multiple of its own width.
+     *
+     * A ruled surface's lobe has no natural end — as the finish approaches a
+     * true grating the ratio runs away — and a highlight longer than the card
+     * is not a highlight, it is a bar across the art. At the reference 104-pixel
+     * card, six is already most of the width.
+     */
+    private const val STREAK_CEILING = 6f
 
     /** Plain diffuse lighting for a surface pointing along [normal]. */
     fun lit(normal: Vec3, light: Light, intensity: Float = 1f): Float {
@@ -412,6 +437,27 @@ object Shading {
 
         val fresnel = ((1f - abs(facing)).pow(2.5f) * material.rim).coerceIn(0f, 1f)
 
+        // How long the pool is drawn, and it comes off the exponents rather
+        // than out of the air. A ruled finish has two roughnesses rather than
+        // one: tight across the grooves, slack along them. Splitting the single
+        // `shininess` about the anisotropy gives those two exponents, and a
+        // Blinn-Phong lobe of exponent n has angular half-width going as
+        // 1/sqrt(n) — so the ratio the eye reads as a streak is the square root
+        // of the ratio of the exponents.
+        //
+        // Foil, at shininess 44 and anisotropy 0.8: 79.2 across against 8.8
+        // along, a ratio of nine, a streak of three to one. That is a foil and
+        // not a stripe, and it is arithmetic rather than a number somebody
+        // liked.
+        val streak = if (material.anisotropy <= 0f) {
+            1f
+        } else {
+            val across = material.shininess * (1f + material.anisotropy)
+            val along = material.shininess * (1f - material.anisotropy)
+            if (along <= 0f) STREAK_CEILING
+            else sqrt(across / along).coerceIn(1f, STREAK_CEILING)
+        }
+
         // The hotspot, in the card's own frame. Mirrored along with the card
         // when the back is showing, or the highlight would walk the wrong way
         // across a set card as it turns.
@@ -430,6 +476,7 @@ object Shading {
                 y = 0.5f + SPREAD * (half dot down) / depth,
             ),
             facing = facing,
+            streak = streak,
         )
     }
 }

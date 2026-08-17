@@ -440,4 +440,61 @@ class ShadingTest {
         assertClose(1f, shade.lamp.amount, note = "at full strength, the specular being the amount:")
         assertTrue(shade.lamp.blue < shade.lamp.red, "and warm means less blue, was ${shade.lamp.blue}")
     }
+
+    // ---- a ruled finish answers with a streak ---------------------------------
+
+    @Test
+    fun onlyAFoilStretchesItsHighlightAndItStretchesByItsOwnExponents() {
+        // `docs/AAA.md` #21: a foil is not a shinier card, it is a combed one,
+        // and what says so is the *shape* of the pool rather than its size.
+        //
+        // The number is not chosen. Splitting one `shininess` about the
+        // anisotropy gives the two exponents a ruled surface really has, and a
+        // Blinn-Phong lobe's half-width goes as 1/sqrt(n) — so the streak is
+        // sqrt(across / along). Foil at 44 and 0.8 is sqrt(79.2 / 8.8) = 3.
+        assertClose(
+            3f,
+            Shading.of(Pose3(), CardMaterial.Foil, key).streak,
+            note = "a foil's pool should be three times longer than it is wide:",
+        )
+
+        listOf(CardMaterial.Gloss, CardMaterial.Sleeve).forEach { flat ->
+            assertEquals(
+                1f,
+                Shading.of(Pose3(), flat, key).streak,
+                "$flat has no grooves and must keep a round pool",
+            )
+        }
+    }
+
+    @Test
+    fun theStreakChangesTheShapeOfTheHighlightAndNothingAboutItsStrength() {
+        // `docs/DESIGN.md` §7 is that the pool *moves* rather than brightens,
+        // and an anisotropic lobe that also got brighter would be that
+        // anti-pattern wearing a physics argument. It is also what keeps
+        // `GoldenStageTest` still: it records diff, spec, rim and hot, and this
+        // change may touch none of them.
+        val pose = Pose3()
+        val streaked = Shading.of(pose, CardMaterial.Foil, key)
+        val round = Shading.of(pose, CardMaterial.Foil.copy(anisotropy = 0f), key)
+
+        assertEquals(round.specular, streaked.specular, "the streak brightened the pool")
+        assertEquals(round.diffuse, streaked.diffuse, "the streak moved the diffuse")
+        assertEquals(round.fresnel, streaked.fresnel, "the streak moved the rim")
+        assertEquals(round.hotspot, streaked.hotspot, "the streak moved the pool")
+    }
+
+    @Test
+    fun aStreakIsNeverDrawnLongerThanTheCardItIsOn() {
+        // The ratio runs away as a finish approaches a true grating, and a
+        // highlight longer than the card is a bar across the art rather than a
+        // highlight. At the reference 104-pixel card, six is already most of
+        // the width.
+        val grating = CardMaterial.Foil.copy(anisotropy = 0.999f)
+
+        val streak = Shading.of(Pose3(), grating, key).streak
+
+        assertTrue(streak <= 6f, "a near-grating drew a streak of $streak")
+        assertTrue(streak > 1f, "and it is still a streak")
+    }
 }
