@@ -39,16 +39,69 @@ class StageTuningTest {
         // On the surface it was tuned on. A pose is only legal against a stage:
         // `minDistanceAt` solves the floor from the corner of the mat furthest
         // from where the camera is aimed, so a narrower stage has a further
-        // floor. kai's 1.145 is legal on his 2960x1848 tablet and three per cent
-        // inside the floor on a 16:9 stage, where `CameraRig` opens at 1.179
-        // instead. That is the envelope doing its job rather than a bad default,
-        // and it is the reason this is asserted somewhere real rather than at
-        // the zero-by-zero surface the clamp also accepts.
+        // floor — which is why the sweep below exists as well as this.
         assertEquals(
             pose,
             StageTuning.DEFAULT.camera.envelope().clamp(pose, 2960f, 1848f),
             "the stage opens at a pose its own envelope would move",
         )
+    }
+
+    @Test
+    fun theStageOpensAtThePovSeatAndNotMerelyNearIt() {
+        // kai asked for the play stage to feel like a first-person game, and the
+        // seat that is one already existed — argued, measured and tested — on a
+        // button nobody presses before they have already seen the table from
+        // standing. So the opening pose *is* that seat rather than a second set
+        // of numbers resembling it, and this is what stops the two drifting: `4`
+        // takes you back exactly where you started rather than near it.
+        assertEquals(
+            StageSeat.POV.pose,
+            StageTuning.DEFAULT.camera.pose(),
+            "the opening pose and the seat it is named after have come apart",
+        )
+    }
+
+    @Test
+    fun theOpeningPoseIsLegalOnEveryScreenTheAppRunsOn() {
+        // The test that was missing, and its absence is why the naive version of
+        // the seat change was wrong twice over.
+        //
+        // The test above asks the envelope about **one** surface, kai's tablet.
+        // That is not enough, because `minDistanceAt` divides by
+        // `governing = max(height, width * 0.55)`, so on a wide short phone the
+        // governing dimension comes off the *width* and the whole scale changes.
+        // Solving `minDistanceAt(58) <= 1.33` needs 0.614 on 16:10 but 0.647 on
+        // a Pixel 8, 0.650 on an S24 and 0.662 on `phone-small` — so a clearance
+        // chosen on the reference stage alone fails on three of these seven. And
+        // the clearance that shipped before this seat did was worse: at 41.5
+        // degrees and 0.59 the floor on `phone-small` is 1.1663 against a
+        // distance of 1.1446, so that one box had never opened where the other
+        // six did, silently, because a clamp does not report.
+        //
+        // Only the aspect ratio matters — `reach` and `governing` both scale
+        // linearly with the surface — so densities are left out rather than
+        // forgotten, and these are the dp boxes from `docs/DEVICES.md`.
+        val boxes = listOf(
+            "tab-s11" to (1480f to 924f),
+            "tab-a9" to (1280f to 800f),
+            "fold-open" to (1004f to 804f),
+            "pixel8" to (914f to 411f),
+            "s24" to (780f to 360f),
+            "phone-small" to (640f to 360f),
+            "desktop" to (1600f to 1000f),
+        )
+        val tune = StageTuning.DEFAULT.camera
+        val pose = tune.pose()
+
+        boxes.forEach { (name, size) ->
+            val (width, height) = size
+            assertEquals(
+                pose,
+                tune.envelope().clamp(pose, width, height),
+                "the opening pose is corrected on $name, which then opens somewhere no other device does",
+            )
+        }
     }
 
     @Test
@@ -89,14 +142,14 @@ class StageTuningTest {
         assertEquals(1.36f, d.cards.peekLift)
         assertEquals(1.88f, d.cards.peekScale)
         assertEquals(0f, d.camera.yawDegrees)
-        assertEquals(41.5f, d.camera.pitchDegrees)
-        assertEquals(1.1445942f, d.camera.distance)
+        assertEquals(58f, d.camera.pitchDegrees)
+        assertEquals(1.33f, d.camera.distance)
         assertEquals(1f, d.camera.lens)
-        assertEquals(0.59f, d.camera.clearance)
-        assertEquals(0.01f, d.camera.panX)
-        assertEquals(0.02f, d.camera.panY)
+        assertEquals(0.9f, d.camera.clearance)
+        assertEquals(0f, d.camera.panX)
+        assertEquals(0f, d.camera.panY)
         assertEquals(0f, d.camera.shiftX)
-        assertEquals(-0.05f, d.camera.shiftY)
+        assertEquals(0.13f, d.camera.shiftY)
         assertEquals(0.05f, d.room.deskDepth)
         assertEquals(1.4f, d.room.deskSpan)
         assertEquals(2f, d.room.wallBack)

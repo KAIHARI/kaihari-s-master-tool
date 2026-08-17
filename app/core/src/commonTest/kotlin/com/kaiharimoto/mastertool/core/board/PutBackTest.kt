@@ -360,4 +360,66 @@ class PutBackTest {
         }
         return intent ?: DropIntent.Free(MatPoint.Centre)
     }
+
+    // ---- and it holds at whatever angle the stage is looked at from ------------
+
+    @Test
+    fun bothGesturesSurviveEveryPitchTheStageCanOpenAt() {
+        // The claim the two above make at *one* seat, made at every seat — and
+        // the reason it is here is that the one-seat version passed for two
+        // releases while being one number away from false.
+        //
+        // A spread's holes and the zones are laid out over the same grid, and
+        // what separates them is that a fanned card is drawn lifted, so its
+        // footprint sits up-table by an offset that grows with `sin(tilt)`.
+        // Measured against real `PileFan` output, the nearest a hole gets to a
+        // zone centre is 0.178 card widths at 41.5 degrees and **0.072** at 58 —
+        // while `INCUMBENT_BIAS` is 0.12. So at the head-height seat the
+        // hysteresis was worth more than the distance it was arbitrating, and
+        // both gestures broke at once in opposite directions: a latched put-back
+        // won against a zone the finger pointed exactly at, and a latched zone
+        // won against a hole the finger pointed exactly at.
+        //
+        // Capping that bias at half the gap makes it arithmetically impossible
+        // for either to carry past the other's centre, at any angle. This sweeps
+        // the envelope rather than the four seats, because the camera is free and
+        // a player who tilts to sixty-five degrees is still searching a pile.
+        val board = deskLayout(2960f, 1848f)
+        val fanLift = CarryHeight.fan(board.cardHeight)
+        val zones = board.slots.entries.filter { it.key is BoardSlot.Zone }
+
+        listOf(21f, 34f, 41.5f, 50f, 58f, 65f, 72f).forEach { pitch ->
+            val plane = StageTuning.DEFAULT.camera
+                .copy(pitchDegrees = pitch)
+                .let { it.envelope().clamp(it.pose(), 2960f, 1848f) }
+                .planeFor(2960f, 1848f)
+
+            listOf(40, 15).forEach { count ->
+                val spread = PileFan.spread(count, board.field, board.cardWidth, board.cardHeight)
+                spread.cards.forEach { card ->
+                    // Aiming at a zone must reach the zone.
+                    zones.forEach { (slot, rect) ->
+                        assertNotEquals(
+                            DropIntent.Cancel,
+                            drag(
+                                board, plane, card.x, card.y, rect.centerX, rect.centerY,
+                                wanderTo = card.x + board.cardWidth * 2.5f to card.y,
+                            ),
+                            "at $pitch degrees, a $count-card spread: slot ${card.index} lost $slot",
+                        )
+                    }
+                    // And aiming at the hole must still put it back.
+                    val hole = board.toPixels(onFelt(board, plane, card.x, card.y, fanLift))
+                    assertEquals(
+                        DropIntent.Cancel,
+                        drag(
+                            board, plane, card.x, card.y, hole.first, hole.second,
+                            wanderTo = card.x + board.cardWidth * 2.5f to card.y,
+                        ),
+                        "at $pitch degrees, a $count-card spread: slot ${card.index} would not go back",
+                    )
+                }
+            }
+        }
+    }
 }

@@ -102,8 +102,8 @@ data class StageTuning(
 @Serializable
 data class CameraTune(
     val yawDegrees: Float = 0f,
-    val pitchDegrees: Float = 41.5f,
-    val distance: Float = 1.1445942f,
+    val pitchDegrees: Float = 58f,
+    val distance: Float = 1.33f,
     /** See [CameraPose.lens]: a focal length, with the subject pinned. */
     val lens: Float = 1f,
     /**
@@ -114,13 +114,13 @@ data class CameraTune(
      * on the panel: [distance] was reported as a slider that stops working, and
      * what it stops at is this.
      */
-    val clearance: Float = 0.59f,
+    val clearance: Float = 0.9f,
     /** Where the camera is aimed. See [CameraPose.panX]. */
-    val panX: Float = 0.01f,
-    val panY: Float = 0.02f,
+    val panX: Float = 0f,
+    val panY: Float = 0f,
     /** And where that lands in the picture. See [CameraPose.shiftX]. */
     val shiftX: Float = 0f,
-    val shiftY: Float = -0.05f,
+    val shiftY: Float = 0.13f,
 ) {
     /** Named, not positional: [CameraPose] has grown a field three times now. */
     fun pose(): CameraPose = CameraPose(

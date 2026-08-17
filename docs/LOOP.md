@@ -1366,6 +1366,70 @@ all walked straight from the slot to the target, which is the one path arming
 fixes. The second gate exists because a judge measured 40 lost aims out of 728
 on the path a player actually makes.
 
+### Iteration 23 — the chair, and a number worth more than the distance it arbitrated
+
+kai asked for a AAA first-person game, answered the four questions
+`docs/PHOTOREAL.md` ends on, and the first of them is a seat: **`StageSeat.POV`
+becomes the pose the stage opens at.** Thirty-two degrees of elevation instead of
+48.5, the room going from a fifth of the picture to about half, and a card losing
+about a third of its drawn *height* to `cos(pitch)` — which is what looking at a
+table from a chair does, and is why the hold-to-read card reader exists.
+
+**Two things had to be fixed before the seat could move, and neither was the
+seat.** The first is that `CameraTune`'s defaults had never reached the camera at
+all: the `SideEffect` that places the opening pose guards on
+`placed[0] != tune.camera`, and `placed` was seeded with
+`StageTuning.DEFAULT.camera` — so on any device whose stored tuning still equalled
+the defaults it compared them against themselves and placed nothing, leaving the
+camera where `CameraRig(seat = StageSeat.TABLE)` built it. Iteration 21 made kai's
+own export the defaults and that is why it did not change what he opened on. The
+studio could not see it either, because every shot types a seat digit first; a
+shot named `opening` presses nothing, and it is what confirmed the fix rather than
+argued it.
+
+The second is the one worth remembering. `PutBackTest` is not a test of pinned
+numbers — it drives real `PileFan` geometry through the *default* pose over every
+slot of three spreads — and at 58 degrees **two of its assertions failed in
+opposite directions**: a slot could no longer reach a monster zone, and a
+different slot could no longer be put back. Opposite failures are the signature of
+a threshold that is larger than the thing it is deciding between, and a probe said
+so exactly: a spread's holes and the zones sit on the same grid, separated only
+because a fanned card is drawn lifted, and that separation grows with
+`sin(tilt)` — so the nearest hole-to-zone distance is **0.178 card widths at 41.5
+degrees and 0.072 at 58**, against an `INCUMBENT_BIAS` of **0.12**. At the old
+seat the bias was comfortably smaller than the gap; at the new one it was larger,
+so a latched put-back beat a zone the finger pointed exactly at and a latched zone
+beat a hole the finger pointed exactly at.
+
+The fix is not a smaller bias, because that loses the anti-flicker the bias is
+for. It is that **hysteresis on a two-way contest may never be worth more than
+half the distance between the two candidates** — capped there, neither can carry
+past the other's centre, by construction, at any angle. Where the two are
+comfortably apart it is still the whole bias, so iteration 22's tuning is
+untouched. `bothGesturesSurviveEveryPitchTheStageCanOpenAt` sweeps seven pitches
+from 21 to 72 rather than the four seats, because the camera is free and somebody
+searching a graveyard at sixty-five degrees is still searching a graveyard.
+
+Three things found while measuring, all kept. **The clearance had to go to 0.9,
+not the 0.62 a 16:10 stage suggests** — `minDistanceAt(58) <= 1.33` needs 0.647 on
+a Pixel 8, 0.650 on an S24 and 0.662 on `phone-small`, and 0.9 is
+`CameraEnvelope.DEFAULT_CLEARANCE`, at which POV's distance is *exactly* 1.5x the
+floor. The seat was solved against the shipped envelope all along; carrying kai's
+tighter 0.59 underneath it was the mismatch. **The previously shipped default was
+already being clamped on `phone-small`** (floor 1.1663 against distance 1.1446),
+so one box had never opened where the other six did. And **only the aspect ratio
+matters** — `reach` and `governing` both scale with the surface — which is why
+`theOpeningPoseIsLegalOnEveryScreenTheAppRunsOn` sweeps dp boxes and ignores
+density.
+
+What the picture shows: the window is a window, the lamp has a stem and a foot,
+and there is a room behind the desk instead of a strip above it. What it also
+shows, now that half the frame is room: the wall is a flat fill, the desk grain
+reads as ripples rather than timber, and nothing in the room casts a shadow. Those
+are phases 6 and 7 and they are next.
+
+---
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find
@@ -1407,8 +1471,10 @@ what the eye has caught and the hand has not reached.
 - **Driving a real orbit** — a pointer drag on the felt, which `MatInput`
   already understands — is now the cheapest remaining upgrade to the loop's own
   perception. Everything above is still a still.
-- **Moving `CameraTune`'s defaults to the POV seat is two lines and one real
-  regression, and the regression is measured.** The numbers are settled: the
+- ~~**Moving `CameraTune`'s defaults to the POV seat is two lines and one real
+  regression.**~~ **Done — iteration 23.** Kept below because the measurement is
+  the useful part and the next person to move a threshold on this table should
+  read it. The numbers are settled: the
   pose is `StageSeat.POV.pose` exactly, and `clearance` must go to **0.9**, not
   to the 0.62 a 16:10 stage alone suggests. `minDistanceAt(58) <= 1.33` needs
   0.614 on 16:10, 0.647 on a Pixel 8, 0.650 on an S24 and **0.662** on

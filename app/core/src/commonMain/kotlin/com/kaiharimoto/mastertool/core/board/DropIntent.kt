@@ -8,6 +8,7 @@ import com.kaiharimoto.mastertool.core.layout.Slot
 import com.kaiharimoto.mastertool.core.tune.StageTuning
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.min
 
 /**
  * What letting go right now would do.
@@ -274,12 +275,38 @@ object DropTargets {
         //    slot at the end of a row is nearer the graveyard than any zone.
         //    Together they leave nothing, which `PutBackTest` measures over
         //    every slot of a real spread rather than over a hand-picked point.
+        //
+        //    **And the hysteresis on that comparison is capped at half the gap,
+        //    which is what makes it a fact about geometry rather than about one
+        //    seat.** A bias exists so a decision does not flicker while a finger
+        //    trembles on a boundary; it must never be worth so much that it
+        //    carries one target past the *centre* of the other, because then the
+        //    losing gesture is unreachable no matter how exactly it is aimed.
+        //    Both of these were reachable at the seat this was tuned at and
+        //    neither is a card width away from breaking: the nearest a spread's
+        //    hole gets to a zone centre is 0.178 card widths at the old opening
+        //    pitch of 41.5 degrees and **0.072** at the head-height 58, against
+        //    an `INCUMBENT_BIAS` of 0.12 — so a latched put-back beat a zone the
+        //    finger was pointing exactly at, and a latched zone beat a hole the
+        //    finger was pointing exactly at. Two failures in opposite directions
+        //    from one number being larger than the distance it was arbitrating.
+        //    Half the gap can do neither by construction, and where the two are
+        //    comfortably apart it is the whole bias, so nothing about the seat
+        //    this was tuned at changes.
         if (home != null && home.departed) {
             val sticky = previous == DropIntent.Cancel
-            val toHome = distance(px, layout.toPixels(home.at)) -
-                if (sticky) cardWidth * INCUMBENT_BIAS else 0f
+            val homePx = layout.toPixels(home.at)
+            // Unbiased, only to name which zone this contest is against: letting
+            // hysteresis pick the candidate *and* then bounding itself by the
+            // candidate it picked is a loop with no fixed point.
+            val gap = nearestZone(px, layout, previous, cap = 0f)
+                ?.let { distance(homePx, centre(it.rect)) }
+                ?: Float.MAX_VALUE
+            val margin = min(cardWidth * INCUMBENT_BIAS, gap * 0.5f)
+
+            val toHome = distance(px, homePx) - if (sticky) margin else 0f
             val reach = cardWidth * threshold(sticky, PUT_BACK_ENTER, PUT_BACK_LEAVE)
-            val pull = nearestZone(px, layout, previous)
+            val pull = nearestZone(px, layout, previous, cap = margin)
             if (toHome <= reach && (pull == null || toHome <= pull.biased)) return DropIntent.Cancel
         }
 
@@ -353,14 +380,21 @@ object DropTargets {
      * — which on this table would read as the put-back winning against a zone
      * the highlight says is not the one being aimed at.
      */
+    /**
+     * @param cap the most the incumbent's bias may be worth here, in pixels.
+     *   Unbounded for every caller but the put-back contest, which has to hold
+     *   its hysteresis below the distance between the two things it is choosing
+     *   between — see rank 0.
+     */
     private fun nearestZone(
         px: Pair<Float, Float>,
         layout: BoardLayout,
         previous: DropIntent?,
+        cap: Float = Float.MAX_VALUE,
     ): Pull? {
         val incumbent = (previous as? DropIntent.Zone)?.slot
         fun biased(slot: BoardSlot, rect: Slot) = distance(px, centre(rect)) -
-            if (slot == incumbent) rect.width * INCUMBENT_BIAS else 0f
+            if (slot == incumbent) min(rect.width * INCUMBENT_BIAS, cap) else 0f
 
         val nearest = layout.slots.entries
             .filter { it.key is BoardSlot.Zone }
