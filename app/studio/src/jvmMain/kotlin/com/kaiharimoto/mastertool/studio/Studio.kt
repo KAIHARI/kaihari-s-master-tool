@@ -151,8 +151,9 @@ fun main(args: Array<String>) {
                 // one group of knobs it was most wanted for: every shot came
                 // back at its named seat with only the lens surviving, because
                 // `aimAt(seat)` carries the lens across and nothing else.
-                if (opts.tuning.camera == StageTuning.DEFAULT.camera) {
-                    Keys.press(scene, shot.seat.digit)
+                val seat = shot.seat
+                if (seat != null && opts.tuning.camera == StageTuning.DEFAULT.camera) {
+                    Keys.press(scene, seat.digit)
                 }
                 // A seat change is a spring, and the room's palette crosses a
                 // recomposition. Both are done well inside this.
@@ -411,7 +412,16 @@ private enum class Seat(val digit: Key) {
     OVERHEAD(Key.One), TABLE(Key.Two), SEATED(Key.Three), POV(Key.Four)
 }
 
-private class Shot(val name: String, val scene: Scene, val light: DeskLight, val seat: Seat)
+/**
+ * One picture. A null [seat] means **do not press a seat at all**.
+ *
+ * That is not a convenience, it is the only way to photograph the view kai
+ * actually gets when he opens the app. Every other shot types a digit first, so
+ * for as long as the studio has existed it has been unable to see the *opening*
+ * camera — which is how `CameraTune`'s defaults went several releases without
+ * reaching the rig at all and nobody noticed. Name a shot `opening` for it.
+ */
+private class Shot(val name: String, val scene: Scene, val light: DeskLight, val seat: Seat?)
 
 /**
  * `--pitch=80`, `--yaw=45`: aim the whole run, rather than one shot.
@@ -549,6 +559,7 @@ private class Options(
                 scene = if (has("minimal")) Scene.MINIMAL else Scene.DESK,
                 light = if (has("night")) DeskLight.NIGHT else DeskLight.DAY,
                 seat = when {
+                    has("opening", "open") -> null
                     has("overhead") -> Seat.OVERHEAD
                     has("seated") -> Seat.SEATED
                     has("pov", "head", "chair") -> Seat.POV

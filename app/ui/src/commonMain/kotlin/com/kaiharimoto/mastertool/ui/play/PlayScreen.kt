@@ -92,6 +92,7 @@ import com.kaiharimoto.mastertool.core.perf.FrameProbe
 import com.kaiharimoto.mastertool.core.scene.DeskClock
 import com.kaiharimoto.mastertool.core.scene.DeskLight
 import com.kaiharimoto.mastertool.core.scene.Scene
+import com.kaiharimoto.mastertool.core.tune.CameraTune
 import com.kaiharimoto.mastertool.core.tune.StageTuning
 import com.kaiharimoto.mastertool.core.tune.HandTune
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -389,7 +390,19 @@ fun PlayScreen(
     // The holder is a plain array rather than snapshot state on purpose: it is
     // written from inside the effect, and a `mutableStateOf` written there
     // schedules another recomposition for a value nothing reads.
-    val placed = remember { arrayOf(StageTuning.DEFAULT.camera) }
+    //
+    // **Seeded null, and it used to be seeded with the defaults.** That looked
+    // like a harmless way to say "nothing has been placed yet" and it was not:
+    // on a fresh install the stored tuning *is* `StageTuning.DEFAULT`, so the
+    // guard below compared the defaults against themselves, found them equal,
+    // and never placed anything at all. The camera then stayed where the rig was
+    // constructed — `CameraRig(seat = StageSeat.TABLE)` — so the seat the stage
+    // opened at was Table, and every number in `CameraTune`'s defaults was dead
+    // on exactly the devices that had never been tuned. Iteration 21 made kai's
+    // own export those defaults; this is why it did not change what he opens on.
+    //
+    // Null is the only seed that cannot collide with a real tuning.
+    val placed = remember { arrayOf<CameraTune?>(null) }
     SideEffect {
         // Only when the *tuning* moves. Comparing against the live rig instead
         // would re-place the camera on every frame of an orbit and the table

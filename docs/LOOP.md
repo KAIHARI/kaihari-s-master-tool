@@ -1407,6 +1407,38 @@ what the eye has caught and the hand has not reached.
 - **Driving a real orbit** — a pointer drag on the felt, which `MatInput`
   already understands — is now the cheapest remaining upgrade to the loop's own
   perception. Everything above is still a still.
+- **Moving `CameraTune`'s defaults to the POV seat is two lines and one real
+  regression, and the regression is measured.** The numbers are settled: the
+  pose is `StageSeat.POV.pose` exactly, and `clearance` must go to **0.9**, not
+  to the 0.62 a 16:10 stage alone suggests. `minDistanceAt(58) <= 1.33` needs
+  0.614 on 16:10, 0.647 on a Pixel 8, 0.650 on an S24 and **0.662** on
+  `phone-small`, so a number solved on the reference stage fails on three of the
+  seven boxes in `docs/DEVICES.md`. 0.9 is not a number chosen to clear that: it
+  is `CameraEnvelope.DEFAULT_CLEARANCE`, and POV's distance is *exactly* 1.5x
+  the floor at it (1.33341 against 1.33), which is the derivation POV's own KDoc
+  gives. The seat was solved against the shipped envelope; carrying kai's
+  tighter 0.59 underneath it was the mismatch. Only the aspect ratio matters —
+  `reach` and `governing` both scale with the surface — so densities do not
+  enter it.
+  **What blocks it is `PutBackTest`**, which is not a test of pinned numbers: it
+  drives real `PileFan` geometry through `StageTuning.DEFAULT.camera.pose()`
+  over every slot of three spreads. At 58 degrees two assertions fail and they
+  fail in **opposite directions** — slot 16 of a 40-card spread can no longer
+  reach `ExtraMonster(1)` after wandering (put-back wins when it should not),
+  and slot 13 will no longer go back (a zone wins when put-back should). Opposite
+  failures mean tightening either gate breaks the other, so this is a
+  re-derivation rather than a nudge. The mechanism is in `DropIntent`'s own
+  KDoc, which measured the separation as *"34 mat pixels on the shipped stage"*:
+  a fanned card is drawn lifted, so its felt footprint sits up-table of its slot
+  by an offset that grows with `sin(tilt)` — 0.6626 to 0.8480, a factor of
+  **1.28**, taking those 34 pixels to about 43.5 and pushing the hole further
+  into the zone discs it is contesting. Iteration 22 separated those two targets
+  by history and by a rank-0 comparison at one tilt; making the separation a
+  function of tilt is the work.
+  One thing found on the way that is worth fixing on its own: the **currently
+  shipped** default is already clamped on `phone-small` (floor 1.1663 against a
+  distance of 1.1446), so one of the seven boxes has never opened where the other
+  six do. The new defaults at 0.9 clear every box.
 - **And the studio runs in a Claude session now.** It needs the Android SDK
   because `:ui` has an `androidTarget`, and that used to be the end of it. Both
   `dl.google.com` and Google's Maven are reachable from the sandbox: install
