@@ -202,6 +202,98 @@ object StageRig {
     }
 
     /**
+     * The same surface with the key's *direct* light taken away — what a point
+     * inside a full umbra actually receives.
+     *
+     * A shadow is not a colour. It is this surface, lit by everything that
+     * still reaches it: the ambient, the bounce, and the rim. Everything except
+     * the one lamp something is standing in front of.
+     *
+     * ## Why it had to be computed rather than chosen
+     *
+     * `Shadows.DARKEST` was **0.66**, and a card's shadow was that black
+     * whatever the room was doing. But `Light.ambient` is 0.72 in Minimal and
+     * 0.55 at night and is **unoccluded everywhere** — nothing on this stage
+     * has ever cast a shadow in the ambient — so three quarters of the light on
+     * the felt was, physically, still arriving inside the shadow. Darkening to
+     * 0.66 against that is not a penumbra on a lit surface, it is a hole
+     * punched through one, and it is most of why cards read as stickers laid on
+     * a picture of a table rather than as objects on it.
+     *
+     * Under the shipped rig, on a flat mat, the honest figure is [occlusion]'s:
+     * about **a fifth**, not two thirds.
+     *
+     * ## The rule this half of the arithmetic has to keep
+     *
+     * Stated once, here, because two terms that both darken will otherwise be
+     * tuned against each other forever and the result is a black halo that
+     * reads as *stronger* shadows rather than as wrong ones:
+     *
+     * **A cast shadow occludes `key.intensity` only. Contact occlusion occludes
+     * `key.ambient` only. Their sum is the surface's whole irradiance.**
+     */
+    fun shadowed(
+        normal: Vec3,
+        eye: Vec3 = Vec3.Toward,
+        key: Light = Key,
+        bounce: Light = Bounce,
+        rim: Light = Rim,
+        at: Vec3? = null,
+    ): Lit {
+        val unit = normal.normalised()
+        val headroom = 1f - key.ambient
+
+        // The key's direct term is the one thing missing, and it is missing
+        // rather than reduced: this is the *umbra*, where none of it arrives.
+        val fill = max(0f, unit dot bounce.toLightFrom(at)) * bounce.intensity *
+            bounce.attenuation(at) * headroom
+
+        val graze = (1f - abs(unit dot eye.normalised())).coerceIn(0f, 1f)
+        val kick = max(0f, unit dot rim.toLightFrom(at)) * rim.intensity *
+            rim.attenuation(at) * graze.pow(GRAZE_FALLOFF) * headroom
+
+        val amount = (key.ambient + fill + kick).coerceIn(0f, 1f)
+        if (amount <= 0f) return Lit.None
+
+        // No `direct` term, so no key warmth either — which is the physics
+        // rather than an omission. A shadow is lit by the room and the player
+        // and not by the lamp, so it is *cooler* than what surrounds it, and
+        // that is the whole of `AAA.md` #18's "shadows are not black".
+        val temperature = fill * bounce.warmth + kick * rim.warmth
+        return Lit(amount, temperature / amount)
+    }
+
+    /**
+     * How much of a surface's light a full umbra removes, 0..1.
+     *
+     * The alpha a cast shadow should be painted at, and the number
+     * `Shadows.DARKEST` was guessing at. One minus the ratio of [shadowed] to
+     * [lit], which is exactly "the share of what lands here that came straight
+     * from the key".
+     */
+    fun occlusion(
+        normal: Vec3,
+        eye: Vec3 = Vec3.Toward,
+        key: Light = Key,
+        bounce: Light = Bounce,
+        rim: Light = Rim,
+        at: Vec3? = null,
+    ): Float {
+        val full = lit(normal, eye, key, bounce, rim, at).amount
+        if (full <= 0f) return 0f
+        val dark = shadowed(normal, eye, key, bounce, rim, at).amount
+        return ((full - dark) / full).coerceIn(0f, 1f)
+    }
+
+    /** [shadowed], with the three lamps handed over as one value. */
+    fun shadowed(normal: Vec3, eye: Vec3, lighting: StageLighting, at: Vec3? = null): Lit =
+        shadowed(normal, eye, lighting.key, lighting.bounce, lighting.rim, at)
+
+    /** [occlusion], with the three lamps handed over as one value. */
+    fun occlusion(normal: Vec3, eye: Vec3, lighting: StageLighting, at: Vec3? = null): Float =
+        occlusion(normal, eye, lighting.key, lighting.bounce, lighting.rim, at)
+
+    /**
      * The same three lamps, handed over as one value instead of three.
      *
      * The only overload that exists, and it exists so that no call site has to

@@ -273,4 +273,65 @@ class RoomLightTest {
             "the room is not dimmer than the table at the same point",
         )
     }
+
+    // ---- what a shadow actually removes ---------------------------------------
+
+    @Test
+    fun aFullUmbraRemovesAboutAFifthOfTheLightAndNotTwoThirds() {
+        // The number `Shadows.DARKEST` was guessing at, computed.
+        //
+        // It was 0.66, chosen, and a card's shadow was that black whatever the
+        // room was doing — while `Light.ambient` is 0.72 in Minimal and is
+        // unoccluded everywhere, because nothing on this stage has ever cast a
+        // shadow in the ambient. So three quarters of the light on the felt was
+        // still physically arriving inside the shadow, and darkening to 0.66
+        // against that is a hole punched through a lit surface rather than a
+        // shadow on one. It is most of why cards read as stickers.
+        val up = Vec3(0f, 0f, 1f)
+
+        val removed = StageRig.occlusion(up, Vec3.Toward)
+
+        assertTrue(
+            removed in 0.15f..0.30f,
+            "a full umbra on the mat should remove about a fifth of the light, was $removed",
+        )
+    }
+
+    @Test
+    fun aShadowIsTheSurfaceUnderEverythingExceptTheOneLampItBlocks() {
+        // The definitional claim, and the one that keeps this from drifting
+        // back into being a colour: shadowed plus what the key sends directly
+        // is the whole of lit, exactly.
+        val up = Vec3(0f, 0f, 1f)
+
+        listOf(StageLighting.Minimal, StageLighting.DeskDay, StageLighting.DeskNight).forEach { rig ->
+            val full = StageRig.lit(up, Vec3.Toward, rig).amount
+            val dark = StageRig.shadowed(up, Vec3.Toward, rig).amount
+
+            assertTrue(dark < full, "a shadow should be darker than what surrounds it, in $rig")
+            assertTrue(dark > 0f, "and it should not be black: $rig gave $dark")
+            assertTrue(
+                kotlin.math.abs(
+                    StageRig.occlusion(up, Vec3.Toward, rig) - (full - dark) / full,
+                ) < 1e-5f,
+                "occlusion is the share of the light the key was sending, in $rig",
+            )
+        }
+    }
+
+    @Test
+    fun aShadowIsCoolerThanWhatSurroundsItRatherThanJustDarker() {
+        // `docs/AAA.md` #18. With the key's direct term gone its warmth goes
+        // with it, so what is left is the bounce and the player's rim — which
+        // is the physics rather than a colour anybody chose.
+        val up = Vec3(0f, 0f, 1f)
+
+        val full = StageRig.lit(up, Vec3.Toward)
+        val dark = StageRig.shadowed(up, Vec3.Toward)
+
+        assertTrue(
+            dark.warmth < full.warmth,
+            "a shadow should lose the key's warmth: ${dark.warmth} against ${full.warmth}",
+        )
+    }
 }
