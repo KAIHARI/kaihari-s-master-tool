@@ -253,7 +253,21 @@ internal data class StageLook(
             // window at 223 and a lit card at 141: darker than either, which is
             // the handbook's rule, and clearly a surface, which is the point.
             wall = Color(0xFF4B463D),
-            floor = Color(0xFF0D0B09),
+            // Boards, not void — and this is the wall's own correction arriving
+            // one release later at the surface nobody could see either. It was
+            // `#0D0B09`, an albedo of thirteen out of 255, which is not a dark
+            // floor: it is the absence of one, and everything the shading does
+            // is a multiply, so no light in the room could ever have found it.
+            // It went unnoticed for as long as the walls stood in the air and
+            // the desk hid what was under them. Now they reach it, the room is
+            // closed, and the floor is a lit wedge in the bottom corner of the
+            // picture at any yaw.
+            //
+            // Under the desk top rather than over it. A floor further from every
+            // light in the room than the desk is *should* come back darker, and
+            // it does — that is the rig's job. What it may not be is a colour
+            // the rig has nothing to work with.
+            floor = Color(0xFF2A2118),
             glass = Color(0xFFDCE4EA),
             sky = Color(0xFF8CB0D4),
             // Gloss paint on softwood, and the brightest thing in the room after
@@ -302,7 +316,8 @@ internal data class StageLook(
             // for this wall means the lamp standing a card away from it, and the
             // fall-off from there into the far corner.
             wall = Color(0xFF4B463D),
-            floor = Color(0xFF0D0B09),
+            // The same boards. A room does not relay its floor at dusk either.
+            floor = Color(0xFF2A2118),
             glass = Color(0xFFDCE4EA),
             // Both ends of the night sky come back at two per cent, so the
             // gradient is a formality; what it buys is that the pane is never
