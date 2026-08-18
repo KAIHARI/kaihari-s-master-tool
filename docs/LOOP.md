@@ -45,9 +45,9 @@ against but *"the bookshelf exists and has books in it"* is.
 | Zones | outlines. Should be inlay or engraving, and lit as such |
 | Window | **a window**: four panes, a frame, a graded sky |
 | Sun outside | not possible through this window — iteration 8 has the numbers |
-| Floor | a flat plane, barely in frame |
+| Floor | a flat plane, and the room's plan: the walls stand on its edges |
 | Wall | **a fifth of the screen**, and painted rather than void |
-| Side walls | do not exist. The room is open at both sides |
+| Side walls | **two returns**, standing on the floor like the back wall does |
 | Ceiling | does not exist. The room is open above |
 | Millennium Puzzle | **deleted** — see iteration 13. Nothing stands on the left of the desk |
 | Lamp | **a turned lamp**: brass foot, tapered stem, a shade that is a shell and is lit from inside |
@@ -1525,6 +1525,63 @@ shader text is unreachable from `commonTest`, so the vignette's curve and the
 grain's envelope are asserted by a measurement in this entry rather than by a
 claim in core. Generating the SkSL from core constants is the fix and it is not
 done.
+
+---
+
+### Iteration 26 — the room was a flat, and its walls were in the air
+
+Two defects wearing the same black, found by counting rather than by looking. A
+17x11 sweep of the glass, over yaw, asking of every grid point whether *any*
+projected face covers it: **ten holes at thirty degrees of yaw**, none at zero.
+Which is the whole of what "the room is a flat behind a desk" means, stated as a
+number.
+
+**It had no sides.** The camera turns freely now — that is iterations 16 and 17
+and kai's "complete freedom and control" — and a single back wall has nothing at
+its edges the moment it does. Two returns close it, from the back wall's front
+face toward the player, meeting the back wall along one edge each and sharing no
+volume with it, which is what `ScenePainter`'s separating axis needs.
+
+**And no wall reached the floor.** Every one of them stood on z = 0 — a desk's
+height in the air — and the desk hid the void under them from straight ahead and
+from nowhere else. Two of the ten holes were that, and it is the older bug: the
+wall's KDoc had recorded a skirt being *removed* for a paint-order reason, which
+was correct about the symptom (one tall box from the floor to the wall top shares
+volume with the desk) and wrong about the fix. The right shape is three skirts,
+because a wall that reaches the floor has to be **two boxes**:
+`noPieceOfTheRoomStraddlesTheDeskTop` is what makes `ground` and `standing` a
+partition, and that partition is where the felt goes. The seam costs nothing —
+the halves share a face — and the desk now stops at the wall's face instead of
+running under it, because the strip under the wall belongs to the skirt.
+
+Underneath both was **one number too many**. The wall stood 1.12 desk-spans out;
+the floor ran eight card widths past the desk. Two numbers for one room is a room
+with a gap in it, and the gap was 530 pixels wide: past the wall's end you were
+looking over the floor's far edge into nothing. The room has one plan now.
+`ROOM_MARGIN` is the rectangle, the floor tiles it, the three walls stand on its
+edges, and `FLOOR_MARGIN` is half a card of skirting so there is floor under a
+wall's thickness. `ROOM_DEPTH` is measured rather than chosen: the bottom corner
+of the glass looks past the room's near end at a quarter turn, and the hole closes
+at eight card widths and does not get smaller at sixteen.
+
+Ten holes at thirty degrees, **none anywhere through a quarter turn either way**.
+The limit is honest rather than convenient: three walls and no ceiling means the
+top corner of the glass looks over the wall past about fifty degrees of yaw, and
+at eighty degrees of *pitch* the top third of the picture is void — those are
+objects to build, and they are phase 8's.
+
+Two tests moved rather than being deleted, which is the half of this worth
+keeping. The piece budget goes from twenty to twenty-four **on the record**: it
+was written when the room was a flat, and closing it costs five. And the back
+wall's wash is no longer monotone — the wall runs past the lamp now, so it peaks
+opposite the lamp and falls away in both directions, which is what a pool is. The
+old claim was an artefact of a wall that stopped short of it, and the wall with no
+lamp in front of it carries the monotone half instead.
+
+At night none of this is visible, and that is worth saying plainly: the room falls
+away so far from the lamp that a hole and a wall are the same colour. The day room
+is where it shows, and the crop that proves it is the desk's right-hand edge at
+thirty-five degrees — a pure-black wedge before, a lit wall after.
 
 ---
 

@@ -704,7 +704,7 @@ first phase that is not marked done and reads that stage in full before writing 
 | Phase | The sentence that will be true of the picture afterwards | Is | Needs |
 |---|---|---|---|
 | 0 | *(nothing visible — ships folded into 1)* | stage 0, plus the studio learning the POV seat | — |
-| 1 | "I am sitting at the desk, and the room is around me." | `CameraTune` → `StageSeat.POV`; the room closed at the sides and above | 0 |
+| 1 | "I am sitting at the desk, and the room is around me." | **done** — `CameraTune` → `StageSeat.POV`, and the room closed at the sides. Not above: at eighty degrees of pitch the top third is still void, which is a ceiling and so phase 8's | 0 |
 | 2 | "Every faint white arrives at the brightness it was tuned for." | stage 2 | — |
 | 3 | "Cards stop being stickers laid on a picture of a desk." | stage 3, **plus stage 1's pile ruling** | 2 |
 | 4 | "It stops looking like a diagram of a table and starts looking like a photograph of one." | stage 7 **minus the tonemap** | 0 |
