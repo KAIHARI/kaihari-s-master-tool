@@ -1487,6 +1487,47 @@ call, it belongs with the rim constant and the exposure, and it wants the tablet
 
 ---
 
+### Iteration 25 — the room is looked at through a lens
+
+The first thing on this stage that is about the *camera* rather than about any
+surface. One `RenderEffect` on one layer above the mat — never on the mat's own,
+because that layer carries the yaw, the tilt and the camera distance, so a
+vignette drawn there is an ellipse whose centre walks off the optical axis as
+the table turns. `DESIGN.md` §6 was widened for it first, in its own commit.
+
+Three artefacts, each there because its *absence* is what makes a render look
+rendered. **cos⁴ vignette**, in linear, about the true optical axis — not a taste
+dial: the falloff is the projection's own, and at the reference stage it is 0.77
+EV at the horizontal edge and a full stop in the corner. **Grain**, under the
+envelope `σ(u) = σmax·2√(u(1−u))`, which is exactly zero at code 0 and at code
+255 *by construction* — the only form that can coexist with a true-black design,
+because uniform-amplitude grain speckles `#000000` and ends the identity. And
+**lateral chromatic aberration** as a magnification difference rather than a
+constant offset, at 0.45 px in the corner of a Tab S11: deliberately invisible,
+which is the exact opposite of `Prismatic.kt`'s fringes and why it is kept out of
+their namespace.
+
+Measured rather than admired. A patch of wall that was a flat **62.00 across the
+whole frame** now reads 61.3 in the middle and **47.8 at the edge**; its
+neighbour-difference goes from **0.000 to 0.958**, which is the grain existing.
+And `Scene.MINIMAL` comes back ungraded — three flat corners at mean 6.00 with
+neighbour-difference **0.000** — which is the handbook's stage staying the
+handbook's stage.
+
+What is not in it: no bloom and no depth of field, which want a second pass or a
+layer per card, and **no tonemap**, because AgX cannot land while `Tone.veil`
+survives — under it the veil a card wants goes negative and a black overlay can
+only darken. And nothing here idles: the grain is a function of the pixel and not
+of the clock, fixed in the frame like grain on a plate.
+
+The one debt this leaves is the parity gap `PHOTOREAL.md` §0 predicted: the
+shader text is unreachable from `commonTest`, so the vignette's curve and the
+grain's envelope are asserted by a measurement in this entry rather than by a
+claim in core. Generating the SkSL from core constants is the fix and it is not
+done.
+
+---
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find

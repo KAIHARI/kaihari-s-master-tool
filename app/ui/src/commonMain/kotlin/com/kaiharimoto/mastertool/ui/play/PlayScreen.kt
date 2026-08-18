@@ -636,7 +636,12 @@ fun PlayScreen(
             // `remember` below that: the layout above is untouched, so the board,
             // the hit boxes and the gesture in flight all stay exactly where they
             // were while the desk moves.
-            val scenery = remember(scene, time, layout, widthPx, heightPx, tune.room) {
+            // Compiled once for the life of the screen, like the felt and the grain.
+    // Null below API 33, on a refusing driver, or on a typo — and null here is
+    // simply the ungraded picture.
+    val lens = remember { StageLens.compile() }
+
+    val scenery = remember(scene, time, layout, widthPx, heightPx, tune.room) {
                 Scenery.of(scene, time, layout, widthPx, heightPx, tune.room)
             }
             // The palette and the rig, together. The rig is solved beside the
@@ -960,6 +965,27 @@ fun PlayScreen(
             // slides out from under it. So the second frame is gone: everything
             // is in the mat's, `flatten` carries the height, and the card in
             // your hand is turned by the same camera as the felt it left.
+            // ---- the camera the room is seen through -----------------------------
+            //
+            // One layer above the mat and never the mat's own: that one carries
+            // the yaw, the tilt and the camera distance, so a vignette drawn on
+            // it is an ellipse whose centre walks off the optical axis as the
+            // table turns. `docs/DESIGN.md` §6 has the rule and the cost — one
+            // full-screen composite, affordable exactly once.
+            //
+            // Desk scenes only. `Scene.MINIMAL` is the handbook's stage and
+            // arrives ungraded, which is also what every device below API 33
+            // gets, because `compileStageEffect` answers null and this whole
+            // modifier becomes the identity.
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    renderEffect = if (scene == Scene.MINIMAL) {
+                        null
+                    } else {
+                        StageLens.effectFor(lens, widthPx, heightPx, camera.plane.cameraDistance)
+                    }
+                },
+            ) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -1074,7 +1100,11 @@ fun PlayScreen(
                     }
                 }
             }
+            }
 
+            // Outside the graded layer on purpose: it draws nothing, and a
+            // gesture arbiter inside an offscreen composite is a gesture arbiter
+            // whose coordinates have been through a pass it knows nothing about.
             MatInput(pilot = pilot, layout = layout, camera = camera)
 
             menuFor?.let { origin ->
