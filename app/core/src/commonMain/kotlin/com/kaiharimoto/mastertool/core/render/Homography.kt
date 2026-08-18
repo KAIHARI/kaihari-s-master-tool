@@ -145,6 +145,37 @@ data class Homography(
     }
 
     /**
+     * How fast this map runs, at one point: `sqrt(|det J|)`.
+     *
+     * The number of destination units one source unit covers, averaged over
+     * direction — which is what a texture has to know to stop aliasing. A
+     * homography's Jacobian determinant is `det(H) / w³`, so the whole of it is
+     * one determinant computed once and a `w` computed per point, and the square
+     * root is what turns an area ratio back into a length ratio.
+     *
+     * The reason it is here rather than in a shader is that `w` is the only part
+     * that varies: a caller passing this into SkSL sends [determinant] as a
+     * uniform and computes the rest from the `w` it already has. There are no
+     * derivatives in AGSL or SkSL on either platform, so every level of detail
+     * on this stage is analytic and comes out of core. See `docs/AAA.md` #97.
+     *
+     * Zero where the point is on the map's own horizon, which is the honest
+     * answer: nothing there has a finite size.
+     */
+    fun scaleAt(x: Float, y: Float): Float {
+        val w = m20 * x + m21 * y + m22
+        if (w == 0f) return 0f
+        val det = determinant()
+        return sqrt(abs(det) / abs(w * w * w))
+    }
+
+    /** The determinant of these nine numbers, which is [scaleAt]'s only constant. */
+    fun determinant(): Float =
+        m00 * (m11 * m22 - m12 * m21) -
+            m01 * (m10 * m22 - m12 * m20) +
+            m02 * (m10 * m21 - m11 * m20)
+
+    /**
      * These nine numbers, written into the sixteen a Compose `Matrix` holds.
      *
      * The layout is not a guess and it is not negotiable, so it lives here

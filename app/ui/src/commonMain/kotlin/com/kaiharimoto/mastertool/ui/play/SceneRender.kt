@@ -6,9 +6,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.kaiharimoto.mastertool.core.layout.StagePlane
+import com.kaiharimoto.mastertool.core.layout.Flattened
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.render.CardSolid
 import com.kaiharimoto.mastertool.core.render.Face
+import com.kaiharimoto.mastertool.core.render.Homography
 import com.kaiharimoto.mastertool.core.render.FaceWash
 import com.kaiharimoto.mastertool.core.render.Lit
 import com.kaiharimoto.mastertool.core.render.StageLighting
@@ -431,6 +433,8 @@ internal fun DrawScope.drawScene(
     wood: StageShader? = null,
     grainOrigin: Pair<Float, Float> = 0f to 0f,
     grainPitch: Float = 1f,
+    /** The wall's own surface, on the same terms. */
+    plaster: StageShader? = null,
 ) {
     if (pieces.isEmpty()) return
     val eyeAt = stage.eyePoint(eye)
@@ -468,6 +472,7 @@ internal fun DrawScope.drawScene(
                 wood = wood,
                 grainOrigin = grainOrigin,
                 grainPitch = grainPitch,
+                plaster = plaster,
             )
         }
 }
@@ -541,6 +546,7 @@ private fun DrawScope.drawSolid(
     wood: StageShader? = null,
     grainOrigin: Pair<Float, Float> = 0f to 0f,
     grainPitch: Float = 1f,
+    plaster: StageShader? = null,
 ) {
     CardSolid.visible(faces, eyeAt)
         .sortedBy { stage.project(it.centre).depth }
@@ -554,8 +560,14 @@ private fun DrawScope.drawSolid(
             if (face.corners.any { !stage.reaches(it) }) return@forEach
 
             val path = Path()
-            face.corners.forEachIndexed { index, corner ->
-                val flat = stage.flatten(corner)
+            // Kept rather than discarded: a shader colouring a face that is not
+            // the mat plane has to be told which part of the face a pixel is on,
+            // and the map that says so is built from these exact four points —
+            // the *same expression* the outline was drawn with, which is the
+            // whole reason `Homography` takes flattened points rather than
+            // flattening them itself.
+            val flatCorners = face.corners.map { stage.flatten(it) }
+            flatCorners.forEachIndexed { index, flat ->
                 if (index == 0) path.moveTo(flat.x, flat.y) else path.lineTo(flat.x, flat.y)
             }
             path.close()
@@ -602,6 +614,21 @@ private fun DrawScope.drawSolid(
                     facet(path, colour.shaded(StageRig.room(face, eye, look.lighting)), look)
                 } else {
                     facet(path, washBrush(wash, stage, colour), look)
+                }
+            }
+
+            // And the wall's own surface, over the fill that the rig just
+            // decided. Walls only: the desk has its timber, the floor is a
+            // different trade, and a skirt is the same wall below the desk top
+            // so it gets it too by carrying `Surface.WALL`.
+            //
+            // This is the first shader here that colours a plane which is not
+            // the mat, so it is the first one that has to be told where it is.
+            // See `Plaster` — the map is built from `flatCorners`, the same four
+            // points the outline was drawn with.
+            if (plaster != null && emission == null && surface == Surface.WALL) {
+                plasterBrush(plaster, face, flatCorners, look, grainPitch)?.let {
+                    facet(path, it, look, BlendMode.Overlay)
                 }
             }
 
@@ -684,6 +711,52 @@ private fun DrawScope.drawSolid(
                 )
             }
         }
+}
+
+/**
+ * One face's plaster, or null where the face has no map back to itself.
+ *
+ * Null is the ordinary answer for a face seen edge-on: three corners land on a
+ * line, the homography is degenerate, and `Homography.inverse` says so rather
+ * than handing back a matrix full of infinities. The caller then draws the flat
+ * fill, which is the right picture for a face with no area anyway.
+ *
+ * The two axes are the face's own first two edges, so the coordinates that come
+ * out are world units along the wall. Offset by where this face starts, which is
+ * what makes the four pieces around a window one continuous wall rather than
+ * four patches that each begin again.
+ */
+private fun plasterBrush(
+    shader: StageShader,
+    face: Face,
+    flatCorners: List<Flattened>,
+    look: StageLook,
+    cardWidth: Float,
+): Brush? {
+    if (face.corners.size < 4) return null
+    val across = face.corners[1] - face.corners[0]
+    val down = face.corners[3] - face.corners[0]
+    val width = across.length
+    val height = down.length
+    if (width <= 0f || height <= 0f) return null
+    val u = across * (1f / width)
+    val v = down * (1f / height)
+
+    val quad = flatCorners.map { Vec2(it.x, it.y) }
+    val toFace = Homography.rectToQuad(width, height, quad)?.inverse() ?: return null
+
+    // Toward the key, not the way the light travels. The sign that cost a whole
+    // iteration once already — see `FeltWeave`.
+    val key = look.lighting.key.direction
+    val toward = Vec3(-key.x, -key.y, -key.z)
+    return Plaster.brushFor(
+        shader = shader,
+        toFace = toFace,
+        origin = (face.corners[0] dot u) to (face.corners[0] dot v),
+        cardWidth = cardWidth,
+        lightInPlane = (toward dot u) to (toward dot v),
+        lightAlongNormal = toward dot face.normal,
+    )
 }
 
 /**

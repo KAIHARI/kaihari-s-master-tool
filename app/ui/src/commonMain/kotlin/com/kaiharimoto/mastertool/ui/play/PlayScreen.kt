@@ -793,6 +793,7 @@ fun PlayScreen(
             // shipped, which is the whole contract of the seam.
             val weave = remember { FeltWeave.compile() }
             val wood = remember { WoodGrain.compile() }
+            val plaster = remember { Plaster.compile() }
 
             // Both clocks report here, so a gesture the frame loop decides acts
             // on the same card the press landed on.
@@ -1065,13 +1066,18 @@ fun PlayScreen(
                         wood = wood,
                         grainOrigin = layout.field.left to layout.field.top,
                         grainPitch = layout.cardWidth,
+                        plaster = plaster,
                     )
                     drawFelt(layout, camera.plane, camera.eye, look, pool, weave)
                     // Between the desk and the lamp, which is where a shadow on
                     // the desk belongs: after the surface it lands on, before
                     // the fixture that throws it. `AAA.md` #61d.
                     drawRoomShadows(scenery.deskShadows, camera.plane, camera.eye, look)
-                    drawScene(scenery.standing, camera.plane, camera.eye, look)
+                    drawScene(
+                        scenery.standing, camera.plane, camera.eye, look,
+                        grainPitch = layout.cardWidth,
+                        plaster = plaster,
+                    )
                     drawMatControls(layout, play.field)
                     play.carried.forEach {
                         drawIndicator(it, play.field, layout, tune.hand.stepFraction, play.handRow)

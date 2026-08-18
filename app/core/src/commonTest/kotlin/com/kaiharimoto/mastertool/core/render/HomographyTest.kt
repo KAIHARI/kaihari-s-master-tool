@@ -5,6 +5,7 @@ import com.kaiharimoto.mastertool.core.motion.Pose3
 import com.kaiharimoto.mastertool.core.motion.Vec2
 import com.kaiharimoto.mastertool.core.motion.Vec3
 import kotlin.math.abs
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -403,5 +404,56 @@ class HomographyTest {
             assertClose(at.x, back.map(at).x, 1e-4f, "x at $at:")
             assertClose(at.y, back.map(at).y, 1e-4f, "y at $at:")
         }
+    }
+
+    // ---- how fast the map runs, which is what stops a texture aliasing --------------
+
+    @Test
+    fun theScaleAtAPointIsTheAreaTheMapOpensThereSquareRooted() {
+        // Checked against the map itself rather than against the formula: take a
+        // small square around the point, map its corners, and measure the area
+        // that comes out. The closed form has to agree with what the homography
+        // actually does, or every level of detail derived from it is a plausible
+        // number about nothing.
+        val quad = listOf(
+            Vec2(120f, 40f), Vec2(880f, 90f), Vec2(760f, 520f), Vec2(200f, 470f),
+        )
+        val h = Homography.rectToQuad(100f, 100f, quad)!!
+        listOf(20f to 20f, 50f to 50f, 80f to 30f, 30f to 80f).forEach { (x, y) ->
+            val d = 0.05f
+            val a = h.map(x - d, y - d)
+            val b = h.map(x + d, y - d)
+            val c = h.map(x + d, y + d)
+            // The shoelace area of the mapped square, over the source area.
+            val area = abs(
+                (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y),
+            ) / ((2f * d) * (2f * d))
+            assertEquals(sqrt(area), h.scaleAt(x, y), sqrt(area) * 0.02f, "at ($x, $y)")
+        }
+    }
+
+    @Test
+    fun aMapThatRunsAwayFromTheCameraRunsSlowerTheFurtherItGoes() {
+        // The whole reason this exists. A wall seen from a chair is drawn as a
+        // trapezoid, so one end of it packs many more surface units into a pixel
+        // than the other — and a texture band-limited on the near end crawls on
+        // the far one. Stated as a claim about the map rather than about a wall.
+        val trapezoid = listOf(
+            Vec2(300f, 100f), Vec2(700f, 100f), Vec2(1000f, 500f), Vec2(0f, 500f),
+        )
+        val h = Homography.rectToQuad(100f, 100f, trapezoid)!!
+        val far = h.scaleAt(50f, 0f)
+        val near = h.scaleAt(50f, 100f)
+        assertTrue(near > far * 1.5f, "the far end is not smaller: $far against $near")
+    }
+
+    @Test
+    fun aMapWithNoAreaHasNoScale() {
+        // Degenerate rather than merely small: three collinear corners give a
+        // determinant of nothing, and a texture on it has no size to be. Zero is
+        // the answer a caller can act on; a NaN is not.
+        val flat = listOf(Vec2(0f, 0f), Vec2(100f, 0f), Vec2(200f, 0f), Vec2(300f, 0f))
+        val h = Homography.rectToQuad(100f, 100f, flat)
+        assertTrue(h == null || h.scaleAt(50f, 50f) == 0f, "a flat quad reports a scale")
     }
 }
