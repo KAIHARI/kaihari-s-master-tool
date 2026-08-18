@@ -377,6 +377,20 @@ object Shading {
     private const val MIN_FACING = 0.32f
 
     /**
+     * Below this a highlight is not drawn at all.
+     *
+     * A fifth of one code of 255 — genuinely nothing to look at, and a gradient
+     * and a blend for it is a draw call per card per frame spent on a pixel
+     * nobody can see. It lives here rather than beside the drawing because it
+     * is the line the *shading* has to clear, and `ShadingTest` is what says
+     * every stock clears it in every room. It did not, for a long time: a foil
+     * lying flat came to 0.0005 in the day room, which is how a material with
+     * the highest [CardMaterial.specular] on the table ended up the only one
+     * with no highlight at all.
+     */
+    const val FAINTEST = 0.004f
+
+    /**
      * The longest a streak may be drawn, as a multiple of its own width.
      *
      * A ruled surface's lobe has no natural end — as the finish approaches a
@@ -385,6 +399,32 @@ object Shading {
      * card, six is already most of the width.
      */
     private const val STREAK_CEILING = 6f
+
+    /**
+     * What a lobe of this exponent has to be multiplied by to carry the same
+     * light as a broad one.
+     *
+     * `(n + 8) / 8pi` is the standard normalisation, and leaving it out is what
+     * made "shinier" mean "dimmer" here: raising a number below one to a higher
+     * power only ever removes light, so every increase in [CardMaterial.shininess]
+     * was quietly a reduction in how much of the lamp reached the eye. With it,
+     * a tighter finish *concentrates* the same light instead of losing it, which
+     * is the whole difference between a gloss and a matte being two materials
+     * and being one material at two brightnesses.
+     */
+    private fun energy(exponent: Float): Float = (exponent + 8f) / (8f * PI)
+
+    private const val PI = 3.14159265f
+
+    /**
+     * The varnish's own exponent, shared by every stock.
+     *
+     * One number rather than a per-material one, because it is not a property
+     * of the card — it is a property of the *coating*, which is the same
+     * lacquer on a common and on a secret rare. What differs between them is
+     * how much of it there is, which is [CardMaterial.coat].
+     */
+    private const val COAT_SHININESS = 12f
 
     /** Plain diffuse lighting for a surface pointing along [normal]. */
     fun lit(normal: Vec3, light: Light, intensity: Float = 1f): Float {
@@ -424,14 +464,43 @@ object Shading {
         val diffuse = (light.ambient + (1f - light.ambient) * lambert * light.intensity * reach)
             .coerceIn(0f, 1f)
 
+        // The card's own two axes, hoisted above the specular because a ruled
+        // stock's lobe is measured against them and the hotspot below is not
+        // the only thing that needs them any more.
+        val side = if (facing < 0f) -1f else 1f
+        val right = Rot3.right(pose) * side
+        val down = Rot3.down(pose)
+
         // Blinn-Phong: the half-vector between the eye and the light, which is
         // the direction a mirror at this point would have to face.
         val half = (toLight + eye.normalised()).normalised()
         val alignment = max(0f, visible dot half)
+
+        // Two lobes, because a card is two surfaces: the finish, and the
+        // varnish over it.
+        //
+        // One lobe could not do this. The body's exponent is what makes a gloss
+        // a gloss — 44 on a foil is a tight, mirror-ish flash — and a lobe that
+        // tight is *only* bright when the geometry very nearly lines up, which
+        // on a table it hardly ever does: at a typical alignment of 0.855 a
+        // 44th power is 0.001, and `drawCardSurface` skips the highlight
+        // entirely below 0.004. So a foil lying on the desk had no highlight at
+        // all in either room a foil appears in, and the material carrying the
+        // highest [CardMaterial.specular] was the dimmest thing on the stage.
+        //
+        // The coat is the fix and it is a real surface rather than a floor
+        // bolted under the number: printed card stock is varnished, the varnish
+        // is smooth where the stock beneath it is not, and a broad weak lobe is
+        // exactly what a varnish returns. It is why a matte card still has a
+        // sheen when you tilt it. So every card now catches the light from
+        // almost anywhere, and the body lobe is what still *flashes* when the
+        // angle comes good.
+        val body = alignment.pow(material.shininess) * energy(material.shininess)
+        val coat = alignment.pow(COAT_SHININESS) * energy(COAT_SHININESS)
         val specular = if (lambert <= 0f) {
             0f
         } else {
-            (alignment.pow(material.shininess) * material.specular * light.intensity * reach)
+            ((body * material.specular + coat * material.coat) * light.intensity * reach)
                 .coerceIn(0f, 1f)
         }
 
@@ -458,12 +527,9 @@ object Shading {
             else sqrt(across / along).coerceIn(1f, STREAK_CEILING)
         }
 
-        // The hotspot, in the card's own frame. Mirrored along with the card
-        // when the back is showing, or the highlight would walk the wrong way
-        // across a set card as it turns.
-        val side = if (facing < 0f) -1f else 1f
-        val right = Rot3.right(pose) * side
-        val down = Rot3.down(pose)
+        // The hotspot, in the card's own frame. `right` is mirrored along with
+        // the card when the back is showing, or the highlight would walk the
+        // wrong way across a set card as it turns.
         val depth = max(half dot visible, MIN_FACING)
 
         return Shade(

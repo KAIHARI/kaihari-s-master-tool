@@ -64,23 +64,23 @@ class GoldenStageTest {
             rest face   362.1,569.4  484.3,569.4  469.8,745.6  342.0,745.6
             rest solid  right 0.817/-0.080 477.3,655.6  near 0.779/-0.059 406.0,745.7  front 1.000/0.098 414.8,655.5
             rest shadow 361.9,569.1  484.1,569.1  469.6,745.2  341.9,745.2  dark 0.660  soft 3.1
-            rest shade  diff 0.955  spec 0.264  rim 0.001  hot 0.305,0.440
+            rest shade  diff 0.955  spec 0.401  rim 0.001  hot 0.305,0.440
             held face   859.4,256.2  965.2,265.5  965.2,441.4  859.4,439.1
             held solid  near 0.788/-0.066 913.3,440.4  left 0.804/0.078 859.4,347.8  front 0.920/0.007 913.4,350.6
             held shadow 906.4,398.1  990.7,357.2  974.6,472.3  887.5,515.8  dark 0.352  soft 34.2
-            held shade  diff 0.837  spec 0.000  rim 0.002  hot -0.382,-0.134
+            held shade  diff 0.837  spec 0.003  rim 0.002  hot -0.382,-0.134
             set  face   1134.8,625.4  1145.3,748.8  1330.8,748.8  1314.5,625.4
             set  solid  back 1.000/0.098 1231.1,686.3  far 0.804/0.078 1139.9,686.2  right 0.779/-0.059 1238.0,748.8
             set  shadow 1134.5,625.1  1145.1,748.4  1330.5,748.4  1314.3,625.1  dark 0.660  soft 3.1
-            set  shade  diff 0.955  spec 0.137  rim 0.000  hot 0.560,0.305
+            set  shade  diff 0.955  spec 0.206  rim 0.000  hot 0.560,0.305
             pile face   297.7,176.7  411.4,176.7  394.9,323.5  276.3,323.5
             pile solid  right 0.817/-0.080 409.1,260.4  near 0.779/-0.059 342.5,334.5  front 1.000/0.098 345.3,248.6
             pile shadow 311.9,201.6  422.4,201.6  406.8,345.1  291.7,345.1  dark 0.660  soft 3.1
-            pile shade  diff 0.955  spec 0.228  rim 0.001  hot 0.305,0.440
+            pile shade  diff 0.955  spec 0.262  rim 0.001  hot 0.305,0.440
             deck face   1340.7,222.3  1224.8,222.3  1243.2,374.0  1364.1,374.0
             deck solid  back 1.000/0.098 1276.4,322.1  right 0.804/0.078 1226.4,309.5  near 0.779/-0.059 1294.9,385.9
             deck shadow 1322.9,249.8  1210.9,249.8  1228.0,397.4  1344.8,397.4  dark 0.660  soft 3.1
-            deck shade  diff 0.955  spec 0.137  rim 0.000  hot 0.305,0.440
+            deck shade  diff 0.955  spec 0.206  rim 0.000  hot 0.305,0.440
             """.trimIndent(),
             actual = dump(Home),
         )
@@ -94,23 +94,23 @@ class GoldenStageTest {
             rest face   488.2,830.3  591.4,751.0  701.0,899.9  596.5,983.4
             rest solid  right 0.794/-0.065 645.5,824.5  near 0.798/-0.071 649.2,941.3  front 1.000/0.099 593.9,864.9
             rest shadow 487.8,830.1  591.0,750.9  700.6,899.7  596.1,983.2  dark 0.660  soft 3.1
-            rest shade  diff 0.955  spec 0.089  rim 0.000  hot 0.207,0.343
+            rest shade  diff 0.955  spec 0.171  rim 0.000  hot 0.207,0.343
             held face   721.5,266.8  798.9,211.9  898.8,356.9  828.0,418.1
             held solid  near 0.814/-0.083 864.3,386.8  left 0.804/0.078 775.3,343.3  front 0.923/0.004 813.2,313.4
             held shadow 816.7,353.6  855.8,271.3  917.4,375.6  878.5,461.3  dark 0.352  soft 34.2
-            held shade  diff 0.837  spec 0.000  rim 0.009  hot -0.574,-0.330
+            held shade  diff 0.837  spec 0.001  rim 0.009  hot -0.574,-0.330
             set  face   1129.6,407.9  1209.1,497.6  1335.9,396.2  1255.9,309.7
             set  solid  back 1.000/0.099 1232.7,402.2  far 0.804/0.078 1168.9,452.5  right 0.798/-0.071 1273.0,446.5
             set  shadow 1129.3,407.8  1208.7,497.5  1335.5,396.1  1255.5,309.6  dark 0.660  soft 3.1
-            set  shade  diff 0.955  spec 0.107  rim 0.000  hot 0.657,0.207
+            set  shade  diff 0.955  spec 0.156  rim 0.000  hot 0.657,0.207
             pile face   141.6,540.4  247.8,466.4  346.6,605.3  239.0,683.2
             pile solid  right 0.794/-0.065 304.8,540.7  near 0.798/-0.071 301.6,648.0  front 1.000/0.099 243.5,572.7
             pile shadow 162.7,551.5  265.3,479.8  361.3,614.5  257.4,689.9  dark 0.660  soft 3.1
-            pile shade  diff 0.955  spec 0.120  rim 0.000  hot 0.207,0.343
+            pile shade  diff 0.955  spec 0.160  rim 0.000  hot 0.207,0.343
             deck face   1048.3,-30.9  961.6,30.3  1069.7,147.9  1157.1,83.8
             deck solid  back 1.000/0.099 1050.1,84.9  right 0.804/0.078 1011.3,102.2  near 0.798/-0.071 1108.2,129.1
             deck shadow 1040.1,-0.5  956.2,59.0  1060.4,173.3  1145.0,111.1  dark 0.660  soft 3.1
-            deck shade  diff 0.955  spec 0.107  rim 0.000  hot 0.207,0.343
+            deck shade  diff 0.955  spec 0.156  rim 0.000  hot 0.207,0.343
             """.trimIndent(),
             actual = dump(Turned),
         )
@@ -124,23 +124,23 @@ class GoldenStageTest {
             rest face   472.3,534.3  563.7,534.3  545.4,624.9  446.8,624.9
             rest solid  right 0.817/-0.080 554.9,578.1  near 0.749/-0.037 496.1,625.1  front 1.000/0.094 507.5,577.9
             rest shadow 472.1,534.1  563.6,534.1  545.2,624.7  446.7,624.7  dark 0.660  soft 3.1
-            rest shade  diff 0.955  spec 0.069  rim 0.069  hot 0.263,0.767
+            rest shade  diff 0.955  spec 0.142  rim 0.069  hot 0.263,0.767
             held face   840.6,331.3  914.7,354.8  919.9,457.6  842.5,435.5
             held solid  near 0.753/-0.041 881.7,446.9  left 0.804/0.078 841.5,382.4  front 0.925/0.003 879.8,393.8
             held shadow 877.4,451.1  937.8,432.0  928.6,486.5  864.9,507.7  dark 0.352  soft 34.2
-            held shade  diff 0.837  spec 0.000  rim 0.014  hot -0.414,0.299
+            held shade  diff 0.837  spec 0.006  rim 0.014  hot -0.414,0.299
             set  face   1052.9,562.5  1066.5,626.6  1209.6,626.6  1188.7,562.5
             set  solid  back 1.000/0.094 1129.1,594.1  far 0.804/0.078 1059.5,593.9  right 0.749/-0.037 1138.0,626.8
             set  shadow 1052.7,562.3  1066.3,626.4  1209.3,626.4  1188.5,562.3  dark 0.660  soft 3.1
-            set  shade  diff 0.955  spec 0.101  rim 0.032  hot 0.233,0.263
+            set  shade  diff 0.955  spec 0.146  rim 0.032  hot 0.233,0.263
             pile face   451.3,334.7  530.3,334.7  512.4,398.9  428.2,398.9
             pile solid  right 0.817/-0.080 523.5,379.4  near 0.749/-0.037 472.6,412.7  front 1.000/0.094 480.9,365.8
             pile shadow 455.9,361.3  533.8,361.3  516.4,426.3  433.4,426.3  dark 0.660  soft 3.1
-            pile shade  diff 0.955  spec 0.103  rim 0.046  hot 0.263,0.767
+            pile shade  diff 0.955  spec 0.143  rim 0.046  hot 0.263,0.767
             deck face   1177.2,351.9  1096.4,351.9  1116.6,418.9  1202.9,418.9
             deck solid  back 1.000/0.094 1142.4,415.7  right 0.804/0.078 1103.7,400.1  near 0.749/-0.037 1156.8,435.0
             deck shadow 1171.4,382.8  1091.8,382.8  1111.4,450.8  1196.3,450.8  dark 0.660  soft 3.1
-            deck shade  diff 0.955  spec 0.101  rim 0.032  hot 0.263,0.767
+            deck shade  diff 0.955  spec 0.146  rim 0.032  hot 0.263,0.767
             """.trimIndent(),
             actual = dump(Steep),
         )

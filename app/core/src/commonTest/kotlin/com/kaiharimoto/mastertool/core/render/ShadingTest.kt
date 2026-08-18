@@ -441,6 +441,99 @@ class ShadingTest {
         assertTrue(shade.lamp.blue < shade.lamp.red, "and warm means less blue, was ${shade.lamp.blue}")
     }
 
+    // ---- the light reaches every stock, in every room -------------------------
+
+    @Test
+    fun everyStockCatchesTheLightInEveryRoomItIsSeenIn() {
+        // `docs/LOOP.md` carried *"nothing on a card catches the light"* as an
+        // impression from iteration 0, with a note that it was worth measuring
+        // before assuming it needed to be stronger. Measured, it was worse than
+        // an impression: a foil lying flat came to **0.0005** under the day rig
+        // and 0.0012 at night, against [Shading.FAINTEST], so the material with
+        // the highest specular constant on the table was the only one with no
+        // highlight at all — sixty-four times dimmer than a sleeve, because a
+        // 44th power of a typical 0.855 alignment is one part in a thousand.
+        //
+        // This is the claim that stops it coming back, and it is deliberately
+        // over every room rather than over the one the stage opens in: a card
+        // is lit by whichever rig it is under, and the day key is the oblique
+        // one that found this.
+        val flat = Pose3(position = Vec3(1480f, 900f, 0f))
+        val eye = StageRig.eye(58f, 0f)
+
+        listOf(
+            "Minimal" to StageLighting.Minimal.key,
+            "DeskDay" to StageLighting.DeskDay.key,
+            "DeskNight" to StageLighting.DeskNight.key,
+        ).forEach { (room, key) ->
+            listOf(
+                "Gloss" to CardMaterial.Gloss,
+                "Foil" to CardMaterial.Foil,
+                "Sleeve" to CardMaterial.Sleeve,
+            ).forEach { (stock, material) ->
+                val lit = Shading.of(flat, material, key, eye).specular
+                assertTrue(
+                    lit > Shading.FAINTEST,
+                    "$stock lying flat in $room is $lit, under the threshold it has to clear to be drawn",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun theCoatIsWhatKeepsAFlatCardLitAndTheFinishIsWhatMakesItFlash() {
+        // Two lobes doing two jobs, and the test is that neither can be dropped.
+        //
+        // Take the varnish away and the finish alone cannot hold a flat foil
+        // above the threshold under the day rig — which is exactly the state
+        // this arrived in. Take the finish away and the flash goes: the whole
+        // difference between a foil and a matte is what happens when the angle
+        // comes good, and a coat is too broad to say it.
+        val flat = Pose3(position = Vec3(1480f, 900f, 0f))
+        val eye = StageRig.eye(58f, 0f)
+        val day = StageLighting.DeskDay.key
+
+        val bare = Shading.of(flat, CardMaterial.Foil.copy(coat = 0f), day, eye).specular
+        assertTrue(bare < Shading.FAINTEST, "a bare finish should be the state this fixed, was $bare")
+        assertTrue(
+            Shading.of(flat, CardMaterial.Foil, day, eye).specular > Shading.FAINTEST,
+            "and the coat is what lifts it",
+        )
+
+        // Square-on, where the finish is everything: a foil out-flashes a matte
+        // by more than their coats differ, or the finishes are not materials.
+        val square = Shading.of(Pose3(), CardMaterial.Foil, key).specular
+        val matte = Shading.of(Pose3(), CardMaterial.Sleeve, key).specular
+        assertTrue(square > matte, "a foil should out-flash a sleeve square on: $square vs $matte")
+    }
+
+    @Test
+    fun aTighterFinishConcentratesTheLightRatherThanLosingIt() {
+        // The bug underneath the measurement, stated as a property. Raising a
+        // number below one to a higher power can only ever remove light, so
+        // without the `(n + 8) / 8pi` normalisation every increase in
+        // `shininess` was quietly a reduction in how much of the lamp came
+        // back — "shinier" meant "dimmer", which is not what the word means.
+        //
+        // Asked at the one geometry where a lobe is at its actual peak: a lamp
+        // straight overhead and an eye straight above it, so the half-vector is
+        // the normal and the alignment is exactly one. Anywhere else a tighter
+        // lobe *is* dimmer — that is what a tighter lobe means, and it is
+        // precisely why the coat above has to exist.
+        val overhead = Light(direction = Vec3(0f, 0f, -1f), intensity = 1f, ambient = 0f)
+        val straightDown = Vec3(0f, 0f, 1f)
+        val tight = CardMaterial.Gloss.copy(shininess = 60f, coat = 0f)
+        val slack = CardMaterial.Gloss.copy(shininess = 6f, coat = 0f)
+
+        val peakTight = Shading.of(Pose3(), tight, overhead, straightDown).specular
+        val peakSlack = Shading.of(Pose3(), slack, overhead, straightDown).specular
+
+        assertTrue(
+            peakTight > peakSlack,
+            "a tighter finish came back dimmer at its own peak: $peakTight against $peakSlack",
+        )
+    }
+
     // ---- a ruled finish answers with a streak ---------------------------------
 
     @Test

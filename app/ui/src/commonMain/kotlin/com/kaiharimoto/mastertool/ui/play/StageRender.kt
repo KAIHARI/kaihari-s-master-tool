@@ -540,7 +540,7 @@ internal fun DrawScope.drawCardSurface(
         )
     }
 
-    if (shade.specular > 0.004f) {
+    if (shade.specular > Shading.FAINTEST) {
         val hotspot = Offset(shade.hotspot.x * size.width, shade.hotspot.y * size.height)
         // A highlight is a reflection of the lamp rather than of the room, so
         // it is the one place a temperature arrives undiluted. Everywhere else

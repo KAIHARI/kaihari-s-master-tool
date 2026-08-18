@@ -1430,6 +1430,63 @@ are phases 6 and 7 and they are next.
 
 ---
 
+### Iteration 24 — shinier meant dimmer, and a foil had no light at all
+
+Iteration 23's release said the anisotropic streak was built. It was, and it did
+nothing, and the studio's new finger is what proved it: tap the extra deck open
+and the pictures come back **byte-identical** with the anisotropy on and off —
+and byte-identical again with `Foil.specular` cranked from 0.52 to 1.0. A
+temporary fill gated on the draw threshold drew on nothing at all. The shape was
+right and the term it shaped was zero.
+
+The measurement, for a card lying flat at the seat the stage opens at: a foil's
+specular was **0.00052** under the day rig and 0.0012 at night, against a draw
+threshold of 0.004. So the material carrying the highest specular constant on the
+table was the only one with no highlight — **sixty-four times dimmer than a
+sleeve**. That is `docs/LOOP.md`'s oldest impression, *"nothing on a card catches
+the light"*, turned into a number.
+
+Two things were wrong and only one of them was obvious.
+
+**The lobe was never energy-normalised.** Raising a number below one to a higher
+power can only remove light, so every increase in `shininess` was quietly a
+reduction in how much of the lamp came back: "shinier" meant "dimmer", which is
+not what the word means. `(n + 8) / 8pi` is the standard fix and it is now there.
+
+**And normalisation alone does not reach it** — 2.07x on a number three orders
+under the threshold. What reaches it is a **second lobe**, and the argument is a
+surface rather than a floor bolted under a number: printed stock is varnished,
+the varnish is smooth where the stock is not, and a broad weak lobe is what a
+varnish returns. It is why a matte card still has a sheen when you tilt it. So
+`CardMaterial.coat` is how much lacquer is over the finish — most on a sleeve,
+which *is* a sheet of plastic, least on a foil, where the holographic layer is
+the thing you are meant to see — and the finish lobe is what still *flashes*
+when the angle comes good.
+
+Two attempts did not work and are worth not repeating. Putting the anisotropy
+into the *intensity* (Ashikhmin-Shirley, so a ruled stock answers broadly along
+its grooves) is physically right and swung a foil's brightness **640x** with card
+rotation, 0.0005 to 0.32 — which is not a material, it is a strobe, and it fights
+`DESIGN.md` §7's "the highlight moves, the brightness does not". And the first
+tuning left the peak at 0.600 on a well-aligned foil, which is `PHOTOREAL.md`'s
+predicted clip: it says in as many words that normalising makes foil clip unless
+the constants come down in the same change. They came down — foil's specular
+0.52 to 0.30 — and the peak is 0.40.
+
+`GoldenStageTest` moved and only its `spec` column moved: every face, solid,
+shadow, `diff`, `rim` and `hot` line is identical, which is the whole point of a
+recording with one identifiable cause. `Shading.FAINTEST` moved into core in the
+same change, because the threshold is the line the *shading* has to clear and a
+magic number in the renderer cannot be asserted against.
+
+What the picture shows: 3.4% of pixels at the opening frame, 6.3% with the extra
+deck open, peak 7 of 255. **That is honest and it is small**, because the day key
+is oblique and a card lying flat under it genuinely does not blaze. The
+structural defect is gone; how bright a card highlight should *be* is a taste
+call, it belongs with the rim constant and the exposure, and it wants the tablet.
+
+---
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find
@@ -1468,8 +1525,9 @@ what the eye has caught and the hand has not reached.
   write landed in an order the dispatcher chose. An aimed run then ignores the
   seat in every name, by the rule that already existed — a tuning carrying a
   camera *is* the camera.
-- **The card specular is not reaching the picture, and on foil it is not drawn
-  at all.** `docs/LOOP.md` has carried *"nothing on a card catches the light"*
+- ~~**The card specular is not reaching the picture.**~~ **Fixed — iteration 24.**
+  Kept because the measurement is the useful half.
+ `docs/LOOP.md` has carried *"nothing on a card catches the light"*
   as an impression since iteration 0, with the note that it was *"worth
   measuring before assuming it needs to be stronger"*. Measured, at the seat the
   stage now opens at, for a card lying flat:
@@ -1490,12 +1548,10 @@ what the eye has caught and the hand has not reached.
   `shade.specular > 0.004f` drew nothing on any foil in the frame, and cranking
   `Foil.specular` from 0.52 to 1.0 gave a **byte-identical** picture.
 
-  This is `docs/PHOTOREAL.md` stage 2's N1 and N5, and it is now the thing
-  standing in front of every card-facing change: the anisotropic streak (#21)
-  shapes a term that is zero here, and stage 4's per-pixel BRDF would be tuned
-  against the same nothing. Normalising the lobe by `(s + 8) / (8pi)` alone does
-  not reach it — that is 2.07x on foil, 0.00052 to 0.0011, still under the
-  threshold. The exponents have to be re-derived, which is what stage 2 says.
+  What fixed it was not a bigger number: a **second, broad lobe** for the
+  varnish every printed card carries, plus the `(n + 8) / 8pi` normalisation the
+  single lobe never had. Every stock now clears the threshold in every room, and
+  `ShadingTest` says so over the whole matrix rather than at one pose.
 - **The eye cannot see a foil, and that is now the biggest hole in it.**
   `CardStock.of` gives `CardMaterial.Foil` to face-up **extra-deck** cards only,
   and nothing in the play stage's shortcut table opens the extra deck — `f`
