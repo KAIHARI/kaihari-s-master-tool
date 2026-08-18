@@ -1468,6 +1468,34 @@ what the eye has caught and the hand has not reached.
   write landed in an order the dispatcher chose. An aimed run then ignores the
   seat in every name, by the rule that already existed — a tuning carrying a
   camera *is* the camera.
+- **The card specular is not reaching the picture, and on foil it is not drawn
+  at all.** `docs/LOOP.md` has carried *"nothing on a card catches the light"*
+  as an impression since iteration 0, with the note that it was *"worth
+  measuring before assuming it needs to be stronger"*. Measured, at the seat the
+  stage now opens at, for a card lying flat:
+
+  | | `Minimal` | `DeskDay` | `DeskNight` |
+  |---|---|---|---|
+  | Sleeve (`specular` 0.16) | 0.086 | 0.033 | 0.040 |
+  | Gloss (0.34) | 0.068 | 0.0058 | 0.0094 |
+  | **Foil (0.52)** | 0.034 | **0.00052** | **0.0012** |
+
+  `drawCardSurface` skips the whole block below 0.004, so **a foil lying on the
+  desk has no highlight at all in either Desk room** — which is where every foil
+  on this table lives. And the order is inverted: the material with the *highest*
+  specular constant is the dimmest thing on the stage, sixty-four times dimmer
+  than a sleeve, because `shininess = 44` takes the half-vector alignment to the
+  forty-fourth power and a lobe that tight is extinguished by any deviation at
+  all. Proved rather than argued: a temporary fill gated on
+  `shade.specular > 0.004f` drew nothing on any foil in the frame, and cranking
+  `Foil.specular` from 0.52 to 1.0 gave a **byte-identical** picture.
+
+  This is `docs/PHOTOREAL.md` stage 2's N1 and N5, and it is now the thing
+  standing in front of every card-facing change: the anisotropic streak (#21)
+  shapes a term that is zero here, and stage 4's per-pixel BRDF would be tuned
+  against the same nothing. Normalising the lobe by `(s + 8) / (8pi)` alone does
+  not reach it — that is 2.07x on foil, 0.00052 to 0.0011, still under the
+  threshold. The exponents have to be re-derived, which is what stage 2 says.
 - **The eye cannot see a foil, and that is now the biggest hole in it.**
   `CardStock.of` gives `CardMaterial.Foil` to face-up **extra-deck** cards only,
   and nothing in the play stage's shortcut table opens the extra deck — `f`

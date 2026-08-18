@@ -159,6 +159,21 @@ fun main(args: Array<String>) {
                 // recomposition. Both are done well inside this.
                 clock.run(opts.shotFrames)
 
+                // Then the finger, if this run has one. After the seat, because
+                // both of the things it is for — opening a pile, turning the
+                // table — are aimed at a place on the glass, and where that
+                // place is depends on where the camera ended up.
+                opts.drag?.let { (from, to) ->
+                    Pointer.drag(
+                        scene, clock,
+                        from.first * opts.width, from.second * opts.height,
+                        to.first * opts.width, to.second * opts.height,
+                    )
+                }
+                opts.tap?.let { (x, y) ->
+                    Pointer.tap(scene, clock, x * opts.width, y * opts.height)
+                }
+
                 val png = clock.frame().encodeToData(EncodedImageFormat.PNG)
                     ?: error("Skia declined to encode ${shot.name}")
                 val file = File(opts.out, "${shot.name}.png")
@@ -239,7 +254,7 @@ private const val FRAME_NANOS = 16_666_667L
  * to land. Advancing only one of the two is how a harness photographs either a
  * frozen table or a table with no pictures on it.
  */
-private class FrameClock(private val scene: ImageComposeScene, private val pauseMillis: Long) {
+internal class FrameClock(private val scene: ImageComposeScene, private val pauseMillis: Long) {
     private var nanos = 0L
 
     suspend fun run(frames: Int) {
@@ -481,6 +496,18 @@ private class Options(
      * every existing shot and every golden contact sheet is unchanged.
      */
     val tuning: StageTuning,
+    /**
+     * `--tap=0.27,0.70`: where to put a finger, in fractions of the glass.
+     *
+     * Fractions rather than a slot name, and `Pointer`'s KDoc has the argument:
+     * re-solving the board and the camera here would be a second copy of both
+     * that has to agree with the one the screen reached, possibly through a
+     * seat press and `CameraFit`. Found by looking at a shot, which is the
+     * loop's own method.
+     */
+    val tap: Pair<Float, Float>?,
+    /** `--drag=0.5,0.5:0.7,0.5`: a swept drag on the glass. On felt, an orbit. */
+    val drag: Pair<Pair<Float, Float>, Pair<Float, Float>>?,
     val shots: List<Shot>,
 ) {
     companion object {
@@ -540,6 +567,12 @@ private class Options(
                             ?: error("$file is not a tuning export")
                     } ?: StageTuning.DEFAULT
                     ).aimedBy(map),
+                tap = map["tap"]?.let(::point),
+                drag = map["drag"]?.let { spec ->
+                    val ends = spec.split(":")
+                    require(ends.size == 2) { "--drag wants from:to, got $spec" }
+                    point(ends[0]) to point(ends[1])
+                },
                 shots = names.map(::shotOf),
             )
         }
@@ -551,6 +584,16 @@ private class Options(
          * filename, and a contact sheet whose files are `a.png`, `b.png` is a
          * contact sheet nobody can talk about.
          */
+        /** `0.27,0.70` — a place on the glass, as fractions of it. */
+        private fun point(spec: String): Pair<Float, Float> {
+            val parts = spec.split(",")
+            require(parts.size == 2) { "a point is x,y in fractions of the glass, got $spec" }
+            val x = parts[0].toFloatOrNull()
+            val y = parts[1].toFloatOrNull()
+            require(x != null && y != null) { "a point is two numbers, got $spec" }
+            return x to y
+        }
+
         private fun shotOf(name: String): Shot {
             val parts = name.lowercase().split("-")
             fun has(vararg words: String) = parts.any { it in words }

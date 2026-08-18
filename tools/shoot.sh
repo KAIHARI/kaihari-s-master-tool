@@ -5,6 +5,8 @@
 #   tools/shoot.sh --shots=desk-night-seated        # one named shot
 #   tools/shoot.sh --shots=desk-night-pov           # the seat the stage opens at
 #   tools/shoot.sh --pitch=80 --yaw=45              # aim the whole run
+#   tools/shoot.sh --tap=0.27,0.70                  # put a finger on the glass
+#   tools/shoot.sh --drag=0.5,0.5:0.7,0.5           # and drag it: on felt, an orbit
 #   tools/shoot.sh --out=/tmp/x --density=2         # tablet metrics
 #
 # A shot name carries a seat: overhead, table, seated, pov. --pitch/--yaw aim
