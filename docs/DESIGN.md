@@ -205,6 +205,31 @@ mat in `BlendMode.Overlay`, whose identity is mid grey, so the shader emits 0.5
 where the cloth is flat and the worst a mistake in it can do is push the felt
 around a little. A shader that *replaces* a surface has to earn that separately.
 
+**A shader may also colour the whole picture, once, above everything.** The rule
+above governs a shader that colours *a surface*, and the seam it describes hands
+back a `Brush`. There is a second seam — `StageEffect`, a `RenderEffect` on a
+layer — and it exists for the things that are not about any surface at all: a
+vignette, a grain, a tonemap, a lens's chromatic fringe. Those are facts about
+the *camera*, and a camera does not belong to the felt or to a card.
+
+Three conditions, and the first is the one that costs something.
+
+**It goes on its own layer, above the mat's, and never on the mat's own.** That
+layer already carries `rotationZ = -yaw; rotationX = tilt; cameraDistance`, so a
+vignette drawn there is an ellipse whose centre walks off the optical axis as the
+table turns — a lens artefact that moves with the subject is not a lens artefact.
+The cost is an offscreen pass, and it is affordable *exactly once*: one
+full-screen composite is about a twelfth of a tablet's memory bus, and one per
+card is sixty of them and would end this stage. **Nothing that draws per card may
+use this seam.**
+
+**It is the Desk scenes' privilege, not the stage's.** `Scene.MINIMAL` is the
+handbook's stage and is graded by nobody; the camera arrives with the room.
+
+**And it degrades to nothing.** `compileStageEffect` returns null below API 33 or
+on a driver that refuses, and the picture that comes back is simply the ungraded
+one — which is what a third of Android sees and what shipped before this existed.
+
 **`Light.direction` is the way the light travels.** The key is
 `(0.30, 0.45, -0.84)`, heading *down* onto the table, and every dot product in a
 shader wants the vector pointing back at the lamp. Handed the travel direction,
