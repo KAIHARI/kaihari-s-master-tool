@@ -289,18 +289,28 @@ internal fun DrawScope.drawCardShadow(
      * [Shadows.cast].
      */
     bodyDepth: Float = 0f,
+    /**
+     * Where the camera is, for the rim term inside `StageRig.occlusion`.
+     *
+     * A shadow's darkness is a fact about the surface receiving it, and the
+     * rim light this stage carries is gated on the graze — so how much of the
+     * felt's light a card removes depends, slightly, on where you are standing.
+     */
+    eye: Vec3 = Vec3.Toward,
     look: StageLook,
 ) {
-    // `shadow.alpha` is an opacity somebody chose rather than a fraction of
-    // light — `Shadows` keeps the constant behind it private for that reason —
-    // so the sRGB correction that went through the solids left it alone. There
-    // is no `1 - light` in it to correct.
+    // `shadow.alpha` is **coverage** — how much of the shadow is there — and
+    // how dark that comes out is a separate question with a separate answer.
+    // `StageRig.occlusion` is that answer: the share of the felt's light that
+    // was arriving straight from the key, and therefore the share a card
+    // standing in front of it takes away.
     //
-    // It is not untouched by that change, though. It was tuned against solids
-    // that came back up to a fifth darker than they now do, so a card currently
-    // throws the shadow of a dimmer lamp than the one lighting its own edges.
-    // That is a judgement to make with the tablet in hand rather than
-    // arithmetic, and it is left for the next tuning pass instead of guessed at.
+    // Splitting the two is what stops a shadow being a colour. The old single
+    // number was 0.66 whatever the room was doing, while the ambient it does
+    // not occlude is 0.72 in Minimal and 0.55 at night — so the same constant
+    // was a hole punched through a lit surface in one room and roughly right in
+    // another. Asked properly it is about a fifth, and a shadow becomes the
+    // felt seen darker rather than a shape laid over it.
     //
     // Cast from the room's own key, which is what makes changing the hour a
     // change of *room* rather than of colour: every shadow on the board swings
@@ -309,7 +319,13 @@ internal fun DrawScope.drawCardShadow(
     // read as a duplicated card.
     val shadow = Shadows.cast(pose, width, height, look.lighting.key, cardHeight, bodyDepth = bodyDepth)
         ?: return
-    if (shadow.alpha <= 0.01f) return
+
+    // The felt is flat, so the surface receiving this is the one the rig
+    // already answers about: normal straight up, at the point the shadow lands.
+    val landed = shadow.corners.firstOrNull()
+    val darkest = StageRig.occlusion(SURFACE_UP, eye, look.lighting, landed)
+    val alpha = shadow.alpha * darkest
+    if (alpha <= 0.004f) return
 
     val flat = shadow.corners.map { Vec2(it.x, it.y) }
 
@@ -322,7 +338,7 @@ internal fun DrawScope.drawCardShadow(
         shadow.spread < cardHeight * 0.12f -> 3
         else -> SHADOW_STEPS
     }
-    val step = 1f - (1f - shadow.alpha).pow(1f / rings)
+    val step = 1f - (1f - alpha).pow(1f / rings)
 
     // A real penumbra straddles the geometric edge: it begins a little *inside*
     // it and ends the same distance outside. Feathering only outward — which is
@@ -723,6 +739,9 @@ private fun DrawScope.drawShuffleMark(slot: Slot, colour: Color) {
  * was a number, and it is now a property of the surface, which is why it can
  * shrink when the camera comes down and a number never could.
  */
+/** The felt's own normal: this table is flat and every shadow lands on it. */
+private val SURFACE_UP = Vec3(0f, 0f, 1f)
+
 private const val FELT_ROUGHNESS = 0.36f
 
 /**

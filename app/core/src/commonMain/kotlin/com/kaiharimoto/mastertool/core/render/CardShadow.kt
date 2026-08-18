@@ -16,6 +16,20 @@ import kotlin.math.max
  */
 data class CardShadow(
     val corners: List<Vec3>,
+    /**
+     * How much of the cast shadow is *there*, 0..1 — coverage, not darkness.
+     *
+     * One where the card is touching, falling away as it lifts, and it says
+     * nothing at all about how dark the result should be. That is
+     * `StageRig.occlusion`'s answer, because how much light a shadow removes is
+     * a fact about the *room* rather than about the card throwing it.
+     *
+     * It used to carry both, as a chosen 0.66 with the height fade folded in,
+     * and the two could not be told apart: the ambient a shadow does not occlude
+     * is 0.72 in Minimal and 0.55 at night, so a fixed 0.66 was a hole punched
+     * through a lit surface in one room and nearly right in another. Separating
+     * them is what lets a shadow be *the felt, darker* instead of a colour.
+     */
     val alpha: Float,
     val spread: Float,
     /**
@@ -62,9 +76,6 @@ data class Landed(val corners: List<Vec3>, val rays: List<Float>)
  * effect.
  */
 object Shadows {
-
-    /** How dark a contact shadow gets, before any height fades it. */
-    private const val DARKEST = 0.66f
 
     /** The height, in card heights, at which the cast shadow has half faded. */
     private const val FADE_OVER = 0.60f
@@ -137,7 +148,7 @@ object Shadows {
 
         return CardShadow(
             corners = landed.corners,
-            alpha = DARKEST / (1f + lift / FADE_OVER),
+            alpha = 1f / (1f + lift / FADE_OVER),
             spread = soft,
             // The *unfloored* angle, deliberately. `soft` carries a hairline
             // floor so that even a point source's edge has a pixel to be

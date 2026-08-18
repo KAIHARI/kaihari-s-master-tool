@@ -1882,7 +1882,8 @@ private fun StagedCard(
                     // frame, which is the frame `Shadows.cast` and `CardSolid`
                     // already speak.
                     drawCardShadow(
-                        pose, seat.width, seat.height, seat.height, seat.solid, look,
+                        pose, seat.width, seat.height, seat.height, seat.solid,
+                        camera.eye, look,
                     )
                     drawSolidEdges(
                         pose, seat.width, seat.height, seat.solid,
