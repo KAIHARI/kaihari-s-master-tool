@@ -4,6 +4,7 @@ import android.graphics.BitmapShader
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
+import android.util.Log
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.RenderEffect
@@ -49,7 +50,14 @@ actual class StageEffect internal constructor(internal val shader: RuntimeShader
 
 actual fun compileStageEffect(sksl: String): StageEffect? {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
-    return runCatching { StageEffect(RuntimeShader(sksl)) }.getOrNull()
+    return runCatching { StageEffect(RuntimeShader(sksl)) }
+        // Loud, once, and never per frame. See the desktop actual: a shader
+        // that fails to compile is indistinguishable from one that compiled and
+        // drew the identity, and the silence has cost this project two
+        // debugging rounds. The version gate above returns before this, so a
+        // device that simply has no runtime shaders says nothing.
+        .onFailure { Log.w("StageShader", "shader did not compile", it) }
+        .getOrNull()
 }
 
 actual fun StageEffect.effect(uniforms: ShaderUniforms.() -> Unit): RenderEffect? {

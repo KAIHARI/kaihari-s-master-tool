@@ -3,6 +3,7 @@ package com.kaiharimoto.mastertool.ui.play
 import androidx.compose.ui.graphics.RenderEffect
 import com.kaiharimoto.mastertool.ui.gpu.StageEffect
 import com.kaiharimoto.mastertool.ui.gpu.compileStageEffect
+import com.kaiharimoto.mastertool.core.render.AgX
 import com.kaiharimoto.mastertool.ui.gpu.effect
 
 /**
@@ -37,12 +38,25 @@ import com.kaiharimoto.mastertool.ui.gpu.effect
  * design device that is deliberately *visible*, and letting one become the
  * other would lose both.
  *
+ * **Exposure and the film**, which is [AgX] and is the only part of this pass
+ * that changes what the picture is *made of* rather than what a lens did to it.
+ * It goes last of the light terms and first of the encoding ones: the exposure
+ * and the vignette are both facts about how much light reached the film, so
+ * both are in linear and both are before the curve; the grain is a fact about
+ * the film's own grain, so it is after.
+ *
+ * It landed here rather than in `Tone` on purpose, and that is a correction to
+ * the plan. `docs/PHOTOREAL.md` made AgX wait for `Tone.veil` to die, because it
+ * assumed the curve would be applied per surface — where a veil that has to
+ * compensate for it goes negative, and a black overlay can only darken. A grade
+ * over the finished picture has no such problem: it never meets `Tone` at all.
+ * The veil's own error is still real and still owed (`AAA.md` N2); it is a
+ * correctness debt rather than a blocker, which is what a measurement is for.
+ *
  * ## What it deliberately is not
  *
  * No bloom and no depth of field yet: both want a second pass or a layer per
- * card, and this one is the free one. No tonemap, because AgX cannot land until
- * `Tone.veil` is gone — under it the veil a card wants goes negative, and a
- * black overlay can only darken.
+ * card, and this one is the free one.
  *
  * And **nothing here idles**. The grain is a function of the pixel, not of the
  * clock: it is fixed in the frame like grain on a plate, and a tile that
@@ -75,6 +89,7 @@ internal object StageLens {
             // than a radial gradient somebody liked.
             float("uTanHalf", (width * 0.5f) / focal)
             float("uVignette", VIGNETTE)
+            float("uExposure", AgX.stops(AgX.EXPOSURE_EV))
             float("uGrain", GRAIN)
             float("uAberration", ABERRATION)
         }
@@ -94,8 +109,11 @@ internal object StageLens {
         uniform float2 uRes;
         uniform float  uTanHalf;
         uniform float  uVignette;
+        uniform float  uExposure;
         uniform float  uGrain;
         uniform float  uAberration;
+
+${AgX.sksl().prependIndent("        ")}
 
         // Integer-free, so it is ES2-safe on both backends.
         float hash12(float2 p) {
@@ -106,9 +124,6 @@ internal object StageLens {
 
         float toLinear(float c) {
             return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
-        }
-        float toSrgb(float c) {
-            return c <= 0.0031308 ? c * 12.92 : 1.055 * pow(c, 1.0 / 2.4) - 0.055;
         }
 
         half4 main(float2 p) {
@@ -122,16 +137,19 @@ internal object StageLens {
                 content.eval(p).g,
                 content.eval(centre + offset * (1.0 - uAberration)).b);
 
-            // cos^4 of the off-axis angle, applied in linear because that is
-            // where light falls off.
+            // Everything that is about light reaching the film, in linear and
+            // in one place: the exposure, then cos^4 of the off-axis angle.
             float r = length(offset) / (uRes.x * 0.5);
             float t = r * uTanHalf;
             float q = 1.0 + t * t;
             float fall = mix(1.0, 1.0 / (q * q), uVignette);
-            rgb = float3(
-                toSrgb(toLinear(rgb.r) * fall),
-                toSrgb(toLinear(rgb.g) * fall),
-                toSrgb(toLinear(rgb.b) * fall));
+            float gain = uExposure * fall;
+            float3 lin = float3(toLinear(rgb.r), toLinear(rgb.g), toLinear(rgb.b)) * gain;
+
+            // And the film. `agx` hands back a display value, already carrying
+            // the transfer the panel wants, so there is no `toSrgb` after it —
+            // adding one would apply the curve twice and wash the whole picture.
+            rgb = agx(lin);
 
             // Grain last, in the space being quantised, under an envelope that
             // is zero at both ends by construction. Two hashes so it is TPDF —

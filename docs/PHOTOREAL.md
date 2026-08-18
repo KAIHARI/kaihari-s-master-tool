@@ -708,7 +708,7 @@ first phase that is not marked done and reads that stage in full before writing 
 | 2 | "Every faint white arrives at the brightness it was tuned for." | stage 2 | — |
 | 3 | "Cards stop being stickers laid on a picture of a desk." | stage 3, **plus stage 1's pile ruling** | 2 |
 | 4 | "It stops looking like a diagram of a table and starts looking like a photograph of one." | stage 7 **minus the tonemap** | 0 |
-| 5 | "Cards stop being sixty copies of one sprite." | stage 4, **and then the AgX stage 4 unblocks** | 2, 4 |
+| 5 | "Cards stop being sixty copies of one sprite." | stage 4. **AgX shipped early, in phase 4's lens** — see below | 2, 4 |
 | 6 | "The wall is plaster, the glass is glass, and daylight lands on the desk." | stage 5, and AAA #64 | 2 |
 | 7 | "Everything in the room is standing on the floor." | AAA #61d, as a set | 6 |
 | 8 | "It is a bedroom with a desk in it, not a desk with a wall behind it." | AAA #92 + #93, then the furniture | 1, 7 |
@@ -726,6 +726,17 @@ Three of those orderings are deliberate and each was argued rather than assumed.
   that stage is the pile's ruled side, and it belongs with the shadows because it is the
   same complaint — *the biggest object on the table is the most obviously wrong thing in
   the frame*.
+- **AgX did not need `Tone.veil` dead, and that ordering was wrong.** This document made
+  the tonemap wait for N2 because it assumed the curve would be applied *per surface* —
+  where a veil that has to compensate for it goes negative, and a black overlay can only
+  darken. Put over the finished picture, in the same `RenderEffect` as the vignette and
+  the grain, it never meets `Tone` at all. So it shipped with phase 4's lens.
+  `core/render/AgX.kt` is the curve, tested, and it generates its own SkSL so there is no
+  second copy to drift. Two things were measured on the way and both corrected this plan:
+  the **post-power of 1.2** is the ACES mistake in miniature — it halves a shadow edge,
+  6.56 codes to 3.15 — so the power is one and **+1.5 EV** carries the whole grade,
+  landing within three codes of every midtone this plan asked for. N2 is still owed; it
+  is a correctness debt rather than a blocker.
 - **The room is built before it is reflected.** Stage 6 bakes a probe of `SceneModel`'s
   own boxes, and a probe of an empty room is a flat wash on sixty cards. Building the
   furniture first is also what makes the golden re-record that stage costs worth paying

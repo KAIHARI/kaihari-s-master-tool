@@ -51,6 +51,13 @@ actual class StageEffect internal constructor(internal val builder: RuntimeShade
 
 actual fun compileStageEffect(sksl: String): StageEffect? =
     runCatching { StageEffect(RuntimeShaderBuilder(RuntimeEffect.makeForShader(sksl))) }
+        // Loud, once, and never per frame. A shader that fails to compile is
+        // indistinguishable from one that compiled and drew the identity — the
+        // fallback is deliberate and the silence is not. It has now cost two
+        // debugging rounds in this project: iteration 5's un-negated light, and
+        // a lens whose whole grade was a literal `${'$'}{...}` left in the source,
+        // which produced a picture that looked entirely plausible.
+        .onFailure { println("[stage-effect] $sksl\n$it") }
         .getOrNull()
 
 actual fun StageEffect.effect(uniforms: ShaderUniforms.() -> Unit): RenderEffect? {
