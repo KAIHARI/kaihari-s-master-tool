@@ -6,6 +6,7 @@ import com.kaiharimoto.mastertool.core.motion.Vec3
 import com.kaiharimoto.mastertool.core.scene.Scene
 import com.kaiharimoto.mastertool.core.scene.Scenery
 import com.kaiharimoto.mastertool.core.scene.TimeOfDay
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
@@ -177,17 +178,45 @@ class RoomLightTest {
             .pieces.first { it.name == "wall right" }
         val front = wall.box.faces().first { it.normal.y > 0.99f }
 
-        val wash = StageRig.wash(front, Vec3.Toward, night)
+        val wash = StageRig.wash(front, Vec3.Toward, night, samples = 9)
         assertTrue(wash != null, "the widest piece in the room is shaded flat")
         val ends = wash!!.stops.map { it.amount }
         assertTrue(
-            ends.first() != ends.last(),
+            ends.max() - ends.min() > 1e-3f,
             "the wash runs from ${ends.first()} to ${ends.last()}",
         )
-        // And it runs the way the room does: monotone from one end to the other.
+        // And it runs the way the room does: this is the wall the lamp stands
+        // in front of, so it is brightest opposite the lamp and falls away in
+        // both directions. It used to be asserted monotone, which was true of a
+        // wall that stopped 1.12 desk-widths out and stopped short of the pool;
+        // the room stands on the floor's own edge now, the wall runs past the
+        // lamp, and a pool with an end on it was the artefact.
+        val lamp = night.key.position!!
+        val peak = ends.indexOf(ends.max())
+        val at = wash.from + (wash.to - wash.from) * (peak / (ends.size - 1f))
+        assertTrue(
+            abs(at.x - lamp.x) < layout.cardWidth,
+            "the pool is at ${at.x} and the lamp at ${lamp.x}",
+        )
+        assertTrue(peak > 0 && peak < ends.lastIndex, "the pool is at an end of the wall: $ends")
+    }
+
+    @Test
+    fun aWallWithNoLampInFrontOfItFallsOffAllTheWayAcross() {
+        // The other half of the claim above, and what keeps it from being
+        // satisfied by noise: the wall on the far side of the room has the lamp
+        // off its end, so there is no peak to find and the grade runs one way.
+        val wall = Scenery.of(Scene.DESK, TimeOfDay.NIGHT, layout, surfaceWidth, surfaceHeight)
+            .pieces.first { it.name == "wall left" }
+        val front = wall.box.faces().first { it.normal.y > 0.99f }
+
+        val ends = StageRig.wash(front, Vec3.Toward, night, samples = 9)!!.stops.map { it.amount }
         val rising = ends.last() > ends.first()
         ends.zipWithNext { a, b ->
-            assertTrue(if (rising) b >= a - 1e-5f else b <= a + 1e-5f, "the wash is not monotone: $ends")
+            assertTrue(
+                if (rising) b >= a - 1e-5f else b <= a + 1e-5f,
+                "the wash is not monotone: $ends",
+            )
         }
     }
 

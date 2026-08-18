@@ -295,10 +295,16 @@ data class SceneModel(
      */
     val deskShadows: List<RoomShadow>
         get() {
-            // The desk is the ground piece whose top *is* the surface — there is
-            // exactly one, and finding it by geometry rather than by name means
-            // a renamed piece cannot silently stop casting.
-            val desk = ground.maxByOrNull { it.box.max.z } ?: return emptyList()
+            // The desk is the ground piece whose top *is* the surface, and the
+            // biggest of those — finding it by geometry rather than by name
+            // means a renamed piece cannot silently stop casting. The area is
+            // not a tie-break for tidiness: the walls reach the floor now, so
+            // the three skirts share the desk's own top edge exactly, and the
+            // desk beats each of them by a factor of forty.
+            val desk = ground
+                .filter { it.box.max.z >= ground.maxOf { other -> other.box.max.z } }
+                .maxByOrNull { (it.box.max.x - it.box.min.x) * (it.box.max.y - it.box.min.y) }
+                ?: return emptyList()
             return RoomShadows.onSurface(standing, lighting.key, desk.box)
         }
 
@@ -463,8 +469,17 @@ object Scenery {
     /** How thick the wall is. It only shows as a lip along the desk's far edge. */
     const val WALL_THICKNESS = 0.6f
 
-    /** How far the wall runs past the ends of the desk. Walls do not stop. */
-    const val WALL_OVERHANG = 1.12f
+    /**
+     * How far the walls stand past the ends of the desk, in card widths.
+     *
+     * The room's plan, and there is exactly one of it: the floor is this
+     * rectangle and the walls stand on its edges. It was two numbers — a wall
+     * 1.12 times the desk's own span and a floor eight card widths past it —
+     * and two numbers for one room is a room with a gap in it. The wall ended
+     * 530 pixels inside the floor, so past the wall's end you were looking over
+     * the floor's far edge into nothing.
+     */
+    const val ROOM_MARGIN = 8.0f
 
     // ---- the room below the desk ---------------------------------------------------
 
@@ -474,8 +489,24 @@ object Scenery {
     /** How thick the floor is. Only its top face is ever seen. */
     const val FLOOR_THICKNESS = 0.4f
 
-    /** How far the floor runs past the desk, in card widths. */
-    const val FLOOR_MARGIN = 8.0f
+    /**
+     * How far the room runs past the desk's near edge, in card widths.
+     *
+     * Measured rather than chosen: at a quarter turn the bottom corner of the
+     * picture looks past the near end of the room, and the hole there closes
+     * at eight and does not get smaller at sixteen. Half a metre of floor on
+     * the player's side of the desk, which is where the chair is.
+     */
+    const val ROOM_DEPTH = 8.0f
+
+    /**
+     * How far the floor runs past the walls, in card widths.
+     *
+     * A skirting board's worth, so that a wall standing on the floor's edge has
+     * floor under the whole of its thickness rather than exactly to its inside
+     * face. Everything else about the room's size is [ROOM_MARGIN].
+     */
+    const val FLOOR_MARGIN = 0.5f
 
     // ---- the window ------------------------------------------------------------------
 
@@ -955,10 +986,19 @@ object Scenery {
         // stops beyond the glass is a table you are sitting at.
         val near = maxOf(mat.bottom, surfaceHeight) + card * room.deskDepth
 
-        val wallOverhang = halfSpan * WALL_OVERHANG
+        // The room's plan: one rectangle, which the floor tiles and the three
+        // walls stand on the edges of. See [ROOM_MARGIN].
+        val wallOverhang = halfSpan + card * ROOM_MARGIN
         val wallLeft = mat.centerX - wallOverhang
         val wallRight = mat.centerX + wallOverhang
         val wallTop = tall * WALL_HEIGHT
+        // And where the floor is, which is a desk's height below the desk.
+        val underfoot = -card * DESK_STAND
+        // The room's near end: past the desk, because you are sitting there.
+        // A wall that stops where the desk stops leaves the bottom corner of
+        // the picture empty from about forty degrees of yaw, and the room only
+        // stops falling off the near corner at [ROOM_DEPTH].
+        val front = near + card * ROOM_DEPTH
 
         // The joinery's own two dimensions, needed here because the sill has to
         // leave the bottom rail somewhere to sit. See FRAME_PROUD.
@@ -1020,6 +1060,25 @@ object Scenery {
             box = SceneBox.standing(l, back, r, face, bottom, top),
         )
 
+        /** The same piece of wall, stood somewhere else along the room's depth. */
+        fun ScenePiece.fromTo(from: Float, to: Float) = copy(
+            box = SceneBox.standing(box.min.x, from, box.max.x, to, box.min.z, box.max.z),
+        )
+
+        /**
+         * What a wall stands on: the strip between the floor and the desk top.
+         *
+         * Below the felt, so it is [SceneModel.ground] and is painted before the
+         * felt — which is right, because it is behind and below everything the
+         * felt carries.
+         */
+        fun skirt(name: String, l: Float, r: Float, from: Float, to: Float, floor: Float) =
+            ScenePiece(
+                name = name,
+                surface = Surface.WALL,
+                box = SceneBox.standing(l, from, r, to, floor, 0f),
+            )
+
         // Everything from here to the bars stands in front of the wall's face
         // and never inside it. See FRAME_PROUD: the paint order is a separating
         // axis, and two boxes that share volume have no correct order at all.
@@ -1042,12 +1101,12 @@ object Scenery {
                     name = "floor",
                     surface = Surface.FLOOR,
                     box = SceneBox.standing(
-                        left = left - card * FLOOR_MARGIN,
+                        left = wallLeft - card * FLOOR_MARGIN,
                         top = back - card * FLOOR_MARGIN,
-                        right = right + card * FLOOR_MARGIN,
-                        bottom = near + card * FLOOR_MARGIN,
-                        floor = -card * (DESK_STAND + FLOOR_THICKNESS),
-                        ceiling = -card * DESK_STAND,
+                        right = wallRight + card * FLOOR_MARGIN,
+                        bottom = front,
+                        floor = underfoot - card * FLOOR_THICKNESS,
+                        ceiling = underfoot,
                     ),
                 ),
                 ScenePiece(
@@ -1055,7 +1114,14 @@ object Scenery {
                     surface = Surface.TABLE,
                     box = SceneBox.standing(
                         left = left,
-                        top = back,
+                        // Up against the wall's face, not under it. It ran back
+                        // to the wall's *back* face for as long as the wall
+                        // began at the desk top and so had nothing below it to
+                        // collide with. Now that the wall reaches the floor,
+                        // the strip under it is the skirt's, and two boxes that
+                        // share volume have no paint order at all — see the
+                        // three skirts below.
+                        top = face,
                         right = right,
                         bottom = near,
                         floor = -card * DESK_THICKNESS,
@@ -1064,6 +1130,49 @@ object Scenery {
                 ),
                 wall("wall left", wallLeft, openingLeft, 0f, wallTop),
                 wall("wall right", openingRight, wallRight, 0f, wallTop),
+                // The two returns and the three skirts, which are what makes
+                // this a room rather than a flat behind a desk.
+                //
+                // A back wall alone reads as a flat the moment the camera comes
+                // off yaw zero — which it now does, freely, on kai's "complete
+                // freedom and control". `theRoomFillsThePictureWhenTheTableIsTurned`
+                // measured ten holes in the picture at thirty degrees.
+                //
+                // Two things had to be true at once. The returns start at the
+                // back wall's *front* face and run toward the player, so the
+                // three walls meet along one edge each and share no volume —
+                // which is what `ScenePainter`'s separating axis needs. And
+                // every wall reaches the floor, which none of them did: they
+                // stood on z = 0, a desk's height in the air, and the desk hid
+                // the void under them only from straight ahead. Turn the table
+                // thirty degrees and you were looking under the wall.
+                //
+                // A wall that reaches the floor is two boxes, because
+                // `noPieceOfTheRoomStraddlesTheDeskTop` is what makes `ground`
+                // and `standing` a partition and so what gives the felt a place
+                // in the paint order. The seam is z = 0 and it is free: the two
+                // halves share a face and nothing else.
+                wall("wall side left", wallLeft, wallLeft + card * WALL_THICKNESS, 0f, wallTop)
+                    .fromTo(face, front),
+                wall("wall side right", wallRight - card * WALL_THICKNESS, wallRight, 0f, wallTop)
+                    .fromTo(face, front),
+                skirt("skirt back", wallLeft, wallRight, back, face, underfoot),
+                skirt(
+                    "skirt left",
+                    wallLeft,
+                    wallLeft + card * WALL_THICKNESS,
+                    face,
+                    front,
+                    underfoot,
+                ),
+                skirt(
+                    "skirt right",
+                    wallRight - card * WALL_THICKNESS,
+                    wallRight,
+                    face,
+                    front,
+                    underfoot,
+                ),
                 wall("sill", openingLeft, openingRight, 0f, sill),
                 wall("header", openingLeft, openingRight, head, wallTop),
                 ScenePiece(

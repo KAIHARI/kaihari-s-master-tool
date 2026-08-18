@@ -344,20 +344,61 @@ class SceneryTest {
     }
 
     @Test
-    fun theWallStandsOnTheDeskRatherThanThroughIt() {
-        // The wall used to carry a skirt down to the desk's underside. It is
-        // hidden by the desk top from every angle *and painted over it*, because
-        // the wall's tall front-top corner outruns the desk's near edge below
-        // about twenty-seven degrees of pitch — which ate thirty of the forty
-        // pixels of bare wood between the wall and the mat.
-        val desk = piece("desk").box
-        assertEquals(0f, walls().minOf { it.box.min.z }, 1e-3f, "the wall does not stand on the desk")
-        walls().forEach { wall ->
-            assertTrue(wall.box.min.z >= 0f, "${wall.name} hangs below the desk top")
-            assertTrue(wall.box.min.y >= desk.min.y, "${wall.name} is behind the desk's far edge")
-            assertTrue(wall.box.max.y <= desk.max.y, "${wall.name} is past the desk")
+    fun everyWallReachesTheFloorAndIsTwoPiecesBecauseOfIt() {
+        // The walls stood on z = 0 — a desk's height in the air — and the desk
+        // hid the void under them from straight ahead and from nowhere else.
+        // Turn the table thirty degrees and you were looking under the wall:
+        // two of the ten holes `theRoomFillsThePictureWhenTheTableIsTurned`
+        // measured were exactly that, and the rest were the missing returns.
+        //
+        // Each wall is two boxes because `noPieceOfTheRoomStraddlesTheDeskTop`
+        // is what makes `ground` and `standing` a partition, and that partition
+        // is where the felt goes. The seam costs nothing: the halves share a
+        // face and no volume.
+        val floorTop = piece("floor").box.max.z
+        val standing = walls() + sideWalls()
+
+        assertEquals(0f, standing.minOf { it.box.min.z }, 1e-3f, "a wall does not stand on the desk")
+        assertTrue(skirts().isNotEmpty(), "the walls stand on nothing")
+        skirts().forEach { skirt ->
+            assertEquals(0f, skirt.box.max.z, 1e-3f, "${skirt.name} does not reach the desk top")
+            assertEquals(floorTop, skirt.box.min.z, 1e-3f, "${skirt.name} does not reach the floor")
         }
+        // And there is no wall standing on nothing: every standing wall's
+        // footprint is covered by a skirt.
+        standing.forEach { wall ->
+            assertTrue(
+                skirts().any { under ->
+                    under.box.min.x <= wall.box.min.x + 1e-3f &&
+                        under.box.max.x >= wall.box.max.x - 1e-3f &&
+                        under.box.min.y <= wall.box.min.y + 1e-3f &&
+                        under.box.max.y >= wall.box.max.y - 1e-3f
+                },
+                "${wall.name} has no skirt under it",
+            )
+        }
+    }
+
+    @Test
+    fun theDeskIsPushedUpAgainstTheWallRatherThanRunningUnderIt() {
+        // It ran back to the wall's *back* face, which was free for as long as
+        // the wall began at the desk top and so had nothing below it to collide
+        // with. A wall that reaches the floor claims that strip, and two boxes
+        // that share volume have no paint order at all.
+        val desk = piece("desk").box
         assertEquals(0f, desk.max.z, 1e-3f)
+        assertEquals(
+            walls().minOf { it.box.max.y },
+            desk.min.y,
+            1e-3f,
+            "the desk does not meet the wall's face",
+        )
+        sideWalls().forEach { wall ->
+            assertTrue(
+                wall.box.max.x <= desk.min.x + 1e-3f || wall.box.min.x >= desk.max.x - 1e-3f,
+                "${wall.name} stands in the desk",
+            )
+        }
     }
 
     @Test
@@ -663,6 +704,40 @@ class SceneryTest {
         }
     }
 
+    @Test
+    fun theRoomFillsThePictureThroughAQuarterTurnEitherWay() {
+        // The test above sweeps four seats and every one of them sits at yaw
+        // zero, so for as long as it has existed it has only ever asked whether
+        // the room closes *straight ahead*. The camera turns — kai's own words
+        // were "complete freedom and control" — and the moment it does, a room
+        // made of one back wall has nothing at its sides.
+        //
+        // `theFloorClosesHolesTheDeskLeavesWhenTheTableTurns` measured that and
+        // deliberately only claimed the floor *helps*, naming the residual
+        // rather than hiding it. This is the claim that residual has to clear,
+        // and it is written at the pose the stage now opens at because that is
+        // where half the picture is room.
+        //
+        // **A quarter turn, and the limit is honest rather than convenient.**
+        // The room has three walls and no ceiling: past about fifty degrees the
+        // top corner of the glass looks over the wall, and past about ninety you
+        // are looking at where the fourth wall would be. Those are objects to
+        // build, not a sweep to widen — `docs/PHOTOREAL.md`'s phase 8. Turning
+        // the table a quarter turn either way is every angle a player plays
+        // from, and it is the whole of what these five pieces promise.
+        val opening = StageTuning.DEFAULT.camera.pose()
+
+        (-45..45 step 5).forEach { yaw ->
+            val plane = opening.copy(yawDegrees = yaw.toFloat())
+                .planeFor(surfaceWidth, surfaceHeight)
+            assertEquals(
+                0,
+                misses(room().pieces, plane),
+                "a hole in the picture with the table turned $yaw degrees",
+            )
+        }
+    }
+
     // ---- the minimal stage is untouched -------------------------------------------------
 
     @Test
@@ -824,8 +899,34 @@ class SceneryTest {
     private fun piece(name: String, time: TimeOfDay = TimeOfDay.NIGHT): ScenePiece =
         room(time).pieces.single { it.name == name }
 
-    private fun walls(): List<ScenePiece> =
-        room().pieces.filter { it.surface == Surface.WALL }
+    /**
+     * The **back** wall's pieces: the four the window is a hole in.
+     *
+     * Scoped to that slab rather than to `Surface.WALL`, and the distinction is
+     * load-bearing. The room grew two side returns, which are wall in every
+     * sense that matters to the renderer — and the two claims below this are
+     * about the *back* wall specifically: that its pieces tile one rectangle
+     * with the window's hole in it, and that it stands on the desk rather than
+     * running past it. A filter on the surface quietly swept the returns into
+     * both and made one of them arithmetically false.
+     */
+    private fun walls(): List<ScenePiece> {
+        val standing = room().pieces.filter { it.surface == Surface.WALL && it.box.min.z >= 0f }
+        val back = standing.minOf { it.box.min.y }
+        return standing
+            .filter { it.box.min.y <= back + 1e-3f && it.box.max.y <= back + 1e-3f + WALL_SLAB }
+    }
+
+    /** The two returns that close the room when the table turns. */
+    private fun sideWalls(): List<ScenePiece> =
+        room().pieces.filter { it.surface == Surface.WALL && it.box.min.z >= 0f } - walls().toSet()
+
+    /** What every wall stands on: the strip between the floor and the desk top. */
+    private fun skirts(): List<ScenePiece> =
+        room().pieces.filter { it.surface == Surface.WALL && it.box.max.z <= 0f }
+
+    /** How thick the back wall's slab is, in mat pixels, for [walls]. */
+    private val WALL_SLAB: Float get() = layout.cardWidth * Scenery.WALL_THICKNESS + 1e-3f
 
     private fun rigEye(plane: StagePlane): Vec3 =
         com.kaiharimoto.mastertool.core.render.StageRig.eye(plane.tiltDegrees, plane.yawDegrees)
@@ -899,7 +1000,21 @@ class SceneryTest {
 
     private companion object {
         /** How many objects the room may add to a stage that already holds sixty. */
-        const val BUDGET = 20
+        /**
+         * How many pieces the room may be.
+         *
+         * It was twenty, written when the room was a back wall with a window in
+         * it and a lamp — a flat behind a desk, which is what it looks like the
+         * moment the camera comes off yaw zero. Closing it costs five: two
+         * returns, and a skirt under each of the three walls, because a wall
+         * that reaches the floor has to be two boxes to keep `ground` and
+         * `standing` a partition.
+         *
+         * Raised deliberately and on the record rather than bumped: the room
+         * comes out of the same budget the sixty cards do, and `docs/AAA.md`
+         * #92's retained scene is what buys the next increase.
+         */
+        const val BUDGET = 24
 
         /** Touching on a face is a joint; a hair past it is an overlap. */
         const val GAP = 1e-3f
