@@ -28,6 +28,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.lerp
 import kotlin.math.abs
+import kotlin.math.pow
+import com.kaiharimoto.mastertool.core.scene.RoomShadow
+import com.kaiharimoto.mastertool.core.render.Outset
+import com.kaiharimoto.mastertool.core.motion.Vec2
 
 /**
  * The room: the furniture the mat is lying on, and what is behind it.
@@ -752,3 +756,74 @@ private fun poolBrush(pool: LightPool, surface: Color): Brush = Brush.radialGrad
     center = Offset(pool.foot.x, pool.foot.y),
     radius = pool.radius,
 )
+
+/**
+ * The shadows the room throws on its own desk, painted with the desk.
+ *
+ * A decal on a receiver, never a piece: `ScenePainter` sorts the room by a
+ * separating axis and there is no depth buffer for anything to disagree with, so
+ * a shadow that entered the ordering would be the one thing able to contradict
+ * it. This runs between the ground pieces and the standing ones — after the desk
+ * it lands on and before the lamp that throws it — which is the seam the felt
+ * already uses.
+ *
+ * Darkened by `StageRig.occlusion` rather than by a chosen alpha, so it is the
+ * desk seen with the key taken away rather than a grey shape laid over it. Same
+ * arithmetic as a card's shadow, and deliberately: two shadow models on one
+ * surface would disagree about the room the moment either was tuned.
+ */
+internal fun DrawScope.drawRoomShadows(
+    shadows: List<RoomShadow>,
+    stage: StagePlane,
+    eye: Vec3,
+    look: StageLook,
+) {
+    if (shadows.isEmpty()) return
+
+    shadows.forEach { shadow ->
+        val flat = shadow.corners.map { corner ->
+            val landed = stage.flatten(corner)
+            Offset(landed.x, landed.y)
+        }
+        if (flat.size < 3) return@forEach
+
+        val darkest = StageRig.occlusion(
+            SURFACE_UP,
+            eye,
+            look.lighting,
+            shadow.corners.firstOrNull(),
+        )
+        if (darkest <= 0.004f) return@forEach
+
+        // Feathered the way a card's is: a handful of rings rather than one hard
+        // quad, because the lamp has a real angular size and its edge is soft
+        // over several mat pixels. Fewer rings than a card gets — this is
+        // furniture, it never moves, and nobody is looking at its edge.
+        val rings = if (shadow.spread <= 1f) 1 else ROOM_SHADOW_RINGS
+        val step = 1f - (1f - darkest).pow(1f / rings)
+
+        for (ring in 0 until rings) {
+            val grow = shadow.spread * ring / rings
+            val path = Path().apply {
+                val grown = if (grow <= 0f) flat.map { Vec2(it.x, it.y) }
+                else Outset.of(flat.map { Vec2(it.x, it.y) }, grow)
+                moveTo(grown[0].x, grown[0].y)
+                grown.drop(1).forEach { lineTo(it.x, it.y) }
+                close()
+            }
+            drawPath(path, color = look.shadow.copy(alpha = step))
+        }
+    }
+}
+
+/** The felt's own normal, for the surface every room shadow lands on. */
+private val SURFACE_UP = Vec3(0f, 0f, 1f)
+
+/**
+ * How many rings a room shadow's penumbra gets.
+ *
+ * Three rather than the card's five. The lamp does not move, its shadow does not
+ * move, and the edge nobody is looking at does not need two more draw calls per
+ * frame to be soft enough.
+ */
+private const val ROOM_SHADOW_RINGS = 3

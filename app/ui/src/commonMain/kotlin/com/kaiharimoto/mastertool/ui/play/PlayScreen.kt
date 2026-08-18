@@ -1067,6 +1067,10 @@ fun PlayScreen(
                         grainPitch = layout.cardWidth,
                     )
                     drawFelt(layout, camera.plane, camera.eye, look, pool, weave)
+                    // Between the desk and the lamp, which is where a shadow on
+                    // the desk belongs: after the surface it lands on, before
+                    // the fixture that throws it. `AAA.md` #61d.
+                    drawRoomShadows(scenery.deskShadows, camera.plane, camera.eye, look)
                     drawScene(scenery.standing, camera.plane, camera.eye, look)
                     drawMatControls(layout, play.field)
                     play.carried.forEach {

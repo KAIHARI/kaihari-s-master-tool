@@ -280,6 +280,28 @@ data class SceneModel(
     val ground: List<ScenePiece> get() = pieces.filter { it.box.max.z <= 0f }
     val standing: List<ScenePiece> get() = pieces.filter { it.box.max.z > 0f }
 
+    /**
+     * What the room throws on its own desk top, solved with the furniture.
+     *
+     * Everything standing on the desk, and only onto the desk: `AAA.md` #61d's
+     * "as a set" is a promise about one surface at a time, and the surface every
+     * fixture on this stage is touching is z = 0. A shadow does not bend over an
+     * edge onto a second receiver unless it is cast against that one too, which
+     * is a thing to add when there is a second thing standing somewhere else.
+     *
+     * Painted between [ground] and [standing] — after the desk it lands on and
+     * before the lamp that throws it — which is the same seam the felt already
+     * uses and for the same reason.
+     */
+    val deskShadows: List<RoomShadow>
+        get() {
+            // The desk is the ground piece whose top *is* the surface — there is
+            // exactly one, and finding it by geometry rather than by name means
+            // a renamed piece cannot silently stop casting.
+            val desk = ground.maxByOrNull { it.box.max.z } ?: return emptyList()
+            return RoomShadows.onSurface(standing, lighting.key, desk.box)
+        }
+
     companion object {
         val Empty = SceneModel(emptyList())
     }
@@ -1221,3 +1243,32 @@ object Scenery {
             }
         }
 }
+
+/**
+ * Whether this surface is part of the room's shell rather than a thing in it.
+ *
+ * The shell is the room — the walls, the floor, the window and the joinery
+ * around it — and the distinction earns its place by deciding which pieces throw
+ * shadows onto the desk (`RoomShadows`). Two of them were bugs before it
+ * existed. The **wall** cast a broad dark band across the back of the desk,
+ * thrown by the very surface the daylight arrives through: a wall with a window
+ * in it is the aperture, not an occluder of its own window. And the **joinery**
+ * would throw bars of shadow across the desk, which a real window does and this
+ * room cannot have yet — that is `AAA.md` #61c, cut once already because the rig
+ * lights the desk from the window's direction so anything drawn on top of it
+ * comes out darker than the wood. It needs the day key split into sky and sun.
+ *
+ * Geometry could not tell these apart. Containment in the desk's footprint
+ * catches the wall, which overhangs it, and misses the joinery, which is
+ * narrower than the desk. Depth catches neither, because the frame is built
+ * *proud* of the wall and stands in front of it. What actually separates a lamp
+ * from a window is what it is, so that is what is asked.
+ *
+ * Exhaustive on purpose: a new [Surface] will not compile until somebody has
+ * said which side of this line it falls on.
+ */
+val Surface.isShell: Boolean
+    get() = when (this) {
+        Surface.WALL, Surface.FLOOR, Surface.GLASS, Surface.FRAME -> true
+        Surface.TABLE, Surface.SHADE, Surface.GLOW, Surface.BRASS -> false
+    }

@@ -904,4 +904,73 @@ class SceneryTest {
         /** Touching on a face is a joint; a hair past it is an overlap. */
         const val GAP = 1e-3f
     }
+
+    // ---- the room throws shadows on itself, as a set --------------------------
+
+    @Test
+    fun everyFixtureOnTheDeskThrowsAShadowAndTheRoomItselfDoesNot() {
+        // `docs/AAA.md` #61d's "as a set", checkable. The argument for having no
+        // room shadows at all was that one object throwing one reads as the
+        // thing that got special treatment — so the answer is not one lamp with
+        // a shadow, it is every fixture or none.
+        //
+        // Two things are deliberately outside the set and both were bugs first.
+        // The **wall** overhangs the desk and was in the first version, which
+        // drew a broad dark band across the back of it thrown by the very
+        // surface the daylight arrives through. And the **window's joinery** is
+        // narrower than the desk and therefore inside it — it would throw bars
+        // of shadow across a real desk, and that is `AAA.md` #61c, which is cut
+        // until the day key is split into sky and sun. Casting it now would be
+        // the same double-darkening that got the daylight patch deleted.
+        listOf(TimeOfDay.DAY, TimeOfDay.NIGHT).forEach { hour ->
+            val model = room(hour)
+            val desk = model.ground.maxByOrNull { it.box.max.z }!!
+            val casters = model.deskShadows.map { it.caster }.toSet()
+
+            fun inside(piece: ScenePiece) =
+                piece.box.min.x >= desk.box.min.x && piece.box.max.x <= desk.box.max.x &&
+                    piece.box.min.y >= desk.box.min.y && piece.box.max.y <= desk.box.max.y
+
+            val fixtures = model.standing.filter {
+                !it.surface.isShell && inside(it) && it.box.min.z > 0.1f
+            }
+
+            assertTrue(
+                fixtures.isNotEmpty(),
+                "at $hour nothing stands clear on the desk, so this test proves nothing",
+            )
+            fixtures.forEach { piece ->
+                assertTrue(
+                    piece.name in casters,
+                    "at $hour ${piece.name} stands on the desk and throws no shadow",
+                )
+            }
+            assertTrue(
+                model.standing.filter { it.surface.isShell }.none { it.name in casters },
+                "at $hour the room's own shell is casting on the desk: $casters",
+            )
+        }
+    }
+
+    @Test
+    fun aRoomShadowLandsOnTheDeskAndNotThroughIt() {
+        val room = room(TimeOfDay.NIGHT)
+
+        room.deskShadows.forEach { shadow ->
+            shadow.corners.forEach { corner ->
+                assertEquals(
+                    0f,
+                    corner.z,
+                    "${shadow.caster} threw a shadow off the surface it lands on",
+                )
+            }
+            // Four for a box, eight for anything turned: a round foot throwing
+            // a hard-cornered rectangle is the one part of this a person notices
+            // straight away, so a lathe's shadow gets an octagon.
+            assertTrue(
+                shadow.corners.size == 4 || shadow.corners.size == 8,
+                "${shadow.caster} cast ${shadow.corners.size} corners",
+            )
+        }
+    }
 }
