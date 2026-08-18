@@ -45,8 +45,8 @@ against but *"the bookshelf exists and has books in it"* is.
 | Zones | outlines. Should be inlay or engraving, and lit as such |
 | Window | **a window**: four panes, a frame, a graded sky |
 | Sun outside | not possible through this window — iteration 8 has the numbers |
-| Floor | a flat plane, and the room's plan: the walls stand on its edges |
-| Wall | **a fifth of the screen**, and painted rather than void |
+| Floor | **boards**, flat: the room's plan, and the walls stand on its edges |
+| Wall | **plaster**, per-pixel: a slow drift of tone and the float's own relief |
 | Side walls | **two returns**, standing on the floor like the back wall does |
 | Ceiling | does not exist. The room is open above |
 | Millennium Puzzle | **deleted** — see iteration 13. Nothing stands on the left of the desk |
@@ -1585,6 +1585,115 @@ thirty-five degrees — a pure-black wedge before, a lit wall after.
 
 ---
 
+### Iteration 27 — the picture is put on film
+
+The desk scenes were a lit table in a room that had fallen off the bottom of the
+range: the wall read code 62, the desk 45, the floor 17. Correct arithmetic about
+a room nobody could see. `core/render/AgX.kt` is the curve, `StageLens` is where
+it goes — over the finished picture, after the exposure and the vignette and
+before the grain — and the day room comes up about a stop: **wall 62 to 115, desk
+45 to 84, a card's art 138 to 180, and a card's white bar does not move**, which
+is what a shoulder is for.
+
+Three things it corrected in the plan that asked for it, and all three were
+measurements rather than opinions.
+
+**AgX did not need `Tone.veil` dead.** `PHOTOREAL.md` made it wait for N2 because
+it assumed the curve would be applied per *surface*, where a veil compensating
+for it goes negative and a black overlay can only darken. A grade over the
+finished picture never meets `Tone` at all. The veil's own error is still real
+and still owed — it is a correctness debt, not a blocker, and the difference is
+what a measurement is for.
+
+**The post-power of 1.2 is the ACES mistake in miniature.** A power over one
+applies to the *display* value, so it costs most where that value is smallest: at
+a linear 0.002 — a shadow edge, a pile side — plain sRGB is 6.59 codes, AgX as
+published is **6.56**, and AgX to the 1.2 is **3.15**. Half the bottom of the
+range, on the stage whose identity is that range. So the power is one, +1.5 EV
+carries the whole grade, and it lands within three codes of every midtone the
+plan wanted for four codes at the top.
+
+**And true black survives by construction.** `log2(0)` clamps to `MIN_EV`, the
+normalisation sends that to zero, and the sigmoid's constant term is negative
+there — so the clamp has something to clamp and `#000000` comes back `#000000` at
+every exposure there is.
+
+The other half is `AgX.sksl()`, which emits the same arithmetic as `AgX.tonemap`
+from the same constants. That is `PHOTOREAL.md` §0's answer to the one structural
+hole in this project's fidelity discipline — shader text is unreachable from
+`commonTest` on either platform, so a shader is the only lighting in the app with
+no test under it. A generator does not fix that in general; it fixes it for
+anything generated.
+
+**And it shipped invisible first.** The grade was a literal dollar-brace
+interpolation left unevaluated in the source, `runCatching` swallowed the compile
+error, and the picture that came back was entirely plausible — every region
+moved, in the right direction, by exactly the amount that losing the *vignette*
+moves it. Five minutes of arithmetic said so: nothing matched any single
+exposure, and everything matched "the lens is gone". Both seams print once on a
+failed compile now. A silent null is the one thing this seam cannot afford and it
+has now cost two rounds.
+
+---
+
+### Iteration 28 — the floor was a hole, and the wall had already said so
+
+`#0D0B09` is an albedo of thirteen out of 255. Everything the shading does is a
+multiply, so no light in this room could ever have found it: that is not a dark
+floor, it is the absence of one. The wall got exactly this correction one release
+ago — *"paint, not void"* — and the argument is copied verbatim, because it is
+the same bug at the surface nobody could see either.
+
+What made it visible was iteration 26. For as long as the walls stood a desk's
+height in the air and the desk hid what was under them, the floor was off screen;
+closed and standing on it, the floor is a lit wedge in the bottom corner of the
+picture at any yaw, and it was a black triangle with a hard edge against a
+properly lit desk.
+
+Boards, under the desk top rather than over it. The wedge goes **34 to 69 by day
+and sits at 27 by night**, so the rig still carries the fall-off it should — a
+floor further from every light in the room than the desk is *ought* to come back
+darker. What it may not be is a colour the rig has nothing to work with.
+
+---
+
+### Iteration 29 — a shader learns where it is standing
+
+The wall is most of the room and the room is half the picture, and after the
+tonemap it is a *bright* flat fill rather than a dark one. `Plaster` is the two
+things that stop paint reading as paper: a wall skimmed with a float is gently
+wavy, so light moves very slightly as it crosses it, and its tone is not uniform.
+
+The engineering is the coordinate. `WoodGrain` and `FeltWeave` are free of this —
+they draw on z = 0, where `flatten` is the identity, so a draw-scope pixel *is* a
+mat point. A wall stands up in the room, so a shader over it is handed mat pixels
+and no idea where they are. `Homography.rectToQuad` over the face's own two
+edges, inverted, is that map, and it is the use `Homography.inverse`'s KDoc was
+written for a release before there was a caller. The coordinates are world units
+on the wall's plane offset by where the face begins, so the four pieces tiling one
+wall around a window are one surface rather than four that each start again. The
+level of detail is analytic — `Homography.scaleAt`, `sqrt(|det|)/|w|^1.5`, tested
+against the area the map actually opens rather than against the formula — because
+there are no derivatives in AGSL or SkSL on either platform.
+
+**It was true and invisible first**, at 3.4 codes on a fifth of the screen, which
+is the same mistake as the foil streak and was caught the same way: by looking at
+it at 1x. Diagnosed rather than cranked. Variation at exactly one scale is a
+*texture*; what reads as a surface is variation at more than one. The tone now
+drifts at four float-sweeps and the relief stays at one, and the wall moves by up
+to **20 codes**.
+
+One thing it cannot do yet, and it is the room rather than the number: the relief
+reads at night and barely by day, because `DeskDay.key` comes *through* the
+window and therefore travels along the wall's own outward normal. The wall
+containing a window is the one surface that window cannot light, and by day it is
+nearly all ambient — where relief has nothing to catch. `AAA.md` #61c is the fix,
+and cranking the amplitude instead would make the night wall stucco.
+
+`Scene.MINIMAL` comes back bit-identical, checked rather than assumed.
+
+---
+
 ## 6. Seen, not yet done
 
 Things a look has already found, so the next iteration does not have to find
@@ -1600,6 +1709,29 @@ what the eye has caught and the hand has not reached.
   drawn and correct and invisible, because the felt they land on is `#0E0E12`.
   `AAA.md` #18 (shadows are not black) and #65 (the felt has a weave) are one
   item, not two: neither is worth doing without the other.
+- **The wall containing the window is the one surface that window cannot
+  light.** `DeskDay.key` travels along the wall's own outward normal, so by day
+  the whole back wall is ambient — no relief on it can catch anything, and any
+  material given to it will be pigment only until `AAA.md` #61c splits the key
+  into a sky that stands in front of the wall and a sun that comes through the
+  opening. Measured in iteration 29: the plaster moves the night wall by 19
+  codes and the day wall by 7.
+- **`Tone.veil` is still owed (N2).** AgX did not need it dead — see iteration
+  27 — but its error is real and unchanged: 1.19x too bright at a diffuse of
+  0.72 and 1.87x at 0.3, worst on the dark art it exists to keep readable. It is
+  a *multiply with an offset*, and that offset is the whole of it, so a
+  `BlendMode.Modulate` is the same arithmetic and fixes nothing. The honest form
+  is an affine `ColorMatrix` on the art's own painter — `k*c + (k-1)*0.055` —
+  and the trap is that Compose's `ColorMatrix` fifth column is 0..255 on Android
+  and 0..1 on Skiko, so it wants the tablet before a signed build.
+- **The pile's ruling is better than this list has said since iteration 0.** The
+  standing complaint is *"a 35-card deck is drawn as about seven thick slabs"*,
+  which was measured at a seat that no longer exists: at POV the deck's side is
+  about sixty pixels long, `LAYER_MIN_SPACING` allows thirty-five lines, and the
+  deck has thirty-four to draw — so every card is ruled. It is still a flat band
+  with an even hatch and it still wants `Homography.inverse` and a continuous
+  rule, but it is no longer the most obviously wrong thing in the frame and the
+  entry should stop saying so.
 - **Nothing on a card catches the light.** `Shading.of` puts a specular pool on
   the stock and at these sizes it is not reaching the picture. Worth measuring
   before assuming it needs to be stronger — the handbook is explicit that the
