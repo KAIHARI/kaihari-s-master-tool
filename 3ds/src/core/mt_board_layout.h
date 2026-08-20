@@ -32,6 +32,9 @@
 /** Below this a card is a coloured rectangle rather than a card. */
 #define MT_MIN_CARD_WIDTH 28.0f
 
+/** A Yu-Gi-Oh! card is 59 x 86mm. Written once; two copies would drift. */
+#define CARD_ASPECT_DEFAULT 0.686f
+
 typedef struct {
     MtBoardSlot slot;
     MtSlot rect;

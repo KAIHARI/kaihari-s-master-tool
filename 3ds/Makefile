@@ -134,6 +134,11 @@ else
 #---------------------------------------------------------------------------------
 DEPENDS := $(OFILES:.o=.d)
 
+# picasso and bin2s turn shaders/*.v.pica into a generated header, and main.c
+# includes it. Without this every source file races the shader build and the
+# first clean build fails on a missing scene_shbin.h.
+$(OFILES_SOURCES) : $(HFILES)
+
 # Assigned, not appended, and that is the whole point.
 #
 # This Makefile includes 3ds_rules at the top, so it is included *twice*: once
