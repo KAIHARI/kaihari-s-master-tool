@@ -93,6 +93,15 @@ Each ends in an installable `.cia` built by CI.
 |---|---|---|
 | **P0** | Skeleton, Makefile, RSF, CIA packaging, CI | in progress |
 | **P1** | The domain in C, proved by golden vectors | in progress |
+
+Ported and under vector so far: `mt_types`, `mt_board_layout`
+(`BoardLayouter.solve` and `slotAt`, all seventeen slots in the order ties
+depend on), `mt_drop` (the intent vocabulary and `SetPosition`), `mt_spring`,
+`mt_ydk`. 21,183 checks. Still to port: `PlayField`, `DropTargets.resolve`,
+`DropCommit`, `HandFan`, `PileFan`, `CardIndex`, `EffectMatching`.
+
+| | | |
+|---|---|---|
 | **P2** | citro3d, card solids, lighting LUTs, baked textures, stereo | |
 | **P3** | The bottom-screen control surface — **playable, the demo** | |
 | **P4** | Marker AR: camera, CV, pose, stereo compositing | |
