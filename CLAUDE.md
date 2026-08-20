@@ -262,6 +262,38 @@ be corrected.
   see `Tone.veil` for the numbers — so its darkness comes from the room falling
   away rather than from the cards going dim.
 
+## There is a second console, and it is a rewrite
+
+`3ds/` is a New 3DS port, sideloaded as a `.cia`. **`docs/PORT.md` is the
+authority** — read it before touching anything in there. The short version:
+
+- **It shares no code with `app/`, and cannot.** There is no Kotlin/Native or
+  JVM target for Horizon OS, and the PICA200 has no programmable fragment
+  shader — only a fixed-function lighting stage driven by lookup tables. It is C
+  against libctru and citro3d, sharing the *arithmetic* and the *design*.
+- **The arithmetic crosses over proved, not by hand.** `GoldenVectorExportTest`
+  (in `:core`'s jvmTest source set) sweeps each ported function over a grid and
+  writes `3ds/test/vectors/`; `3ds/test/mt_test.c` compiles the C with the *host*
+  compiler and asserts against the same files. `make -C 3ds/test test` is a
+  second's work on any machine and is the port's whole safety net.
+- **The vectors are committed, and CI diffs them.** A change in `:core` that
+  moves a zone will fail the `vectors` job. That is not a bug — it means the
+  console's copy of the rules has to move too, and the regenerated file belongs
+  in the same commit so the change is visible in review.
+- **`3ds/src/core/` may never include a libctru header.** That one rule is what
+  keeps the above true. It is the same rule that keeps `:core` compiling in a
+  sandbox where `:ui` cannot.
+- **The port deletes rather than ports the projection layer.** `StagePlane`,
+  `CarryHeight` and `MatInput.handQuad` exist because Compose has no real 3D;
+  citro3d has matrices and the bottom screen is orthographic, so three of the six
+  load-bearing play-stage rules above become vacuous rather than translated.
+- **Two numbers are permanent**, the same class as the Android `versionCode`
+  floor: `UniqueId` `0xFF4D7` in `3ds/app.rsf`, and the `3ds/VERSION` triple,
+  which may only go up. And a `.3dsx` inherits its host's permissions while a
+  `.cia` gets only what its RSF grants — a missing service is a black screen
+  after install, not a build error, which is why `app.rsf` already lists every
+  service the app will ever call.
+
 ## Roadmap State
 
 Shipped: the full deck builder (drag-and-drop, exact consistency calculator,
