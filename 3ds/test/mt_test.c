@@ -20,6 +20,7 @@
 #include "../src/core/mt_board_layout.h"
 #include "../src/core/mt_drop.h"
 #include "../src/core/mt_spring.h"
+#include "../src/core/mt_ydk.h"
 #include "../src/core/mt_types.h"
 
 static int g_checks = 0;
@@ -318,6 +319,113 @@ static int test_spring(void) {
     return rows;
 }
 
+/* ---- deck files -------------------------------------------------------- */
+
+static char *slurp(const char *path, size_t *len) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (n < 0) { fclose(f); return NULL; }
+    char *buf = malloc((size_t)n + 1);
+    if (!buf) { fclose(f); return NULL; }
+    size_t got = fread(buf, 1, (size_t)n, f);
+    fclose(f);
+    buf[got] = '\0';
+    *len = got;
+    return buf;
+}
+
+/*
+ * The label says where the input came from: `case/` for the synthetic files
+ * written beside the vectors, `repo/` for real decks at the repository root.
+ * The prefixes exist because two different decks in this repository are both
+ * called lab.ydkx, and a bare file name made them one key.
+ */
+static void resolve_deck_path(const char *label, char *out, size_t cap) {
+    if (strncmp(label, "case/", 5) == 0)      snprintf(out, cap, "vectors/%s", label);
+    else if (strncmp(label, "repo/", 5) == 0) snprintf(out, cap, "../../%s", label + 5);
+    else                                      snprintf(out, cap, "%s", label);
+}
+
+static int test_ydk(void) {
+    FILE *f = open_vectors("ydk.txt");
+    char line[8192];
+    char *v[512];
+    int rows = 0;
+
+    char loaded_label[256] = "";
+    char *text = NULL;
+    size_t text_len = 0;
+    MtYdkDocument doc;
+    memset(&doc, 0, sizeof doc);
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+
+        /* `created` takes the rest of the line, so it is read before the line
+         * is chopped into fields - a name may contain spaces. */
+        char raw[8192];
+        snprintf(raw, sizeof raw, "%s", line);
+        char *nl = strpbrk(raw, "\r\n");
+        if (nl) *nl = '\0';
+
+        int n = split(line, v, 512);
+        if (n < 2) { fprintf(stderr, "%s:%d: short line\n", g_file, g_line); ++g_failures; continue; }
+
+        const char *label = v[0];
+        const char *key = v[1];
+
+        if (strcmp(label, loaded_label) != 0) {
+            free(text);
+            char path[512];
+            resolve_deck_path(label, path, sizeof path);
+            text = slurp(path, &text_len);
+            if (!text) {
+                fprintf(stderr, "%s:%d: cannot read %s\n", g_file, g_line, path);
+                ++g_failures;
+                loaded_label[0] = '\0';
+                continue;
+            }
+            mt_ydk_parse(text, text_len, &doc);
+            snprintf(loaded_label, sizeof loaded_label, "%s", label);
+        }
+
+        if (!strcmp(key, "ydkx")) {
+            check_f("ydkx", mt_ydk_is_ydkx(&doc) ? 1.0f : 0.0f, (float)atof(v[2]));
+        } else if (!strcmp(key, "warnings")) {
+            check_f("warnings", (float)doc.warning_count, (float)atof(v[2]));
+        } else if (!strcmp(key, "created")) {
+            /* Everything after "<label> created " on the untouched line. */
+            const char *at = strstr(raw, " created ");
+            const char *want = at ? at + 9 : "-";
+            const char *got = doc.created_by[0] ? doc.created_by : "-";
+            check_s("createdBy", got, want);
+        } else {
+            const int *ids; int count;
+            if      (!strcmp(key, "main"))  { ids = doc.deck.main;  count = doc.deck.main_count; }
+            else if (!strcmp(key, "extra")) { ids = doc.deck.extra; count = doc.deck.extra_count; }
+            else if (!strcmp(key, "side"))  { ids = doc.deck.side;  count = doc.deck.side_count; }
+            else { fprintf(stderr, "%s:%d: unknown key '%s'\n", g_file, g_line, key); ++g_failures; continue; }
+
+            int want_count = atoi(v[2]);
+            check_f("section count", (float)count, (float)want_count);
+            for (int i = 0; i < want_count && 3 + i < n; ++i) {
+                char what[32];
+                snprintf(what, sizeof what, "%s[%d]", key, i);
+                check_f(what, i < count ? (float)ids[i] : -1.0f, (float)atof(v[3 + i]));
+            }
+        }
+        ++rows;
+    }
+    free(text);
+    fclose(f);
+    printf("  ydk              %4d records\n", rows);
+    return rows;
+}
+
 int main(void) {
     printf("mt conformance: the C port against :core's golden vectors\n");
     test_board_solve();
@@ -325,6 +433,7 @@ int main(void) {
     test_board_slot_at();
     test_set_position();
     test_spring();
+    test_ydk();
 
     printf("%d checks, %d failures\n", g_checks, g_failures);
     if (g_failures > 25) fprintf(stderr, "(%d further failures not shown)\n", g_failures - 25);

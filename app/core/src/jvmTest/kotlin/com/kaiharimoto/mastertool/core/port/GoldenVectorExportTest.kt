@@ -9,6 +9,7 @@ import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
 import com.kaiharimoto.mastertool.core.motion.SpringValue
 import com.kaiharimoto.mastertool.core.motion.Springs
+import com.kaiharimoto.mastertool.core.ydk.YdkCodec
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -240,6 +241,79 @@ class GoldenVectorExportTest {
             "spec v0 vel0 target dt step = value velocity settled",
             lines,
         )
+    }
+
+    /**
+     * Deck files, parsed by both sides from byte-identical inputs.
+     *
+     * The synthetic cases are *written out as real files* rather than described,
+     * so that the C reads exactly what the Kotlin read. A vector that quoted an
+     * input inside itself would need two escapings to agree, and the first
+     * disagreement between them would look like a parser bug.
+     *
+     * They are the awkward ones on purpose: a CRLF file, a UTF-8 BOM, a file
+     * with no section marker at all, `!side` before `#extra`, junk lines, a
+     * `#Created By` in the wrong case (which the Kotlin matches
+     * case-insensitively and then strips case-*sensitively*, keeping the whole
+     * string - a quirk the port reproduces rather than corrects), and a
+     * `#ydkx-extended` block that is not readable and must be dropped.
+     */
+    @Test
+    fun `ydk documents`() {
+        val dir = File(vectorDir(), "case")
+        dir.mkdirs()
+
+        val cases = linkedMapOf(
+            "plain.ydk" to "#main\n46986414\n46986414\n#extra\n#side\n",
+            "crlf.ydk" to "#main\r\n46986414\r\n89631139\r\n!side\r\n38033121\r\n",
+            "bom.ydk" to "\uFEFF#main\n46986414\n",
+            "no-marker.ydk" to "46986414\n89631139\n",
+            "side-first.ydk" to "#main\n46986414\n!side\n38033121\n#extra\n1861629\n",
+            "junk.ydk" to "#main\n46986414\nnot-a-card\n  \n12x34\n89631139\n",
+            "created-wrong-case.ydk" to "#Created By kai\n#main\n46986414\n",
+            "created-lower.ydk" to "#created by kai\n#main\n46986414\n",
+            "comment.ydk" to "#this is a comment\n#main\n46986414\n",
+            "negative.ydk" to "#main\n-46986414\n46986414\n",
+            "huge-id.ydk" to "#main\n999999999999\n46986414\n",
+            "ydkx-good.ydkx" to
+                "#main\n46986414\n#ydkx-extended\n{\"groups\":[{\"name\":\"Starters\"}],\"notes\":{}}\n",
+            "ydkx-broken.ydkx" to "#main\n46986414\n#ydkx-extended\n{\"groups\": [\n",
+            "ydkx-empty.ydkx" to "#main\n46986414\n#ydkx-extended\n",
+        )
+        cases.forEach { (name, body) -> File(dir, name).writeText(body) }
+
+        // The real ones too. A synthetic suite proves the edge cases; a deck
+        // somebody actually built proves the ordinary case, which is the one
+        // that has to work on the console.
+        // Labelled by where they came from, not by their file name. The
+        // repository holds *two different decks* both called lab.ydkx - one at
+        // the root and one in ydk/ - so a label of `it.name` silently gave two
+        // inputs the same key, and the conformance suite read the first file
+        // twice while comparing it against the second file's answers.
+        val repo = vectorDir().parentFile.parentFile.parentFile
+        val real = buildList {
+            add(File(repo, "lab.ydkx"))
+            File(repo, "ydk").listFiles()?.sortedBy { it.name }?.let(::addAll)
+        }
+
+        val entries = cases.keys.map { "case/$it" to File(dir, it) } +
+            real.filter { it.isFile }.map { "repo/${it.relativeTo(repo).invariantSeparatorsPath}" to it }
+
+        val lines = buildList {
+            for ((label, file) in entries) {
+                val result = YdkCodec.parse(file.readText())
+                val doc = result.document
+                add("$label ydkx ${b(doc.isYdkx)}")
+                add("$label warnings ${result.warnings.size}")
+                add("$label main ${doc.deck.main.size} ${doc.deck.main.joinToString(" ") { it.value.toString() }}".trim())
+                add("$label extra ${doc.deck.extra.size} ${doc.deck.extra.joinToString(" ") { it.value.toString() }}".trim())
+                add("$label side ${doc.deck.side.size} ${doc.deck.side.joinToString(" ") { it.value.toString() }}".trim())
+                // Last, and taking the rest of the line, because a name may
+                // contain spaces and this format splits on them.
+                add("$label created ${doc.createdBy ?: "-"}")
+            }
+        }
+        write("ydk.txt", "<file> <key> <values...>  (case/* live in vectors/case/, repo/* at the repo root)", lines)
     }
 
     /** The stable spelling of a slot, shared with the C by convention. */
