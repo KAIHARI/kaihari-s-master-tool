@@ -7,7 +7,10 @@ name: Build for 3DS
 #   conformance  - host gcc, no devkitARM. The C port against :core's vectors.
 #   vectors      - :core:jvmTest regenerates the vectors; a diff means the
 #                  tablet's behaviour moved and the port has not been told.
-#   3ds          - devkitARM in a container. The .3dsx and the .cia.
+#   homebrew     - devkitARM in a container. The .3dsx and the .cia.
+#                  (Named 'homebrew' and not '3ds': an Actions job id may
+#                  not start with a digit, and the whole workflow fails to
+#                  parse if one does - reported as a run with zero jobs.)
 
 on:
   push:
@@ -72,7 +75,7 @@ jobs:
             exit 1
           fi
 
-  3ds:
+  homebrew:
     name: 3DSX and CIA
     runs-on: ubuntu-latest
     container:
