@@ -10,6 +10,7 @@ import com.kaiharimoto.mastertool.core.motion.SpringSpec
 import com.kaiharimoto.mastertool.core.motion.SpringValue
 import com.kaiharimoto.mastertool.core.motion.Springs
 import com.kaiharimoto.mastertool.core.ydk.YdkCodec
+import kotlin.random.Random
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -314,6 +315,49 @@ class GoldenVectorExportTest {
             }
         }
         write("ydk.txt", "<file> <key> <values...>  (case/* live in vectors/case/, repo/* at the repo root)", lines)
+    }
+
+    /**
+     * The generator itself, before anything that uses it.
+     *
+     * `PlayField.riffled` writes Fisher-Yates out by hand instead of calling
+     * `shuffled(Random(seed))`, and its comment says why: the standard library
+     * may change its algorithm between versions and platforms, and a seed that
+     * dealt one hand on a tablet and another on a desktop would make every bug
+     * report about an opening hand unreproducible.
+     *
+     * That reasoning does not survive a port unless the *generator* crosses over
+     * with it. An identical Fisher-Yates fed by a different PRNG is a shuffle
+     * that is correct, deterministic and a different deal — the very failure the
+     * hand-written loop exists to prevent, walking in through the one door it
+     * left open. So `kotlin.random.Random` — XorWow, not `java.util.Random` — is
+     * reproduced in C, and this is what holds it there.
+     *
+     * The bounds are chosen to hit both branches of `nextInt(until)`: powers of
+     * two take the upper bits directly, everything else goes through a modulo
+     * with a rejection loop for the short tail.
+     */
+    @Test
+    fun `kotlin random`() {
+        val seeds = listOf(0L, 1L, 7L, 42L, -1L, 1234567890123L, Long.MIN_VALUE, Long.MAX_VALUE)
+        val bounds = listOf(2, 3, 5, 8, 16, 17, 40, 60, 1000, 65536)
+
+        val lines = buildList {
+            for (seed in seeds) {
+                // The raw stream first, which pins seeding and the 64 discarded
+                // outputs independently of any bound arithmetic.
+                val raw = Random(seed)
+                for (i in 0 until 24) add("raw $seed $i = ${raw.nextInt()}")
+
+                for (bound in bounds) {
+                    val random = Random(seed)
+                    for (i in 0 until 16) {
+                        add("bound $seed $bound $i = ${random.nextInt(bound)}")
+                    }
+                }
+            }
+        }
+        write("random.txt", "raw <seed> <i> = <int>  |  bound <seed> <bound> <i> = <int>", lines)
     }
 
     /** The stable spelling of a slot, shared with the C by convention. */

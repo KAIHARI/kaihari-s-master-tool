@@ -19,6 +19,7 @@
 
 #include "../src/core/mt_board_layout.h"
 #include "../src/core/mt_drop.h"
+#include "../src/core/mt_random.h"
 #include "../src/core/mt_spring.h"
 #include "../src/core/mt_ydk.h"
 #include "../src/core/mt_types.h"
@@ -45,6 +46,26 @@ static void check_f(const char *what, float got, float want) {
         if (g_failures <= 25) {
             fprintf(stderr, "%s:%d: %s got %.9g want %.9g\n",
                     g_file, g_line, what, (double)got, (double)want);
+        }
+    }
+}
+
+/*
+ * Exact, and separate from check_f on purpose.
+ *
+ * check_f's tolerance is absolute-plus-relative, which is right for a board
+ * coordinate and wrong for anything counted. At a card id of 46,986,414 the
+ * relative term alone is a tolerance of 470 - so a passcode off by a few
+ * hundred would have passed - and at a raw PRNG output near 2^31 it is about
+ * 19,000. A float cannot even represent a 32-bit integer exactly. Integers are
+ * compared as integers.
+ */
+static void check_i(const char *what, long long got, long long want) {
+    ++g_checks;
+    if (got != want) {
+        ++g_failures;
+        if (g_failures <= 25) {
+            fprintf(stderr, "%s:%d: %s got %lld want %lld\n", g_file, g_line, what, got, want);
         }
     }
 }
@@ -144,7 +165,7 @@ static int test_board_solve(void) {
         check_f("cardWidth",  l.card_width,  (float)atof(v[6]));
         check_f("cardHeight", l.card_height, (float)atof(v[7]));
         check_f("gap",        l.gap,         (float)atof(v[8]));
-        check_f("fits",       l.fits ? 1.0f : 0.0f, (float)atof(v[9]));
+        check_i("fits",       l.fits ? 1 : 0, atoll(v[9]));
 
         const MtSlot rects[4] = { l.field, l.hand, l.readout, mt_board_bounds(&l) };
         const char *names[4]  = { "field", "hand", "readout", "bounds" };
@@ -309,9 +330,9 @@ static int test_spring(void) {
 
         check_f("spring.value",    state.value,    (float)atof(v[7]));
         check_f("spring.velocity", state.velocity, (float)atof(v[8]));
-        check_f("spring.settled",
-                mt_spring_settled(state, target, 0.5f, 0.5f) ? 1.0f : 0.0f,
-                (float)atof(v[9]));
+        check_i("spring.settled",
+                mt_spring_settled(state, target, 0.5f, 0.5f) ? 1 : 0,
+                atoll(v[9]));
         ++rows;
     }
     fclose(f);
@@ -394,9 +415,9 @@ static int test_ydk(void) {
         }
 
         if (!strcmp(key, "ydkx")) {
-            check_f("ydkx", mt_ydk_is_ydkx(&doc) ? 1.0f : 0.0f, (float)atof(v[2]));
+            check_i("ydkx", mt_ydk_is_ydkx(&doc) ? 1 : 0, atoll(v[2]));
         } else if (!strcmp(key, "warnings")) {
-            check_f("warnings", (float)doc.warning_count, (float)atof(v[2]));
+            check_i("warnings", doc.warning_count, atoll(v[2]));
         } else if (!strcmp(key, "created")) {
             /* Everything after "<label> created " on the untouched line. */
             const char *at = strstr(raw, " created ");
@@ -411,11 +432,11 @@ static int test_ydk(void) {
             else { fprintf(stderr, "%s:%d: unknown key '%s'\n", g_file, g_line, key); ++g_failures; continue; }
 
             int want_count = atoi(v[2]);
-            check_f("section count", (float)count, (float)want_count);
+            check_i("section count", count, want_count);
             for (int i = 0; i < want_count && 3 + i < n; ++i) {
                 char what[32];
                 snprintf(what, sizeof what, "%s[%d]", key, i);
-                check_f(what, i < count ? (float)ids[i] : -1.0f, (float)atof(v[3 + i]));
+                check_i(what, i < count ? ids[i] : -1, atoll(v[3 + i]));
             }
         }
         ++rows;
@@ -423,6 +444,60 @@ static int test_ydk(void) {
     free(text);
     fclose(f);
     printf("  ydk              %4d records\n", rows);
+    return rows;
+}
+
+static int test_random(void) {
+    FILE *f = open_vectors("random.txt");
+    char line[256];
+    char *v[8];
+    int rows = 0;
+
+    /*
+     * Each block restarts the generator from its seed, so a wrong number of
+     * discarded outputs at seeding shows up on the first row of a block rather
+     * than as drift much later.
+     */
+    MtRandom r;
+    long long loaded_seed = 0;
+    int loaded_bound = -1;
+    int loaded_raw = 0;
+    int have = 0;
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+        int n = split(line, v, 8);
+
+        if (!strcmp(v[0], "raw")) {
+            if (n != 5) { fprintf(stderr, "%s:%d: expected 5 fields\n", g_file, g_line); ++g_failures; continue; }
+            long long seed = atoll(v[1]);
+            int i = atoi(v[2]);
+            if (!have || !loaded_raw || seed != loaded_seed || i == 0) {
+                mt_random_seed(&r, (int64_t)seed);
+                loaded_seed = seed; loaded_raw = 1; loaded_bound = -1; have = 1;
+            }
+            check_i("random.nextInt", mt_random_next_int(&r), atoll(v[4]));
+        } else if (!strcmp(v[0], "bound")) {
+            if (n != 6) { fprintf(stderr, "%s:%d: expected 6 fields\n", g_file, g_line); ++g_failures; continue; }
+            long long seed = atoll(v[1]);
+            int bound = atoi(v[2]);
+            int i = atoi(v[3]);
+            if (!have || loaded_raw || seed != loaded_seed || bound != loaded_bound || i == 0) {
+                mt_random_seed(&r, (int64_t)seed);
+                loaded_seed = seed; loaded_bound = bound; loaded_raw = 0; have = 1;
+            }
+            check_i("random.nextInt(bound)",
+                    mt_random_next_int_bound(&r, bound), atoll(v[5]));
+        } else {
+            fprintf(stderr, "%s:%d: unknown row '%s'\n", g_file, g_line, v[0]);
+            ++g_failures;
+            continue;
+        }
+        ++rows;
+    }
+    fclose(f);
+    printf("  random           %4d draws\n", rows);
     return rows;
 }
 
@@ -434,6 +509,7 @@ int main(void) {
     test_set_position();
     test_spring();
     test_ydk();
+    test_random();
 
     printf("%d checks, %d failures\n", g_checks, g_failures);
     if (g_failures > 25) fprintf(stderr, "(%d further failures not shown)\n", g_failures - 25);
