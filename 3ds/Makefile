@@ -190,11 +190,16 @@ $(OUTPUT).cia : $(OUTPUT).elf $(OUTPUT).bnr $(OUTPUT).icn $(RSF)
 	    -DAPP_ROMFS="$(TOPDIR)/$(ROMFS)"
 	@echo "built ... $(notdir $@)"
 
-%.shbin.o %_shbin.h : %.v.pica
-	@echo $(notdir $<)
-	@picasso -o $(notdir $*.shbin) $<
-	@bin2s -a 4 -H `(echo $(notdir $*) | tr . _)`_shbin.h $(notdir $*.shbin) | \
-	    $(AS) -o $*.shbin.o
+# The canonical pair, and not hand-rolled on purpose.
+#
+# 3ds_rules already knows how to turn a .v.pica into a .shbin with picasso, and
+# base_tools (which it includes, via base_rules) defines bin2o - which runs
+# bin2s with the right alignment, derives the header name from the input, and
+# assembles through $(CC) rather than $(AS) so CPPFLAGS reach it. A local
+# version of that has to get all four of those right and gains nothing.
+%.shbin.o %_shbin.h : %.shbin
+	$(SILENTMSG) $(notdir $<)
+	$(bin2o)
 
 -include $(DEPENDS)
 
