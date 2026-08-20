@@ -66,7 +66,10 @@ fun MasterToolApp(deps: AppDependencies) {
         configureImageLoader(deps.imageCacheDir)
         // The format is a layout preference on disk but belongs to the builder at
         // runtime, so it is handed over once the stored settings arrive.
-        layoutState.start { preferences -> builderState.onFormatChange(preferences.format) }
+        layoutState.start { preferences ->
+            builderState.onFormatChange(preferences.format)
+            builderState.onSearchEffectsChange(preferences.searchEffects)
+        }
         builderState.start()
         // Silent on launch: it only interrupts if there is something to install.
         updateState.check(userInitiated = false)

@@ -10,8 +10,8 @@ simulator.
 
 **The project is the cross-platform app in `app/`.** Kotlin Multiplatform +
 Compose Multiplatform, targeting Android (landscape tablets, Samsung Tab
-S11-class) and desktop (macOS/Windows/Linux) from one codebase. See
-`app/README.md` for architecture and build instructions.
+S11-class; and now phones in portrait) and desktop (macOS/Windows/Linux) from
+one codebase. See `app/README.md` for architecture and build instructions.
 
 **`legacy/kai master tool.html` is the archived original** — the single-file
 web tool the app replaces (~36k lines, plain HTML + Tailwind + vanilla JS).
@@ -639,6 +639,71 @@ that: the deck **showcase** stage, and play polish (deal-origin projection,
 stack shuffle/cut). `docs/TABLE.md` §5 is the ordered list of everything else,
 and its first three — tokens, a scrubbable history, card text on the peek —
 are now the cheapest things on it.
+
+## The builder has two arrangements, and one rule picks between them
+
+The app was `android:screenOrientation="userLandscape"` until kai asked to use
+it on a phone. `core/layout/Posture.kt` is the whole decision: **a window taller
+than it is wide is `TALL`, everything else is `WIDE`** — no dp threshold, because
+a threshold has to be re-chosen for every new device and the aspect ratio is what
+the two arrangements actually turn on. A portrait *tablet* gets `TALL` too, and
+that is right rather than incidental.
+
+`WIDE` is the tablet builder and is untouched. `TALL` is `ui/deckbuilder/
+TallBuilder.kt`, and one sentence generates all of it: **the pool goes where the
+thumbs are.** It docks along the bottom, its search field sits at the very bottom
+of the dock immediately above the keyboard, and the deck takes what is left
+above. `docs/DEVICES.md` §6 is the authority and carries the comparison table.
+Four things are load-bearing:
+
+- **The two postures share a device, so they may not share their numbers.**
+  `tallColumns` and `tallSearchColumns` are separate preferences, and
+  `setColumns` takes the posture rather than inferring it — otherwise a row width
+  chosen on a phone-shaped window is still there when the tablet is turned back
+  on its side.
+- **Portrait sizes the deck width-first and scrolls** (`DeckFitter.stack`).
+  `DeckFitter.plan` solves for the width that makes the whole deck fit the height
+  it has, which is the right question on a tablet and hands back a 23dp card in a
+  phone's portrait window. One row width for all three sections, default six,
+  because the tablet's size hierarchy between main and extra is a luxury of width.
+- **Typing means the pool.** A finger in the search field takes the dock to FULL
+  and the deck out of the way; letting go brings it back, but never below HALF,
+  because closing the dock over the results of the search just typed throws the
+  answer away. That is `PoolDock.afterTyping`, in core, with a test on it.
+- **The dock's furniture is declared to the thing that positions it**, the same
+  contract `DeckFitter` has with `chromeFor`: `PEEK` *is* the chrome height, so a
+  bar added to the dock and not to `DOCK_CHROME` is a search field pushed off the
+  bottom of the screen. And `imePadding` goes **outside** the height, not inside
+  it — inside, focusing the deck-name field at `PEEK` squeezes the search field
+  to nothing.
+
+The play stage is not in on this. It rotates because the activity does, and in
+portrait it draws a 360dp board with the height unused; it is landscape by
+preference now rather than by lock, and a portrait stage is its own piece of work
+(`docs/DEVICES.md` §5).
+
+## Cards can be searched by what they say, not only by what they are called
+
+Some archetypes are not a word in anybody's name — kai's example is the deck
+built out of cards that *mention* "Light and Darkness Ritual", which a
+name-search can only find if you already know them. `core/search/EffectMatching.kt`
+reads the printed text, and three decisions in it are worth keeping:
+
+- **No index.** The obvious implementation maps every word of every card's text
+  to the cards using it, which is about five megabytes on a thirteen-thousand
+  card pool and buys a search that was already fast enough. `containsRun` walks
+  the *raw* text and normalises as it goes — lowercasing, treating any run of
+  punctuation as one word break — so nothing is copied and nothing is kept alive
+  between queries.
+- **Every text tier ranks below every name tier** (400 and 300 against a name
+  floor of 460), so widening the scope can only append rows to the bottom of a
+  list whose top is unchanged. That is what makes `searchEffects` safe to default
+  **on**.
+- **The query can carry its own scope.** `text:`/`effect:` searches only the
+  text, `name:` only names, and a quoted `"run of words"` must appear contiguous.
+  A prefix costs no chrome, which matters most on the screen that has none —
+  and the trailing word is always matched as a prefix, so the list is not empty
+  until you finish typing.
 
 **Explicitly deferred by the user — do not build on the legacy designs:**
 siding patterns and shootout mode will be redesigned from scratch in a future

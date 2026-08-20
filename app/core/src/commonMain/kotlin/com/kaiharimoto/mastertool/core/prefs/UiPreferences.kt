@@ -1,6 +1,7 @@
 package com.kaiharimoto.mastertool.core.prefs
 
 import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.layout.PoolStop
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.scene.DeskLight
@@ -81,6 +82,29 @@ data class UiPreferences(
      */
     val searchVisible: Boolean = true,
     /**
+     * Cards per row in the pool, in a portrait window.
+     *
+     * Three, against the four a tablet gets, and for the opposite reason to
+     * [tallColumns]: the pool is where you *recognise* a card rather than count
+     * one, and three across a 360dp phone is a 109dp tile — big enough to read
+     * the name badge on, and a comfortable thumb target on a surface that is
+     * mostly reached by thumb.
+     */
+    val tallSearchColumns: Int = 3,
+    /**
+     * Whether a query is also read against the text printed under the name.
+     *
+     * **On**, which is safe in a way a scope setting usually is not: every text
+     * hit scores below every name hit (see `EffectMatching`), so switching this
+     * on can only append rows to the bottom of a list whose top is unchanged.
+     * Off is for the moment the appended rows are in the way.
+     *
+     * It is a preference at all because the alternative was making people type
+     * `text:` every time, and the archetype kai was chasing — every card that
+     * mentions "Light and Darkness Ritual" — is not a thing you look up once.
+     */
+    val searchEffects: Boolean = true,
+    /**
      * Size the three panes from their row widths so all of them are visible.
      *
      * The alternative — each pane taking a share of the column height and
@@ -97,6 +121,32 @@ data class UiPreferences(
     val side: SectionPreferences = SectionPreferences(weight = 1f, columns = 15),
     /** Show one tile per distinct card with a count, rather than one per copy. */
     val stacked: Boolean = false,
+    /**
+     * Cards per row in a portrait window — one number for all three sections.
+     *
+     * Separate from [main], [extra] and [side] because a phone and a tablet are
+     * looked at on the same device now, and a column count written by one of
+     * them must not reach the other: rotating a tablet to portrait and back
+     * would otherwise leave the tablet builder wearing the phone's row width.
+     *
+     * One number rather than three because the tablet's hierarchy — a main-deck
+     * card half again the size of an extra-deck one — is a luxury of width. In
+     * portrait the sections are told apart by their headers, and the cards are
+     * better off all being as large as the narrowest of them can be.
+     *
+     * Six is a card about 56dp wide on a 360dp phone, which is the width at
+     * which the art is still a picture rather than a swatch.
+     */
+    val tallColumns: Int = 6,
+    /**
+     * How far the card pool is open in a portrait window.
+     *
+     * Remembered because it is a working posture rather than a transient: a
+     * person who dragged the pool down to see their whole deck should find it
+     * down again next time, the same way the search split is remembered on a
+     * tablet.
+     */
+    val poolStop: PoolStop = PoolStop.HALF,
     /**
      * An image to use for the card back instead of the one that ships.
      *
@@ -249,6 +299,14 @@ data class UiPreferences(
         } else {
             searchColumns.coerceIn(SectionPreferences.MIN_COLUMNS, SectionPreferences.MAX_COLUMNS)
         },
+        tallSearchColumns = tallSearchColumns.coerceIn(
+            SectionPreferences.MIN_COLUMNS,
+            SectionPreferences.MAX_COLUMNS,
+        ),
+        tallColumns = tallColumns.coerceIn(
+            SectionPreferences.MIN_COLUMNS,
+            SectionPreferences.MAX_COLUMNS,
+        ),
         main = main.sanitised(fallbackWeight = 2f),
         extra = extra.sanitised(fallbackWeight = 1f),
         side = side.sanitised(fallbackWeight = 1f),

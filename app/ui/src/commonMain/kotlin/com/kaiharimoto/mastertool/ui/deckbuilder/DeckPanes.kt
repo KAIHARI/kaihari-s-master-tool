@@ -83,6 +83,7 @@ import com.kaiharimoto.mastertool.core.layout.GridPoint
 import com.kaiharimoto.mastertool.core.layout.GridRegion
 import com.kaiharimoto.mastertool.core.layout.GridFit
 import com.kaiharimoto.mastertool.core.layout.GridFitter
+import com.kaiharimoto.mastertool.core.layout.Posture
 import com.kaiharimoto.mastertool.core.layout.SectionFit
 import com.kaiharimoto.mastertool.core.layout.SectionFitRequest
 import com.kaiharimoto.mastertool.core.model.Card
@@ -154,6 +155,7 @@ fun DeckPanes(
     drag: DragController,
     onDropped: (DragSession, DropHover?) -> Unit,
     modifier: Modifier = Modifier,
+    posture: Posture = Posture.WIDE,
 ) {
     BoxWithConstraints(
         modifier
@@ -165,27 +167,42 @@ fun DeckPanes(
 
         // Recomputed on every layout pass, which is one division and means the
         // deck re-fits the instant the window, the pool or the row width changes.
-        val plan: DeckFit? = if (preferences.fitAll) {
-            with(density) {
-                DeckFitter.plan(
-                    requests = SECTION_ORDER.map { section ->
-                        SectionFitRequest(
-                            count = state.deck[section].displayCount(preferences.stacked),
-                            columns = preferences[section].columns,
-                            baselineCount = section.baselineCapacity,
-                            spacing = CARD_SPACING.toPx(),
-                            collapsed = preferences[section].collapsed,
-                            chromeHeight = chromeFor(preferences[section].collapsed, section).toPx(),
-                        )
-                    },
+        val plan: DeckFit? = with(density) {
+            val requests = SECTION_ORDER.map { section ->
+                SectionFitRequest(
+                    count = state.deck[section].displayCount(preferences.stacked),
+                    columns = layout.columnsFor(section, posture),
+                    baselineCount = section.baselineCapacity,
+                    spacing = CARD_SPACING.toPx(),
+                    collapsed = preferences[section].collapsed,
+                    chromeHeight = chromeFor(preferences[section].collapsed, section).toPx(),
+                )
+            }
+            when {
+                // Portrait asks the other question. Solving for the width that
+                // makes the whole deck fit a third of a phone's height hands
+                // back a twenty-dp card; taking the width as given and letting
+                // the column scroll hands back one you can see the art on.
+                // `fitAll` is not consulted, because there is nothing here it
+                // could switch between that is worth having.
+                posture.isTall -> DeckFitter.stack(
+                    requests = requests,
                     availableWidth = maxWidth.toPx(),
                     availableHeight = maxHeight.toPx(),
                     aspectRatio = CARD_ASPECT_RATIO,
                     paneGap = PANE_GAP.toPx(),
                 )
+
+                preferences.fitAll -> DeckFitter.plan(
+                    requests = requests,
+                    availableWidth = maxWidth.toPx(),
+                    availableHeight = maxHeight.toPx(),
+                    aspectRatio = CARD_ASPECT_RATIO,
+                    paneGap = PANE_GAP.toPx(),
+                )
+
+                else -> null
             }
-        } else {
-            null
         }
 
         val stackWidth = plan?.let { with(density) { it.contentWidth.toDp() } }
@@ -219,6 +236,7 @@ fun DeckPanes(
                     drag = drag,
                     onDropped = onDropped,
                     section = section,
+                    posture = posture,
                     fit = fit,
                     spacing = CARD_SPACING,
                     scrolls = plan?.fits == false,
@@ -234,8 +252,12 @@ fun DeckPanes(
                     PaneDivider(
                         // A divider under a fitted column has nothing to trade:
                         // taking hold of it is the decision to size by hand, and
-                        // the drag that follows lands on real weights.
-                        enabled = !sectionPreferences.collapsed && !preferences[next].collapsed,
+                        // the drag that follows lands on real weights. In
+                        // portrait it has nothing to trade either — the panes
+                        // are as tall as their cards make them and the column
+                        // scrolls — so it is a rule rather than a handle.
+                        enabled = !posture.isTall &&
+                            !sectionPreferences.collapsed && !preferences[next].collapsed,
                         onDrag = { delta -> layout.resizePanes(section, next, delta) },
                     )
                 }
@@ -303,6 +325,7 @@ private fun DeckSectionPane(
     drag: DragController,
     onDropped: (DragSession, DropHover?) -> Unit,
     section: DeckSection,
+    posture: Posture,
     fit: SectionFit?,
     spacing: Dp,
     scrolls: Boolean,
@@ -321,7 +344,7 @@ private fun DeckSectionPane(
     // the wrong slot).
     val geometry = remember { PaneGeometry() }
     // What the grid actually settled on, so the header can report it.
-    var effectiveColumns by remember { mutableStateOf(preferences.columns) }
+    var effectiveColumns by remember { mutableStateOf(layout.columnsFor(section, posture)) }
 
     val hover = drag.hover?.takeIf { it.section == section }
     val dropBorder = when {
@@ -384,7 +407,9 @@ private fun DeckSectionPane(
             .padding(PANE_PADDING),
         verticalArrangement = Arrangement.spacedBy(HEADER_GAP),
     ) {
-        SectionHeader(state, layout, section, ids.size, preferences, effectiveColumns, accent)
+        SectionHeader(
+            state, layout, section, posture, ids.size, preferences, effectiveColumns, accent,
+        )
 
         if (preferences.collapsed) return@Column
 
@@ -439,7 +464,7 @@ private fun DeckSectionPane(
                         )
                     } else {
                         GridFit(
-                            columns = preferences.columns,
+                            columns = layout.columnsFor(section, posture),
                             fits = GridFitter.requiredHeight(
                                 count = displayed.size,
                                 columns = preferences.columns,
@@ -654,7 +679,11 @@ private fun DeckSectionPane(
 
                 if (ids.isEmpty()) {
                     Text(
-                        "Tap a card on the left to add it here",
+                        if (posture.isTall) {
+                        "Tap a card below to add it here"
+                    } else {
+                        "Tap a card on the left to add it here"
+                    },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.align(Alignment.Center),
@@ -1000,6 +1029,7 @@ private fun SectionHeader(
     state: DeckBuilderState,
     layout: DeckLayoutState,
     section: DeckSection,
+    posture: Posture,
     count: Int,
     preferences: SectionPreferences,
     columns: Int,
@@ -1044,14 +1074,14 @@ private fun SectionHeader(
             // Ten across, fifteen across — the row width is the setting, and the
             // cards are sized to whatever makes it fit.
             CompactIconButton(
-                onClick = { layout.setColumns(section, columns - 1) },
+                onClick = { layout.setColumns(section, columns - 1, posture) },
                 enabled = columns > SectionPreferences.MIN_COLUMNS,
             ) {
                 Icon(Icons.Filled.Remove, contentDescription = "Fewer, larger cards per row")
             }
             Text(columns.toString(), style = MaterialTheme.typography.labelMedium)
             CompactIconButton(
-                onClick = { layout.setColumns(section, columns + 1) },
+                onClick = { layout.setColumns(section, columns + 1, posture) },
                 enabled = columns < SectionPreferences.MAX_COLUMNS,
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "More, smaller cards per row")
@@ -1075,21 +1105,26 @@ private fun SectionHeader(
 
                     HorizontalDivider()
 
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                if (layout.preferences.fitAll) {
-                                    "✓ Fit the whole deck on screen"
-                                } else {
-                                    "Fit the whole deck on screen"
-                                }
-                            )
-                        },
-                        onClick = {
-                            menuOpen = false
-                            layout.setFitAll(!layout.preferences.fitAll)
-                        },
-                    )
+                    // Not offered in portrait, where the column scrolls and
+                    // there is nothing for it to switch between: an item that
+                    // is present and inert is worse than one that is absent.
+                    if (!posture.isTall) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (layout.preferences.fitAll) {
+                                        "✓ Fit the whole deck on screen"
+                                    } else {
+                                        "Fit the whole deck on screen"
+                                    }
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                layout.setFitAll(!layout.preferences.fitAll)
+                            },
+                        )
+                    }
 
                     if (section == DeckSection.MAIN) {
                         HorizontalDivider()

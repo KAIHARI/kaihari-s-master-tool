@@ -14,6 +14,16 @@ import com.kaiharimoto.mastertool.core.model.CardId
 data class SearchOutcome(
     val cards: List<Card>,
     val matchCount: Int,
+    /**
+     * How many of [matchCount] were found by their printed text rather than by
+     * their name.
+     *
+     * Reported separately because the two are different answers. "38 matches"
+     * for a query that names one card and is mentioned by thirty-seven others
+     * reads as a broken search; "1 by name, 37 by effect" reads as the thing
+     * you were actually looking for.
+     */
+    val effectMatchCount: Int = 0,
 ) {
     val truncated: Boolean get() = matchCount > cards.size
 
@@ -67,14 +77,25 @@ class CardIndex private constructor(
      * Filtering happens before scoring so an active filter shrinks the work
      * rather than adding to it, and results are capped so a one-letter query
      * cannot hand the UI 13,000 rows to lay out.
+     *
+     * [scope] decides whether the printed text under the name is searched too.
+     * A scope named in the query itself — `text:`, `effect:`, `name:` — wins
+     * over this argument, because typing it is a more specific act than leaving
+     * a setting where it was. The text tiers all rank below every name tier
+     * (see [EffectMatching]), so widening the scope only ever appends.
      */
     fun search(
         query: String,
         filter: CardFilter = CardFilter.NONE,
+        scope: SearchScope = SearchScope.NAMES,
         limit: Int = 120,
     ): SearchOutcome {
-        val normalizedQuery = TextMatching.normalize(query)
-        val tokens = normalizedQuery.split(' ').filter { it.isNotEmpty() }
+        val parsed = SearchQuery.parse(query)
+        val normalizedQuery = parsed.normalized
+        val tokens = parsed.tokens
+        val effectiveScope = parsed.scope ?: scope
+        val readNames = effectiveScope != SearchScope.TEXT
+        val readText = effectiveScope != SearchScope.NAMES
 
         if (normalizedQuery.isEmpty()) {
             // No query to rank by, so rank by name. Browsing a filter has to show
@@ -88,10 +109,25 @@ class CardIndex private constructor(
         }
 
         val hits = ArrayList<ScoredCard>(minOf(limit * 4, 512))
+        var byText = 0
         for (i in cards.indices) {
             val card = cards[i]
             if (!filter.matches(card)) continue
-            val score = TextMatching.score(normalizedNames[i], normalizedQuery, tokens) ?: continue
+            val nameScore = if (readNames) {
+                TextMatching.score(normalizedNames[i], normalizedQuery, tokens)
+            } else {
+                null
+            }
+            // Only cards the name did not already claim are read for their
+            // text: a card cannot be found twice, and the expensive half of
+            // the scan is the half that is skipped for every name hit.
+            val textScore = if (readText && nameScore == null) {
+                EffectMatching.score(card.description, parsed)
+            } else {
+                null
+            }
+            val score = nameScore ?: textScore ?: continue
+            if (nameScore == null) byText++
             hits.add(ScoredCard(card, score))
         }
 
@@ -102,12 +138,21 @@ class CardIndex private constructor(
         )
 
         // Every match is already in `hits`, so the total costs nothing extra.
-        return SearchOutcome(cards = hits.take(limit).map { it.card }, matchCount = hits.size)
+        return SearchOutcome(
+            cards = hits.take(limit).map { it.card },
+            matchCount = hits.size,
+            effectMatchCount = byText,
+        )
     }
 
-    /** Short list for the autocomplete dropdown. */
+    /**
+     * Short list for the autocomplete dropdown.
+     *
+     * Names only, whatever the pool is being searched by elsewhere: a dropdown
+     * of eight rows has room for the card you are spelling and nothing else.
+     */
     fun suggest(query: String, limit: Int = 8): List<Card> =
-        search(query, CardFilter.NONE, limit).cards
+        search(query, CardFilter.NONE, SearchScope.NAMES, limit).cards
 
     private class ScoredCard(val card: Card, val score: Int)
 

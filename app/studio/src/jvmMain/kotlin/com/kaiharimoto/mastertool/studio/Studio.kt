@@ -305,7 +305,10 @@ private fun Stage(deps: AppDependencies, director: Director, opts: Options) {
 
     DisposableEffect(Unit) {
         configureImageLoader(deps.imageCacheDir)
-        layoutState.start { preferences -> builderState.onFormatChange(preferences.format) }
+        layoutState.start { preferences ->
+            builderState.onFormatChange(preferences.format)
+            builderState.onSearchEffectsChange(preferences.searchEffects)
+        }
         builderState.start()
         director.prefs = layoutState
         // The deck arrives through the ordinary import path, so the studio is

@@ -157,6 +157,72 @@ object DeckFitter {
         return DeckFit(contentWidth, sections, total, fits = total <= availableHeight + 0.5f)
     }
 
+    /**
+     * The other way of sizing the same three panes: width first, and scroll.
+     *
+     * [plan] solves for the width that makes the whole deck fit the height it
+     * has. That is the right question on a tablet, where the answer is a card
+     * you can read. It is the wrong question in a portrait window: a 360dp-wide
+     * phone with a card pool docked along the bottom leaves the deck about a
+     * third of its height, and solving for that hands back a twenty-dp card —
+     * a deck rendered as lint.
+     *
+     * So in [Posture.TALL] the width is the input, the card size follows from
+     * the row width alone, and the column scrolls. The deck stops being a
+     * diagram you take in at a glance and becomes a list you move through,
+     * which is what a phone can honestly offer.
+     *
+     * [fits] is still answered honestly against [availableHeight], because when
+     * the deck *does* fit — a side deck on its own, a collapsed pane or two —
+     * the caller should centre it rather than leave it pinned to the top of a
+     * scroll container with nothing to scroll.
+     */
+    fun stack(
+        requests: List<SectionFitRequest>,
+        availableWidth: Float,
+        availableHeight: Float,
+        aspectRatio: Float,
+        paneGap: Float = 0f,
+    ): DeckFit {
+        if (requests.isEmpty()) return DeckFit(availableWidth, emptyList(), 0f, fits = true)
+
+        val chrome = requests.sumOf { it.chromeHeight.toDouble() }.toFloat() +
+            paneGap * (requests.size - 1)
+
+        if (availableWidth <= 0f || aspectRatio <= 0f) {
+            return DeckFit(0f, requests.map { EMPTY_SECTION }, chrome, fits = false)
+        }
+
+        val sections = requests.map { request ->
+            val columns = request.columns.coerceAtLeast(1)
+            val rows = if (request.collapsed) {
+                0
+            } else {
+                ceil(maxOf(request.count, request.baselineCount).toDouble() / columns).toInt()
+            }
+            val cardWidth = ((availableWidth - request.spacing * (columns - 1)) / columns)
+                .coerceAtLeast(0f)
+            val cardHeight = cardWidth / aspectRatio
+            val gridHeight = if (rows <= 0) 0f else rows * cardHeight + request.spacing * (rows - 1)
+            SectionFit(
+                columns = columns,
+                rows = rows,
+                cardWidth = cardWidth,
+                cardHeight = cardHeight,
+                gridHeight = gridHeight,
+                paneHeight = gridHeight + request.chromeHeight,
+            )
+        }
+
+        val total = chrome + sections.sumOf { it.gridHeight.toDouble() }.toFloat()
+        return DeckFit(
+            contentWidth = availableWidth,
+            sections = sections,
+            totalHeight = total,
+            fits = total <= availableHeight + 0.5f,
+        )
+    }
+
     private val EMPTY_SECTION = SectionFit(
         columns = 1,
         rows = 0,

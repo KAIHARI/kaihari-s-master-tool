@@ -19,15 +19,11 @@ import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Redo
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -48,10 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kaiharimoto.mastertool.core.model.Format
-import com.kaiharimoto.mastertool.core.prefs.ThemeMode
-import com.kaiharimoto.mastertool.core.prefs.UiPreferences
 import com.kaiharimoto.mastertool.ui.egg.ChibiLogo
-import com.kaiharimoto.mastertool.ui.fx.defaultFeedbackEnabled
 import com.kaiharimoto.mastertool.ui.theme.ChromaticText
 import com.kaiharimoto.mastertool.ui.theme.MasterToolPalette
 import com.kaiharimoto.mastertool.ui.theme.wordmarkFamily
@@ -218,161 +211,9 @@ fun DeckBuilderTopBar(
                 Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text("New deck") },
-                    onClick = { menuOpen = false; state.newDeck() },
-                )
-                DropdownMenuItem(
-                    text = { Text("Import…") },
-                    onClick = { menuOpen = false; state.importFromFile() },
-                )
-                DropdownMenuItem(
-                    text = { Text("Export…") },
-                    onClick = { menuOpen = false; state.exportToFile() },
-                )
-                DropdownMenuItem(
-                    text = { Text("Share") },
-                    leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
-                    onClick = { menuOpen = false; state.shareDeck() },
-                )
-
+                DeckFileMenuItems(state) { menuOpen = false }
                 HorizontalDivider()
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            if (layout.preferences.fitAll) {
-                                "✓ Fit the whole deck on screen"
-                            } else {
-                                "Fit the whole deck on screen"
-                            }
-                        )
-                    },
-                    onClick = {
-                        menuOpen = false
-                        layout.setFitAll(!layout.preferences.fitAll)
-                    },
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            if (layout.preferences.stacked) {
-                                "Show every copy"
-                            } else {
-                                "Stack duplicate cards"
-                            }
-                        )
-                    },
-                    onClick = {
-                        menuOpen = false
-                        layout.update { it.copy(stacked = !it.stacked) }
-                    },
-                )
-                DropdownMenuItem(
-                    text = {
-                        val effective = layout.preferences.feedbackEnabled
-                            ?: defaultFeedbackEnabled()
-                        Text(if (effective) "Sound & haptics: on" else "Sound & haptics: off")
-                    },
-                    onClick = {
-                        layout.update {
-                            val effective = it.feedbackEnabled ?: defaultFeedbackEnabled()
-                            it.copy(feedbackEnabled = !effective)
-                        }
-                    },
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            if (layout.preferences.prismaticCards) {
-                                "Prismatic borders: on"
-                            } else {
-                                "Prismatic borders: off"
-                            },
-                        )
-                    },
-                    onClick = {
-                        layout.update { it.copy(prismaticCards = !it.prismaticCards) }
-                    },
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            when (layout.preferences.themeMode) {
-                                ThemeMode.SYSTEM -> "Theme: match system"
-                                ThemeMode.DARK -> "Theme: dark"
-                                ThemeMode.LIGHT -> "Theme: light"
-                            }
-                        )
-                    },
-                    onClick = {
-                        // Cycles rather than opening a submenu: three values, and
-                        // the whole screen previews the choice instantly.
-                        layout.update {
-                            it.copy(
-                                themeMode = when (it.themeMode) {
-                                    ThemeMode.SYSTEM -> ThemeMode.DARK
-                                    ThemeMode.DARK -> ThemeMode.LIGHT
-                                    ThemeMode.LIGHT -> ThemeMode.SYSTEM
-                                }
-                            )
-                        }
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("Reset layout") },
-                    onClick = {
-                        menuOpen = false
-                        layout.update {
-                            // Keep what is about the deck or the person — the
-                            // format, the stacked view, the pinned easter-egg
-                            // pool, the theme, which room the table is in — and
-                            // reset what is about the layout. "The room" in the
-                            // comment this replaces meant the panes; the play
-                            // stage now has a literal one, and it is a taste
-                            // rather than a layout, so it survives like the
-                            // theme beside it.
-                            UiPreferences.DEFAULT.copy(
-                                format = it.format,
-                                stacked = it.stacked,
-                                easterEggPool = it.easterEggPool,
-                                themeMode = it.themeMode,
-                                feedbackEnabled = it.feedbackEnabled,
-                                cardBackUrl = it.cardBackUrl,
-                                prismaticCards = it.prismaticCards,
-                                scene = it.scene,
-                                deskLight = it.deskLight,
-                                // Tuning is a taste too, and one that took a
-                                // person an evening with a slider. A menu item
-                                // on a *different screen* with no undo is the
-                                // last place it should be destroyed from; the
-                                // panel has its own reset.
-                                stageTuning = it.stageTuning,
-                            )
-                        }
-                    },
-                )
-
-                HorizontalDivider()
-
-                DropdownMenuItem(
-                    text = { Text("Refresh card database") },
-                    leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
-                    onClick = { menuOpen = false; state.refreshCardPool(force = true) },
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            if (updateState.isChecking) {
-                                "Checking…"
-                            } else {
-                                "v${updateState.currentVersionName}"
-                            }
-                        )
-                    },
-                    leadingIcon = { Icon(Icons.Filled.SystemUpdate, contentDescription = null) },
-                    onClick = { menuOpen = false; updateState.check(userInitiated = true) },
-                )
+                AppSettingsMenuItems(state, layout, updateState) { menuOpen = false }
             }
         }
     }

@@ -28,6 +28,14 @@ is what the layout solver responds to and it is the product of the two:
 | `s24` | 2340×1080 | 3.0 | 780×360 |
 | `phone-small` | 1920×1080 | 3.0 | 640×360 |
 | `desktop` | 1600×1000 | 1.0 | 1600×1000 |
+| `s24-portrait` | 1080×2340 | 3.0 | 360×780 |
+| `pixel8-portrait` | 1080×2400 | 2.625 | 411×914 |
+| `small-portrait` | 1080×1920 | 3.0 | 360×640 |
+| `tab-s11-portrait` | 1848×2960 | 2.0 | 924×1480 |
+
+The last four are new, and they are the ones §6 is about. Anything after the
+shot name is passed through, so `tools/devices.sh flat --screen=builder` shoots
+the deck builder at all eleven.
 
 **640×360 is the floor.** Below that the app may say it does not fit; above it
 the app must be *playable*, which is a stronger claim than *renderable* and is
@@ -90,6 +98,13 @@ trying to fix.
 and carry their own copies of it. They work and are shipped; converting them is
 tidy-up, and worth doing before a fourth bar copies the wrong one.
 
+**And the builder header now has a sibling** — `TallTopBar`, one line, for the
+portrait window (§6). It is a different bar rather than a scrolling copy of the
+1400dp one, because a horizontally scrolling *primary* header is a header whose
+controls you have to go looking for. What keeps the two honest is that their
+overflow menu is one piece of code (`BuilderMenu.kt`): a setting cannot exist on
+the tablet and not on the phone, which is the §4 failure in its other form.
+
 The other four weighted spacers are clear, and each was checked rather than
 assumed:
 
@@ -127,6 +142,53 @@ a say in, and two of them trade against each other.
 - **No quality tiers.** A full-screen per-pixel wood shader at 3× density on a
   midrange phone GPU is untested and is the most likely performance cliff in the
   app. `AAA.md` #98.
-- **Portrait is refused** (`android:screenOrientation="userLandscape"`). Right
-  for the play stage, probably wrong for the deck builder, and currently one
-  decision covering both.
+- **The play stage in portrait.** The manifest no longer refuses it (§6), so
+  the stage can now be turned upright, where `min(byWidth, byHeight)` gives it a
+  360dp-wide board with most of the height unused — the bullet two above this
+  one, in its other orientation. The builder is the screen a phone is for and
+  the stage is landscape by preference, not by lock; a portrait arrangement for
+  the stage is its own piece of work.
+
+## 6. Portrait, and the second builder
+
+The app was `android:screenOrientation="userLandscape"` for its whole life,
+which is what "built against one tablet" looks like as a policy. kai asked to
+use it on a phone; the layout that came back was landscape-on-a-phone, which is
+the worst of both — a 780×360 window where the deck gets a third of the height
+and the pool a third of the width.
+
+So there are two builders now, and one rule picks between them.
+
+**`Posture.of(width, height)`: taller than wide is `TALL`, everything else is
+`WIDE`.** No dp threshold, deliberately. A threshold has to be chosen and
+re-chosen for every new dp box and gets foldables wrong in both directions; the
+aspect ratio is what the arrangement actually turns on, because the two layouts
+differ in what they put *beside* what. A portrait tablet gets `TALL` too, and
+that is correct rather than incidental.
+
+| | `WIDE` (unchanged) | `TALL` |
+|---|---|---|
+| pool | pane down the left | docked along the bottom, three stops |
+| search field | top of the pane | bottom of the dock, above the keyboard |
+| deck | right, fitted, all three panes visible | above, one row width, scrolls |
+| deck sizing | `DeckFitter.plan` — solve width for the height | `DeckFitter.stack` — width is given, scroll |
+| row width | 10 / 15 / 15, per section | one number for all three, default 6 |
+| header | 1400dp of controls, scrolls below that | one line, everything else in the overflow |
+
+Three things are worth knowing before touching it:
+
+- **The two postures share a device, so they may not share their numbers.** A
+  row width written while a tablet was held upright must not still be there when
+  it is turned back on its side. `tallColumns` and `tallSearchColumns` are
+  separate preferences for exactly that reason, and `DeckLayoutState.setColumns`
+  takes the posture rather than inferring it.
+- **The pool's furniture is declared to the thing that positions it**, the same
+  contract `DeckFitter` has with `chromeFor`. `PoolDock`'s `PEEK` stop *is* the
+  dock's chrome height, so a bar added to the dock and not added to
+  `DOCK_CHROME` is a search field pushed off the bottom of the screen.
+- **`imePadding` goes outside the height, not inside it.** Inside, the keyboard
+  eats the dock's own content, and focusing the *deck name* field while the pool
+  is at `PEEK` squeezes the search field to nothing. Outside, the padding lifts
+  the dock and the height is coerced into what is left.
+
+What is **not** done: the play stage in portrait, above.

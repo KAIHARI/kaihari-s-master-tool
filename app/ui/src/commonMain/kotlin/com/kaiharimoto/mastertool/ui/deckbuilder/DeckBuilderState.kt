@@ -34,6 +34,7 @@ import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.model.Format
 import com.kaiharimoto.mastertool.core.search.CardFilter
 import com.kaiharimoto.mastertool.core.search.CardIndex
+import com.kaiharimoto.mastertool.core.search.SearchScope
 import com.kaiharimoto.mastertool.core.ydk.YdkCodec
 import com.kaiharimoto.mastertool.ui.AppDependencies
 import kotlinx.coroutines.CoroutineScope
@@ -66,9 +67,11 @@ data class UndoToken(val serial: Long)
 /**
  * State holder for the deck builder.
  *
- * The app is landscape-locked on Android, so there is no rotation recreation to
- * survive and a plain remembered holder is enough — no ViewModel machinery, and
- * one fewer dependency whose API can drift.
+ * A plain remembered holder rather than a ViewModel: the Android activity keeps
+ * its own instance across a configuration change (`configChanges` in the
+ * manifest lists orientation), so a rotation does not recreate it and there is
+ * nothing here that needs to survive one. One fewer dependency whose API can
+ * drift.
  */
 class DeckBuilderState(
     private val deps: AppDependencies,
@@ -88,6 +91,21 @@ class DeckBuilderState(
 
     /** How many cards matched in total, which is usually more than were drawn. */
     var matchCount by mutableStateOf(0)
+        private set
+
+    /** How many of [matchCount] were found by their text rather than their name. */
+    var effectMatchCount by mutableStateOf(0)
+        private set
+
+    /**
+     * Whether a query also reads the text printed under the name.
+     *
+     * Lives here rather than on the layout state because it changes what
+     * [results] *is*, and every text hit ranks below every name hit — so
+     * turning it on appends and turning it off truncates, and neither reorders
+     * anything above the cut. Persisted by the toolbar, the way the format is.
+     */
+    var searchEffects by mutableStateOf(true)
         private set
 
     var deck by mutableStateOf(Deck.EMPTY)
@@ -367,20 +385,28 @@ class DeckBuilderState(
 
     fun clearFilters() = onFilterChange(CardFilter.NONE)
 
+    fun onSearchEffectsChange(value: Boolean) {
+        if (searchEffects == value) return
+        searchEffects = value
+        runSearch(immediate = true)
+    }
+
     private fun runSearch(immediate: Boolean = false) {
         searchJob?.cancel()
         val activeQuery = query
         val activeFilter = filter
+        val activeScope = if (searchEffects) SearchScope.ALL else SearchScope.NAMES
         searchJob = scope.launch {
             // Debounced so a fast typist scans the pool once, not once per key.
             if (!immediate) delay(SEARCH_DEBOUNCE_MS)
             // Scoring 13,000 names with a bounded Levenshtein is far too much
             // work for the frame thread, and `scope` is the composition's.
             val outcome = withContext(deps.computeDispatcher) {
-                index.search(activeQuery, activeFilter, limit = RESULT_LIMIT)
+                index.search(activeQuery, activeFilter, activeScope, limit = RESULT_LIMIT)
             }
             results = outcome.cards
             matchCount = outcome.matchCount
+            effectMatchCount = outcome.effectMatchCount
         }
     }
 

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.kaiharimoto.mastertool.core.data.PreferencesRepository
 import com.kaiharimoto.mastertool.core.deck.SortMode
+import com.kaiharimoto.mastertool.core.layout.Posture
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.core.prefs.SectionPreferences
 import com.kaiharimoto.mastertool.core.prefs.UiPreferences
@@ -110,14 +111,36 @@ class DeckLayoutState(
     }
 
     /**
+     * How many cards a row of [section] holds, in this [posture].
+     *
+     * Portrait has one row width for the whole deck rather than one per
+     * section — see [UiPreferences.tallColumns] — and, crucially, it is stored
+     * somewhere else. The two postures share a device now: a phone-sized row
+     * width written while a tablet was held upright must not still be there
+     * when it is turned back on its side.
+     */
+    fun columnsFor(section: DeckSection, posture: Posture): Int =
+        if (posture.isTall) preferences.tallColumns else preferences[section].columns
+
+    /**
      * Sets how many cards a row of [section] holds.
      *
      * Under the fitter this is the whole setting — the row width is chosen, and
      * the card size follows from it. By hand it also means "stop choosing the
-     * count for me", which is what [SectionPreferences.autoFit] is.
+     * count for me", which is what [SectionPreferences.autoFit] is. In portrait
+     * there is nothing to stop choosing: the column scrolls and the row width
+     * was never solved for, so the number is simply the number.
      */
-    fun setColumns(section: DeckSection, columns: Int) {
-        updateSection(section) { it.copy(columns = columns, autoFit = false) }
+    fun setColumns(section: DeckSection, columns: Int, posture: Posture) {
+        val clamped = columns.coerceIn(
+            SectionPreferences.MIN_COLUMNS,
+            SectionPreferences.MAX_COLUMNS,
+        )
+        if (posture.isTall) {
+            update { it.copy(tallColumns = clamped) }
+        } else {
+            updateSection(section) { it.copy(columns = clamped, autoFit = false) }
+        }
     }
 
     /** Whether the three panes are sized to show the whole deck at once. */

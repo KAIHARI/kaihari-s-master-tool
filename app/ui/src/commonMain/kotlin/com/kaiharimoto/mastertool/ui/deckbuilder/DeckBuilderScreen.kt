@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.kaiharimoto.mastertool.core.deck.DeckGrouping
 import com.kaiharimoto.mastertool.core.input.ShortcutAction
 import com.kaiharimoto.mastertool.core.input.ShortcutContext
+import com.kaiharimoto.mastertool.core.layout.Posture
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.model.DeckSection
 import com.kaiharimoto.mastertool.ui.components.CardInspector
@@ -46,13 +48,23 @@ import com.kaiharimoto.mastertool.ui.input.ShortcutRelay
 import com.kaiharimoto.mastertool.ui.update.UpdateState
 
 /**
- * The deck builder, laid out for a landscape tablet.
+ * The deck builder, in whichever of its two arrangements the window is for.
  *
- * Search sits on the left under the thumb of whichever hand is holding the
- * tablet, and the three deck sections stack down the right where they can all be
- * seen at once — the thing the desktop tool's collapsible panes were working
- * around on a small screen. Every boundary here is draggable and remembered, so
- * the split is whatever the deck being built needs it to be.
+ * **Wide** is the tablet builder and is unchanged: search on the left under the
+ * thumb of whichever hand is holding the tablet, and the three deck sections
+ * stacked down the right where they can all be seen at once — the thing the
+ * desktop tool's collapsible panes were working around on a small screen. Every
+ * boundary there is draggable and remembered, so the split is whatever the deck
+ * being built needs it to be.
+ *
+ * **Tall** is the phone builder — see [TallBuilderBody]. A portrait window has
+ * no width to divide, so the pool docks along the bottom where the thumbs are
+ * and the deck takes what is left above it.
+ *
+ * Everything *around* the two — the drag overlay, every sheet, the shortcut
+ * host, the snackbar and what Escape closes — is shared, because none of it is
+ * about the shape of the window. Only the body differs, which is the whole
+ * seam: two arrangements of one builder rather than two builders.
  */
 @Composable
 fun DeckBuilderScreen(
@@ -199,56 +211,71 @@ fun DeckBuilderScreen(
         ) { padding ->
             // The dragged card is composed here, outside every pane, so it is not
             // clipped by the grid it was lifted out of.
-            Box(Modifier.fillMaxSize().padding(padding)) {
-                Column(Modifier.fillMaxSize()) {
-                    DeckBuilderTopBar(
-                        state,
-                        layout,
-                        updateState,
-                        onOpenLibrary,
-                        onOpenPlay,
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
+                val posture = Posture.of(maxWidth.value, maxHeight.value)
 
-                    Row(
-                        Modifier
-                            .fillMaxSize()
-                            .onGloballyPositioned { layout.builderWidthPx = it.size.width.toFloat() },
-                    ) {
-                        // The pool is where cards come from; once they are in,
-                        // it is the thing between you and the list. Switching it
-                        // off hands its width to the deck, and the deck is
-                        // re-fitted into it on the same frame.
-                        if (layout.preferences.searchVisible) {
-                            SearchPane(
+                if (posture.isTall) {
+                    TallBuilderBody(
+                        state = state,
+                        layout = layout,
+                        updateState = updateState,
+                        drag = drag,
+                        searchFocus = searchFocus,
+                        onDropped = onDropped,
+                        onOpenLibrary = onOpenLibrary,
+                        onOpenPlay = onOpenPlay,
+                    )
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                        DeckBuilderTopBar(
+                            state,
+                            layout,
+                            updateState,
+                            onOpenLibrary,
+                            onOpenPlay,
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+
+                        Row(
+                            Modifier
+                                .fillMaxSize()
+                                .onGloballyPositioned { layout.builderWidthPx = it.size.width.toFloat() },
+                        ) {
+                            // The pool is where cards come from; once they are in,
+                            // it is the thing between you and the list. Switching it
+                            // off hands its width to the deck, and the deck is
+                            // re-fitted into it on the same frame.
+                            if (layout.preferences.searchVisible) {
+                                SearchPane(
+                                    state = state,
+                                    layout = layout,
+                                    drag = drag,
+                                    searchFocus = searchFocus,
+                                    onDropped = onDropped,
+                                    modifier = Modifier
+                                        .weight(layout.preferences.searchWeight)
+                                        .fillMaxHeight(),
+                                )
+
+                                SearchDeckDivider(onDrag = layout::resizeSearchPane)
+                            }
+
+                            DeckPanes(
                                 state = state,
                                 layout = layout,
                                 drag = drag,
-                                searchFocus = searchFocus,
                                 onDropped = onDropped,
                                 modifier = Modifier
-                                    .weight(layout.preferences.searchWeight)
+                                    .weight(
+                                        if (layout.preferences.searchVisible) {
+                                            1f - layout.preferences.searchWeight
+                                        } else {
+                                            1f
+                                        }
+                                    )
                                     .fillMaxHeight(),
                             )
-
-                            SearchDeckDivider(onDrag = layout::resizeSearchPane)
                         }
-
-                        DeckPanes(
-                            state = state,
-                            layout = layout,
-                            drag = drag,
-                            onDropped = onDropped,
-                            modifier = Modifier
-                                .weight(
-                                    if (layout.preferences.searchVisible) {
-                                        1f - layout.preferences.searchWeight
-                                    } else {
-                                        1f
-                                    }
-                                )
-                                .fillMaxHeight(),
-                        )
                     }
                 }
 
