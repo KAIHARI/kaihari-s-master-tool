@@ -104,8 +104,7 @@ export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 
 ifneq ($(strip $(ROMFS)),)
   ifneq ($(wildcard $(CURDIR)/$(ROMFS)/.),)
-    export _3DSXFLAGS += --romfs=$(CURDIR)/$(ROMFS)
-    export ROMFS_ARG  := -DAPP_ROMFS=$(CURDIR)/$(ROMFS)
+    export ROMFS_DIR := $(CURDIR)/$(ROMFS)
   endif
 endif
 
@@ -134,6 +133,19 @@ clean:
 else
 #---------------------------------------------------------------------------------
 DEPENDS := $(OFILES:.o=.d)
+
+# Assigned, not appended, and that is the whole point.
+#
+# This Makefile includes 3ds_rules at the top, so it is included *twice*: once
+# at the top level and once by the sub-make running inside build/. Anything
+# 3ds_rules appends to _3DSXFLAGS in terms of $(CURDIR) therefore comes out
+# pointing at build/ the second time - which is why 3dsxtool reported "Cannot
+# open SMDH file!" for a file that had just been built one directory up. A ':='
+# here discards whatever accumulated and states the absolute paths once.
+_3DSXFLAGS := --smdh=$(OUTPUT).smdh
+ifneq ($(strip $(ROMFS_DIR)),)
+_3DSXFLAGS += --romfs=$(ROMFS_DIR)
+endif
 
 $(OUTPUT).3dsx : $(OUTPUT).elf $(OUTPUT).smdh
 $(OUTPUT).elf  : $(OFILES)
