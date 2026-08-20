@@ -1,0 +1,120 @@
+name: Build for 3DS
+
+# The 3DS port. Three jobs, and the split is the same one CLAUDE.md describes
+# for the app: the part that compiles anywhere is tested everywhere, and the
+# part that needs a toolchain nobody has locally is only built here.
+#
+#   conformance  - host gcc, no devkitARM. The C port against :core's vectors.
+#   vectors      - :core:jvmTest regenerates the vectors; a diff means the
+#                  tablet's behaviour moved and the port has not been told.
+#   3ds          - devkitARM in a container. The .3dsx and the .cia.
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    paths:
+      - '3ds/**'
+      - 'app/core/src/jvmTest/kotlin/**/port/**'
+      - '.github/workflows/build-3ds.yml'
+  pull_request:
+    paths:
+      - '3ds/**'
+      - '.github/workflows/build-3ds.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-3ds-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance:
+    name: Core conformance (host)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No toolchain to install. That is the point of src/core/ linking no
+      # libctru: the arithmetic the whole port rests on is checked in seconds,
+      # on any machine, before anything slower is attempted.
+      - name: Build and run the conformance suite
+        working-directory: 3ds/test
+        run: make test
+
+  vectors:
+    name: Golden vectors are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Regenerate the vectors from :core
+        working-directory: app
+        run: ./gradlew :core:jvmTest --tests "*GoldenVectorExportTest*" -Pmastertool.android=false --stacktrace
+
+      # A diff here is not necessarily a bug - it means a change to :core moved
+      # the table. It has to be committed, so that the console's copy of the
+      # rules moves with the tablet's and the change is visible in review.
+      - name: The committed vectors must match what :core produces
+        run: |
+          if ! git diff --exit-code -- 3ds/test/vectors/; then
+            echo
+            echo "::error::The golden vectors are stale. A change in :core moved"
+            echo "::error::the table. Run the exporter locally and commit the diff:"
+            echo "::error::  cd app && ./gradlew :core:jvmTest --tests '*GoldenVectorExportTest*'"
+            exit 1
+          fi
+
+  3ds:
+    name: 3DSX and CIA
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools for the CIA step
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            cmake build-essential git curl unzip \
+            libpng-dev zlib1g-dev libogg-dev libvorbis-dev
+          3ds/tools/fetch-cia-tools.sh /opt/cia-tools
+          echo "/opt/cia-tools" >> "$GITHUB_PATH"
+
+      # The .3dsx needs only devkitPro's own tools, so it is built first and
+      # separately: if this fails the problem is the code, and if only the CIA
+      # step fails the problem is packaging.
+      - name: Build the 3dsx
+        working-directory: 3ds
+        run: |
+          set -o pipefail
+          make 2>&1 | tee build-3dsx.log
+          # Never trust a piped exit code - CLAUDE.md, and it applies here too.
+          test -f kai-master-tool.3dsx || { echo "::error::no .3dsx produced"; exit 1; }
+          ls -l kai-master-tool.3dsx
+
+      - name: Build the cia
+        working-directory: 3ds
+        run: |
+          set -o pipefail
+          make cia 2>&1 | tee build-cia.log
+          test -f kai-master-tool.cia || { echo "::error::no .cia produced"; exit 1; }
+          ls -l kai-master-tool.cia
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: kai-master-tool-3ds
+          path: |
+            3ds/kai-master-tool.3dsx
+            3ds/kai-master-tool.cia
+            3ds/build-*.log
+          if-no-files-found: error

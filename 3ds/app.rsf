@@ -1,0 +1,135 @@
+# The exheader: what this title is allowed to do.
+#
+# ## Read this before wondering why the .cia crashes and the .3dsx does not
+#
+# A .3dsx runs under the Homebrew Launcher, inside a *host title's* process, and
+# inherits that title's permissions - which are usually a game's, and generous.
+# A .cia is its own title and gets exactly what this file grants it, so a
+# service missing from ServiceAccessControl below is not a warning at build time
+# and not a helpful error at run time: it is a hang or a black screen, on the
+# console, after install. Every service the app will ever call is therefore
+# listed here *now*, ahead of the code that calls it. Adding one later costs a
+# reinstall; the cost of listing one early is nothing.
+#
+# ## Two numbers that are permanent
+#
+# UniqueId identifies the title to the console. Change it and the HOME menu sees
+# a *different app*: a second icon, and the first one's save data orphaned with
+# no way to reach it. It is chosen once, here, and never again - the same class
+# of decision as the Android versionCode floor in CLAUDE.md.
+#
+# The title version (major.minor.micro, set by the Makefile from VERSION) must
+# only ever increase, or FBI will not treat an install as an update.
+
+BasicInfo:
+  Title                   : "kai's master tool"
+  ProductCode             : CTR-P-KMTL
+  Logo                    : Homebrew
+
+TitleInfo:
+  Category                : Application
+  # Chosen once. Arbitrary within the 0xFF000-0xFFFFF range homebrew uses to
+  # stay clear of retail title ids. Never change this value.
+  UniqueId                : 0xFF4D7
+
+Option:
+  UseOnSD                 : true
+  FreeProductCode         : true
+  MediaFootPadding        : false
+  EnableCompress          : true
+  EnableCrypt             : false
+
+AccessControlInfo:
+  # 124MB and 804MHz are New 3DS figures, and setting them is what makes this a
+  # New 3DS title: an Old 3DS will decline to launch it rather than run it badly.
+  # That is deliberate - the marker AR pipeline has a CV pass in it, and the
+  # honest answer to "does this run on a 2011 console" is no.
+  SystemModeExt           : 124MB
+  CpuSpeed                : 804MHz
+  EnableL2Cache           : true
+
+  IdealProcessor          : 0
+  # Cores 0 and 1. The marker CV pass wants a core of its own (docs/PORT.md
+  # risk 2), and widening this is part of that spike rather than a guess made
+  # now - a mask the kernel rejects is a title that will not launch at all.
+  AffinityMask            : 3
+  Priority                : 30
+  MaxCpu                  : 0x9E
+  CoreVersion             : 2
+  DescVersion             : 2
+
+  MemoryType              : Application
+  SystemMode              : 64MB
+  HandleTableSize         : 512
+
+  FileSystemAccess:
+    - DirectSdmc
+    - CategorySystemApplication
+
+  IoAccessControl:
+
+  ServiceAccessControl:
+    # --- the floor: anything that draws, reads input or touches the SD card
+    - APT:U
+    - $hioFIO
+    - $hostio0
+    - $hostio1
+    - ac:u                # wifi state, needed before http can connect
+    - cfg:u               # region, language, and the 3D slider's calibration
+    - fs:USER
+    - gsp::Gpu
+    - hid:USER
+    - ndm:u               # yields the system's network daemon while we download
+    - ns:s
+    - ptm:u               # battery, and the pedometer-free bits of power state
+    - ptm:sysm
+
+    # --- audio (core/haptics has a sound vocabulary this inherits)
+    - dsp::DSP
+
+    # --- the cameras: marker AR, phase 4
+    - cam:u
+    - y2r:u               # hardware YUV->RGB, so the capture path costs no CPU
+
+    # --- the network: card art over wi-fi, phase 5
+    - http:C
+    - soc:U
+    - ssl:C
+
+    # --- head tracking: phase 7, New 3DS only.
+    # Listed now on purpose. qtm is the one service on this list the app does
+    # not yet call, and it is here because the alternative is discovering in
+    # phase 7 that every device with the app installed needs to reinstall it.
+    - qtm:u
+
+SystemControlInfo:
+  SaveDataSize            : 0K        # decks and preferences live on the SD card
+  RemasterVersion         : 0
+  StackSize               : 0x40000
+
+  Dependency:
+    ac:                   0x0004013000002402
+    am:                   0x0004013000001502
+    camera:               0x0004013000001602
+    cfg:                  0x0004013000001702
+    codec:                0x0004013000001802
+    dsp:                  0x0004013000001A02
+    gpio:                 0x0004013000001B02
+    gsp:                  0x0004013000001C02
+    hid:                  0x0004013000001D02
+    http:                 0x0004013000001E02
+    i2c:                  0x0004013000001F02
+    mcu:                  0x0004013000002001
+    mic:                  0x0004013000002002
+    ndm:                  0x0004013000002B02
+    news:                 0x0004013000003502
+    nim:                  0x0004013000002C02
+    nwm:                  0x0004013000002D02
+    pdn:                  0x0004013000002102
+    ps:                   0x0004013000003102
+    ptm:                  0x0004013000002202
+    qtm:                  0x0004013020004202
+    ro:                   0x0004013000003702
+    socket:               0x0004013000002E02
+    spi:                  0x0004013000002302
+    ssl:                  0x0004013000002F02

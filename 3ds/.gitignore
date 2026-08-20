@@ -1,0 +1,10 @@
+build/
+*.3dsx
+*.cia
+*.elf
+*.smdh
+*.bnr
+*.icn
+*.map
+build-*.log
+test/mt_test

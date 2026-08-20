@@ -1,0 +1,283 @@
+/*
+ * The conformance suite: the C port, asserted against the Kotlin it was
+ * translated from.
+ *
+ * This links no libctru and runs on the host, which is the point — a regression
+ * in the port is caught by `make -C 3ds/test` on any machine, in under a second,
+ * without a console or an emulator or the devkitARM toolchain. It is the direct
+ * analogue of the rule in CLAUDE.md that keeps :core compiling in a sandbox
+ * while :ui only compiles in CI.
+ *
+ * The vectors in `vectors/` are written by `GoldenVectorExportTest` in
+ * `:core`'s jvmTest source set and are committed. If this suite fails, either
+ * the C is wrong or the Kotlin moved; `git log` on the vector file says which.
+ */
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "../src/core/mt_board_layout.h"
+#include "../src/core/mt_drop.h"
+#include "../src/core/mt_types.h"
+
+static int g_checks = 0;
+static int g_failures = 0;
+static const char *g_file = "";
+static int g_line = 0;
+
+/*
+ * Absolute plus relative, and both are loose enough to absorb a difference in
+ * float operation order and tight enough to catch a real one. A board pixel is
+ * 1.0, so 1e-3 is a thousandth of the smallest thing anybody can see.
+ */
+static int close_enough(float a, float b) {
+    if (isnan(a) && isnan(b)) return 1;
+    return fabsf(a - b) <= 1e-3f + 1e-5f * fabsf(b);
+}
+
+static void check_f(const char *what, float got, float want) {
+    ++g_checks;
+    if (!close_enough(got, want)) {
+        ++g_failures;
+        if (g_failures <= 25) {
+            fprintf(stderr, "%s:%d: %s got %.9g want %.9g\n",
+                    g_file, g_line, what, (double)got, (double)want);
+        }
+    }
+}
+
+static void check_s(const char *what, const char *got, const char *want) {
+    ++g_checks;
+    if (strcmp(got, want) != 0) {
+        ++g_failures;
+        if (g_failures <= 25) {
+            fprintf(stderr, "%s:%d: %s got '%s' want '%s'\n",
+                    g_file, g_line, what, got, want);
+        }
+    }
+}
+
+/* ---- the stable spelling of a slot, shared with the Kotlin by convention -- */
+
+static const char *slot_name(MtBoardSlot s) {
+    static char buf[8];
+    switch (s.kind) {
+        case MT_SLOT_DECK:       return "DECK";
+        case MT_SLOT_EXTRA_DECK: return "EXTRA";
+        case MT_SLOT_GRAVEYARD:  return "GY";
+        case MT_SLOT_BANISHED:   return "BAN";
+        case MT_SLOT_ZONE:
+            switch (s.zone.kind) {
+                case MT_ZONE_MONSTER:       snprintf(buf, sizeof buf, "M%d", s.zone.index); return buf;
+                case MT_ZONE_EXTRA_MONSTER: snprintf(buf, sizeof buf, "E%d", s.zone.index); return buf;
+                case MT_ZONE_SPELL_TRAP:    snprintf(buf, sizeof buf, "S%d", s.zone.index); return buf;
+                case MT_ZONE_FIELD_SPELL:   return "F";
+            }
+            return "?";
+    }
+    return "?";
+}
+
+static const char *position_name(MtCardPosition p) {
+    switch (p) {
+        case MT_POS_FACE_UP_ATK:   return "FACE_UP_ATK";
+        case MT_POS_FACE_UP_DEF:   return "FACE_UP_DEF";
+        case MT_POS_FACE_DOWN_DEF: return "FACE_DOWN_DEF";
+        case MT_POS_FACE_DOWN_ATK: return "FACE_DOWN_ATK";
+        default:                   return "?";
+    }
+}
+
+/* ---- reading the vector files ------------------------------------------ */
+
+static FILE *open_vectors(const char *name) {
+    char path[512];
+    snprintf(path, sizeof path, "vectors/%s", name);
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        fprintf(stderr, "cannot open %s - run :core:jvmTest to generate it\n", path);
+        exit(2);
+    }
+    g_file = name;
+    g_line = 0;
+    return f;
+}
+
+/** Splits a line on whitespace in place. Returns the field count. */
+static int split(char *line, char **out, int max) {
+    int n = 0;
+    char *save = NULL;
+    for (char *tok = strtok_r(line, " \t\r\n", &save);
+         tok && n < max;
+         tok = strtok_r(NULL, " \t\r\n", &save)) {
+        out[n++] = tok;
+    }
+    return n;
+}
+
+static int is_skippable(const char *line) {
+    while (*line == ' ' || *line == '\t') ++line;
+    return *line == '#' || *line == '\n' || *line == '\r' || *line == '\0';
+}
+
+/* ---- the cases --------------------------------------------------------- */
+
+static int test_board_solve(void) {
+    FILE *f = open_vectors("board_solve.txt");
+    char line[2048];
+    char *v[40];
+    int rows = 0;
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+        int n = split(line, v, 40);
+        if (n != 26) { fprintf(stderr, "%s:%d: expected 26 fields, got %d\n", g_file, g_line, n); ++g_failures; continue; }
+
+        MtBoardLayout l = mt_board_solve((float)atof(v[0]), (float)atof(v[1]),
+                                         (float)atof(v[2]), (float)atof(v[3]),
+                                         (float)atof(v[4]));
+        /* v[5] is "=" */
+        check_f("cardWidth",  l.card_width,  (float)atof(v[6]));
+        check_f("cardHeight", l.card_height, (float)atof(v[7]));
+        check_f("gap",        l.gap,         (float)atof(v[8]));
+        check_f("fits",       l.fits ? 1.0f : 0.0f, (float)atof(v[9]));
+
+        const MtSlot rects[4] = { l.field, l.hand, l.readout, mt_board_bounds(&l) };
+        const char *names[4]  = { "field", "hand", "readout", "bounds" };
+        for (int i = 0; i < 4; ++i) {
+            int base = 10 + i * 4;
+            char what[32];
+            snprintf(what, sizeof what, "%s.left",   names[i]); check_f(what, rects[i].left,   (float)atof(v[base + 0]));
+            snprintf(what, sizeof what, "%s.top",    names[i]); check_f(what, rects[i].top,    (float)atof(v[base + 1]));
+            snprintf(what, sizeof what, "%s.width",  names[i]); check_f(what, rects[i].width,  (float)atof(v[base + 2]));
+            snprintf(what, sizeof what, "%s.height", names[i]); check_f(what, rects[i].height, (float)atof(v[base + 3]));
+        }
+        ++rows;
+    }
+    fclose(f);
+    printf("  board_solve      %4d cases\n", rows);
+    return rows;
+}
+
+static int test_board_slots(void) {
+    FILE *f = open_vectors("board_slots.txt");
+    MtBoardLayout l = mt_board_solve(400.0f, 240.0f, 0.686f, 1.0f, 0.0f);
+    char line[512];
+    char *v[8];
+    int index = 0;
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+        int n = split(line, v, 8);
+        if (n != 6) { fprintf(stderr, "%s:%d: expected 6 fields, got %d\n", g_file, g_line, n); ++g_failures; continue; }
+
+        if (index >= l.slot_count) {
+            fprintf(stderr, "%s:%d: more slots in the vectors than in the C\n", g_file, g_line);
+            ++g_failures;
+            break;
+        }
+        /* Index-by-index, not name lookup: the order is what slotAt resolves
+         * ties by, so a port that produced the right seventeen rectangles in
+         * the wrong order must fail here. */
+        check_s("slot order", slot_name(l.slots[index].slot), v[0]);
+        check_f("slot.left",   l.slots[index].rect.left,   (float)atof(v[2]));
+        check_f("slot.top",    l.slots[index].rect.top,    (float)atof(v[3]));
+        check_f("slot.width",  l.slots[index].rect.width,  (float)atof(v[4]));
+        check_f("slot.height", l.slots[index].rect.height, (float)atof(v[5]));
+        ++index;
+    }
+    fclose(f);
+    if (index != l.slot_count) {
+        fprintf(stderr, "%s: %d slots in the vectors, %d in the C\n", g_file, index, l.slot_count);
+        ++g_failures;
+    }
+    printf("  board_slots      %4d slots\n", index);
+    return index;
+}
+
+static int test_board_slot_at(void) {
+    FILE *f = open_vectors("board_slot_at.txt");
+    MtBoardLayout l = mt_board_solve(400.0f, 240.0f, 0.686f, 1.0f, 0.0f);
+    char line[512];
+    char *v[8];
+    int rows = 0;
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+        int n = split(line, v, 8);
+        if (n != 4) { fprintf(stderr, "%s:%d: expected 4 fields, got %d\n", g_file, g_line, n); ++g_failures; continue; }
+
+        const MtPlacedSlot *hit = mt_board_slot_at(&l, (float)atof(v[0]), (float)atof(v[1]));
+        check_s("slotAt", hit ? slot_name(hit->slot) : "-", v[3]);
+        ++rows;
+    }
+    fclose(f);
+    printf("  board_slot_at    %4d points\n", rows);
+    return rows;
+}
+
+static int parse_intent(const char *name, MtDropIntent *out, int *present) {
+    MtMatPoint centre = { 0.5f, 0.5f };
+    *present = 1;
+    if (!strcmp(name, "none"))      { *present = 0; return 1; }
+    if (!strcmp(name, "free"))      { *out = mt_drop_free(centre); return 1; }
+    if (!strcmp(name, "monster"))   { *out = mt_drop_zone(mt_slot_zone(mt_zone(MT_ZONE_MONSTER, 2)), centre); return 1; }
+    if (!strcmp(name, "extra"))     { *out = mt_drop_zone(mt_slot_zone(mt_zone(MT_ZONE_EXTRA_MONSTER, 0)), centre); return 1; }
+    if (!strcmp(name, "spell"))     { *out = mt_drop_zone(mt_slot_zone(mt_zone(MT_ZONE_SPELL_TRAP, 1)), centre); return 1; }
+    if (!strcmp(name, "field"))     { *out = mt_drop_zone(mt_slot_zone(mt_zone(MT_ZONE_FIELD_SPELL, 0)), centre); return 1; }
+    if (!strcmp(name, "deckslot"))  { *out = mt_drop_zone(mt_slot_pile(MT_SLOT_DECK), centre); return 1; }
+    if (!strcmp(name, "stack"))     { *out = mt_drop_simple(MT_DROP_STACK); out->target = 7; return 1; }
+    if (!strcmp(name, "hand"))      { *out = mt_drop_simple(MT_DROP_HAND); out->target = 2; return 1; }
+    if (!strcmp(name, "graveyard")) { *out = mt_drop_simple(MT_DROP_GRAVEYARD); return 1; }
+    if (!strcmp(name, "cancel"))    { *out = mt_drop_simple(MT_DROP_CANCEL); return 1; }
+    return 0;
+}
+
+static int test_set_position(void) {
+    FILE *f = open_vectors("set_position.txt");
+    char line[512];
+    char *v[8];
+    int rows = 0;
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+        int n = split(line, v, 8);
+        if (n != 6) { fprintf(stderr, "%s:%d: expected 6 fields, got %d\n", g_file, g_line, n); ++g_failures; continue; }
+
+        MtDropIntent intent;
+        int present = 0;
+        if (!parse_intent(v[2], &intent, &present)) {
+            fprintf(stderr, "%s:%d: unknown intent '%s'\n", g_file, g_line, v[2]);
+            ++g_failures;
+            continue;
+        }
+        MtMonsterHint hint = !strcmp(v[3], "yes") ? MT_MONSTER_YES
+                           : !strcmp(v[3], "no")  ? MT_MONSTER_NO
+                                                  : MT_MONSTER_UNKNOWN;
+
+        MtCardPosition got = mt_set_position(atoi(v[0]) != 0, atoi(v[1]) != 0,
+                                             present ? &intent : NULL, hint);
+        check_s("setPosition", position_name(got), v[5]);
+        ++rows;
+    }
+    fclose(f);
+    printf("  set_position     %4d cases\n", rows);
+    return rows;
+}
+
+int main(void) {
+    printf("mt conformance: the C port against :core's golden vectors\n");
+    test_board_solve();
+    test_board_slots();
+    test_board_slot_at();
+    test_set_position();
+
+    printf("%d checks, %d failures\n", g_checks, g_failures);
+    if (g_failures > 25) fprintf(stderr, "(%d further failures not shown)\n", g_failures - 25);
+    return g_failures == 0 ? 0 : 1;
+}
