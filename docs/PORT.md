@@ -198,10 +198,11 @@ interface from the start, and a host-side bake (a desktop tool writing tiled
 textures to the SD card) stays alive as the guaranteed fallback. A thumbnail is
 about 25KB, so a deck is ~1.5MB either way.
 
-**2 · Core 2 on New 3DS.** The CV pass wants a core of its own.
-`AffinityMask` in `app.rsf` is currently `3` — cores 0 and 1 — because a mask
-the kernel rejects is a title that will not launch at all. Widening it is part
-of the P4 spike. Fallback: CV on core 1 at 15fps.
+**2 · Core 2 on New 3DS. Answered, and it was the wrong knob.** The CV pass
+wants a core of its own, and the way to get one is not `AffinityMask` — it is
+`CanAccessCore2: true` in the exheader, which `app.rsf` now sets. What remains
+for P4 is measuring whether the tracker actually holds 15–30fps there, not
+whether it may run there at all. Fallback is unchanged: CV on core 1 at 15fps.
 
 **3 · The CIA toolchain is the most fragile thing in the build.** devkitPro
 ships neither `makerom` nor `bannertool`, and bannertool's original upstream was

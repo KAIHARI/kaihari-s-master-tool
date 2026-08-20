@@ -40,6 +40,15 @@ Option:
   EnableCrypt             : false
 
 AccessControlInfo:
+  CoreVersion             : 2
+  DescVersion             : 2
+
+  # Minimum kernel this title will run on (4.5.0).
+  ReleaseKernelMajor      : "02"
+  ReleaseKernelMinor      : "33"
+
+  UseExtSaveData          : false
+
   # 124MB and 804MHz are New 3DS figures, and setting them is what makes this a
   # New 3DS title: an Old 3DS will decline to launch it rather than run it badly.
   # That is deliberate - the marker AR pipeline has a CV pass in it, and the
@@ -47,26 +56,139 @@ AccessControlInfo:
   SystemModeExt           : 124MB
   CpuSpeed                : 804MHz
   EnableL2Cache           : true
+  # This, and not AffinityMask, is what lets a thread be placed on core 2 - so
+  # the marker tracker can have a core to itself without stealing frames from
+  # the renderer. docs/PORT.md risk 2 was written before this was found.
+  CanAccessCore2          : true
 
-  IdealProcessor          : 0
-  # Cores 0 and 1. The marker CV pass wants a core of its own (docs/PORT.md
-  # risk 2), and widening this is part of that spike rather than a guess made
-  # now - a mask the kernel rejects is a title that will not launch at all.
-  AffinityMask            : 3
-  Priority                : 30
-  MaxCpu                  : 0x9E
-  CoreVersion             : 2
-  DescVersion             : 2
-
+  # Process settings
   MemoryType              : Application
   SystemMode              : 64MB
-  HandleTableSize         : 512
+  IdealProcessor          : 0
+  AffinityMask            : 1
+  Priority                : 16
+  MaxCpu                  : 0x9E
+  HandleTableSize         : 0x200
 
+  DisableDebug                  : false
+  EnableForceDebug              : false
+  CanWriteSharedPage            : true
+  CanUsePrivilegedPriority      : false
+  CanUseNonAlphabetAndNumber    : true
+  PermitMainFunctionArgument    : true
+  CanShareDeviceMemory          : true
+  RunnableOnSleep               : false
+  SpecialMemoryArrange          : true
+
+  # Decks, the card database and the art cache all live on the SD card, so the
+  # write permission is as necessary as the read one. Nothing here needs NAND.
   FileSystemAccess:
-    - DirectSdmc
     - CategorySystemApplication
+    - DirectSdmc
+    - DirectSdmcWrite
 
   IoAccessControl:
+
+  # Virtual address mappings the graphics and audio stacks need.
+  IORegisterMapping:
+   - 1ff00000-1ff7ffff   # DSP memory
+  MemoryMapping:
+   - 1f000000-1f5fffff:r # VRAM
+
+  # Accessible SVCs, <Name>:<ID>.
+  #
+  # This is 1-62 and 71-88: everything an application issues, including the
+  # cache-maintenance and DMA calls (82-88) that the GPU and camera paths rely
+  # on. What is deliberately *not* here is 96-125 - the debugger, process
+  # creation, resource limits, Backdoor and KernelSetState. The common homebrew
+  # template grants all of them; an application never issues one, and a title
+  # that can attach a debugger to another process is a strictly worse thing to
+  # install than one that cannot.
+  #
+  # If something ever fails on device with a syscall error, this comment is the
+  # first place to look: the fix is to add the one call by name, not to paste
+  # the whole list back in.
+  SystemCallAccess:
+    ControlMemory: 1
+    QueryMemory: 2
+    ExitProcess: 3
+    GetProcessAffinityMask: 4
+    SetProcessAffinityMask: 5
+    GetProcessIdealProcessor: 6
+    SetProcessIdealProcessor: 7
+    CreateThread: 8
+    ExitThread: 9
+    SleepThread: 10
+    GetThreadPriority: 11
+    SetThreadPriority: 12
+    GetThreadAffinityMask: 13
+    SetThreadAffinityMask: 14
+    GetThreadIdealProcessor: 15
+    SetThreadIdealProcessor: 16
+    GetCurrentProcessorNumber: 17
+    Run: 18
+    CreateMutex: 19
+    ReleaseMutex: 20
+    CreateSemaphore: 21
+    ReleaseSemaphore: 22
+    CreateEvent: 23
+    SignalEvent: 24
+    ClearEvent: 25
+    CreateTimer: 26
+    SetTimer: 27
+    CancelTimer: 28
+    ClearTimer: 29
+    CreateMemoryBlock: 30
+    MapMemoryBlock: 31
+    UnmapMemoryBlock: 32
+    CreateAddressArbiter: 33
+    ArbitrateAddress: 34
+    CloseHandle: 35
+    WaitSynchronization1: 36
+    WaitSynchronizationN: 37
+    SignalAndWait: 38
+    DuplicateHandle: 39
+    GetSystemTick: 40
+    GetHandleInfo: 41
+    GetSystemInfo: 42
+    GetProcessInfo: 43
+    GetThreadInfo: 44
+    ConnectToPort: 45
+    SendSyncRequest1: 46
+    SendSyncRequest2: 47
+    SendSyncRequest3: 48
+    SendSyncRequest4: 49
+    SendSyncRequest: 50
+    OpenProcess: 51
+    OpenThread: 52
+    GetProcessId: 53
+    GetProcessIdOfThread: 54
+    GetThreadId: 55
+    GetResourceLimit: 56
+    GetResourceLimitLimitValues: 57
+    GetResourceLimitCurrentValues: 58
+    GetThreadContext: 59
+    Break: 60
+    OutputDebugString: 61
+    ControlPerformanceCounter: 62
+    CreatePort: 71
+    CreateSessionToPort: 72
+    CreateSession: 73
+    AcceptSession: 74
+    ReplyAndReceive1: 75
+    ReplyAndReceive2: 76
+    ReplyAndReceive3: 77
+    ReplyAndReceive4: 78
+    ReplyAndReceive: 79
+    BindInterrupt: 80
+    UnbindInterrupt: 81
+    InvalidateProcessDataCache: 82
+    StoreProcessDataCache: 83
+    FlushProcessDataCache: 84
+    StartInterProcessDma: 85
+    StopDma: 86
+    GetDmaState: 87
+    RestartDma: 88
 
   ServiceAccessControl:
     # --- the floor: anything that draws, reads input or touches the SD card
