@@ -80,6 +80,12 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: devkitpro/devkitarm:latest
+    # Inside a container Actions runs steps with `sh -e`, which on Debian is
+    # dash - and dash has no `set -o pipefail`. The devkitPro image is Debian
+    # 12 and does carry bash, so asking for it is enough.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
