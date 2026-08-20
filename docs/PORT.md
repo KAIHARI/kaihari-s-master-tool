@@ -157,7 +157,29 @@ interaxial eye translation is the one genuinely new term.
 
 ---
 
-## 7. Two numbers that are permanent
+## 7. The release track is its own, and that is not cosmetic
+
+kai's instruction is that the 3DS build is separate from the Android one. It is:
+`build-3ds.yml` builds it, `release-3ds.yml` publishes it, and neither touches
+`app/`. Android releases are tagged `v1.2.3`; these are tagged **`3ds-v1.0.0`**.
+
+The prefix is load-bearing. GitHub's `/releases/latest` hands back the most
+recent non-prerelease release of *any* tag shape, and that endpoint is exactly
+what the Android app's in-app updater reads — so a 3DS release arrives in front
+of the Android updater whether or not anybody wanted it to. `AppVersion.parse`
+is the only place the two can be told apart, and it could not: `takeWhile(
+Char::isDigit)` read `3ds-v1.0.0` as **major version 3** with a pre-release of
+`v1.0.0`. Newer than any APK this app has ever shipped, permanently, carrying no
+APK to install, and shadowing the real Android release published before it. A
+segment must now be *entirely* digits; `AppVersionTest` pins it.
+
+**One ordering consequence, because an installed APK carries the old parser.**
+Until a build containing that fix is on the tablet, publishing a 3DS release
+will make the existing install report "a newer release exists but carries no
+APK". Ship an Android patch first, or accept one confusing notice until the next
+one goes out.
+
+## 8. Two numbers that are permanent
 
 The same class of decision as the Android `versionCode` floor.
 
@@ -177,7 +199,7 @@ reinstall.
 
 ---
 
-## 8. Risks, and what is actually known about each
+## 9. Risks, and what is actually known about each
 
 **1 · TLS on a 2011 console. Partly answered, and the answer is not comfortable.**
 Both `images.ygoprodeck.com` and `db.ygoprodeck.com` return **301 to HTTPS on

@@ -50,8 +50,24 @@ data class AppVersion(
                 null
             }
 
+            // A segment counts only if the *whole* of it is digits.
+            //
+            // This used to be `takeWhile(Char::isDigit)`, which reads the
+            // leading digits of a segment and throws the rest away — and that
+            // is how the tag `3ds-v1.0.0` parsed as **major version 3** with a
+            // pre-release of `v1.0.0`. Newer than every release this app has
+            // ever had, permanently, and carrying no APK. The 3DS port
+            // publishes under its own `3ds-v*` tag namespace precisely so the
+            // two release tracks stay apart, and `/releases/latest` hands back
+            // the newest release of *any* tag shape, so the discrimination has
+            // to happen here.
+            //
+            // Leniency is still the intent for the cases it was written for —
+            // `v1.2.3`, `1.2.3`, `1.2`, `1.2.3-beta.1` all still parse, and a
+            // trailing oddity like `1.2.3rc` still yields 1.2. What no longer
+            // parses is a segment that merely *begins* with a digit.
             val numbers = numericPart.split('.')
-                .map { part -> part.takeWhile(Char::isDigit).toIntOrNull() }
+                .map { part -> if (part.isNotEmpty() && part.all(Char::isDigit)) part.toInt() else null }
 
             // A version is only usable if it starts with at least one number.
             if (numbers.isEmpty() || numbers.first() == null) return UNKNOWN

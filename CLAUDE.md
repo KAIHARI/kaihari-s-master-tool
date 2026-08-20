@@ -287,6 +287,12 @@ authority** — read it before touching anything in there. The short version:
   `CarryHeight` and `MatInput.handQuad` exist because Compose has no real 3D;
   citro3d has matrices and the bottom screen is orthographic, so three of the six
   load-bearing play-stage rules above become vacuous rather than translated.
+- **Its release track is separate**, on kai's instruction: `release-3ds.yml`,
+  tagged `3ds-v1.0.0` against Android's `v1.2.3`. That prefix is load-bearing —
+  `/releases/latest` returns the newest release of *any* tag shape and the
+  in-app APK updater reads exactly that endpoint, so `AppVersion.parse` is the
+  only thing keeping them apart. It could not until now: it read `3ds-v1.0.0` as
+  major version **3**, newer than any APK ever shipped and carrying none.
 - **Two numbers are permanent**, the same class as the Android `versionCode`
   floor: `UniqueId` `0xFF4D7` in `3ds/app.rsf`, and the `3ds/VERSION` triple,
   which may only go up. And a `.3dsx` inherits its host's permissions while a

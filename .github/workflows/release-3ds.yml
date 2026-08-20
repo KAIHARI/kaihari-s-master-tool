@@ -1,0 +1,184 @@
+name: Release CIA
+
+# Publishes the 3DS build as a GitHub release. This is a **separate track from
+# the Android APK** and shares nothing with `release.yml` except the repository.
+#
+# ## The tag namespace is the separation
+#
+# Android releases are tagged `v1.2.3`. These are tagged `3ds-v1.0.0`, and the
+# prefix is not decoration: GitHub's `/releases/latest` returns the most recent
+# non-prerelease release of *any* tag shape, and the Android app's in-app
+# updater reads exactly that endpoint. A 3DS release therefore lands in front of
+# the Android updater whether anyone wants it to or not, and `AppVersion.parse`
+# is what has to tell them apart. It does now; before it did, `3ds-v1.0.0` read
+# as *major version 3* — newer than any APK ever shipped, carrying no APK to
+# install, and shadowing the real Android release published before it.
+#
+# So: never tag a 3DS release `v*`, and never tag an Android release `3ds-v*`.
+#
+# ## The two permanent numbers
+#
+# The CIA's title version comes from the tag and must only ever increase, or FBI
+# reads an install as a downgrade and refuses it. The UniqueId in `3ds/app.rsf`
+# is fixed forever and is not settable here on purpose — a different UniqueId is
+# a different app to the HOME menu, with the first one's data orphaned.
+
+on:
+  push:
+    tags:
+      - '3ds-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 1.0.1 (tagged 3ds-v1.0.1)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as a pre-release'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-3ds-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the CIA
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      name: ${{ steps.version.outputs.name }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every 3ds-v tag, so the monotonicity gate below can see them.
+          fetch-depth: 0
+
+      - name: Resolve and gate the version
+        id: version
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RAW="${{ inputs.version }}"
+          else
+            RAW="${GITHUB_REF_NAME}"
+          fi
+          NAME="${RAW#3ds-v}"
+          NAME="${NAME#v}"
+
+          if ! [[ "$NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$NAME' is not major.minor.micro. The CIA title version is three numbers."
+            exit 1
+          fi
+
+          # A published title version is spent forever: the console refuses an
+          # install whose version is not greater than the one already there, so
+          # a number that goes backwards is a build nobody can install over.
+          PREV="$(git tag -l '3ds-v*' | sed 's/^3ds-v//' \
+                  | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+          if [ -n "$PREV" ]; then
+            HIGHEST="$(printf '%s\n%s\n' "$PREV" "$NAME" | sort -V | tail -1)"
+            if [ "$NAME" = "$PREV" ] || [ "$HIGHEST" != "$NAME" ]; then
+              echo "::error::$NAME does not come after the last released $PREV."
+              exit 1
+            fi
+          fi
+
+          echo "name=$NAME"        >> "$GITHUB_OUTPUT"
+          echo "tag=3ds-v$NAME"    >> "$GITHUB_OUTPUT"
+          echo "Releasing 3ds-v$NAME (previous: ${PREV:-none})"
+
+      - name: Tools for the CIA step
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            cmake build-essential git curl unzip \
+            libpng-dev zlib1g-dev libogg-dev libvorbis-dev
+          3ds/tools/fetch-cia-tools.sh /opt/cia-tools
+          echo "/opt/cia-tools" >> "$GITHUB_PATH"
+
+      - name: Build
+        run: |
+          set -o pipefail
+          # The Makefile takes the title version from this file. Written, not
+          # committed: the tag is the record of what shipped.
+          echo "${{ steps.version.outputs.name }}" > 3ds/VERSION
+          make -C 3ds cia 2>&1 | tee 3ds/build-release.log
+
+          test -f 3ds/kai-master-tool.cia  || { echo "::error::no .cia produced";  exit 1; }
+          test -f 3ds/kai-master-tool.3dsx || { echo "::error::no .3dsx produced"; exit 1; }
+
+          cp 3ds/kai-master-tool.cia  "kai-master-tool-${{ steps.version.outputs.name }}.cia"
+          cp 3ds/kai-master-tool.3dsx "kai-master-tool-${{ steps.version.outputs.name }}.3dsx"
+          ls -l kai-master-tool-*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kai-master-tool-3ds-release
+          path: |
+            kai-master-tool-*.cia
+            kai-master-tool-*.3dsx
+          if-no-files-found: error
+
+  # Publishing is a second job on a normal runner rather than a step in the
+  # first, because the devkitPro container has no `gh` and the alternative was
+  # a python program nested inside a shell string inside a YAML block scalar -
+  # three levels of quoting for something the CLI does in one line.
+  publish:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: kai-master-tool-3ds-release
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+          NAME: ${{ needs.build.outputs.name }}
+        run: |
+          set -euo pipefail
+          ls -l kai-master-tool-*
+
+          PRERELEASE=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then PRERELEASE="--prerelease"; fi
+
+          NOTES=$(mktemp)
+          {
+            echo "kai's master tool for the New 3DS, $TAG."
+            echo
+            echo "Install \`kai-master-tool-$NAME.cia\` with FBI."
+            echo
+            echo "The \`.3dsx\` is for the Homebrew Launcher, but the \`.cia\` is the"
+            echo "real build: a \`.3dsx\` inherits its host title's permissions and a"
+            echo "\`.cia\` gets only what its own RSF grants, so a missing service shows"
+            echo "up in one and not the other."
+            echo
+            echo "This is the 3DS track. It is unrelated to the Android \`v*\` releases"
+            echo "and the in-app APK updater ignores it."
+          } > "$NOTES"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" kai-master-tool-*.cia kai-master-tool-*.3dsx --clobber
+          else
+            gh release create "$TAG" kai-master-tool-*.cia kai-master-tool-*.3dsx \
+              --title "kai's master tool for 3DS $TAG" \
+              --notes-file "$NOTES" \
+              $PRERELEASE
+          fi
