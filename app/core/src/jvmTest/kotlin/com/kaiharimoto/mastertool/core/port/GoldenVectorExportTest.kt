@@ -6,6 +6,9 @@ import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.SetPosition
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
+import com.kaiharimoto.mastertool.core.motion.SpringSpec
+import com.kaiharimoto.mastertool.core.motion.SpringValue
+import com.kaiharimoto.mastertool.core.motion.Springs
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -189,6 +192,54 @@ class GoldenVectorExportTest {
                         }
         }
         write("set_position.txt", "faceDown turned intent monster = position", lines)
+    }
+
+    /**
+     * Spring trajectories, stepped rather than sampled.
+     *
+     * A spring is not a function of its inputs, it is a function of its own
+     * previous state, so a vector that checked one step would pass on an
+     * integrator that had the order wrong. Semi-implicit Euler advances the
+     * velocity first and the position with the *new* velocity; explicit Euler
+     * uses the old one, injects energy, and diverges on a stiff spring. Those
+     * two agree closely for one step and visibly disagree after forty, which is
+     * why every step of every trajectory is written down.
+     *
+     * The dt list is deliberately awkward: a 60Hz frame, a 30Hz frame, one past
+     * MAX_STEP so the clamp is exercised, and a zero.
+     */
+    @Test
+    fun `spring trajectories`() {
+        val specs = listOf(
+            "snappy" to SpringSpec.Snappy,
+            "bouncy" to SpringSpec.Bouncy,
+            "calm" to SpringSpec.Calm,
+        )
+        val starts = listOf(0f to 0f, 120f to 0f, 40f to -900f)
+        val targets = listOf(0f, 100f)
+        val dts = listOf(1f / 60f, 1f / 30f, 0.25f, 0f)
+
+        val lines = buildList {
+            for ((specName, spec) in specs)
+                for ((v0, vel0) in starts)
+                    for (target in targets)
+                        for (dt in dts) {
+                            var state = SpringValue(v0, vel0)
+                            for (i in 0 until 40) {
+                                state = Springs.step(state, target, spec, dt)
+                                add(
+                                    "$specName ${f(v0)} ${f(vel0)} ${f(target)} ${f(dt)} $i " +
+                                        "= ${f(state.value)} ${f(state.velocity)} " +
+                                        b(Springs.settled(state, target))
+                                )
+                            }
+                        }
+        }
+        write(
+            "spring.txt",
+            "spec v0 vel0 target dt step = value velocity settled",
+            lines,
+        )
     }
 
     /** The stable spelling of a slot, shared with the C by convention. */

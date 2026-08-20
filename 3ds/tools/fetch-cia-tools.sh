@@ -20,7 +20,11 @@ set -euo pipefail
 
 DEST="${1:-/opt/cia-tools}"
 MAKEROM_VERSION="${MAKEROM_VERSION:-v0.18.4}"
-BANNERTOOL_REF="${BANNERTOOL_REF:-master}"
+# Deliberately empty by default: clone whatever the fork calls its default
+# branch. Pinning it to "master" is what broke the first CI run - the fork
+# uses a different default, and a hardcoded branch name turns "the upstream
+# renamed its branch" into "the tool is gone". Set this to pin a ref.
+BANNERTOOL_REF="${BANNERTOOL_REF:-}"
 
 mkdir -p "$DEST"
 cd "$(mktemp -d)"
@@ -62,7 +66,10 @@ else
     # Source build first, not second. The prebuilt Linux releases need
     # glibc 2.39+, which is newer than several devkitPro images; building takes
     # about a minute and does not care.
-    if git clone --depth 1 --branch "$BANNERTOOL_REF" \
+    clone_args=(--depth 1 --recurse-submodules)
+    [ -n "$BANNERTOOL_REF" ] && clone_args+=(--branch "$BANNERTOOL_REF")
+
+    if git clone "${clone_args[@]}" \
             https://github.com/carstene1ns/3ds-bannertool.git bannertool-src; then
         cmake -S bannertool-src -B bannertool-build \
               -DCMAKE_BUILD_TYPE=Release >/dev/null

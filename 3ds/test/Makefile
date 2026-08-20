@@ -5,7 +5,13 @@
 # equivalent of `./gradlew :core:jvmTest`.
 
 CC      ?= gcc
-CFLAGS  ?= -std=c99 -O1 -g -Wall -Wextra -Werror -Wno-unused-parameter
+# -ffp-contract=off matters here and only here. GCC will otherwise fuse a*b+c
+# into a single FMA, which is *more* accurate and therefore disagrees with the
+# JVM, which does not. Over one spring step the difference is a ULP; over the
+# forty steps of a trajectory it accumulates into a real one. A conformance
+# suite wants the same arithmetic, not the best arithmetic.
+CFLAGS  ?= -std=c99 -O1 -g -Wall -Wextra -Werror -Wno-unused-parameter \
+           -ffp-contract=off
 LDLIBS  := -lm
 
 CORE    := $(wildcard ../src/core/*.c)

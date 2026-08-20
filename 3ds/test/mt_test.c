@@ -19,6 +19,7 @@
 
 #include "../src/core/mt_board_layout.h"
 #include "../src/core/mt_drop.h"
+#include "../src/core/mt_spring.h"
 #include "../src/core/mt_types.h"
 
 static int g_checks = 0;
@@ -270,12 +271,60 @@ static int test_set_position(void) {
     return rows;
 }
 
+static int test_spring(void) {
+    FILE *f = open_vectors("spring.txt");
+    char line[512];
+    char *v[16];
+    int rows = 0;
+
+    /*
+     * A trajectory is replayed, not sampled. The state carries between rows of
+     * the same run, so a bug in the integrator shows up as drift that grows
+     * down the file rather than as one wrong number - which is exactly how an
+     * explicit-Euler mistake would present.
+     */
+    MtSpringValue state = { 0.0f, 0.0f };
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+        int n = split(line, v, 16);
+        if (n != 10) { fprintf(stderr, "%s:%d: expected 10 fields, got %d\n", g_file, g_line, n); ++g_failures; continue; }
+
+        MtSpringSpec spec;
+        if      (!strcmp(v[0], "snappy")) spec = mt_spring_snappy();
+        else if (!strcmp(v[0], "bouncy")) spec = mt_spring_bouncy();
+        else if (!strcmp(v[0], "calm"))   spec = mt_spring_calm();
+        else { fprintf(stderr, "%s:%d: unknown spec '%s'\n", g_file, g_line, v[0]); ++g_failures; continue; }
+
+        float v0     = (float)atof(v[1]);
+        float vel0   = (float)atof(v[2]);
+        float target = (float)atof(v[3]);
+        float dt     = (float)atof(v[4]);
+        int   step   = atoi(v[5]);
+
+        if (step == 0) { state.value = v0; state.velocity = vel0; }
+        state = mt_spring_step(state, target, spec, dt);
+
+        check_f("spring.value",    state.value,    (float)atof(v[7]));
+        check_f("spring.velocity", state.velocity, (float)atof(v[8]));
+        check_f("spring.settled",
+                mt_spring_settled(state, target, 0.5f, 0.5f) ? 1.0f : 0.0f,
+                (float)atof(v[9]));
+        ++rows;
+    }
+    fclose(f);
+    printf("  spring           %4d steps\n", rows);
+    return rows;
+}
+
 int main(void) {
     printf("mt conformance: the C port against :core's golden vectors\n");
     test_board_solve();
     test_board_slots();
     test_board_slot_at();
     test_set_position();
+    test_spring();
 
     printf("%d checks, %d failures\n", g_checks, g_failures);
     if (g_failures > 25) fprintf(stderr, "(%d further failures not shown)\n", g_failures - 25);
