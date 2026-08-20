@@ -75,8 +75,13 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 export OUTPUT   := $(CURDIR)/$(TARGET)
 export TOPDIR   := $(CURDIR)
 
+# SHADERS belongs here too: the sub-make runs in build/ and finds every
+# prerequisite through VPATH, so a shader directory left out of it is a
+# .v.pica make cannot see and a "no rule to make target" on the generated
+# header rather than on the file that is actually missing.
 export VPATH    := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
-                   $(foreach dir,$(GRAPHICS),$(CURDIR)/$(dir))
+                   $(foreach dir,$(GRAPHICS),$(CURDIR)/$(dir)) \
+                   $(foreach dir,$(SHADERS),$(CURDIR)/$(dir))
 
 export DEPSDIR  := $(CURDIR)/$(BUILD)
 
