@@ -51,7 +51,12 @@
 	dp4 outpos.w, projection[3], r1
 
 	mov outtc0, intex
-	mul outclr, inclr, matColor
+	; matColor first, and that is a hardware constraint rather than a style.
+	; The PICA200 encodes only src1 as a uniform register; src2 must be an
+	; input or a temporary. `mul outclr, inclr, matColor` is "invalid source2
+	; register" at assembly time. Multiplication commutes, so the fix is free -
+	; it is worth a line because the next uniform used this way will hit it too.
+	mul outclr, matColor, inclr
 
 	end
 .end
