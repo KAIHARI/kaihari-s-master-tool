@@ -67,7 +67,10 @@ import com.kaiharimoto.mastertool.ui.update.UpdateState
 // search field pushed off the bottom of the screen. Same contract as
 // `chromeFor` in DeckPanes.
 private val DOCK_GRABBER = 20.dp
-private val DOCK_META = 36.dp
+// 44, not the 36 this row needs to draw in: Material's own minimum interactive
+// size is 48, and the Filters button inside it is a tap target on the surface
+// that is reached by thumb more than any other in the app.
+private val DOCK_META = 44.dp
 private val DOCK_FIELD = 56.dp
 private val DOCK_GAP = 6.dp
 private val DOCK_BOTTOM = 8.dp
