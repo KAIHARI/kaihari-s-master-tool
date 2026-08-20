@@ -97,13 +97,40 @@ Each ends in an installable `.cia` built by CI.
 Ported and under vector so far: `mt_types`, `mt_board_layout`
 (`BoardLayouter.solve` and `slotAt`, all seventeen slots in the order ties
 depend on), `mt_drop` (the intent vocabulary and `SetPosition`), `mt_spring`,
-`mt_ydk`. 21,183 checks. Still to port: `PlayField`, `DropTargets.resolve`,
-`DropCommit`, `HandFan`, `PileFan`, `CardIndex`, `EffectMatching`.
+`mt_ydk`, `mt_random`. **22,655 checks.** Still to port: `PlayField`,
+`DropTargets.resolve`, `DropCommit`, `HandFan`, `PileFan`, `CardIndex`,
+`EffectMatching`.
+
+`mt_random` is the one that is easy to think optional. `PlayField.riffled`
+writes Fisher-Yates out by hand precisely so a seed deals the same hand
+everywhere — and that argument does not survive a port unless the *generator*
+comes over too. An identical shuffle fed by `rand()` is deterministic, correct,
+and a different deal. So `kotlin.random.Random` is reproduced exactly: XorWow,
+its seeding from a Long, its 64 discarded outputs, its rejection loop.
+
+**P2 has a renderer.** `3ds/src/gfx/` draws the stage with real geometry — a
+card is a six-faced solid, the camera is `Mtx_LookAt` from one of the four
+seats, and the two eyes differ only in a projection built by
+`Mtx_PerspStereoTilt` with the interaxial taken from the 3D slider. The desk,
+the felt and the zones are separated in z rather than by paint order, because
+there is a depth buffer now and coplanar surfaces z-fight.
+
+Two decisions in it are worth knowing. `CARD_THICK` is 0.020 against a real
+card's 0.0129 — nearly honest, where `CardSolid.pileDepth` on the tablet has to
+exaggerate *and* saturate because every z there is multiplied by `sin(tilt)`.
+And culling is off: a card is a thing you look at from both sides, the depth
+buffer already hides what is behind, and a face wound the wrong way in code
+written without a device is invisible geometry that looks exactly like a matrix
+bug. Turn it on once there is a console to check it against.
+
+Still missing from P2: the fragment-lighting LUTs (`StageRig` is not ported
+yet — the per-face shading is a constant in the mesh), the baked wood and felt
+textures, the card back, and the room.
 
 | | | |
 |---|---|---|
-| **P2** | citro3d, card solids, lighting LUTs, baked textures, stereo | |
-| **P3** | The bottom-screen control surface — **playable, the demo** | |
+| **P2** | citro3d, card solids, lighting LUTs, baked textures, stereo | in progress |
+| **P3** | The bottom-screen control surface — **playable, the demo** | started |
 | **P4** | Marker AR: camera, CV, pose, stereo compositing | |
 | **P5** | Card art over wi-fi | |
 | **P6** | Search and deck editing | |
