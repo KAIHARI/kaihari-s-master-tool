@@ -136,6 +136,23 @@ jobs:
           test -f kai-master-tool.cia || { echo "::error::no .cia produced"; exit 1; }
           ls -l kai-master-tool.cia
 
+      # The two steps above are how this job builds, and they are deliberately
+      # two - a failure in the first is the code and a failure in the second is
+      # packaging. `release-3ds.yml` is one command, `make all cia`, and that
+      # difference is not academic: the release asked only for `cia`, got a
+      # perfectly good .cia and no .3dsx, and reported a failed build after the
+      # whole thing had compiled and linked. Nothing exercised the release's
+      # invocation until a release was dispatched, so now this does.
+      - name: The release's own command, from clean
+        working-directory: 3ds
+        run: |
+          set -o pipefail
+          make clean >/dev/null
+          make all cia 2>&1 | tee build-release-path.log
+          test -f kai-master-tool.3dsx || { echo "::error::'make all cia' produced no .3dsx"; exit 1; }
+          test -f kai-master-tool.cia  || { echo "::error::'make all cia' produced no .cia";  exit 1; }
+          ls -l kai-master-tool.3dsx kai-master-tool.cia
+
       - name: Upload
         uses: actions/upload-artifact@v4
         with:

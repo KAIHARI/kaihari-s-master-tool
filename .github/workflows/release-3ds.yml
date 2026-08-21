@@ -115,7 +115,19 @@ jobs:
           # The Makefile takes the title version from this file. Written, not
           # committed: the tag is the record of what shipped.
           echo "${{ steps.version.outputs.name }}" > 3ds/VERSION
-          make -C 3ds cia 2>&1 | tee 3ds/build-release.log
+
+          # Both targets, because they are independent: `all` makes the .3dsx
+          # and `cia` makes the .cia, and neither is a prerequisite of the
+          # other. Asking only for `cia` produced a perfectly good .cia and no
+          # .3dsx at all, which the assertions below then reported as a failed
+          # build - after the whole thing had compiled and linked.
+          #
+          # `build-3ds.yml` never caught it because it runs the two as separate
+          # steps on purpose, to tell a code failure from a packaging one. That
+          # is worth keeping there; what it means is that the CI path and the
+          # release path are two different invocations, and this is the one
+          # nothing exercises until a release is dispatched.
+          make -C 3ds all cia 2>&1 | tee 3ds/build-release.log
 
           test -f 3ds/kai-master-tool.cia  || { echo "::error::no .cia produced";  exit 1; }
           test -f 3ds/kai-master-tool.3dsx || { echo "::error::no .3dsx produced"; exit 1; }
