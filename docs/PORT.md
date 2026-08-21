@@ -97,9 +97,19 @@ Each ends in an installable `.cia` built by CI.
 Ported and under vector so far: `mt_types`, `mt_board_layout`
 (`BoardLayouter.solve` and `slotAt`, all seventeen slots in the order ties
 depend on), `mt_drop` (the intent vocabulary and `SetPosition`), `mt_spring`,
-`mt_ydk`, `mt_random`. **22,655 checks.** Still to port: `PlayField`,
-`DropTargets.resolve`, `DropCommit`, `HandFan`, `PileFan`, `CardIndex`,
+`mt_ydk`, `mt_random`, `mt_playfield`, `mt_handfan`. **39,537 checks.** Still
+to port: `DropTargets.resolve`, `DropCommit`, `PileFan`, `CardIndex`,
 `EffectMatching`.
+
+**Every unit is falsified before it is believed**, and that has earned its keep
+three times. Mutating `PlayField` four ways caught two and missed two — the
+script had hardcoded instance ids that a shuffle invalidates, so `stack`,
+`attach`, `counter` and `takeFromUnder` were all quietly *refused* and 25,945
+checks passed without executing the code they were written for; and piles
+recorded ids only, so `lift` clearing counters and `toBanish` setting face-down
+were invisible. A third round found `reorderHand`'s index adjustment untested
+because the hand was too short for the branches to differ. A suite that has
+never failed has not been shown to work.
 
 `mt_random` is the one that is easy to think optional. `PlayField.riffled`
 writes Fisher-Yates out by hand precisely so a seed deals the same hand

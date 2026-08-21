@@ -19,6 +19,7 @@
 
 #include "../src/core/mt_board_layout.h"
 #include "../src/core/mt_drop.h"
+#include "../src/core/mt_handfan.h"
 #include "../src/core/mt_playfield.h"
 #include "../src/core/mt_random.h"
 #include "../src/core/mt_spring.h"
@@ -653,6 +654,106 @@ static int test_playfield(void) {
     return rows;
 }
 
+/* ---- the hand's row ---------------------------------------------------- */
+
+/** Parses "0,3" or "-" into a list. Returns the count. */
+static int parse_list(const char *s, int *out, int cap) {
+    if (!strcmp(s, "-")) return 0;
+    int n = 0;
+    int value = 0;
+    bool have = false;
+    for (const char *c = s; ; ++c) {
+        if (*c >= '0' && *c <= '9') { value = value * 10 + (*c - '0'); have = true; }
+        else {
+            if (have && n < cap) out[n++] = value;
+            value = 0; have = false;
+            if (*c == '\0') break;
+        }
+    }
+    return n;
+}
+
+static int test_handfan(void) {
+    FILE *f = open_vectors("handfan.txt");
+    MtBoardLayout layout = mt_board_solve(320.0f, 226.0f, 0.686f, 1.0f, 0.0f);
+    MtSlot band = layout.hand;
+    const float SF = MT_HAND_STEP_FRACTION;
+
+    char line[2048];
+    char *v[256];
+    int rows = 0;
+
+    /* The row named by the most recent `row` line - every following line is
+     * about it, exactly as the exporter emitted them. */
+    MtHandRow row = mt_hand_row_of(0);
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+        int n = split(line, v, 256);
+        if (n < 2) continue;
+        const char *key = v[0];
+
+        if (!strcmp(key, "row")) {
+            int count = atoi(v[1]);
+            int lifted[MT_MAX_HAND_PLACES], opening[MT_MAX_HAND_PLACES];
+            int lifted_n = parse_list(v[2], lifted, MT_MAX_HAND_PLACES);
+            int opening_n = parse_list(v[3], opening, MT_MAX_HAND_PLACES);
+            row = mt_hand_row(count, lifted, lifted_n, opening, opening_n);
+
+            /* v[4] is "=" */
+            check_i("row size", row.count, atoll(v[5]));
+            for (int i = 0; i < row.count && 6 + i < n; ++i) {
+                char what[32];
+                snprintf(what, sizeof what, "place[%d]", i);
+                check_i(what, row.places[i], atoll(v[6 + i]));
+            }
+            ++rows;
+        } else if (!strcmp(key, "step")) {
+            check_f("step", mt_hand_step(band, layout.card_width, row.count, SF),
+                    (float)atof(v[2]));
+        } else if (!strcmp(key, "centre")) {
+            int place = atoi(v[2]);
+            int places = atoi(v[3]);
+            check_f("centreOf",
+                    mt_hand_centre_of(band, layout.card_width, place, places, SF),
+                    (float)atof(v[4]));
+        } else if (!strcmp(key, "insert")) {
+            int count = atoi(v[1]);
+            float x = (float)atof(v[2]);
+            int got = mt_hand_insert_at(band, layout.card_width, &row, count, x, SF);
+            check_i("insertAt", got, atoll(v[4]));
+
+            /*
+             * The fixed point, asserted here rather than only in Kotlin: when
+             * the row is holding a place open for the gap insertAt just named,
+             * asking again must name the same gap. A row that re-asked and got
+             * a different answer would flicker every frame.
+             */
+            int opened = mt_hand_opening_for(&row, got, count);
+            if (opened >= 0) {
+                int again = mt_hand_insert_at(band, layout.card_width, &row, count, x, SF);
+                check_i("insertAt is a fixed point", again, got);
+            }
+        } else if (!strcmp(key, "openingfor")) {
+            check_i("openingFor", mt_hand_opening_for(&row, atoi(v[2]), atoi(v[1])), atoll(v[4]));
+        } else if (!strcmp(key, "gapafter")) {
+            check_i("gapAfter", mt_hand_gap_after(&row, atoi(v[2]), atoi(v[1])), atoll(v[4]));
+        } else if (!strcmp(key, "placeof")) {
+            check_i("placeOf", mt_hand_place_of(&row, atoi(v[2])), atoll(v[4]));
+        } else if (!strcmp(key, "point")) {
+            int places = atoi(v[1]);
+            int place = atoi(v[2]);
+            MtMatPoint p = mt_hand_point_for(&layout, place, places, SF);
+            check_f("pointFor.x", p.x, (float)atof(v[3]));
+            check_f("pointFor.y", p.y, (float)atof(v[4]));
+        }
+    }
+    fclose(f);
+    printf("  handfan          %4d rows\n", rows);
+    return rows;
+}
+
 int main(void) {
     printf("mt conformance: the C port against :core's golden vectors\n");
     test_board_solve();
@@ -663,6 +764,7 @@ int main(void) {
     test_ydk();
     test_random();
     test_playfield();
+    test_handfan();
 
     printf("%d checks, %d failures\n", g_checks, g_failures);
     if (g_failures > 25) fprintf(stderr, "(%d further failures not shown)\n", g_failures - 25);

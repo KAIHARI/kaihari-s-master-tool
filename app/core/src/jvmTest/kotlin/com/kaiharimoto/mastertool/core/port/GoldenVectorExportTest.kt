@@ -9,6 +9,8 @@ import com.kaiharimoto.mastertool.core.board.SetPosition
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
+import com.kaiharimoto.mastertool.core.layout.HandFan
+import com.kaiharimoto.mastertool.core.layout.HandRow
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
 import com.kaiharimoto.mastertool.core.motion.SpringValue
 import com.kaiharimoto.mastertool.core.motion.Springs
@@ -568,6 +570,78 @@ class GoldenVectorExportTest {
         run("shuffle -7")
 
         write("playfield.txt", "<step> op <script line> then the whole field, keyed by step", lines)
+    }
+
+    /**
+     * The hand's row, and the inverse that has to land back on it.
+     *
+     * `insertAt` is the true inverse of `centreOf` only because it *counts*
+     * drawn cards rather than dividing by the step — a row with a place held
+     * open in it is not evenly spaced, and dividing describes a row that is.
+     * The property worth pinning is the fixed point: the gap `insertAt` names
+     * for a point is the gap the row is already holding open there. A row that
+     * re-asked and got a different answer would flicker every frame.
+     *
+     * The 3DS draws this as a strip rather than a fan, but a strip with a gap
+     * open in it is the same question, so the same arithmetic answers it.
+     */
+    @Test
+    fun `hand fan`() {
+        val layout = BoardLayouter.solve(320f, 226f, 0.686f, 1f, 0f)
+        val band = layout.hand
+        val stepFraction = 0.74f
+
+        val lines = buildList {
+            for (count in listOf(0, 1, 2, 5, 7, 10, 14)) {
+                for (lifted in listOf(emptySet(), setOf(0), setOf(2), setOf(0, 3))) {
+                    for (opening in listOf(emptyList(), listOf(0), listOf(2), listOf(0, 4))) {
+                        val row = HandFan.row(count, lifted, opening)
+                        add(
+                            "row $count ${lifted.sorted().joinToString(",").ifEmpty { "-" }} " +
+                                "${opening.joinToString(",").ifEmpty { "-" }} = ${row.size}" +
+                                row.places.joinToString("") { " ${it ?: -1}" }
+                        )
+
+                        add("step $count ${f(HandFan.step(band, layout.cardWidth, row.size, stepFraction))}")
+                        for (place in 0 until row.size) {
+                            add(
+                                "centre $count $place ${row.size} " +
+                                    "${f(HandFan.centreOf(band, layout.cardWidth, place, row.size, stepFraction))}"
+                            )
+                        }
+                        // Swept across the band and past both ends, because the
+                        // ends are where an off-by-one lives.
+                        var i = -2
+                        while (i <= 34) {
+                            val x = band.left + band.width * (i / 32f)
+                            add(
+                                "insert $count ${f(x)} = " +
+                                    HandFan.insertAt(band, layout.cardWidth, row, count, x, stepFraction)
+                            )
+                            i++
+                        }
+                        for (at in -1..count + 1) {
+                            add("openingfor $count $at = ${row.openingFor(at, count) ?: -1}")
+                            add("gapafter $count $at = ${row.gapAfter(at, count)}")
+                        }
+                        for (h in 0 until count) {
+                            add("placeof $count $h = ${row.placeOf(h) ?: -1}")
+                        }
+                    }
+                }
+            }
+            for (places in listOf(1, 3, 6, 12)) {
+                for (place in 0 until places) {
+                    val p = HandFan.pointFor(layout, place, places, stepFraction)
+                    add("point $places $place ${f(p.x)} ${f(p.y)}")
+                }
+            }
+        }
+        write(
+            "handfan.txt",
+            "row/step/centre/insert/openingfor/gapafter/placeof/point (layout 320x226)",
+            lines,
+        )
     }
 
     /** The stable spelling of a slot, shared with the C by convention. */
