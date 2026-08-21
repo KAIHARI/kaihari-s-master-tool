@@ -19,6 +19,7 @@
 
 #include "../src/core/mt_board_layout.h"
 #include "../src/core/mt_drop.h"
+#include "../src/core/mt_playfield.h"
 #include "../src/core/mt_random.h"
 #include "../src/core/mt_spring.h"
 #include "../src/core/mt_ydk.h"
@@ -501,6 +502,157 @@ static int test_random(void) {
     return rows;
 }
 
+/* ---- the table --------------------------------------------------------- */
+
+static MtCardPosition position_arg(int raw) {
+    return (raw >= (int)MT_POS_COUNT) ? MT_POS_KEEP : (MtCardPosition)raw;
+}
+
+/** Applies one script line. Returns what the operation answered. */
+static bool apply_op(MtPlayField *f, char **v, int n) {
+    const char *op = v[2];   /* v[0] = step, v[1] = "op" */
+#define ARG_I(k) atoi(v[2 + (k)])
+#define ARG_F(k) ((float)atof(v[2 + (k)]))
+#define ARG_AT(k) ((MtMatPoint){ ARG_F(k), ARG_F((k) + 1) })
+    (void)n;
+
+    if (!strcmp(op, "shuffle"))       { mt_field_shuffle_deck(f, atoll(v[3])); return true; }
+    if (!strcmp(op, "draw"))          return mt_field_draw(f);
+    if (!strcmp(op, "playhand"))      return mt_field_play_from_hand(f, ARG_I(1), ARG_AT(2), position_arg(ARG_I(4)));
+    if (!strcmp(op, "playdeck"))      return mt_field_play_from_deck(f, ARG_I(1), ARG_AT(2), position_arg(ARG_I(4)));
+    if (!strcmp(op, "playextra"))     return mt_field_play_from_extra(f, ARG_I(1), ARG_AT(2), position_arg(ARG_I(4)));
+    if (!strcmp(op, "playgy"))        return mt_field_play_from_graveyard(f, ARG_I(1), ARG_AT(2), position_arg(ARG_I(4)));
+    if (!strcmp(op, "playban"))       return mt_field_play_from_banished(f, ARG_I(1), ARG_AT(2), position_arg(ARG_I(4)));
+    if (!strcmp(op, "move"))          return mt_field_move_on_mat(f, ARG_I(1), ARG_AT(2), position_arg(ARG_I(4)));
+    if (!strcmp(op, "stack"))         return mt_field_stack_onto(f, ARG_I(1), ARG_I(2), position_arg(ARG_I(3)));
+    if (!strcmp(op, "unstack"))       return mt_field_unstack(f, ARG_I(1), ARG_AT(2));
+    if (!strcmp(op, "front"))         return mt_field_bring_to_front(f, ARG_I(1));
+    if (!strcmp(op, "flip"))          return mt_field_flip(f, ARG_I(1));
+    if (!strcmp(op, "rotate"))        return mt_field_rotate(f, ARG_I(1));
+    if (!strcmp(op, "setpos"))        return mt_field_set_position(f, ARG_I(1), position_arg(ARG_I(2)));
+    if (!strcmp(op, "gy"))            return mt_field_to_graveyard(f, ARG_I(1));
+    if (!strcmp(op, "banish"))        return mt_field_to_banish(f, ARG_I(1), ARG_I(2) != 0);
+    if (!strcmp(op, "tohand"))        return mt_field_to_hand(f, ARG_I(1), ARG_I(2));
+    if (!strcmp(op, "decktop"))       return mt_field_to_deck_top(f, ARG_I(1));
+    if (!strcmp(op, "deckbottom"))    return mt_field_to_deck_bottom(f, ARG_I(1));
+    if (!strcmp(op, "toextra"))       return mt_field_to_extra_deck(f, ARG_I(1));
+    if (!strcmp(op, "handgy"))        return mt_field_hand_to_graveyard(f, ARG_I(1));
+    if (!strcmp(op, "handbanish"))    return mt_field_hand_to_banish(f, ARG_I(1));
+    if (!strcmp(op, "handdecktop"))   return mt_field_hand_to_deck_top(f, ARG_I(1));
+    if (!strcmp(op, "handdeckbottom"))return mt_field_hand_to_deck_bottom(f, ARG_I(1));
+    if (!strcmp(op, "reorder"))       return mt_field_reorder_hand(f, ARG_I(1), ARG_I(2));
+    if (!strcmp(op, "counter"))       return mt_field_add_counter(f, ARG_I(1), ARG_I(2));
+    if (!strcmp(op, "attach"))        return mt_field_attach_as_material(f, ARG_I(1), ARG_I(2));
+    if (!strcmp(op, "detach"))        return mt_field_detach_material(f, ARG_I(1));
+    if (!strcmp(op, "takefromunder")) return mt_field_take_from_under(f, ARG_I(1), ARG_I(2), ARG_AT(3), position_arg(ARG_I(5)));
+    if (!strcmp(op, "life"))          { mt_field_adjust_life(f, ARG_I(1)); return true; }
+    if (!strcmp(op, "phase"))         { mt_field_next_phase(f); return true; }
+    if (!strcmp(op, "endturn"))       { mt_field_end_turn(f); return true; }
+
+    fprintf(stderr, "%s:%d: unknown op '%s'\n", g_file, g_line, op);
+    ++g_failures;
+    return false;
+#undef ARG_AT
+#undef ARG_F
+#undef ARG_I
+}
+
+/*
+ * A pile, as id/position/counters triples.
+ *
+ * Ids alone are not enough, and that was a real hole: a card's position and
+ * counters travel with it into a pile, and recording only the id made `lift`
+ * clearing counters and `toBanish` setting face-down both invisible. A mutation
+ * that left counters on a card sent to the graveyard passed cleanly.
+ */
+static void check_pile(const char *name, const MtPlayField *f,
+                       const int *pile, int count, char **v, int n) {
+    int want = atoi(v[2]);
+    check_i(name, count, want);
+    for (int i = 0; i < want && 3 + i * 3 + 2 < n; ++i) {
+        char what[64];
+        int id = (i < count) ? pile[i] : -1;
+        snprintf(what, sizeof what, "%s[%d].id", name, i);
+        check_i(what, id, atoll(v[3 + i * 3]));
+
+        int position = (id >= 0) ? (int)f->instances[id].position : -1;
+        int counters = (id >= 0) ? f->instances[id].counters : -1;
+        snprintf(what, sizeof what, "%s[%d].position", name, i);
+        check_i(what, position, atoll(v[4 + i * 3]));
+        snprintf(what, sizeof what, "%s[%d].counters", name, i);
+        check_i(what, counters, atoll(v[5 + i * 3]));
+    }
+}
+
+static int test_playfield(void) {
+    FILE *f = open_vectors("playfield.txt");
+    char line[4096];
+    char *v[512];
+    int rows = 0;
+
+    /* The same deck the exporter built: distinct passcodes, so a card in the
+     * wrong pile is visible rather than plausible. */
+    int main_ids[24], extra_ids[6];
+    for (int i = 0; i < 24; ++i) main_ids[i] = 1000 + i + 1;
+    for (int i = 0; i < 6; ++i)  extra_ids[i] = 9000 + i + 1;
+
+    static MtPlayField field;
+    mt_field_set_up(&field, main_ids, 24, extra_ids, 6);
+    bool last_ok = true;
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+        int n = split(line, v, 512);
+        if (n < 2) continue;
+        const char *key = v[1];
+
+        if (!strcmp(key, "op")) {
+            last_ok = apply_op(&field, v, n);
+            ++rows;
+        } else if (!strcmp(key, "ok")) {
+            check_i("op refused/accepted", last_ok ? 1 : 0, atoll(v[2]));
+        } else if (!strcmp(key, "lp")) {
+            check_i("lifePoints", field.life_points, atoll(v[2]));
+            check_i("phase", (int)field.phase, atoll(v[4]));
+            check_i("turn", field.turn, atoll(v[6]));
+        } else if (!strcmp(key, "mat")) {
+            check_i("mat count", field.mat_count, atoll(v[2]));
+        } else if (!strncmp(key, "mat", 3)) {
+            int index = atoi(key + 3);
+            if (index >= field.mat_count) { check_i("mat index present", 0, 1); continue; }
+            const MtPlacedCard *placed = &field.mat[index];
+            const MtBoardCard *card = &field.instances[placed->card];
+
+            int c = 2;
+            check_i("placed.id",      placed->card,        atoll(v[c++]));
+            check_i("placed.cardId",  card->card_id,       atoll(v[c++]));
+            check_f("placed.x",       placed->at.x,  (float)atof(v[c++]));
+            check_f("placed.y",       placed->at.y,  (float)atof(v[c++]));
+            check_i("placed.position", (int)card->position, atoll(v[c++]));
+            check_i("placed.counters", card->counters,      atoll(v[c++]));
+
+            int beneath = atoi(v[c++]);
+            check_i("placed.beneath count", placed->beneath_count, beneath);
+            for (int i = 0; i < beneath && c < n; ++i) {
+                check_i("beneath", i < placed->beneath_count ? placed->beneath[i] : -1, atoll(v[c++]));
+            }
+            int materials = (c < n) ? atoi(v[c++]) : 0;
+            check_i("placed.material count", card->material_count, materials);
+            for (int i = 0; i < materials && c < n; ++i) {
+                check_i("material", i < card->material_count ? card->materials[i] : -1, atoll(v[c++]));
+            }
+        } else if (!strcmp(key, "hand"))  check_pile("hand", &field, field.hand, field.hand_count, v, n);
+        else if   (!strcmp(key, "deck"))  check_pile("deck", &field, field.deck, field.deck_count, v, n);
+        else if   (!strcmp(key, "extra")) check_pile("extra", &field, field.extra_deck, field.extra_deck_count, v, n);
+        else if   (!strcmp(key, "gy"))    check_pile("gy", &field, field.graveyard, field.graveyard_count, v, n);
+        else if   (!strcmp(key, "ban"))   check_pile("ban", &field, field.banished, field.banished_count, v, n);
+    }
+    fclose(f);
+    printf("  playfield        %4d ops\n", rows);
+    return rows;
+}
+
 int main(void) {
     printf("mt conformance: the C port against :core's golden vectors\n");
     test_board_solve();
@@ -510,6 +662,7 @@ int main(void) {
     test_spring();
     test_ydk();
     test_random();
+    test_playfield();
 
     printf("%d checks, %d failures\n", g_checks, g_failures);
     if (g_failures > 25) fprintf(stderr, "(%d further failures not shown)\n", g_failures - 25);

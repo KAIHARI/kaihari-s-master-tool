@@ -2,9 +2,12 @@ package com.kaiharimoto.mastertool.core.port
 
 import com.kaiharimoto.mastertool.core.board.DropIntent
 import com.kaiharimoto.mastertool.core.board.FieldZone
+import com.kaiharimoto.mastertool.core.board.CardPosition
 import com.kaiharimoto.mastertool.core.board.MatPoint
+import com.kaiharimoto.mastertool.core.board.PlayField
 import com.kaiharimoto.mastertool.core.board.SetPosition
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
+import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
 import com.kaiharimoto.mastertool.core.motion.SpringValue
@@ -358,6 +361,213 @@ class GoldenVectorExportTest {
             }
         }
         write("random.txt", "raw <seed> <i> = <int>  |  bound <seed> <bound> <i> = <int>", lines)
+    }
+
+    /**
+     * The table itself, driven by a script that lives in the vector file.
+     *
+     * `PlayField` is the one ported thing that is *stateful*, and that changes
+     * what a vector has to be. A function can be swept over a grid of inputs; a
+     * table has to be walked, because each operation's correctness depends on
+     * every operation before it.
+     *
+     * So the script is written **into the file** rather than duplicated in both
+     * languages, and it is built **as it runs**, against the live field. The
+     * first version of this test hardcoded instance ids, and after a shuffle
+     * those ids are somewhere else — so `stack`, `attach`, `counter` and
+     * `takeFromUnder` were all quietly *refused*, the suite recorded the
+     * refusals faithfully on both sides, and 25,945 checks passed without ever
+     * executing the code they were written for. Two deliberate mutations went
+     * undetected before that was noticed.
+     *
+     * Refusals still matter and are still recorded — `ok 0` is a real answer,
+     * and the state after one is compared too, because the Kotlin gets "the
+     * field is unchanged" free from immutability and the C has to earn it. But
+     * a refusal has to be *chosen*, not stumbled into.
+     */
+    @Test
+    fun `play field script`() {
+        // Distinct passcodes, so a card in the wrong pile is visible rather
+        // than plausible.
+        val main = (1..24).map { CardId(1000 + it) }
+        val extra = (1..6).map { CardId(9000 + it) }
+
+        var field = PlayField.setUp(main, extra)
+        val lines = mutableListOf<String>()
+        var step = 0
+
+        fun position(raw: Int): CardPosition? =
+            if (raw >= CardPosition.entries.size) null else CardPosition.entries[raw]
+
+        fun record(ok: Boolean) {
+            lines += "$step ok ${b(ok)}"
+            lines += "$step lp ${field.lifePoints} phase ${field.phase.ordinal} turn ${field.turn}"
+            lines += "$step mat ${field.mat.size}"
+            field.mat.forEachIndexed { i, placed ->
+                val sb = StringBuilder("$step mat$i ${placed.id} ${placed.card.cardId.value} ")
+                sb.append("${f(placed.at.x)} ${f(placed.at.y)} ")
+                sb.append("${placed.card.position.ordinal} ${placed.card.counters} ")
+                sb.append("${placed.beneath.size}")
+                placed.beneath.forEach { sb.append(" ${it.instanceId}") }
+                sb.append(" ${placed.card.materials.size}")
+                placed.card.materials.forEach { sb.append(" ${it.instanceId}") }
+                lines += sb.toString()
+            }
+            // Position and counters travel with a card into a pile, and used to
+            // be dropped here — which made `lift` clearing counters and
+            // `toBanish` setting face-down both invisible. A mutation that left
+            // counters on a card sent to the graveyard passed cleanly.
+            fun pile(name: String, cards: List<com.kaiharimoto.mastertool.core.board.BoardCard>) {
+                lines += "$step $name ${cards.size}" + cards.joinToString("") {
+                    " ${it.instanceId} ${it.position.ordinal} ${it.counters}"
+                }
+            }
+            pile("hand", field.hand)
+            pile("deck", field.deck)
+            pile("extra", field.extraDeck)
+            pile("gy", field.graveyard)
+            pile("ban", field.banished)
+        }
+
+        fun run(raw: String) {
+            step += 1
+            val parts = raw.trim().split(" ")
+            val op = parts[0]
+            fun i(n: Int) = parts[n].toInt()
+            fun p(n: Int) = parts[n].toFloat()
+            fun at(n: Int) = MatPoint(p(n), p(n + 1))
+
+            val next: PlayField? = when (op) {
+                "shuffle" -> field.shuffleDeck(parts[1].toLong())
+                "draw" -> field.draw()
+                "playhand" -> field.playFromHand(i(1), at(2), CardPosition.entries[i(4)])
+                "playdeck" -> field.playFromDeck(i(1), at(2), CardPosition.entries[i(4)])
+                "playextra" -> field.playFromExtra(i(1), at(2), CardPosition.entries[i(4)])
+                "playgy" -> field.playFromGraveyard(i(1), at(2), CardPosition.entries[i(4)])
+                "playban" -> field.playFromBanished(i(1), at(2), CardPosition.entries[i(4)])
+                "move" -> field.moveOnMat(i(1), at(2), position(i(4)))
+                "stack" -> field.stackOnto(i(1), i(2), position(i(3)))
+                "unstack" -> field.unstack(i(1), at(2))
+                "front" -> field.bringToFront(i(1))
+                "flip" -> field.flip(i(1))
+                "rotate" -> field.rotate(i(1))
+                "setpos" -> field.setPosition(i(1), CardPosition.entries[i(2)])
+                "gy" -> field.toGraveyard(i(1))
+                "banish" -> field.toBanish(i(1), i(2) != 0)
+                "tohand" -> field.toHand(i(1), i(2).takeIf { it >= 0 })
+                "decktop" -> field.toDeckTop(i(1))
+                "deckbottom" -> field.toDeckBottom(i(1))
+                "toextra" -> field.toExtraDeck(i(1))
+                "handgy" -> field.handToGraveyard(i(1))
+                "handbanish" -> field.handToBanish(i(1))
+                "handdecktop" -> field.handToDeckTop(i(1))
+                "handdeckbottom" -> field.handToDeckBottom(i(1))
+                "reorder" -> field.reorderHand(i(1), i(2))
+                "counter" -> field.addCounter(i(1), i(2))
+                "attach" -> field.attachAsMaterial(i(1), i(2))
+                "detach" -> field.detachMaterial(i(1))
+                // The position is ignored when the index is 0 — that path is a
+                // plain slide of the top card — which is exactly the asymmetry
+                // the C has to reproduce rather than tidy away.
+                "takefromunder" -> field.takeFromUnder(i(1), i(2), at(3), CardPosition.entries[i(5)])
+                "life" -> field.adjustLifePoints(i(1))
+                "phase" -> field.nextPhase()
+                "endturn" -> field.endTurn()
+                else -> error("unknown op '$op'")
+            }
+
+            lines += "$step op $raw"
+            if (next != null) field = next
+            record(next != null)
+        }
+
+        /** The instance on the mat at [index] from the back, so ops name real cards. */
+        fun onMat(index: Int) = field.mat[index].id
+        fun top() = field.mat.last().id
+
+        record(true)   // step 0
+
+        run("shuffle 20260820")
+        repeat(6) { run("draw") }
+
+        // Four cards down, so there is something to build piles out of.
+        run("playhand 0 0.30 0.40 0")
+        run("playhand 0 0.50 0.40 2")
+        run("playhand 0 0.70 0.40 1")
+        run("playhand 0 0.20 0.60 0")
+
+        val a = onMat(0); val bCard = onMat(1); val c = onMat(2); val d = onMat(3)
+
+        run("move $a 0.32 0.45 4")          // 4 == keep
+        run("move $bCard 0.50 0.42 0")
+        run("front $a")
+        run("front ${top()}")               // already there: refused
+        run("flip $bCard")
+        run("rotate $a")
+        run("setpos $c 3")
+
+        // Two piles of two, then one pile onto the other — the only shape that
+        // exercises the order `beneath` is concatenated in.
+        run("stack $a $bCard 4")
+        run("stack $c $d 4")
+        run("stack $a $c 4")
+        run("stack $a $a 4")                // onto itself: refused
+
+        run("counter $a 3")
+        run("takefromunder $a 2 0.15 0.55 0")
+        run("takefromunder $a 0 0.16 0.56 2")   // index 0 ignores the position
+        run("unstack $a 0.20 0.20")
+
+        run("playdeck 0 0.10 0.10 0")
+        run("playdeck 99 0.10 0.10 0")      // out of range: refused
+        run("playextra 0 0.90 0.10 1")
+
+        val host = top()
+        val guest = onMat(0)
+        run("attach $guest $host")
+        run("attach $host $host")           // onto itself: refused
+        run("detach $host")
+        run("detach $host")                 // nothing attached now: refused
+
+        // A card with counters leaving the mat, so `lift` clearing them is seen.
+        run("counter $host 4")
+        run("gy $host")
+
+        run("banish ${top()} 1")            // face-down, which the pile must show
+        run("tohand ${top()} 0")
+        run("decktop ${top()}")
+        if (field.mat.isNotEmpty()) run("deckbottom ${top()}")
+        if (field.mat.isNotEmpty()) run("toextra ${top()}")
+
+        // Enough cards in hand that reordering has somewhere to go. Without
+        // this the hand held one card by now, `ints_insert_at` clamped both
+        // branches of reorderHand's `to > from` adjustment to the same place,
+        // and a mutation deleting that adjustment passed cleanly.
+        repeat(5) { run("draw") }
+        run("reorder 0 3")
+        run("reorder 3 0")
+        run("reorder 1 4")
+        run("reorder 4 2")
+
+        run("handgy 0")
+        run("handbanish 0")
+        run("handdecktop 0")
+        run("handdeckbottom 0")
+        run("reorder 0 2")
+        run("reorder 1 1")                  // its own place: refused
+        run("reorder 1 2")                  // the gap after itself: refused
+
+        run("playgy 0 0.40 0.80 0")
+        run("playban 0 0.60 0.80 0")
+        run("counter ${top()} -99")         // clamps to zero
+        run("counter ${top()} 0")           // no change: refused
+
+        run("life -1200")
+        run("life -99999")                  // clamps to zero
+        run("phase"); run("phase"); run("endturn")
+        run("shuffle -7")
+
+        write("playfield.txt", "<step> op <script line> then the whole field, keyed by step", lines)
     }
 
     /** The stable spelling of a slot, shared with the C by convention. */
