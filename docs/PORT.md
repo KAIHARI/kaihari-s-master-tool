@@ -96,20 +96,36 @@ Each ends in an installable `.cia` built by CI.
 
 Ported and under vector so far: `mt_types`, `mt_board_layout`
 (`BoardLayouter.solve` and `slotAt`, all seventeen slots in the order ties
-depend on), `mt_drop` (the intent vocabulary and `SetPosition`), `mt_spring`,
-`mt_ydk`, `mt_random`, `mt_playfield`, `mt_handfan`. **39,537 checks.** Still
-to port: `DropTargets.resolve`, `DropCommit`, `PileFan`, `CardIndex`,
-`EffectMatching`.
+depend on), `mt_drop` (the intent vocabulary, `SetPosition`, **and
+`DropTargets.resolve` with `FanHome`**), `mt_spring`, `mt_ydk`, `mt_random`,
+`mt_playfield`, `mt_handfan`. **50,129 checks.** Still to port: `DropCommit`,
+`PileFan`, `CardIndex`, `EffectMatching`.
 
-**Every unit is falsified before it is believed**, and that has earned its keep
-three times. Mutating `PlayField` four ways caught two and missed two — the
+Hysteresis cannot be swept. Stickiness is a function of what the last answer
+was, so most of the resolver's vectors are **paths**: the pointer walks a line
+and each answer feeds back as `previous`, which is what a real drag does.
+
+**Every unit is falsified before it is believed**, and it has earned its keep
+five times — every single time, the hole was in the *test*, not the port. Mutating `PlayField` four ways caught two and missed two — the
 script had hardcoded instance ids that a shuffle invalidates, so `stack`,
 `attach`, `counter` and `takeFromUnder` were all quietly *refused* and 25,945
 checks passed without executing the code they were written for; and piles
 recorded ids only, so `lift` clearing counters and `toBanish` setting face-down
 were invisible. A third round found `reorderHand`'s index adjustment untested
-because the hand was too short for the branches to differ. A suite that has
-never failed has not been shown to work.
+because the hand was too short for the branches to differ.
+
+The resolver then did it twice more. `INCUMBENT_BIAS`'s cap at half the gap
+passed cleanly when removed, because the fan home sat nowhere near a zone
+centre — and that cap is the fix for two bugs in opposite directions, biting
+only when the two targets are nearly on top of each other. And the fan home was
+hardcoded on the C side rather than carried in the file, so the first path that
+used a different one read as a port bug.
+
+A suite that has never failed has not been shown to work. One case is
+documented as **unreachable** rather than left looking tested: `nearestZone`'s
+first-minimum tie-break, because `resolve` takes a `MatPoint` and the round trip
+through the mat's fractions means two distances equal in real arithmetic come
+back differing in the last bit.
 
 `mt_random` is the one that is easy to think optional. `PlayField.riffled`
 writes Fisher-Yates out by hand precisely so a seed deals the same hand
