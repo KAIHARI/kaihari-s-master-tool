@@ -16,6 +16,23 @@ name: Release CIA
 #
 # So: never tag a 3DS release `v*`, and never tag an Android release `3ds-v*`.
 #
+# ## And every 3DS release is published as a pre-release
+#
+# Unconditionally, which is why it is not an input. `AppVersion.parse` only
+# protects a device that *has* it, and the device that most needs protecting is
+# the one still running the build from before the fix — which cannot update,
+# because the thing shadowing its update is the release doing the shadowing.
+# 3ds-v1.0.0 shipped without the flag and did exactly that: it took the repo's
+# "Latest" from v1.2.62 five minutes after v1.2.62 published it.
+#
+# `prerelease` is the only mechanism whose exclusion from `/releases/latest` is
+# in the endpoint's own documented definition rather than inferred from how the
+# "Latest" label behaves, and it costs nothing here: nothing reads that endpoint
+# for the 3DS, because a `.cia` is installed by hand with FBI. It also trips
+# `UpdateChecker`'s own skip-pre-releases rule, so the two guards are
+# independent. The label is explained in the release notes so it does not read
+# as "unfinished".
+#
 # ## The two permanent numbers
 #
 # The CIA's title version comes from the tag and must only ever increase, or FBI
@@ -33,8 +50,8 @@ on:
         description: 'Version to release, e.g. 1.0.1 (tagged 3ds-v1.0.1)'
         required: true
         type: string
-      prerelease:
-        description: 'Mark as a pre-release'
+      republish:
+        description: 'Re-publish the version that is already the newest tag (metadata fixes)'
         required: false
         default: false
         type: boolean
@@ -90,8 +107,17 @@ jobs:
                   | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
           if [ -n "$PREV" ]; then
             HIGHEST="$(printf '%s\n%s\n' "$PREV" "$NAME" | sort -V | tail -1)"
-            if [ "$NAME" = "$PREV" ] || [ "$HIGHEST" != "$NAME" ]; then
+            if [ "$HIGHEST" != "$NAME" ]; then
               echo "::error::$NAME does not come after the last released $PREV."
+              exit 1
+            fi
+            # Equal is a re-run rather than a downgrade, and the publish step
+            # has always had a branch for one - it re-uploads over an existing
+            # release. That branch was unreachable, because this rejected the
+            # only version that could get to it. It is reachable now, and asked
+            # for explicitly, so a re-run stays a decision rather than a typo.
+            if [ "$NAME" = "$PREV" ] && [ "${{ inputs.republish }}" != "true" ]; then
+              echo "::error::$NAME is already released. Pass republish=true to publish over it."
               exit 1
             fi
           fi
@@ -168,9 +194,6 @@ jobs:
           set -euo pipefail
           ls -l kai-master-tool-*
 
-          PRERELEASE=""
-          if [ "${{ inputs.prerelease }}" = "true" ]; then PRERELEASE="--prerelease"; fi
-
           NOTES=$(mktemp)
           {
             echo "kai's master tool for the New 3DS, $TAG."
@@ -182,15 +205,24 @@ jobs:
             echo "\`.cia\` gets only what its own RSF grants, so a missing service shows"
             echo "up in one and not the other."
             echo
-            echo "This is the 3DS track. It is unrelated to the Android \`v*\` releases"
-            echo "and the in-app APK updater ignores it."
+            echo "This is the 3DS track. It is unrelated to the Android \`v*\` releases."
+            echo
+            echo "**It is marked a pre-release on purpose, and it is not unfinished.**"
+            echo "GitHub's \`/releases/latest\` hands back the newest *non*-pre-release of"
+            echo "any tag shape, and the Android app's updater reads exactly that."
+            echo "Without the flag a 3DS release becomes the repo's \"Latest\" and every"
+            echo "tablet asks it for an APK it does not have. Nothing reads that endpoint"
+            echo "for the 3DS - a \`.cia\` is installed by hand - so the flag costs the"
+            echo "console nothing."
           } > "$NOTES"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
+            # Metadata first: a re-publish is usually here to fix exactly this.
+            gh release edit "$TAG" --prerelease --notes-file "$NOTES"
             gh release upload "$TAG" kai-master-tool-*.cia kai-master-tool-*.3dsx --clobber
           else
             gh release create "$TAG" kai-master-tool-*.cia kai-master-tool-*.3dsx \
               --title "kai's master tool for 3DS $TAG" \
               --notes-file "$NOTES" \
-              $PRERELEASE
+              --prerelease
           fi

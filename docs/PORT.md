@@ -280,11 +280,34 @@ Char::isDigit)` read `3ds-v1.0.0` as **major version 3** with a pre-release of
 APK to install, and shadowing the real Android release published before it. A
 segment must now be *entirely* digits; `AppVersionTest` pins it.
 
-**One ordering consequence, because an installed APK carries the old parser.**
-Until a build containing that fix is on the tablet, publishing a 3DS release
-will make the existing install report "a newer release exists but carries no
-APK". Ship an Android patch first, or accept one confusing notice until the next
-one goes out.
+**And the parser fix alone is not enough, which the first release proved.**
+`AppVersion.parse` protects a device that *has* it, and the device that most
+needs protecting is the one still running the build from before it. Shipping the
+Android patch first is necessary and is not sufficient: v1.2.62 published at
+16:40 and `3ds-v1.0.0` took the repo's "Latest" from it at 16:45, five minutes
+before any tablet could plausibly have installed the fix. A device on v1.2.61
+then asks `/releases/latest`, is handed the 3DS release, reads it as version 3,
+and reports "a newer release exists but carries no APK" — including when what it
+is being blocked from is the very build that would stop it happening. The
+updater cannot climb out of that on its own; the APK has to be sideloaded once,
+by hand, from the releases page.
+
+So **every 3DS release is published as a pre-release**, unconditionally, and
+that is why `release-3ds.yml` has no input for it. `/releases/latest`'s own
+documented definition is "the most recent non-pre-release, non-draft release",
+so the flag is the one mechanism whose exclusion is a contract rather than an
+inference from how the "Latest" label behaves. It costs the console nothing —
+a `.cia` is installed by hand with FBI and nothing on a 3DS reads that endpoint
+— and it trips `UpdateChecker`'s own skip-pre-releases rule as well, so the two
+guards fail independently. The release notes say why the label is there, so it
+does not read as "unfinished".
+
+The gate that stops a version going backwards now also allows a deliberate
+re-publish of the newest one, behind a `republish` input. The publish step had
+always carried a branch for re-uploading over an existing release and that
+branch was unreachable, because the gate rejected the only version that could
+reach it — which is how a wrong `prerelease` flag on a published release became
+something with no way to fix it.
 
 ## 8. Two numbers that are permanent
 
