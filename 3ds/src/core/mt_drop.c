@@ -338,3 +338,283 @@ MtDropIntent mt_drop_resolve(MtMatPoint point,
     /* 4. The mat itself, which is always a valid answer. */
     return mt_drop_free(point);
 }
+
+/* ---- turning "what letting go would do" into the thing it does ---------- */
+
+MtDragOrigin mt_from_hand(int index) {
+    MtDragOrigin o = { MT_FROM_HAND, index, -1, mt_slot_pile(MT_SLOT_DECK) };
+    return o;
+}
+MtDragOrigin mt_from_mat(int id) {
+    MtDragOrigin o = { MT_FROM_MAT, -1, id, mt_slot_pile(MT_SLOT_DECK) };
+    return o;
+}
+MtDragOrigin mt_from_pile(MtBoardSlot pile, int index) {
+    MtDragOrigin o = { MT_FROM_PILE, index, -1, pile };
+    return o;
+}
+MtDragOrigin mt_from_buried(int under, int index) {
+    MtDragOrigin o = { MT_FROM_BURIED, index, under, mt_slot_pile(MT_SLOT_DECK) };
+    return o;
+}
+
+/*
+ * Logical equality, not memcmp.
+ *
+ * `movePile` in the Kotlin is "lift the card, put it somewhere, and if the
+ * result equals what we started with then that was not a move" - which is how
+ * dropping a pile onto itself falls out for free. Reproducing it needs the
+ * comparison, and memcmp is the wrong one: the arrays here keep stale values
+ * past their counts, so two logically identical fields can differ in bytes
+ * nobody reads. This compares the live prefix of everything and nothing else.
+ */
+static bool field_equal(const MtPlayField *a, const MtPlayField *b) {
+    if (a->life_points != b->life_points || a->phase != b->phase || a->turn != b->turn) return false;
+    if (a->mat_count != b->mat_count) return false;
+    if (a->hand_count != b->hand_count || a->deck_count != b->deck_count) return false;
+    if (a->extra_deck_count != b->extra_deck_count) return false;
+    if (a->graveyard_count != b->graveyard_count) return false;
+    if (a->banished_count != b->banished_count) return false;
+    if (a->instance_count != b->instance_count) return false;
+
+    for (int i = 0; i < a->mat_count; ++i) {
+        const MtPlacedCard *x = &a->mat[i], *y = &b->mat[i];
+        if (x->card != y->card) return false;
+        if (x->at.x != y->at.x || x->at.y != y->at.y) return false;
+        if (x->beneath_count != y->beneath_count) return false;
+        for (int k = 0; k < x->beneath_count; ++k) {
+            if (x->beneath[k] != y->beneath[k]) return false;
+        }
+    }
+    for (int i = 0; i < a->hand_count; ++i)       if (a->hand[i] != b->hand[i]) return false;
+    for (int i = 0; i < a->deck_count; ++i)       if (a->deck[i] != b->deck[i]) return false;
+    for (int i = 0; i < a->extra_deck_count; ++i) if (a->extra_deck[i] != b->extra_deck[i]) return false;
+    for (int i = 0; i < a->graveyard_count; ++i)  if (a->graveyard[i] != b->graveyard[i]) return false;
+    for (int i = 0; i < a->banished_count; ++i)   if (a->banished[i] != b->banished[i]) return false;
+
+    /* Position and counters live here, and a pile-to-pile move that changed
+     * only a card's facing would otherwise read as no move at all. */
+    for (int i = 0; i < a->instance_count; ++i) {
+        const MtBoardCard *x = &a->instances[i], *y = &b->instances[i];
+        if (x->card_id != y->card_id || x->position != y->position) return false;
+        if (x->counters != y->counters || x->material_count != y->material_count) return false;
+        for (int k = 0; k < x->material_count; ++k) {
+            if (x->materials[k] != y->materials[k]) return false;
+        }
+    }
+    return true;
+}
+
+/** A card arriving on the mat, from wherever it was. */
+static bool land(MtPlayField *f, MtDragOrigin from, MtMatPoint at, MtCardPosition position) {
+    switch (from.kind) {
+        case MT_FROM_HAND:
+            return mt_field_play_from_hand(f, from.index, at, position);
+        /* The position is carried here too, and it was not for two releases:
+         * every other branch took it and this one moved the card and dropped
+         * the answer, so a set of a card *already on the field* turned it over
+         * in the air and then put it back exactly as it was. */
+        case MT_FROM_MAT:
+            return mt_field_move_on_mat(f, from.id, at, position);
+        case MT_FROM_PILE:
+            switch (from.pile.kind) {
+                case MT_SLOT_DECK:       return mt_field_play_from_deck(f, from.index, at, position);
+                case MT_SLOT_EXTRA_DECK: return mt_field_play_from_extra(f, from.index, at, position);
+                case MT_SLOT_GRAVEYARD:  return mt_field_play_from_graveyard(f, from.index, at, position);
+                case MT_SLOT_BANISHED:   return mt_field_play_from_banished(f, from.index, at, position);
+                case MT_SLOT_ZONE:       return false;   /* a zone is not a pile */
+            }
+            return false;
+        case MT_FROM_BURIED:
+            return mt_field_take_from_under(f, from.id, from.index, at, position);
+    }
+    return false;
+}
+
+/*
+ * A card landing on another card.
+ *
+ * Anything not already on the mat has to arrive there first - it is put down on
+ * top of its target and then stacked, which is both what the hand does and what
+ * keeps this to one code path.
+ */
+static bool pile_onto(MtPlayField *f, MtDragOrigin from, int onto,
+                      MtCardPosition position, bool attach) {
+    int target = mt_field_placed(f, onto);
+    if (target < 0) return false;
+
+    if (from.kind == MT_FROM_MAT) {
+        return attach ? mt_field_attach_as_material(f, from.id, onto)
+                      : mt_field_stack_onto(f, from.id, onto, position);
+    }
+
+    MtMatPoint at = f->mat[target].at;
+    if (!land(f, from, at, position)) return false;
+    if (f->mat_count <= 0) return false;
+    int landed = f->mat[f->mat_count - 1].card;
+    return attach ? mt_field_attach_as_material(f, landed, onto)
+                  : mt_field_stack_onto(f, landed, onto, MT_POS_KEEP);
+}
+
+/** The field without `from`'s card, and that card, ready to go elsewhere. */
+static bool lift_from_pile(MtPlayField *f, MtBoardSlot pile, int index, int *out) {
+    int *array; int *count;
+    switch (pile.kind) {
+        case MT_SLOT_DECK:       array = f->deck;       count = &f->deck_count;       break;
+        case MT_SLOT_EXTRA_DECK: array = f->extra_deck; count = &f->extra_deck_count; break;
+        case MT_SLOT_GRAVEYARD:  array = f->graveyard;  count = &f->graveyard_count;  break;
+        case MT_SLOT_BANISHED:   array = f->banished;   count = &f->banished_count;   break;
+        default:                 return false;   /* a zone is not a pile */
+    }
+    if (index < 0 || index >= *count) return false;
+    *out = array[index];
+    for (int i = index; i < *count - 1; ++i) array[i] = array[i + 1];
+    --(*count);
+    return true;
+}
+
+/** Prepends a card to one of the piles, or inserts it into the hand. */
+static bool arrive_in(MtPlayField *f, MtDropKind where, int card, int hand_at) {
+    int *array; int *count;
+    switch (where) {
+        case MT_DROP_GRAVEYARD:  array = f->graveyard;  count = &f->graveyard_count;  break;
+        case MT_DROP_BANISH:     array = f->banished;   count = &f->banished_count;   break;
+        case MT_DROP_DECK:       array = f->deck;       count = &f->deck_count;       break;
+        case MT_DROP_EXTRA_DECK: array = f->extra_deck; count = &f->extra_deck_count; break;
+        case MT_DROP_HAND: {
+            if (f->hand_count >= MT_MAX_PILE) return false;
+            int at = hand_at;
+            if (at < 0) at = 0;
+            if (at > f->hand_count) at = f->hand_count;
+            for (int i = f->hand_count; i > at; --i) f->hand[i] = f->hand[i - 1];
+            f->hand[at] = card;
+            ++f->hand_count;
+            return true;
+        }
+        default: return false;
+    }
+    if (*count >= MT_MAX_PILE) return false;
+    for (int i = *count; i > 0; --i) array[i] = array[i - 1];
+    array[0] = card;
+    ++(*count);
+    return true;
+}
+
+/*
+ * A card lifted out of one pile, or out from under another card, and put
+ * somewhere else.
+ *
+ * Moving between piles is a real thing you do - a banished card back to the
+ * graveyard, a graveyard card back onto the deck - and every one is the same
+ * two steps, so they are written once. Note what does *not* happen: the card
+ * keeps how it was lying. Only the mat-origin branches face a card up, which is
+ * `PlayField.toGraveyard`'s doing rather than this one's, and the asymmetry is
+ * the Kotlin's rather than an oversight here.
+ */
+static bool move_between(MtPlayField *f, const MtPlayField *before,
+                         MtDragOrigin from, MtDropKind where, int hand_at) {
+    int card = -1;
+    if (from.kind == MT_FROM_PILE) {
+        if (!lift_from_pile(f, from.pile, from.index, &card)) return false;
+    } else {
+        /* Taking a card out of a stack on the mat has to decide whether it came
+         * from the pile or from the top card's materials, and that is a fact
+         * about the board rather than about the drag. */
+        int at = mt_field_placed(f, from.id);
+        if (at < 0 || from.index <= 0) return false;
+        MtPlacedCard *placed = &f->mat[at];
+        if (from.index <= placed->beneath_count) {
+            card = placed->beneath[from.index - 1];
+            for (int i = from.index - 1; i < placed->beneath_count - 1; ++i) {
+                placed->beneath[i] = placed->beneath[i + 1];
+            }
+            --placed->beneath_count;
+        } else {
+            MtBoardCard *top = &f->instances[placed->card];
+            int m = from.index - placed->beneath_count - 1;
+            if (m < 0 || m >= top->material_count) return false;
+            card = top->materials[m];
+            for (int i = m; i < top->material_count - 1; ++i) {
+                top->materials[i] = top->materials[i + 1];
+            }
+            --top->material_count;
+        }
+    }
+
+    if (!arrive_in(f, where, card, hand_at)) return false;
+    /* Dropping a pile onto itself is not a move: the card comes out and goes
+     * back in the same place, which compares equal. */
+    return !field_equal(f, before);
+}
+
+static bool commit_into(MtPlayField *f, const MtPlayField *before,
+                        MtDragOrigin from, MtDropIntent intent,
+                        MtCardPosition position) {
+    switch (intent.kind) {
+        /* Somewhere on the mat, either exactly where you let go or pulled into
+         * a zone. The two differ only in the point, which the resolver already
+         * worked out, so they share every line. */
+        case MT_DROP_FREE:
+        case MT_DROP_ZONE:
+            return land(f, from, intent.at, position);
+
+        case MT_DROP_STACK:  return pile_onto(f, from, intent.target, position, false);
+        case MT_DROP_ATTACH: return pile_onto(f, from, intent.target, position, true);
+
+        /* The hand, at the place in it the pointer was over. Every branch takes
+         * the index, including the one from the hand itself - moving a card
+         * *within* your hand is the commonest thing anybody does to one. */
+        case MT_DROP_HAND:
+            switch (from.kind) {
+                case MT_FROM_MAT:  return mt_field_to_hand(f, from.id, intent.target);
+                case MT_FROM_HAND: return mt_field_reorder_hand(f, from.index, intent.target);
+                default:           return move_between(f, before, from, MT_DROP_HAND, intent.target);
+            }
+
+        case MT_DROP_GRAVEYARD:
+            if (from.kind == MT_FROM_MAT)  return mt_field_to_graveyard(f, from.id);
+            if (from.kind == MT_FROM_HAND) return mt_field_hand_to_graveyard(f, from.index);
+            return move_between(f, before, from, MT_DROP_GRAVEYARD, -1);
+
+        case MT_DROP_BANISH:
+            if (from.kind == MT_FROM_MAT)  return mt_field_to_banish(f, from.id, false);
+            if (from.kind == MT_FROM_HAND) return mt_field_hand_to_banish(f, from.index);
+            return move_between(f, before, from, MT_DROP_BANISH, -1);
+
+        case MT_DROP_DECK:
+            if (from.kind == MT_FROM_MAT)  return mt_field_to_deck_top(f, from.id);
+            if (from.kind == MT_FROM_HAND) return mt_field_hand_to_deck_top(f, from.index);
+            return move_between(f, before, from, MT_DROP_DECK, -1);
+
+        case MT_DROP_EXTRA_DECK:
+            if (from.kind == MT_FROM_MAT)  return mt_field_to_extra_deck(f, from.id);
+            /* A hand card has no business in the extra deck. */
+            if (from.kind == MT_FROM_HAND) return false;
+            return move_between(f, before, from, MT_DROP_EXTRA_DECK, -1);
+
+        /* Nothing sensible; the caller puts the card back where it came from. */
+        case MT_DROP_CANCEL: return false;
+    }
+    return false;
+}
+
+bool mt_drop_commit(MtPlayField *field,
+                    MtDragOrigin from,
+                    MtDropIntent intent,
+                    MtCardPosition position) {
+    /*
+     * On a copy, written back only on success.
+     *
+     * That is the whole of "leaves the field untouched when it refuses", and it
+     * has to be structural rather than careful: several of these are two or
+     * three operations deep, and the second one failing after the first
+     * succeeded is exactly the case a hand-checked version gets wrong.
+     */
+    MtPlayField scratch = *field;
+    /* `field` itself is the untouched original until the write-back, so it is
+     * the `before` - one copy of a 17KB struct rather than two, which matters
+     * on a stack of 0x40000. */
+    if (!commit_into(&scratch, field, from, intent, position)) return false;
+    *field = scratch;
+    return true;
+}

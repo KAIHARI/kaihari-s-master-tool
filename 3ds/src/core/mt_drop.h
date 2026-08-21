@@ -177,4 +177,65 @@ MtDropIntent mt_drop_resolve(MtMatPoint point,
                              const MtHandRow *hand,
                              float hand_step);
 
+/* ---- turning "what letting go would do" into the thing it does ---------- */
+
+/*
+ * Where a card being dragged came from.
+ *
+ * Needed because the same destination means different things depending on the
+ * journey: a card dropped on the graveyard leaves the mat if it was on the mat,
+ * leaves the hand if it was in the hand, and is a no-op if it was already in
+ * the graveyard. The intent says where; this says from where.
+ */
+typedef enum {
+    MT_FROM_HAND = 0,
+    MT_FROM_MAT,
+    MT_FROM_PILE,
+    /*
+     * A card underneath one on the mat: the id of the card on top, and how far
+     * down `mt_field_under` the one you mean is.
+     *
+     * The one place on this table where a card had no name. MT_FROM_MAT names
+     * the top of a stack and nothing else, so everything buried in one - the
+     * rest of a pile, and an Xyz monster's materials - was unreachable by any
+     * gesture, which for an Xyz monster means you could not see what it was
+     * made of. Index 1 and up, always: index 0 of that list is the card on top,
+     * and that card already has a name.
+     */
+    MT_FROM_BURIED
+} MtDragOriginKind;
+
+typedef struct {
+    MtDragOriginKind kind;
+    /** MT_FROM_HAND and MT_FROM_PILE: the index. MT_FROM_BURIED: how far down. */
+    int index;
+    /** MT_FROM_MAT: the instance id. MT_FROM_BURIED: the id of the card on top. */
+    int id;
+    /** MT_FROM_PILE: which pile. */
+    MtBoardSlot pile;
+} MtDragOrigin;
+
+MtDragOrigin mt_from_hand(int index);
+MtDragOrigin mt_from_mat(int id);
+MtDragOrigin mt_from_pile(MtBoardSlot pile, int index);
+MtDragOrigin mt_from_buried(int under, int index);
+
+/**
+ * Carries an intent out, or refuses.
+ *
+ * The other half of `mt_drop_resolve`, and pure for the same reason: the
+ * indicator, the release and the test are three readings of one function rather
+ * than three implementations that agree most of the time.
+ *
+ * Every combination that is not a real move returns false and leaves the field
+ * **untouched** - dropping a graveyard card onto the graveyard, sending a hand
+ * card to the extra deck, dragging a card onto itself. The Kotlin gets that from
+ * immutability; this gets it by working on a copy and only writing back on
+ * success, which is the same guarantee bought a different way.
+ */
+bool mt_drop_commit(MtPlayField *field,
+                    MtDragOrigin from,
+                    MtDropIntent intent,
+                    MtCardPosition position);
+
 #endif /* MT_DROP_H */

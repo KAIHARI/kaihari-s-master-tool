@@ -858,6 +858,151 @@ static int test_droptargets(void) {
     return rows;
 }
 
+/* ---- carrying an intent out --------------------------------------------- */
+
+/** The same digest the exporter writes, so one string compares the whole table. */
+static void field_digest(const MtPlayField *f, char *out, size_t cap) {
+    size_t n = 0;
+    n += (size_t)snprintf(out + n, cap - n, "%d", f->mat_count);
+    for (int i = 0; i < f->mat_count && n < cap; ++i) {
+        const MtPlacedCard *p = &f->mat[i];
+        const MtBoardCard *card = &f->instances[p->card];
+        n += (size_t)snprintf(out + n, cap - n, " %d:%d:%d",
+                              p->card, (int)card->position, p->beneath_count);
+        for (int k = 0; k < p->beneath_count && n < cap; ++k) {
+            n += (size_t)snprintf(out + n, cap - n, ",%d", p->beneath[k]);
+        }
+        n += (size_t)snprintf(out + n, cap - n, ":%d", card->material_count);
+        for (int k = 0; k < card->material_count && n < cap; ++k) {
+            n += (size_t)snprintf(out + n, cap - n, ",%d", card->materials[k]);
+        }
+    }
+    n += (size_t)snprintf(out + n, cap - n, " |");
+
+    const int *piles[5]  = { f->hand, f->deck, f->extra_deck, f->graveyard, f->banished };
+    const int counts[5]  = { f->hand_count, f->deck_count, f->extra_deck_count,
+                             f->graveyard_count, f->banished_count };
+    for (int s = 0; s < 5 && n < cap; ++s) {
+        n += (size_t)snprintf(out + n, cap - n, " %d", counts[s]);
+        for (int i = 0; i < counts[s] && n < cap; ++i) {
+            n += (size_t)snprintf(out + n, cap - n, " %d:%d",
+                                  piles[s][i], (int)f->instances[piles[s][i]].position);
+        }
+    }
+}
+
+static MtBoardSlot slot_named(const char *name) {
+    if (!strcmp(name, "deck0"))  return mt_slot_pile(MT_SLOT_DECK);
+    if (!strcmp(name, "gy0") || !strcmp(name, "gy9")) return mt_slot_pile(MT_SLOT_GRAVEYARD);
+    if (!strcmp(name, "ban0"))   return mt_slot_pile(MT_SLOT_BANISHED);
+    if (!strcmp(name, "extra0")) return mt_slot_pile(MT_SLOT_EXTRA_DECK);
+    return mt_slot_zone(mt_zone(MT_ZONE_MONSTER, 0));
+}
+
+static int test_dropcommit(void) {
+    FILE *f = open_vectors("dropcommit.txt");
+    static MtPlayField base;
+    int stacked = -1, loose = -1;
+
+    char line[4096];
+    char *v[512];
+    int rows = 0;
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+        /* The raw line survives the split, because the digest is compared as
+         * one string rather than field by field. */
+        char raw[4096];
+        snprintf(raw, sizeof raw, "%s", line);
+        char *nl = strpbrk(raw, "\r\n");
+        if (nl) *nl = '\0';
+
+        int n = split(line, v, 512);
+        if (n < 1) continue;
+
+        if (!strcmp(v[0], "setup")) {
+            int main_n = atoi(v[1]), extra_n = atoi(v[2]);
+            int main_ids[64], extra_ids[16];
+            for (int i = 0; i < main_n; ++i)  main_ids[i]  = 1000 + i + 1;
+            for (int i = 0; i < extra_n; ++i) extra_ids[i] = 9000 + i + 1;
+            mt_field_set_up(&base, main_ids, main_n, extra_ids, extra_n);
+        } else if (!strcmp(v[0], "build")) {
+            const char *op = v[1];
+            if (!strcmp(op, "draw")) {
+                for (int i = 0; i < atoi(v[2]); ++i) mt_field_draw(&base);
+            } else if (!strcmp(op, "playhand")) {
+                MtMatPoint at = { (float)atof(v[3]), (float)atof(v[4]) };
+                mt_field_play_from_hand(&base, atoi(v[2]), at, (MtCardPosition)atoi(v[5]));
+            } else if (!strcmp(op, "playdeck")) {
+                MtMatPoint at = { (float)atof(v[3]), (float)atof(v[4]) };
+                mt_field_play_from_deck(&base, atoi(v[2]), at, (MtCardPosition)atoi(v[5]));
+            } else if (!strcmp(op, "stacktop")) {
+                mt_field_stack_onto(&base, base.mat[base.mat_count - 1].card,
+                                    base.mat[0].card, MT_POS_KEEP);
+            } else if (!strcmp(op, "gytop")) {
+                mt_field_to_graveyard(&base, base.mat[base.mat_count - 1].card);
+            } else if (!strcmp(op, "bantopfacedown")) {
+                mt_field_to_banish(&base, base.mat[base.mat_count - 1].card, true);
+            }
+        } else if (!strcmp(v[0], "ids")) {
+            stacked = atoi(v[1]);
+            loose = atoi(v[2]);
+        } else if (!strcmp(v[0], "case")) {
+            const char *origin_name = v[1];
+            const char *intent_name = v[2];
+            MtCardPosition position = (MtCardPosition)atoi(v[3]);
+
+            MtDragOrigin from;
+            if      (!strcmp(origin_name, "hand0"))      from = mt_from_hand(0);
+            else if (!strcmp(origin_name, "hand9"))      from = mt_from_hand(9);
+            else if (!strcmp(origin_name, "mat"))        from = mt_from_mat(stacked);
+            else if (!strcmp(origin_name, "matmissing")) from = mt_from_mat(9999);
+            else if (!strcmp(origin_name, "buried1"))    from = mt_from_buried(stacked, 1);
+            else if (!strcmp(origin_name, "buried9"))    from = mt_from_buried(stacked, 9);
+            else if (!strcmp(origin_name, "gy9"))        from = mt_from_pile(slot_named("gy9"), 9);
+            else                                        from = mt_from_pile(slot_named(origin_name), 0);
+
+            MtMatPoint free_at = { 0.44f, 0.55f };
+            MtMatPoint zone_at = { 0.5f, 0.5f };
+            MtDropIntent intent;
+            if      (!strcmp(intent_name, "free"))      intent = mt_drop_free(free_at);
+            else if (!strcmp(intent_name, "zone"))      intent = mt_drop_zone(mt_slot_zone(mt_zone(MT_ZONE_MONSTER, 2)), zone_at);
+            else if (!strcmp(intent_name, "stack"))     { intent = mt_drop_simple(MT_DROP_STACK);  intent.target = loose; }
+            else if (!strcmp(intent_name, "stackself")) { intent = mt_drop_simple(MT_DROP_STACK);  intent.target = stacked; }
+            else if (!strcmp(intent_name, "attach"))    { intent = mt_drop_simple(MT_DROP_ATTACH); intent.target = loose; }
+            else if (!strcmp(intent_name, "hand0"))     { intent = mt_drop_simple(MT_DROP_HAND);   intent.target = 0; }
+            else if (!strcmp(intent_name, "hand2"))     { intent = mt_drop_simple(MT_DROP_HAND);   intent.target = 2; }
+            else if (!strcmp(intent_name, "graveyard")) intent = mt_drop_simple(MT_DROP_GRAVEYARD);
+            else if (!strcmp(intent_name, "banish"))    intent = mt_drop_simple(MT_DROP_BANISH);
+            else if (!strcmp(intent_name, "deck"))      intent = mt_drop_simple(MT_DROP_DECK);
+            else if (!strcmp(intent_name, "extradeck")) intent = mt_drop_simple(MT_DROP_EXTRA_DECK);
+            else                                        intent = mt_drop_simple(MT_DROP_CANCEL);
+
+            /* Every case starts from the same table, so one cannot leave the
+             * next standing on a different board. */
+            MtPlayField field = base;
+            bool ok = mt_drop_commit(&field, from, intent, position);
+            check_i("commit accepted", ok ? 1 : 0, atoll(v[5]));
+
+            char got[2048];
+            field_digest(&field, got, sizeof got);
+            /* The expected digest is the rest of the raw line after "= <ok> ". */
+            const char *want = strstr(raw, "= ");
+            if (want) {
+                want += 2;
+                while (*want && *want != ' ') ++want;   /* skip the ok flag */
+                if (*want == ' ') ++want;
+                check_s("field after commit", got, want);
+            }
+            ++rows;
+        }
+    }
+    fclose(f);
+    printf("  dropcommit       %4d cases\n", rows);
+    return rows;
+}
+
 int main(void) {
     printf("mt conformance: the C port against :core's golden vectors\n");
     test_board_solve();
@@ -870,6 +1015,7 @@ int main(void) {
     test_playfield();
     test_handfan();
     test_droptargets();
+    test_dropcommit();
 
     printf("%d checks, %d failures\n", g_checks, g_failures);
     if (g_failures > 25) fprintf(stderr, "(%d further failures not shown)\n", g_failures - 25);

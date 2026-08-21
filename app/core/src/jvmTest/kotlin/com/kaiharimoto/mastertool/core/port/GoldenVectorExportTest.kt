@@ -5,6 +5,8 @@ import com.kaiharimoto.mastertool.core.board.FieldZone
 import com.kaiharimoto.mastertool.core.board.CardPosition
 import com.kaiharimoto.mastertool.core.board.MatPoint
 import com.kaiharimoto.mastertool.core.board.BoardCard
+import com.kaiharimoto.mastertool.core.board.DragOrigin
+import com.kaiharimoto.mastertool.core.board.DropCommit
 import com.kaiharimoto.mastertool.core.board.DropTargets
 import com.kaiharimoto.mastertool.core.board.FanHome
 import com.kaiharimoto.mastertool.core.board.PlacedCard
@@ -829,6 +831,132 @@ class GoldenVectorExportTest {
         }
 
         write("droptargets.txt", "field/card, then grid/path/arm rows (layout 400x240)", lines)
+    }
+
+    /**
+     * Carrying an intent out: every origin against every destination.
+     *
+     * `DropTargets` says *where* and `DragOrigin` says *from where*, and the
+     * same destination means different things depending on the journey — a card
+     * dropped on the graveyard leaves the mat if it was on the mat, leaves the
+     * hand if it was in the hand, and is no move at all if it was already in the
+     * graveyard. So the sweep is the full product, refusals included, and the
+     * refusals are most of the value: "leaves the field untouched when it
+     * refuses" is what the Kotlin gets from immutability and the C has to earn.
+     *
+     * Two asymmetries in here are the Kotlin's and are reproduced rather than
+     * tidied. A pile-to-pile move keeps the card lying as it was, while the same
+     * destination reached from the *mat* faces it up — because that branch goes
+     * through `PlayField.toGraveyard` and the other does not. And a hand card
+     * cannot reach the extra deck, while a mat card can.
+     *
+     * The board is rebuilt from the script before every case, so one case
+     * cannot leave the next standing on a different table.
+     */
+    @Test
+    fun `drop commit`() {
+        val main = (1..16).map { CardId(1000 + it) }
+        val extra = (1..4).map { CardId(9000 + it) }
+
+        // A board with a stack (so Buried has something to name), a loose card,
+        // cards in hand, and every pile non-empty.
+        fun board(): PlayField {
+            var f = PlayField.setUp(main, extra)
+            repeat(4) { f = f.draw()!! }
+            f = f.playFromHand(0, MatPoint(0.30f, 0.40f), CardPosition.FACE_UP_ATK)!!
+            f = f.playFromHand(0, MatPoint(0.60f, 0.40f), CardPosition.FACE_UP_ATK)!!
+            f = f.playFromHand(0, MatPoint(0.62f, 0.42f), CardPosition.FACE_DOWN_DEF)!!
+            val top = f.mat.last().id
+            val under = f.mat.first().id
+            f = f.stackOnto(top, under)!!            // a real pile
+            f = f.playFromDeck(0, MatPoint(0.80f, 0.70f), CardPosition.FACE_UP_ATK)!!
+            f = f.toGraveyard(f.mat.last().id)!!     // something in the graveyard
+            f = f.playFromDeck(0, MatPoint(0.20f, 0.70f), CardPosition.FACE_UP_ATK)!!
+            // Banished *face-down*, which is the only way the pile-to-pile
+            // asymmetry becomes visible: moving it on to the graveyard must
+            // keep it face-down, where the same destination reached from the
+            // mat would turn it face-up. With every pile card face-up already,
+            // the two behaviours are indistinguishable and the test proves
+            // nothing.
+            f = f.toBanish(f.mat.last().id, faceDown = true)!!
+            return f
+        }
+
+        val sample = board()
+        val stacked = sample.mat.first { it.beneath.isNotEmpty() }
+
+        val origins: List<Pair<String, DragOrigin>> = listOf(
+            "hand0" to DragOrigin.Hand(0),
+            "hand9" to DragOrigin.Hand(9),                       // out of range
+            "mat" to DragOrigin.Mat(stacked.id),
+            "matmissing" to DragOrigin.Mat(9999),
+            "deck0" to DragOrigin.Pile(BoardSlot.Deck, 0),
+            "gy0" to DragOrigin.Pile(BoardSlot.Graveyard, 0),
+            "ban0" to DragOrigin.Pile(BoardSlot.Banished, 0),
+            "extra0" to DragOrigin.Pile(BoardSlot.ExtraDeck, 0),
+            "gy9" to DragOrigin.Pile(BoardSlot.Graveyard, 9),    // out of range
+            "zone" to DragOrigin.Pile(BoardSlot.Zone(FieldZone.Monster(0)), 0), // not a pile
+            "buried1" to DragOrigin.Buried(stacked.id, 1),
+            "buried9" to DragOrigin.Buried(stacked.id, 9),       // nothing that deep
+        )
+
+        val loose = sample.mat.first { it.beneath.isEmpty() }.id
+        val intents: List<Pair<String, DropIntent>> = listOf(
+            "free" to DropIntent.Free(MatPoint(0.44f, 0.55f)),
+            "zone" to DropIntent.Zone(BoardSlot.Zone(FieldZone.Monster(2)), MatPoint(0.5f, 0.5f)),
+            "stack" to DropIntent.Stack(loose),
+            "stackself" to DropIntent.Stack(stacked.id),
+            "attach" to DropIntent.Attach(loose),
+            "hand0" to DropIntent.Hand(0),
+            "hand2" to DropIntent.Hand(2),
+            "graveyard" to DropIntent.Graveyard,
+            "banish" to DropIntent.Banish,
+            "deck" to DropIntent.Deck,
+            "extradeck" to DropIntent.ExtraDeck,
+            "cancel" to DropIntent.Cancel,
+        )
+
+        val lines = mutableListOf<String>()
+
+        // The board itself, so the C builds the same table without replaying.
+        val base = board()
+        lines += "setup ${main.size} ${extra.size}"
+        lines += "build draw 4"
+        lines += "build playhand 0 0.30 0.40 0"
+        lines += "build playhand 0 0.60 0.40 0"
+        lines += "build playhand 0 0.62 0.42 2"
+        lines += "build stacktop"
+        lines += "build playdeck 0 0.80 0.70 0"
+        lines += "build gytop"
+        lines += "build playdeck 0 0.20 0.70 0"
+        lines += "build bantopfacedown"
+        lines += "ids ${stacked.id} $loose"
+
+        fun digest(f: PlayField): String = buildString {
+            append("${f.mat.size}")
+            f.mat.forEach { placed ->
+                append(" ${placed.id}:${placed.card.position.ordinal}:${placed.beneath.size}")
+                placed.beneath.forEach { append(",${it.instanceId}") }
+                append(":${placed.card.materials.size}")
+                placed.card.materials.forEach { append(",${it.instanceId}") }
+            }
+            append(" |")
+            listOf(f.hand, f.deck, f.extraDeck, f.graveyard, f.banished).forEach { pile ->
+                append(" ${pile.size}")
+                pile.forEach { append(" ${it.instanceId}:${it.position.ordinal}") }
+            }
+        }
+
+        for ((originName, origin) in origins) {
+            for ((intentName, intent) in intents) {
+                for (position in listOf(CardPosition.FACE_UP_ATK, CardPosition.FACE_DOWN_DEF)) {
+                    val result = DropCommit.commit(base, origin, intent, position)
+                    lines += "case $originName $intentName ${position.ordinal} " +
+                        "= ${b(result != null)} ${digest(result ?: base)}"
+                }
+            }
+        }
+        write("dropcommit.txt", "setup/build/ids, then case <origin> <intent> <pos> = ok <digest>", lines)
     }
 
     /** The stable spelling of a slot, shared with the C by convention. */
