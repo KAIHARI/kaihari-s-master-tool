@@ -28,6 +28,7 @@
 
 #include "core/mt_board_layout.h"
 #include "core/mt_drop.h"
+#include "core/mt_playfield.h"
 #include "core/mt_random.h"
 #include "core/mt_types.h"
 #include "core/mt_ydk.h"
@@ -43,34 +44,41 @@
 #define FOIL_A     C2D_Color32(0x5A, 0xD2, 0xFF, 0xFF)
 #define BACK       C2D_Color32(0x21, 0x2A, 0x42, 0xFF)
 
-#define MAX_MAT  24
-#define MAX_HAND 10
+/*
+ * Undo is a ring of whole fields.
+ *
+ * `PlayField` on the tablet is immutable, so a list of them *is* the undo
+ * stack and costs nothing to keep. Here the field is one mutable struct, and
+ * the equivalent is to copy it before every move that changes something. About
+ * 15KB a level, sixteen levels, which is a quarter of a megabyte against 124.
+ */
+#define UNDO_DEPTH 16
 
 typedef struct {
-    int card_id;
-    MtMatPoint at;
-    MtCardPosition position;
-    int pile_depth;
-} Placed;
-
-typedef struct {
+    MtPlayField field;
     MtYdkDocument doc;
     char *text;
 
-    int deck[MT_DECK_MAIN_MAX];
-    int deck_count;
+    MtPlayField undo[UNDO_DEPTH];
+    int undo_count;
 
-    int hand[MAX_HAND];
-    int hand_count;
-
-    Placed mat[MAX_MAT];
-    int mat_count;
-
-    int life;
-    MtDuelPhase phase;
-    int turn;
-    uint32_t seed;
+    int64_t seed;
 } Table;
+
+/** Remembers the field so the next move can be taken back. */
+static void checkpoint(Table *t) {
+    if (t->undo_count == UNDO_DEPTH) {
+        for (int i = 0; i < UNDO_DEPTH - 1; ++i) t->undo[i] = t->undo[i + 1];
+        --t->undo_count;
+    }
+    t->undo[t->undo_count++] = t->field;
+}
+
+static bool undo(Table *t) {
+    if (t->undo_count <= 0) return false;
+    t->field = t->undo[--t->undo_count];
+    return true;
+}
 
 /* ---- text ------------------------------------------------------------- */
 
@@ -140,50 +148,14 @@ static void placeholder_deck(Table *t) {
     t->doc.deck.main_count = 40;
 }
 
-/**
- * Fisher-Yates over the ported XorWow, so the seed deals the same hand here as
- * it does on the tablet. `PlayField.riffled`, in C.
- */
-static void shuffle(Table *t, int64_t seed) {
-    MtRandom r;
-    mt_random_seed(&r, seed);
-    for (int i = t->deck_count - 1; i > 0; --i) {
-        int j = mt_random_next_int_bound(&r, i + 1);
-        int swap = t->deck[i];
-        t->deck[i] = t->deck[j];
-        t->deck[j] = swap;
-    }
-}
-
+/** Sets the table up and deals an opening hand. */
 static void deal(Table *t, int64_t seed) {
-    t->deck_count = t->doc.deck.main_count;
-    for (int i = 0; i < t->deck_count; ++i) t->deck[i] = t->doc.deck.main[i];
-    shuffle(t, seed);
-    t->hand_count = 0;
-    t->mat_count = 0;
-    t->life = 8000;
-    t->phase = MT_PHASE_MAIN1;
-    t->turn = 1;
-    for (int i = 0; i < 5 && t->deck_count > 0; ++i) {
-        t->hand[t->hand_count++] = t->deck[--t->deck_count];
-    }
-}
-
-static void draw_one(Table *t) {
-    if (t->deck_count <= 0 || t->hand_count >= MAX_HAND) return;
-    t->hand[t->hand_count++] = t->deck[--t->deck_count];
-}
-
-/** Plays hand card `index` at a mat point. */
-static void play(Table *t, int index, MtMatPoint at, MtCardPosition position) {
-    if (index < 0 || index >= t->hand_count || t->mat_count >= MAX_MAT) return;
-    Placed *p = &t->mat[t->mat_count++];
-    p->card_id = t->hand[index];
-    p->at = at;
-    p->position = position;
-    p->pile_depth = 0;
-    for (int i = index; i < t->hand_count - 1; ++i) t->hand[i] = t->hand[i + 1];
-    --t->hand_count;
+    mt_field_set_up(&t->field,
+                    t->doc.deck.main, t->doc.deck.main_count,
+                    t->doc.deck.extra, t->doc.deck.extra_count);
+    mt_field_shuffle_deck(&t->field, seed);
+    t->undo_count = 0;
+    for (int i = 0; i < 5; ++i) mt_field_draw(&t->field);
 }
 
 /* ---- the bottom screen ------------------------------------------------- */
@@ -195,8 +167,51 @@ static MtMatPoint screen_to_mat(const MtBoardLayout *l, float x, float y) {
     return p;
 }
 
-static void draw_control_surface(const Table *t, const MtBoardLayout *layout,
-                                 const MtPlacedSlot *hit, int held,
+static void mat_to_screen(const MtBoardLayout *l, MtMatPoint p, float *x, float *y) {
+    *x = l->field.left + p.x * l->field.width;
+    *y = l->field.top + p.y * l->field.height;
+}
+
+/** The card's drawn rectangle on the map. A turned card lies on its side. */
+static void card_rect(const MtBoardLayout *l, const MtPlayField *f,
+                      const MtPlacedCard *placed,
+                      float *x, float *y, float *w, float *h) {
+    bool turned = mt_position_turned(f->instances[placed->card].position);
+    *w = turned ? l->card_height : l->card_width;
+    *h = turned ? l->card_width : l->card_height;
+    float cx, cy;
+    mat_to_screen(l, placed->at, &cx, &cy);
+    *x = cx - *w * 0.5f;
+    *y = cy - *h * 0.5f;
+}
+
+/**
+ * Which card the stylus is on, front-most first.
+ *
+ * Front-most because the mat is painted back to front, so the last card drawn
+ * is the one you can see - and the one you can see is the one you meant. On
+ * the tablet this question needs `StagePlane.raise` to undo a projection; here
+ * the map is orthographic and it is a rectangle test.
+ */
+static int card_at(const MtBoardLayout *l, const MtPlayField *f, float px, float py) {
+    for (int i = f->mat_count - 1; i >= 0; --i) {
+        float x, y, w, h;
+        card_rect(l, f, &f->mat[i], &x, &y, &w, &h);
+        if (px >= x && px <= x + w && py >= y && py <= y + h) return f->mat[i].card;
+    }
+    return -1;
+}
+
+static void hand_slot(const MtBoardLayout *l, int count, int i, float *x, float *w) {
+    *w = l->card_width;
+    if (count <= 1) { *x = l->hand.left; return; }
+    float step = (l->hand.width - l->card_width) / (float)(count - 1);
+    if (step > l->card_width * 1.06f) step = l->card_width * 1.06f;
+    *x = l->hand.left + step * (float)i;
+}
+
+static void draw_control_surface(const MtPlayField *f, const MtBoardLayout *layout,
+                                 const MtPlacedSlot *hit, int held, int dragging,
                                  Label *status, Label *readout) {
     C2D_DrawRectSolid(0, 0, 0, MT_BOTTOM_W, STATUS_H, C2D_Color32(0x12, 0x12, 0x16, 0xFF));
     C2D_DrawText(&status->text, C2D_WithColor, 4, 1, 0, 0.38f, 0.38f, INK);
@@ -210,38 +225,42 @@ static void draw_control_surface(const Table *t, const MtBoardLayout *layout,
         stroke(r->left, r->top, r->width, r->height, lit ? FOIL_A : DIM);
     }
 
-    /* Cards on the mat: the map is a multiplication, nothing more. */
-    for (int i = 0; i < t->mat_count; ++i) {
-        const Placed *p = &t->mat[i];
-        bool turned = mt_position_turned(p->position);
-        float w = turned ? layout->card_height : layout->card_width;
-        float h = turned ? layout->card_width : layout->card_height;
-        float cx = layout->field.left + p->at.x * layout->field.width;
-        float cy = layout->field.top + p->at.y * layout->field.height;
-        u32 c = mt_position_face_up(p->position) ? INK : BACK;
-        C2D_DrawRectSolid(cx - w / 2, cy - h / 2, 0, w, h, c);
-        stroke(cx - w / 2, cy - h / 2, w, h, DIM);
+    /* Back to front, the same order the stage paints in - so a pile reads the
+     * same way on both screens. */
+    for (int i = 0; i < f->mat_count; ++i) {
+        const MtPlacedCard *placed = &f->mat[i];
+        const MtBoardCard *card = &f->instances[placed->card];
+        float x, y, w, h;
+        card_rect(layout, f, placed, &x, &y, &w, &h);
+
+        /* A pile is drawn as its own edge, offset, so depth reads without a
+         * third dimension to put it in. */
+        for (int d = placed->beneath_count; d > 0; --d) {
+            float o = (float)d * 1.5f;
+            C2D_DrawRectSolid(x + o, y + o, 0, w, h, C2D_Color32(0x33, 0x33, 0x3C, 0xFF));
+        }
+        C2D_DrawRectSolid(x, y, 0, w, h, mt_position_face_up(card->position) ? INK : BACK);
+        stroke(x, y, w, h, placed->card == dragging ? FOIL_A : DIM);
+        if (card->counters > 0) {
+            C2D_DrawRectSolid(x + w - 5, y + 1, 0, 4, 4, FOIL_A);
+        }
+        if (card->material_count > 0) {
+            C2D_DrawRectSolid(x + 1, y + h - 3, 0, w - 2, 2, C2D_Color32(0xFF, 0x69, 0xB4, 0xFF));
+        }
     }
 
     /*
-     * The hand as a strip, not a fan. `HandFan`'s lean exists to sell three
+     * The hand as a strip, not a fan. HandFan's lean exists to sell three
      * dimensions; in two, a row is the honest form of the same row - and the
      * top screen is where the depth actually is.
      */
-    float hx = layout->hand.left;
-    float step = (t->hand_count > 0)
-        ? (layout->hand.width - layout->card_width) / (float)(t->hand_count > 1 ? t->hand_count - 1 : 1)
-        : 0.0f;
-    if (step > layout->card_width * 1.06f) step = layout->card_width * 1.06f;
-
-    for (int i = 0; i < t->hand_count; ++i) {
-        float x = hx + step * (float)i;
+    for (int i = 0; i < f->hand_count; ++i) {
+        float x, w;
+        hand_slot(layout, f->hand_count, i, &x, &w);
         float y = layout->hand.top - (i == held ? 4.0f : 0.0f);
-        C2D_DrawRectSolid(x, y, 0, layout->card_width, layout->hand.height, INK);
-        stroke(x, y, layout->card_width, layout->hand.height, i == held ? FOIL_A : DIM);
-        if (i == held) {
-            C2D_DrawRectSolid(x, y, 0, layout->card_width, 2.0f, FOIL_A);
-        }
+        C2D_DrawRectSolid(x, y, 0, w, layout->hand.height, INK);
+        stroke(x, y, w, layout->hand.height, i == held ? FOIL_A : DIM);
+        if (i == held) C2D_DrawRectSolid(x, y, 0, w, 2.0f, FOIL_A);
     }
 
     C2D_DrawText(&readout->text, C2D_WithColor, 4, layout->readout.top, 0,
@@ -277,10 +296,7 @@ int main(void) {
     C2D_Prepare();
     romfsInit();
 
-    if (!mt_gfx_init()) {
-        gfxExit();
-        return 1;
-    }
+    if (!mt_gfx_init()) { gfxExit(); return 1; }
     C3D_RenderTarget *bottom = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
     Label status = { C2D_TextBufNew(256), {0} };
@@ -294,7 +310,8 @@ int main(void) {
         placeholder_deck(&table);
         snprintf(deck_name, sizeof deck_name, "no deck on SD");
     }
-    deal(&table, 20260820);
+    table.seed = 20260820;
+    deal(&table, table.seed);
 
     /*
      * Solved once, against the height left after the status bar. Declaring the
@@ -315,22 +332,27 @@ int main(void) {
     int seat = 2;
     MtCamera camera = SEATS[seat];
     const MtPlacedSlot *hit = NULL;
-    int held = 0;
+    int held = 0;              /* which hand card is selected */
+    int dragging = -1;         /* which mat card the stylus has hold of */
+    MtMatPoint drag_at = { 0.5f, 0.5f };
     char buf[192];
+    label_set(&readout, "A draw  B undo  X new hand  Y seat  R set");
 
     while (aptMainLoop()) {
         hidScanInput();
         u32 down = hidKeysDown();
         u32 kheld = hidKeysHeld();
+        u32 up = hidKeysUp();
         if (down & KEY_START) break;
 
-        if (down & KEY_A) draw_one(&table);
-        if (down & KEY_X) { table.seed += 977u; deal(&table, 20260820 + table.seed); }
+        if (down & KEY_A) { checkpoint(&table); if (!mt_field_draw(&table.field)) undo(&table); }
+        if (down & KEY_B) { if (undo(&table)) label_set(&readout, "Undo"); }
+        if (down & KEY_X) { table.seed += 977; deal(&table, table.seed); label_set(&readout, "New hand"); }
         if (down & KEY_Y) { seat = (seat + 1) % 4; camera = SEATS[seat]; }
-        if (down & KEY_LEFT && held > 0) --held;
-        if (down & KEY_RIGHT && held < table.hand_count - 1) ++held;
+        if ((down & KEY_LEFT) && held > 0) --held;
+        if ((down & KEY_RIGHT) && held < table.field.hand_count - 1) ++held;
 
-        /* The camera is a camera. One stick orbits it; the shoulders dolly. */
+        /* The camera is a camera. The pad orbits it; the shoulders dolly. */
         circlePosition pad;
         hidCircleRead(&pad);
         if (abs(pad.dx) > 20) camera.spin += (float)pad.dx * 0.0006f;
@@ -339,37 +361,73 @@ int main(void) {
             if (camera.elevation < 12.0f) camera.elevation = 12.0f;
             if (camera.elevation > 89.0f) camera.elevation = 89.0f;
         }
-        if (kheld & KEY_L) camera.distance += 0.006f;
-        if (kheld & KEY_R) camera.distance -= 0.006f;
+        if (kheld & KEY_ZL) camera.distance += 0.006f;
+        if (kheld & KEY_ZR) camera.distance -= 0.006f;
         if (camera.distance < 0.70f) camera.distance = 0.70f;
         if (camera.distance > 3.00f) camera.distance = 3.00f;
 
+        touchPosition touch;
+        if (down & KEY_TOUCH) {
+            hidTouchRead(&touch);
+            /* A finger that lands on a card takes that card; one that lands on
+             * the felt is aiming a hand card at a zone. One decision, made on
+             * the press - the same split MatDesk makes with ten lanes and this
+             * makes with one, because a stylus cannot be two fingers. */
+            dragging = card_at(&layout, &table.field, (float)touch.px, (float)touch.py);
+            if (dragging >= 0) checkpoint(&table);
+        }
         if (kheld & KEY_TOUCH) {
-            touchPosition touch;
             hidTouchRead(&touch);
             hit = mt_board_slot_at(&layout, (float)touch.px, (float)touch.py);
+            drag_at = screen_to_mat(&layout, (float)touch.px, (float)touch.py);
         }
-        if ((hidKeysUp() & KEY_TOUCH) && hit != NULL) {
-            MtMatPoint at = screen_to_mat(&layout, mt_slot_centre_x(hit->rect),
-                                          mt_slot_centre_y(hit->rect));
-            MtDropIntent intent = mt_drop_zone(hit->slot, at);
-            /* Held R sets the card. Where it lands decides how it lies, and the
-             * zone answers - `SetPosition`, unchanged from the tablet. */
+
+        if (up & KEY_TOUCH) {
             bool set = (kheld & KEY_R) != 0;
-            MtCardPosition position =
-                mt_set_position(set, false, &intent, MT_MONSTER_UNKNOWN);
-            play(&table, held, at, position);
-            if (held >= table.hand_count) held = table.hand_count - 1;
-            if (held < 0) held = 0;
-            snprintf(buf, sizeof buf, "%s  %s", mt_drop_label(intent),
-                     mt_position_face_up(position) ? "face up" : "set");
-            label_set(&readout, buf);
+            if (dragging >= 0) {
+                int onto = -1;
+                /* Released over another card: that is a stack, not a slide. */
+                for (int i = table.field.mat_count - 1; i >= 0; --i) {
+                    int id = table.field.mat[i].card;
+                    if (id == dragging) continue;
+                    float x, y, w, h;
+                    card_rect(&layout, &table.field, &table.field.mat[i], &x, &y, &w, &h);
+                    float px = layout.field.left + drag_at.x * layout.field.width;
+                    float py = layout.field.top + drag_at.y * layout.field.height;
+                    if (px >= x && px <= x + w && py >= y && py <= y + h) { onto = id; break; }
+                }
+                if (onto >= 0) {
+                    mt_field_stack_onto(&table.field, dragging, onto, MT_POS_KEEP);
+                    label_set(&readout, "Stack");
+                } else {
+                    mt_field_move_on_mat(&table.field, dragging, drag_at, MT_POS_KEEP);
+                    label_set(&readout, "Place");
+                }
+                dragging = -1;
+            } else if (hit != NULL && table.field.hand_count > 0) {
+                MtDropIntent intent = mt_drop_zone(hit->slot, drag_at);
+                /* Setting a monster and setting a spell are the same motion of
+                 * the hand; the zone answers. SetPosition, unchanged. */
+                MtCardPosition position =
+                    mt_set_position(set, false, &intent, MT_MONSTER_UNKNOWN);
+                checkpoint(&table);
+                if (mt_field_play_from_hand(&table.field, held, drag_at, position)) {
+                    snprintf(buf, sizeof buf, "%s  %s", mt_drop_label(intent),
+                             mt_position_face_up(position) ? "face up" : "set");
+                    label_set(&readout, buf);
+                } else {
+                    undo(&table);
+                }
+                if (held >= table.field.hand_count) held = table.field.hand_count - 1;
+                if (held < 0) held = 0;
+            }
             hit = NULL;
         }
 
-        snprintf(buf, sizeof buf, "LP %d   %s   T%d   deck %d   %s   %s",
-                 table.life, mt_phase_label(table.phase), table.turn,
-                 table.deck_count, SEAT_NAMES[seat], deck_name);
+        snprintf(buf, sizeof buf, "LP %d  %s  T%d  deck %d  gy %d  %s  %s",
+                 table.field.life_points, mt_phase_label(table.field.phase),
+                 table.field.turn, table.field.deck_count,
+                 table.field.graveyard_count, SEAT_NAMES[seat], deck_name);
         label_set(&status, buf);
 
         float slider = osGet3DSliderState();
@@ -379,13 +437,16 @@ int main(void) {
         for (int e = 0; e < 2; ++e) {
             if (!mt_gfx_begin_stage((MtEye)e, slider, &camera)) continue;
             mt_gfx_draw_table(&layout);
-            for (int i = 0; i < table.mat_count; ++i) {
+            for (int i = 0; i < table.field.mat_count; ++i) {
+                const MtPlacedCard *placed = &table.field.mat[i];
                 MtStageCard c;
-                c.at = table.mat[i].at;
-                c.position = table.mat[i].position;
-                c.lift = 0.0f;
-                c.pile_depth = table.mat[i].pile_depth;
-                c.lit = false;
+                c.at = (placed->card == dragging) ? drag_at : placed->at;
+                c.position = table.field.instances[placed->card].position;
+                /* A card in the air is lifted, which is what the tablet spends
+                 * CarryHeight on and what a depth buffer gives here for free. */
+                c.lift = (placed->card == dragging) ? 0.45f : 0.0f;
+                c.pile_depth = placed->beneath_count;
+                c.lit = (placed->card == dragging);
                 mt_gfx_draw_card(&c);
             }
         }
@@ -393,7 +454,7 @@ int main(void) {
         mt_gfx_begin_2d();
         C2D_TargetClear(bottom, TRUE_BLACK);
         C2D_SceneBegin(bottom);
-        draw_control_surface(&table, &layout, hit, held, &status, &readout);
+        draw_control_surface(&table.field, &layout, hit, held, dragging, &status, &readout);
 
         C3D_FrameEnd(0);
     }
