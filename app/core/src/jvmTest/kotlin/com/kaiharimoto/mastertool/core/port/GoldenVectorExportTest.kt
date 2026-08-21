@@ -16,6 +16,7 @@ import com.kaiharimoto.mastertool.core.board.SetPosition
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.model.CardId
 import com.kaiharimoto.mastertool.core.layout.BoardSlot
+import com.kaiharimoto.mastertool.core.input.MatGuide
 import com.kaiharimoto.mastertool.core.layout.HandFan
 import com.kaiharimoto.mastertool.core.layout.HandRow
 import com.kaiharimoto.mastertool.core.motion.SpringSpec
@@ -97,6 +98,27 @@ class GoldenVectorExportTest {
             }
         )
         assertTrue(lines.isNotEmpty(), "$name would be empty, which asserts nothing")
+    }
+
+    @Test
+    fun `mat guide console idioms`() {
+        // The one vector that carries no arithmetic, and it is here rather than
+        // in a Kotlin test because the thing it has to agree with is in C.
+        //
+        // `MatGuide` is the tablet's guide and `3ds/src/core/mt_input.h` is the
+        // console's, and they are two lists because the console has controls a
+        // table does not - undo, phases, life points, quit. What may not differ
+        // is the *overlap*: a gesture the tablet's guide says is on L must be on
+        // L in the list the console renders. Exported one way on purpose - every
+        // button named here must exist there; a console-only row is not a drift.
+        //
+        // Pipe-separated because a button is "ZL / ZR" and a gesture is a
+        // sentence, and the suite's whitespace splitter would make eleven fields
+        // of either.
+        val lines = MatGuide.all.mapNotNull { gesture ->
+            gesture.button?.let { "$it|${gesture.what}" }
+        }
+        write("matguide.txt", "<button>|<gesture> - every console idiom the tablet names", lines)
     }
 
     @Test

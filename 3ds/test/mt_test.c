@@ -20,6 +20,7 @@
 #include "../src/core/mt_board_layout.h"
 #include "../src/core/mt_drop.h"
 #include "../src/core/mt_handfan.h"
+#include "../src/core/mt_input.h"
 #include "../src/core/mt_playfield.h"
 #include "../src/core/mt_random.h"
 #include "../src/core/mt_spring.h"
@@ -1003,6 +1004,53 @@ static int test_dropcommit(void) {
     return rows;
 }
 
+/*
+ * The console's guide against the tablet's.
+ *
+ * No arithmetic in this one at all, which is why it is last. `MatGuide` on the
+ * tablet and `MT_CONTROLS` here are two lists rather than one, because the
+ * console has controls a table does not have - undo, phases, life points, quit
+ * - and `MatGuide` is explicit that it is not a list of everything. What may not
+ * drift is the overlap: a gesture the tablet's guide says is on L must be on L
+ * in the list the console renders.
+ *
+ * One-directional on purpose. Every button the tablet names must be a button
+ * this table carries; a row here that the tablet does not name is the console
+ * being ahead, not the two disagreeing.
+ */
+static void test_matguide(void) {
+    FILE *f = open_vectors("matguide.txt");
+    char line[512];
+    int rows = 0;
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+
+        char *bar = strchr(line, '|');
+        if (!bar) {
+            fprintf(stderr, "%s:%d: no '|' in '%s'\n", g_file, g_line, line);
+            ++g_failures;
+            continue;
+        }
+        *bar = '\0';
+        char *button = line;
+        char *what = bar + 1;
+        for (char *e = what + strlen(what); e > what && (e[-1] == '\n' || e[-1] == '\r'); --e) {
+            e[-1] = '\0';
+        }
+
+        const char *found = "-";
+        for (int i = 0; i < MT_CONTROL_COUNT; ++i) {
+            if (strcmp(MT_CONTROLS[i].button, button) == 0) { found = MT_CONTROLS[i].button; break; }
+        }
+        check_s(what, found, button);
+        ++rows;
+    }
+    fclose(f);
+    printf("  matguide       %5d idioms\n", rows);
+}
+
 int main(void) {
     printf("mt conformance: the C port against :core's golden vectors\n");
     test_board_solve();
@@ -1016,6 +1064,7 @@ int main(void) {
     test_handfan();
     test_droptargets();
     test_dropcommit();
+    test_matguide();
 
     printf("%d checks, %d failures\n", g_checks, g_failures);
     if (g_failures > 25) fprintf(stderr, "(%d further failures not shown)\n", g_failures - 25);

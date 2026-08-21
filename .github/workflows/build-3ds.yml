@@ -4,7 +4,10 @@ name: Build for 3DS
 # for the app: the part that compiles anywhere is tested everywhere, and the
 # part that needs a toolchain nobody has locally is only built here.
 #
-#   conformance  - host gcc, no devkitARM. The C port against :core's vectors.
+#   conformance  - host gcc, no devkitARM. The C port against :core's vectors,
+#                  and the tripwire against the app layer re-deriving what the
+#                  core already owns - which is the one drift the vectors are
+#                  structurally unable to see.
 #   vectors      - :core:jvmTest regenerates the vectors; a diff means the
 #                  tablet's behaviour moved and the port has not been told.
 #   homebrew     - devkitARM in a container. The .3dsx and the .cia.
@@ -44,6 +47,21 @@ jobs:
       - name: Build and run the conformance suite
         working-directory: 3ds/test
         run: make test
+
+      # The suite proves src/core/ matches :core. Nothing in it proves the app
+      # *uses* src/core/, and for one release the app did not - it hand-rolled
+      # the drop as a rectangle test and re-derived the hand with a different
+      # step cap, both in the one place the vectors cannot reach.
+      - name: The app layer is still wired to its own core
+        working-directory: 3ds
+        run: ./tools/check-app-layer.sh
+
+      # Not a gate: the list of ported-but-unreachable functions is a map of
+      # what has no gesture yet, and it belongs in the log where the next gap
+      # is visible rather than discovered.
+      - name: What is ported and not yet reachable
+        working-directory: 3ds
+        run: ./tools/audit-core-use.py
 
   vectors:
     name: Golden vectors are current

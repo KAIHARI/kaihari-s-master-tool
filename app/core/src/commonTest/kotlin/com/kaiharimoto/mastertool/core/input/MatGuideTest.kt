@@ -30,6 +30,25 @@ class MatGuideTest {
     }
 
     @Test
+    fun everyConsoleIdiomIsActuallyWrittenDown() {
+        // `button` is optional because the 3DS port is behind the tablet, and a
+        // gesture with no console idiom *yet* is a fact rather than a fault. A
+        // blank one is neither: it is a column somebody started filling in and
+        // stopped, and it renders as a gesture the console claims to have and
+        // does not name.
+        //
+        // What holds the strings themselves to `mt_input.h` is not here — it
+        // cannot be, since this module knows nothing about the port. The golden
+        // vectors export this column and `3ds/test/mt_test.c` asserts every
+        // button named here is one that table carries.
+        MatGuide.all.forEach {
+            val button = it.button ?: return@forEach
+            assertTrue(button.isNotBlank(), "'${it.what}' has an empty console idiom")
+            assertEquals(button.trim(), button, "'${it.what}' pads its console idiom")
+        }
+    }
+
+    @Test
     fun everyHeadingHasSomethingUnderIt() {
         // The guide renders by walking the groups rather than by naming them,
         // which is what stops a group from going missing — and which means an

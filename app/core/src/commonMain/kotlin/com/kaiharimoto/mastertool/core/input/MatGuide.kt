@@ -14,6 +14,18 @@ package com.kaiharimoto.mastertool.core.input
  * rather than in numbered zones. Where there is a key, it is the same chord
  * [ShortcutTable] binds, spelled the same way — the guide renders both lists and
  * they must not disagree with each other on the same screen.
+ *
+ * [button] is the **3DS port's** idiom, and it is optional for a second reason
+ * on top of that one: the console is behind, so a gesture that has no console
+ * idiom *yet* is a fact rather than a fault. What it buys is that the ones which
+ * do exist cannot drift — `3ds/src/core/mt_input.h` is the console's own guide,
+ * the vectors export this column, and the C suite asserts every button named
+ * here is a button that table carries. Written exactly as that table spells it,
+ * so the check is string equality and not a translation.
+ *
+ * The limit is worth knowing: this pins the *button*, not the binding. `main.c`
+ * reads `KEY_L` directly and `src/core/` may not name a libctru constant, so
+ * rebinding L in the app and not in the table is drift nothing catches.
  */
 data class Gesture(
     val group: GestureGroup,
@@ -21,6 +33,7 @@ data class Gesture(
     val touch: String,
     val pointer: String,
     val key: String? = null,
+    val button: String? = null,
 )
 
 /**
@@ -82,13 +95,13 @@ object MatGuide {
             what = "Walk round the table",
             touch = "Drag anywhere on the mat, with Camera on",
             pointer = "Drag anywhere on the mat, with Camera on",
-        ),
+            button = "Pad",        ),
         Gesture(
             GestureGroup.CAMERA,
             what = "Come closer, or step back",
             touch = "Pinch on the mat",
             pointer = "Scroll wheel",
-        ),
+            button = "ZL / ZR",        ),
         Gesture(
             GestureGroup.CAMERA,
             what = "Aim somewhere other than the middle",
@@ -101,14 +114,14 @@ object MatGuide {
             touch = "Overhead / Table / Seated on the bar",
             pointer = "Overhead / Table / Seated on the bar",
             key = "1 · 2 · 3",
-        ),
+            button = "L + Y",        ),
         Gesture(
             GestureGroup.CAMERA,
             what = "Sit at the desk, at your own eye level",
             touch = "POV on the bar",
             pointer = "POV on the bar",
             key = "4",
-        ),
+            button = "L + Y",        ),
         Gesture(
             GestureGroup.CAMERA,
             what = "Let the tablet's own tilt move the camera, or stop it",
@@ -123,13 +136,13 @@ object MatGuide {
             what = "Pick a card up and put it down",
             touch = "Drag the card",
             pointer = "Drag the card",
-        ),
+            button = "Stylus",        ),
         Gesture(
             GestureGroup.MOVING,
             what = "Take a whole stack with you",
             touch = "Drag the top card — what is under it comes too",
             pointer = "Drag the top card — what is under it comes too",
-        ),
+            button = "Stylus",        ),
         Gesture(
             GestureGroup.MOVING,
             what = "Move several cards at once",
@@ -141,13 +154,13 @@ object MatGuide {
             what = "Arrange your hand",
             touch = "Drag a card along the hand to where you want it",
             pointer = "Drag a card along the hand to where you want it",
-        ),
+            button = "Stylus",        ),
         Gesture(
             GestureGroup.MOVING,
             what = "Put a card underneath another one",
             touch = "Drag it over and hold still",
             pointer = "Drag it over and hold still",
-        ),
+            button = "ZR drag",        ),
         Gesture(
             GestureGroup.MOVING,
             what = "Bring a buried card back to the top",
@@ -160,7 +173,7 @@ object MatGuide {
             touch = "Drag the top card off the deck",
             pointer = "Drag the top card off the deck",
             key = "D",
-        ),
+            button = "A",        ),
         Gesture(
             GestureGroup.MOVING,
             what = "Search a pile, or a stack on the table",
@@ -179,7 +192,7 @@ object MatGuide {
             what = "Change your mind about a card you took out of a pile",
             touch = "Take it away, then drop it back on the gap it left",
             pointer = "Take it away, then drop it back on the gap it left",
-        ),
+            button = "Stylus",        ),
         Gesture(
             GestureGroup.MOVING,
             what = "Put a pile back the way it was",
@@ -192,7 +205,7 @@ object MatGuide {
             touch = "Tap the mark under it",
             pointer = "Click the mark under it",
             key = "S",
-        ),
+            button = "X",        ),
 
         // ---- turning ---------------------------------------------------------
         Gesture(
@@ -205,25 +218,25 @@ object MatGuide {
             // the documented way to set a monster produced a face-down card
             // standing in attack position, which is exactly what it looks like.
             pointer = "Right-click it, then Set",
-        ),
+            button = "L drag",        ),
         Gesture(
             GestureGroup.TURNING,
             what = "Turn a card that is already in the air face-down",
             touch = "Tap a second finger while you carry it",
             pointer = "Right-click it, then Turn over",
-        ),
+            button = "L drag",        ),
         Gesture(
             GestureGroup.TURNING,
             what = "Turn a card face-down where it lies",
             touch = "Two-finger tap",
             pointer = "Right-click it, then Turn over",
-        ),
+            button = "Y",        ),
         Gesture(
             GestureGroup.TURNING,
             what = "Turn a card to defence",
             touch = "Two fingers, twist",
             pointer = "Right-click it, then Rotate",
-        ),
+            button = "R drag",        ),
 
         // ---- saying things ---------------------------------------------------
         Gesture(

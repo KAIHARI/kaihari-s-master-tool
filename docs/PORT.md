@@ -171,19 +171,73 @@ four pile tiles, and the hand as a linear strip along the bottom. `HandFan`'s
 lean existed to sell three dimensions; in two, a strip is the honest form.
 
 Buttons carry what buttons are good at, and this is a *third idiom* for
-`MatGuide`'s "every gesture ships in every language" rule — `ShortcutTable`'s
-`PLAY_*` actions are already an abstract enum, so the button map is a third
-binding table beside touch and keyboard.
+`MatGuide`'s "every gesture ships in every language" rule. **The table is
+`3ds/src/core/mt_input.h`**, not this document: hold Select on the console and
+the guide you get is rendered from that array, so a binding that changes and a
+guide that does not cannot happen. It is in `src/core/` and therefore carries no
+`KEY_` constants — the button is a *string*, and the switch that turns one into
+an action is in `main.c` where the console headers already are.
+
+Two things about it are worth saying out loud.
+
+**The stylus line is the whole table.** Every destination on this board — a
+zone, a stack, the graveyard, the deck, a particular gap in your hand — is
+reached by dragging, because they exist inside `mt_drop_resolve` and nowhere
+else. Nothing else in the list is a destination.
+
+**While the stylus holds a card the shoulders are modifiers, not camera.** L
+sets it face-down, R lays it sideways, ZR tucks it under as material — and that
+last one makes `DropIntent.Attach` reachable on the console before it is
+reachable on the tablet, where `docs/TABLE.md` still records it as a domain
+operation waiting for an idiom that is not already spoken for. On a 3DS one is
+not: a stylus cannot be a second finger, so the shoulders are free the moment
+the drag owns the gesture.
+
+### The app must use the core it has, and one thing checks that
+
+The conformance suite proves `src/core/` matches `:core`. **Nothing in it proves
+the app uses `src/core/`** — and for one release the app did not. `main.c` called
+21 of ~95 ported functions: it hand-rolled the drop as a rectangle test, so the
+graveyard could not be reached by dragging at all and the readout was computed
+separately from the commit; and it re-derived the hand with a *different step
+cap*, left-aligned against the ported 0.74 centred. Both are bugs the tablet
+already had and fixed, reintroduced in the one place the vectors cannot see.
+
+Two tools sit in `3ds/tools/`, both run by the `conformance` job:
+
+- **`check-app-layer.sh`** — a tripwire, and labelled as one. It fails on a
+  constant the core owns appearing in the app layer, on the *shape* of a
+  re-derivation, and — the stronger half — on a core function that used to be
+  called and is not any more, which is the drift that leaves nothing suspicious
+  behind. Falsified in all three shapes; the arithmetic patterns were written
+  `\(float\)` at first, which in a basic regular expression is a *group* and
+  matched nothing on earth, so the check passed for the wrong reason.
+- **`audit-core-use.py`** — not a gate. It walks the call graph and reports what
+  is ported and not reachable from the app, so the next gap is visible rather
+  than discovered. Transitive on purpose: counting direct calls only would
+  report `mt_field_to_graveyard` as unreached on the very release that made it
+  reachable, since the app asks `mt_drop_commit` and the commit asks that.
+
+At the wiring it reads **75 of 95 reachable**, and the twenty that are not fall
+into four groups, none of them an oversight:
 
 | | |
 |---|---|
-| A / B | draw / cancel-back |
-| X / Y | shuffle / card reader, at full size on the top screen |
-| L held | **set** while dragging — what the two-finger set becomes |
-| R held | turn / flip |
-| D-pad | phase, turn |
-| Circle Pad · C-stick · ZL/ZR | nudge the view · camera · zoom the map |
-| Start / Select | menu / room (MINIMAL · DESK · AR) |
+| a card menu | `add_counter`, `bring_to_front`, `set_position` |
+| the spread (`PileFan`, P3) | `field_under`, `unstack`, `detach_material`, `from_buried`, `board_slot_at` |
+| deck editing (P6) | `ydk_write`, `ydk_is_ydkx` |
+| spare readings | `board_bounds`, `hand_row_of`, `hand_place_of`, `hand_opening_for`, `hand_point_for`, `spring_calm`, `spring_settled`, `shuffle_extra_deck`, `to_deck_bottom`, `hand_to_deck_bottom` |
+
+`hand_point_for` is for a fan and the console draws a strip; `spring_settled` is
+the optimisation of stopping a spring that has arrived, and at forty cards on a
+New 3DS nothing yet needs it.
+
+**One limit, stated rather than papered over.** The guide's button strings are
+checked against the tablet's `MatGuide`, so the two cannot describe the same
+gesture with different buttons. The *binding* is not checked against the string:
+`main.c` reads `KEY_L` directly, and `src/core/` may not name a libctru constant
+without taking the whole conformance suite down with it. Rebinding a button in
+`main.c` and not in `mt_input.c` is a drift nothing here catches.
 
 ## 6. Marker AR
 
