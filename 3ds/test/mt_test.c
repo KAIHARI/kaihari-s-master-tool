@@ -754,6 +754,110 @@ static int test_handfan(void) {
     return rows;
 }
 
+/* ---- where a dragged card would land ----------------------------------- */
+
+/** The stable spelling the exporter uses for an intent. */
+static void check_intent(const MtDropIntent *got, char **v, int base) {
+    check_i("intent.kind", (int)got->kind, atoll(v[base]));
+    int target = (got->kind == MT_DROP_STACK || got->kind == MT_DROP_ATTACH ||
+                  got->kind == MT_DROP_HAND) ? got->target : -1;
+    check_i("intent.target", target, atoll(v[base + 1]));
+
+    if (got->kind == MT_DROP_ZONE) {
+        check_s("intent.slot", slot_name(got->slot), v[base + 2]);
+    }
+    if (got->kind == MT_DROP_FREE || got->kind == MT_DROP_ZONE) {
+        check_f("intent.at.x", got->at.x, (float)atof(v[base + 3]));
+        check_f("intent.at.y", got->at.y, (float)atof(v[base + 4]));
+    }
+}
+
+static int test_droptargets(void) {
+    FILE *f = open_vectors("droptargets.txt");
+    MtBoardLayout layout = mt_board_solve(400.0f, 240.0f, 0.686f, 1.0f, 0.0f);
+
+    static MtPlayField field;
+    memset(&field, 0, sizeof field);
+
+    char line[1024];
+    char *v[64];
+    int rows = 0;
+
+    /* Paths feed each answer back as `previous`, which is the whole of the
+     * hysteresis test - so the state has to survive between lines, and reset
+     * when a new path begins. */
+    MtDropIntent previous;
+    bool have_previous = false;
+    char path_name[64] = "";
+    MtFanHome home = { { 0.22f, 0.28f }, false };
+    bool have_home = false;
+
+    MtHandRow hand = mt_hand_row_of(0);
+
+    while (fgets(line, sizeof line, f)) {
+        ++g_line;
+        if (is_skippable(line)) continue;
+        int n = split(line, v, 64);
+        if (n < 2) continue;
+
+        if (!strcmp(v[0], "field")) {
+            field.hand_count = atoi(v[1]);
+            for (int i = 0; i < field.hand_count; ++i) field.hand[i] = 200 + i;
+            hand = mt_hand_row_of(field.hand_count);
+            field.mat_count = 0;
+        } else if (!strcmp(v[0], "card")) {
+            int id = atoi(v[1]);
+            field.instances[id % MT_MAX_INSTANCES].instance_id = id;
+            MtPlacedCard *placed = &field.mat[field.mat_count++];
+            placed->card = id;
+            placed->at.x = (float)atof(v[2]);
+            placed->at.y = (float)atof(v[3]);
+            placed->beneath_count = 0;
+        } else if (!strcmp(v[0], "grid")) {
+            MtMatPoint point = { (float)atof(v[1]), (float)atof(v[2]) };
+            bool attaching = atoi(v[3]) != 0;
+            MtDropIntent got = mt_drop_resolve(point, 101, &field, &layout,
+                                               NULL, attaching, NULL, &hand,
+                                               MT_HAND_STEP_FRACTION);
+            check_intent(&got, v, 5);
+            ++rows;
+        } else if (!strcmp(v[0], "home")) {
+            /* Announced by the exporter before each path, because a home
+             * inferred from the path's *name* on this side resolved against
+             * the wrong point the moment a path used a different one - and it
+             * read as a port bug rather than as a harness bug. */
+            snprintf(path_name, sizeof path_name, "%s", v[1]);
+            have_previous = false;
+            have_home = strcmp(v[2], "-") != 0;
+            if (have_home) {
+                home.at.x = (float)atof(v[2]);
+                home.at.y = (float)atof(v[3]);
+                home.departed = atoi(v[4]) != 0;
+            }
+        } else if (!strcmp(v[0], "path")) {
+            MtMatPoint point = { (float)atof(v[3]), (float)atof(v[4]) };
+            MtDropIntent got = mt_drop_resolve(point, 101, &field, &layout,
+                                               have_previous ? &previous : NULL,
+                                               false,
+                                               have_home ? &home : NULL,
+                                               &hand, MT_HAND_STEP_FRACTION);
+            check_intent(&got, v, 6);
+            previous = got;
+            have_previous = true;
+            ++rows;
+        } else if (!strcmp(v[0], "arm")) {
+            MtMatPoint landing = { (float)atof(v[1]), (float)atof(v[2]) };
+            MtFanHome fresh = { { 0.22f, 0.28f }, false };
+            MtFanHome seen = mt_fan_home_seeing(fresh, landing, &layout);
+            check_i("latch armed", seen.departed ? 1 : 0, atoll(v[4]));
+            ++rows;
+        }
+    }
+    fclose(f);
+    printf("  droptargets      %4d points\n", rows);
+    return rows;
+}
+
 int main(void) {
     printf("mt conformance: the C port against :core's golden vectors\n");
     test_board_solve();
@@ -765,6 +869,7 @@ int main(void) {
     test_random();
     test_playfield();
     test_handfan();
+    test_droptargets();
 
     printf("%d checks, %d failures\n", g_checks, g_failures);
     if (g_failures > 25) fprintf(stderr, "(%d further failures not shown)\n", g_failures - 25);

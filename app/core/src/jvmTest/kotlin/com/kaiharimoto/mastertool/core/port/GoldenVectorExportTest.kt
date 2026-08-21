@@ -4,7 +4,12 @@ import com.kaiharimoto.mastertool.core.board.DropIntent
 import com.kaiharimoto.mastertool.core.board.FieldZone
 import com.kaiharimoto.mastertool.core.board.CardPosition
 import com.kaiharimoto.mastertool.core.board.MatPoint
+import com.kaiharimoto.mastertool.core.board.BoardCard
+import com.kaiharimoto.mastertool.core.board.DropTargets
+import com.kaiharimoto.mastertool.core.board.FanHome
+import com.kaiharimoto.mastertool.core.board.PlacedCard
 import com.kaiharimoto.mastertool.core.board.PlayField
+import com.kaiharimoto.mastertool.core.board.toMat
 import com.kaiharimoto.mastertool.core.board.SetPosition
 import com.kaiharimoto.mastertool.core.layout.BoardLayouter
 import com.kaiharimoto.mastertool.core.model.CardId
@@ -642,6 +647,188 @@ class GoldenVectorExportTest {
             "row/step/centre/insert/openingfor/gapafter/placeof/point (layout 320x226)",
             lines,
         )
+    }
+
+    /**
+     * The smart movement: precedence, and hysteresis.
+     *
+     * Two things make this harder than "what is under the pointer". Precedence
+     * has to be the same every time — piles beat a card beats a zone beats the
+     * felt — and hysteresis means every threshold is a *pair*, so the intent you
+     * already have is slightly sticky.
+     *
+     * That second half cannot be checked by sweeping a grid, because stickiness
+     * is a function of what the last answer was. So most of this is **paths**:
+     * the pointer walks a line and each answer is fed back as `previous`, which
+     * is exactly what the real drag does. A grid sweep with no history checks
+     * precedence; the paths check that the intent is sticky in the same places
+     * and by the same amounts.
+     *
+     * The field is described in the vector file rather than rebuilt from a
+     * script, because the resolver only reads the mat's ids and points and the
+     * hand's size — so the C can construct exactly the same input without
+     * replaying anything.
+     *
+     * **One thing this suite cannot reach, stated rather than left to look
+     * tested.** `nearestZone` takes the *first* minimum, so an exact tie goes to
+     * the earlier slot in the layout's insertion order. Flipping that to
+     * last-wins changes nothing here and cannot: `resolve` takes a `MatPoint`,
+     * so every candidate point makes a round trip through the mat's fractions,
+     * and two distances that are equal in real arithmetic come back differing
+     * in the last bit. It is a measure-zero case. `slotAt`'s tie-break is a
+     * different matter and *is* tested — that one is reachable, because
+     * rectangle containment with an inflation of exactly half the gap makes two
+     * neighbours meet precisely on a midline.
+     */
+    @Test
+    fun `drop targets`() {
+        val layout = BoardLayouter.solve(400f, 240f, 0.686f, 1f, 0f)
+
+        // A board with cards in a monster zone, a spell zone, and loose on the
+        // felt — so the card-versus-zone contest is live rather than theoretical.
+        val mat = listOf(
+            PlacedCard(BoardCard(101, CardId(1001)), MatPoint(0.50f, 0.50f)),
+            PlacedCard(BoardCard(102, CardId(1002)), MatPoint(0.36f, 0.82f)),
+            PlacedCard(BoardCard(103, CardId(1003)), MatPoint(0.78f, 0.30f)),
+        )
+        val field = PlayField(mat = mat, hand = (0 until 5).map { BoardCard(200 + it, CardId(2000 + it)) })
+
+        val lines = mutableListOf<String>()
+        lines += "field ${field.hand.size} ${mat.size}"
+        mat.forEach { lines += "card ${it.id} ${f(it.at.x)} ${f(it.at.y)}" }
+
+        fun encode(intent: DropIntent): String = when (intent) {
+            is DropIntent.Free -> "0 -1 - ${f(intent.at.x)} ${f(intent.at.y)}"
+            is DropIntent.Zone -> "1 -1 ${slotName(intent.slot)} ${f(intent.at.x)} ${f(intent.at.y)}"
+            is DropIntent.Stack -> "2 ${intent.onto} - 0 0"
+            is DropIntent.Attach -> "3 ${intent.onto} - 0 0"
+            is DropIntent.Hand -> "4 ${intent.at} - 0 0"
+            DropIntent.Graveyard -> "5 -1 - 0 0"
+            DropIntent.Banish -> "6 -1 - 0 0"
+            DropIntent.Deck -> "7 -1 - 0 0"
+            DropIntent.ExtraDeck -> "8 -1 - 0 0"
+            DropIntent.Cancel -> "9 -1 - 0 0"
+        }
+
+        val hand = HandRow.of(field.hand.size)
+
+        // --- 1. precedence, with no history ---------------------------------
+        var iy = -4
+        while (iy <= 28) {
+            var ix = -4
+            while (ix <= 28) {
+                val point = MatPoint(ix / 24f, iy / 24f)
+                for (attaching in listOf(false, true)) {
+                    val intent = DropTargets.resolve(
+                        point = point, dragged = 101, field = field, layout = layout,
+                        previous = null, attaching = attaching, home = null,
+                        hand = hand, handStep = 0.74f,
+                    )
+                    lines += "grid ${f(point.x)} ${f(point.y)} ${b(attaching)} = ${encode(intent)}"
+                }
+                ix++
+            }
+            iy++
+        }
+
+        // --- 1b. exact ties between adjacent zone centres --------------------
+        //
+        // `nearestZone` takes the first minimum, which is the layout's own
+        // insertion order — the same rule `slotAt` resolves midline ties by. A
+        // sweep on a grid never lands exactly on a midline, so the points are
+        // constructed from the zone centres rather than hoped for.
+        val zoneRects = layout.slots.entries.filter { it.key is BoardSlot.Zone }
+        for (i in zoneRects.indices) {
+            for (j in i + 1 until zoneRects.size) {
+                val a = zoneRects[i].value
+                val bRect = zoneRects[j].value
+                val mx = (a.centerX + bRect.centerX) / 2f
+                val my = (a.centerY + bRect.centerY) / 2f
+                val point = layout.toMat(mx to my)
+                val intent = DropTargets.resolve(
+                    point = point, dragged = 101, field = field, layout = layout,
+                    previous = null, attaching = false, home = null,
+                    hand = hand, handStep = 0.74f,
+                )
+                lines += "grid ${f(point.x)} ${f(point.y)} 0 = ${encode(intent)}"
+            }
+        }
+
+        // --- 2. paths, where the answer feeds back --------------------------
+        data class Path(val name: String, val from: MatPoint, val to: MatPoint, val home: FanHome?)
+
+        val homeAt = MatPoint(0.22f, 0.28f)
+        val paths = listOf(
+            // Across the mat through a zone and out again: the zone must latch
+            // and then hold on longer than it took to take.
+            Path("across", MatPoint(-0.10f, 0.50f), MatPoint(1.10f, 0.50f), null),
+            // Down through the hand band.
+            Path("intohand", MatPoint(0.50f, 0.30f), MatPoint(0.50f, 1.60f), null),
+            // Onto a card and off it.
+            Path("ontocard", MatPoint(0.20f, 0.50f), MatPoint(0.80f, 0.50f), null),
+            // Toward the graveyard corner.
+            Path("topile", MatPoint(0.50f, 0.50f), MatPoint(1.15f, 0.18f), null),
+            // The put-back contest, unarmed and armed. The first must never
+            // answer Cancel; the second must, and must still lose to a zone
+            // that is pulling harder.
+            Path("home-unarmed", MatPoint(0.60f, 0.60f), homeAt, FanHome(homeAt, departed = false)),
+            Path("home-armed", MatPoint(0.60f, 0.60f), homeAt, FanHome(homeAt, departed = true)),
+            Path("home-away", homeAt, MatPoint(0.62f, 0.34f), FanHome(homeAt, departed = true)),
+        ) + run {
+            // A home sitting *almost on top of* a zone centre, which is the one
+            // configuration INCUMBENT_BIAS's cap exists for. CLAUDE.md gives
+            // the measured numbers: a spread's hole comes within 0.072 card
+            // widths of a zone centre at the head-height opening pitch, against
+            // a bias of 0.12 — so an uncapped bias carries one target past the
+            // *centre* of the other and makes the losing gesture unreachable no
+            // matter how exactly it is aimed. Capping it at half the gap cannot
+            // do that by construction.
+            //
+            // Without a path like this the cap is untested: uncapping it passed
+            // 49,397 checks cleanly.
+            val zone = layout[FieldZone.Monster(2)]!!
+            val centre = layout.toMat(zone.centerX to zone.centerY)
+            listOf(0.05f, 0.15f, 0.30f).map { offset ->
+                val near = MatPoint(
+                    centre.x + layout.cardWidth * offset / layout.field.width,
+                    centre.y,
+                )
+                Path("home-nearzone-$offset", near, centre, FanHome(near, departed = true))
+            }
+        }
+
+        for (path in paths) {
+            // The home travels with the path rather than being hardcoded on
+            // the other side. It was hardcoded, and the moment a path used a
+            // different home the C resolved against the wrong point and read
+            // as a port bug.
+            lines += "home ${path.name} " +
+                (path.home?.let { "${f(it.at.x)} ${f(it.at.y)} ${b(it.departed)}" } ?: "- - -")
+            var previous: DropIntent? = null
+            for (s in 0..48) {
+                val k = s / 48f
+                val point = MatPoint(
+                    path.from.x + (path.to.x - path.from.x) * k,
+                    path.from.y + (path.to.y - path.from.y) * k,
+                )
+                val intent = DropTargets.resolve(
+                    point = point, dragged = 101, field = field, layout = layout,
+                    previous = previous, attaching = false, home = path.home,
+                    hand = hand, handStep = 0.74f,
+                )
+                lines += "path ${path.name} $s ${f(point.x)} ${f(point.y)} = ${encode(intent)}"
+                previous = intent
+            }
+        }
+
+        // --- 3. the latch arming ---------------------------------------------
+        for (i in 0..24) {
+            val landing = MatPoint(homeAt.x + i / 12f, homeAt.y)
+            val seen = FanHome(homeAt, departed = false).seeing(landing, layout)
+            lines += "arm ${f(landing.x)} ${f(landing.y)} = ${b(seen.departed)}"
+        }
+
+        write("droptargets.txt", "field/card, then grid/path/arm rows (layout 400x240)", lines)
     }
 
     /** The stable spelling of a slot, shared with the C by convention. */

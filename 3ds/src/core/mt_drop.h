@@ -15,6 +15,9 @@
 #ifndef MT_DROP_H
 #define MT_DROP_H
 
+#include "mt_board_layout.h"
+#include "mt_handfan.h"
+#include "mt_playfield.h"
 #include "mt_types.h"
 
 typedef enum {
@@ -101,5 +104,77 @@ MtCardPosition mt_set_position(bool face_down,
                                bool turned,
                                const MtDropIntent *intent,
                                MtMonsterHint monster);
+
+/* ---- where a dragged card would land ------------------------------------ */
+
+/*
+ * Two things make this harder than "what is under the pointer", and both are
+ * the difference between a table that feels smart and one that feels twitchy.
+ *
+ * **Precedence.** A pointer over a card that is itself sitting in a zone could
+ * mean stack-on-that-card or snap-into-that-zone, and the answer has to be the
+ * same every time. The order is deliberate: the piles win over everything
+ * because they are unambiguous destinations you had to travel to; then a card
+ * under the pointer, because aiming at a specific card is a more particular act
+ * than aiming at a region; then a zone; then the bare mat.
+ *
+ * **Hysteresis.** Every threshold is a pair, not a number: a target is harder
+ * to enter than to leave. Without that, a pointer resting on a boundary
+ * flickers between two intents several times a second, the indicator strobes,
+ * and which one you get on release is luck.
+ */
+
+/**
+ * The gap in an open spread a card came out of, and whether it has ever left.
+ *
+ * `at` alone is not enough to mean "put it back". A spread is laid out over
+ * `layout.field` - the seven-by-three grid itself - and its cards are drawn
+ * lifted, so the felt footprint of the slot a card came out of lands a fifth of
+ * a card from a monster zone's centre. "Near where it started means put it
+ * back" therefore also says "near that monster zone means put it back", and the
+ * search that was supposed to end with the card on the board ends with it back
+ * in the deck.
+ *
+ * `departed` is the missing half: a put-back is a *change of mind*, so the card
+ * has to have been somewhere first. The latch arms once and stays armed, because
+ * one that could un-arm would flicker exactly where the two catchments overlap.
+ */
+typedef struct {
+    MtMatPoint at;
+    bool departed;
+} MtFanHome;
+
+/** How far clear of its own slot a card must get before the latch arms. */
+#define MT_FAN_DEPARTURE 1.10f
+
+/** This home, having seen the card at `landing`. Idempotent once armed. */
+MtFanHome mt_fan_home_seeing(MtFanHome home, MtMatPoint landing,
+                             const MtBoardLayout *layout);
+
+/** The mat's own coordinates against the pixels the layout is drawn in. */
+void mt_layout_to_pixels(const MtBoardLayout *l, MtMatPoint p, float *x, float *y);
+MtMatPoint mt_layout_to_mat(const MtBoardLayout *l, float x, float y);
+
+/**
+ * Where a card would land, given where the pointer is.
+ *
+ * @param dragged  the instance being dragged, which cannot land on itself; -1 for none
+ * @param previous what was decided last frame, which is what makes it sticky; NULL for none
+ * @param attaching true when the gesture means "tuck under" rather than "put on
+ *                 top" - the same position, a different intention, and the only
+ *                 one the geometry cannot tell you
+ * @param home     where in an open spread this card was sitting, or NULL
+ * @param hand     the hand *as it is drawn*, so the gap the pointer is over is
+ *                 measured against the row the user can actually see
+ */
+MtDropIntent mt_drop_resolve(MtMatPoint point,
+                             int dragged,
+                             const MtPlayField *field,
+                             const MtBoardLayout *layout,
+                             const MtDropIntent *previous,
+                             bool attaching,
+                             const MtFanHome *home,
+                             const MtHandRow *hand,
+                             float hand_step);
 
 #endif /* MT_DROP_H */
